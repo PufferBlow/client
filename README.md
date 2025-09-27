@@ -31,8 +31,8 @@ A modern, decentralized messaging platform built with React Router v7, featuring
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pufferblow-ui.git
-cd pufferblow-ui
+git clone https://github.com/yourusername/pufferblow-client.git
+cd pufferblow-client
 ```
 
 2. Install dependencies:
@@ -60,7 +60,7 @@ npm run dev
 ## Project Structure
 
 ```
-pufferblow-ui/
+pufferblow-client/
 ├── app/
 │   ├── components/          # Reusable UI components
 │   ├── models/             # TypeScript data models
@@ -73,25 +73,6 @@ pufferblow-ui/
 ├── public/                 # Static assets
 └── build/                  # Build output (generated)
 ```
-
-## Architecture
-
-### Services Layer
-- **apiClient.ts**: Base HTTP client with request/response handling
-- **user.ts**: User authentication and profile management
-- **channel.ts**: Channel operations
-- **message.ts**: Message and communication functions
-- **server.ts**: Server and invite management
-
-### Models Layer
-- **User.ts**: User data structure
-- **Channel.ts**: Channel data structure
-- **Message.ts**: Message data structure
-
-### Testing
-- **Vitest**: Fast unit testing framework
-- **Testing Library**: React component testing utilities
-- **API Mocks**: Comprehensive API endpoint testing
 
 ## Deployment
 
@@ -157,43 +138,6 @@ npm run test
 npm run test:ui
 ```
 
-## API Integration
-
-The application expects a backend API with the following endpoints:
-
-### Authentication
-- `POST /api/v1/users/signin` - User login
-- `POST /api/v1/users/signup` - User registration
-
-### Users
-- `GET /api/v1/users/profile` - Get user profile
-
-### Channels
-- `GET /api/v1/channels` - Get server channels
-- `POST /api/v1/channels` - Create channel
-- `PUT /api/v1/channels/:id` - Update channel
-- `DELETE /api/v1/channels/:id` - Delete channel
-
-### Messages
-- `GET /api/v1/messages` - Get channel messages
-- `POST /api/v1/messages` - Send message
-- `PUT /api/v1/messages/:id` - Update message
-- `DELETE /api/v1/messages/:id` - Delete message
-
-### Servers
-- `GET /api/v1/servers` - Get user servers
-- `POST /api/v1/servers` - Create server
-- `GET /api/v1/servers/:id` - Get server details
-- `PUT /api/v1/servers/:id` - Update server
-- `DELETE /api/v1/servers/:id` - Delete server
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [React Router](https://reactrouter.com/) - Modern routing for React
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
-- [Vite](https://vitejs.dev/) - Fast build tool
-- [Vitest](https://vitest.dev/) - Fast testing framework
