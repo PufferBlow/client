@@ -1,5 +1,6 @@
 import type { Route } from "./+types/login";
-import { Link } from "react-router";
+import { Link, redirect, useActionData } from "react-router";
+import { login } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -8,7 +9,76 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const username = formData.get("username") as string;
+  const password = formData.get("password") as string;
+  const hostPort = formData.get("hostPort") as string;
+  const rememberMe = formData.get("remember-me") === "on";
+
+  if (!username || !password || !hostPort) {
+    return { error: "All fields are required" };
+  }
+
+  // Validate host:port format
+  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]):(\d+)$/;
+  if (!hostPortRegex.test(hostPort)) {
+    return { error: "Invalid host:port format. Please use format like '127.0.0.1:7575' or 'localhost:7575'" };
+  }
+
+  // Additional validation: try to create a URL to check if it's a valid format
+  try {
+    const testUrl = new URL(`http://${hostPort}`);
+    if (!testUrl.hostname || !testUrl.port) {
+      throw new Error('Invalid host or port');
+    }
+  } catch (error) {
+    return { error: "Invalid host:port format. Please ensure the host and port are valid." };
+  }
+
+  const response = await login(hostPort, { username, password });
+
+  if (!response.success) {
+    // Check for specific error message from server
+    const errorData = response.data as any;
+    if (errorData?.error) {
+      return { error: errorData.error };
+    }
+    return { error: response.error || "Login failed" };
+  }
+
+  // Handle server response format
+  const data = response.data as any;
+  const token = data?.auth_token;
+  const expireTime = data?.auth_token_expire_time;
+
+  if (token) {
+    // Always save host:port in localStorage for easy access (only on client)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem("serverHostPort", hostPort);
+    }
+
+    // Create redirect response with cookie
+    const response = redirect("/dashboard");
+
+    if (rememberMe) {
+      // Store token in cookie for longer persistence
+      const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
+      response.headers.append("Set-Cookie", `authToken=${token}; path=/; max-age=${maxAge}`);
+    } else {
+      // Store token in session cookie (expires when browser closes)
+      response.headers.append("Set-Cookie", `authToken=${token}; path=/`);
+    }
+
+    console.log('Token saved to cookies via response headers:', token);
+    return response;
+  }
+
+  return { error: "Invalid response from server" };
+}
+
 export default function Login() {
+  const actionData = useActionData<typeof action>();
   return (
     <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
@@ -23,8 +93,14 @@ export default function Login() {
             </p>
           </div>
 
+          {actionData?.error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {actionData.error}
+            </div>
+          )}
+
           {/* Login Form */}
-          <form className="space-y-6">
+          <form method="post" className="space-y-6">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 Username
@@ -65,7 +141,7 @@ export default function Login() {
                 type="text"
                 required
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="localhost:8080"
+                placeholder="127.0.0.1:7575"
               />
             </div>
 

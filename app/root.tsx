@@ -13,6 +13,7 @@ import "./app.css";
 import { ThemeProvider } from "./components/ThemeProvider";
 
 export const links: Route.LinksFunction = () => [
+  { rel: "icon", type: "image/png", href: "/pufferblow-art-pixel-32x32.png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",

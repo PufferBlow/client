@@ -1,6 +1,6 @@
 import type { Route } from "./+types/dashboard";
-import { Link } from "react-router";
-import { useState } from "react";
+import { Link, redirect } from "react-router";
+import { useState, useEffect, useRef } from "react";
 import { ServerCreationModal } from "../components/ServerCreationModal";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
 import { UserProfileModal } from "../components/UserProfileModal";
@@ -9,6 +9,8 @@ import { UserContextMenu } from "../components/UserContextMenu";
 import { SearchModal } from "../components/SearchModal";
 import { InviteModal } from "../components/InviteModal";
 import { ThemeToggleWithIcon } from "../components/ThemeToggle";
+import { EmojiPicker } from "../components/EmojiPicker";
+import { logger } from "../utils/logger";
 
 interface User {
   id: string;
@@ -28,6 +30,11 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+export async function loader() {
+  // Authentication check moved to component to work with SSR
+  return null;
+}
+
 export default function Dashboard() {
   // Modal states
   const [serverCreationModalOpen, setServerCreationModalOpen] = useState(false);
@@ -36,10 +43,58 @@ export default function Dashboard() {
   const [selectedUserProfileModalOpen, setSelectedUserProfileModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedUserPosition, setSelectedUserPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedUserTriggerRect, setSelectedUserTriggerRect] = useState<DOMRect | null>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [messageContextMenu, setMessageContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [messageInput, setMessageInput] = useState('');
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
+  const messageInputBarRef = useRef<HTMLDivElement>(null);
+
+  // Check authentication on component mount
+  useEffect(() => {
+    const checkAuth = () => {
+      // Check cookies for auth token
+      const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key.trim()] = value;
+        return acc;
+      }, {} as Record<string, string>);
+
+      if (cookies.authToken && cookies.authToken.trim() !== '') {
+        return true; // Authenticated
+      }
+
+      return false; // Not authenticated
+    };
+
+    if (!checkAuth()) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
+    }
+
+    logger.system.info("Dashboard component mounted", {
+      userId: currentUserId,
+      serverId: currentServer.id,
+      serverName: currentServer.name
+    });
+
+    // Log sensitive data redaction example
+    logger.auth.debug("Testing sensitive data redaction", {
+      password: "secret123",
+      authToken: "token123",
+      normalData: "this is fine"
+    });
+
+    return () => {
+      logger.system.info("Dashboard component unmounting");
+    };
+  }, []);
 
   // Mock data
   const currentUserId = "user123";
@@ -57,7 +112,7 @@ export default function Dashboard() {
 
   // Event handlers
   const handleCreateServer = (serverData: { name: string; description: string; isPrivate: boolean }) => {
-    console.log("Creating server:", serverData);
+    logger.ui.info("Creating server", { serverName: serverData.name, isPrivate: serverData.isPrivate });
     // TODO: Implement server creation
   };
 
@@ -90,7 +145,173 @@ export default function Dashboard() {
 
   const handleCopyInvite = (inviteCode: string) => {
     navigator.clipboard.writeText(`https://pufferblow.app/invite/${inviteCode}`);
-    console.log("Copied invite link:", inviteCode);
+    logger.ui.info("Invite link copied to clipboard", { inviteCode: "[REDACTED]" });
+  };
+
+  // Message action handlers
+  const handleMessageReply = (messageId: string) => {
+    console.log("Reply to message:", messageId);
+    // TODO: Implement reply functionality
+  };
+
+  const handleMessageReact = (messageId: string) => {
+    console.log("Add reaction to message:", messageId);
+    // TODO: Implement reaction functionality
+  };
+
+  const handleMessageReport = (messageId: string) => {
+    console.log("Report message:", messageId);
+    // TODO: Implement report functionality
+  };
+
+  const handleMessageCopy = (messageId: string) => {
+    console.log("Copy message:", messageId);
+    // TODO: Implement copy functionality
+  };
+
+  const handleUserReport = (userId: string) => {
+    console.log("Report user:", userId);
+    // TODO: Implement user report functionality
+  };
+
+  const handleCopyUserId = (userId: string) => {
+    navigator.clipboard.writeText(userId);
+    logger.ui.info("User ID copied to clipboard", { userId: "[REDACTED]" });
+  };
+
+  const handleSendMessageToUser = (userId: string) => {
+    console.log("Send message to user:", userId);
+    // TODO: Implement direct message functionality
+  };
+
+  const handleMessageContextMenu = (messageId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    setMessageContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY }
+    });
+  };
+
+  // Message input handlers
+  const handleSendMessage = () => {
+    if (messageInput.trim()) {
+      logger.ui.info("Sending message", { channel: "general", messageLength: messageInput.length });
+      // TODO: Implement message sending
+      setMessageInput('');
+    }
+  };
+
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // Exploitable file extensions to reject
+    const dangerousExtensions = [
+      // Executables
+      'exe', 'bat', 'cmd', 'scr', 'pif', 'com', 'msi', 'jar', 'app',
+      // Scripts
+      'vbs', 'js', 'jse', 'wsf', 'wsh', 'ps1', 'psm1', 'psd1', 'psc1',
+      // Web files that could contain scripts
+      'html', 'htm', 'xhtml', 'shtml', 'xml', 'svg',
+      // Archives that might contain executables
+      'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz',
+      // Other potentially dangerous
+      'reg', 'inf', 'url', 'lnk', 'scf', 'shb', 'shs'
+    ];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const extension = file.name.split('.').pop()?.toLowerCase();
+
+      if (extension && dangerousExtensions.includes(extension)) {
+        logger.ui.warn("Rejected dangerous file upload", {
+          fileName: file.name,
+          extension,
+          reason: "potentially exploitable file type"
+        });
+        alert(`File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`);
+        event.target.value = ''; // Clear the input
+        return;
+      }
+
+      // Check file size (limit to 10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        logger.ui.warn("Rejected large file upload", {
+          fileName: file.name,
+          fileSize: file.size,
+          maxSize
+        });
+        alert(`File "${file.name}" is too large. Maximum file size is 10MB.`);
+        event.target.value = '';
+        return;
+      }
+    }
+
+    logger.ui.info("File(s) selected for upload", {
+      count: files.length,
+      fileNames: Array.from(files).map(f => f.name)
+    });
+    // TODO: Implement file upload
+  };
+
+  const handleEmojiClick = (event: React.MouseEvent) => {
+    event.preventDefault();
+
+    const buttonRect = (event.target as HTMLElement).getBoundingClientRect();
+    const pickerWidth = 320; // w-80
+    const pickerHeight = 400; // Approximate height
+    const gap = 8;
+
+    // Position horizontally: center on the emoji button
+    let x = buttonRect.left + (buttonRect.width / 2) - (pickerWidth / 2);
+
+    // Ensure horizontal bounds
+    if (x < gap) {
+      x = gap;
+    } else if (x + pickerWidth > window.innerWidth - gap) {
+      x = window.innerWidth - pickerWidth - gap;
+    }
+
+    // Position vertically: above the button with some space for the arrow
+    let y = buttonRect.top - pickerHeight - gap - 4; // Extra space for visual arrow
+
+    // If not enough space above, position below
+    if (y < gap) {
+      y = buttonRect.bottom + gap;
+    }
+
+    // Ensure vertical bounds
+    if (y + pickerHeight > window.innerHeight - gap) {
+      y = window.innerHeight - pickerHeight - gap;
+    }
+    if (y < gap) {
+      y = gap;
+    }
+
+    setEmojiPickerPosition({ x, y });
+    setIsEmojiPickerOpen(!isEmojiPickerOpen);
+    logger.ui.debug("Emoji picker toggled", { isOpen: !isEmojiPickerOpen });
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageInput(prev => prev + emoji);
+    setIsEmojiPickerOpen(false);
+    logger.ui.debug("Emoji added to message", { emoji });
+  };
+
+  const handleGifSelect = (gif: { url: string; title: string }) => {
+    // For now, just log the GIF selection - in a real app you'd send this to the message
+    logger.ui.info("GIF selected", { gifUrl: gif.url, gifTitle: gif.title });
+    setIsEmojiPickerOpen(false);
+    // TODO: Implement GIF sending functionality
   };
 
   const handleUserClick = (userId: string, username: string, event: React.MouseEvent) => {
@@ -140,13 +361,43 @@ export default function Dashboard() {
 
     const user = mockUsers[userId];
     if (user) {
-      // Calculate position next to the clicked user card
+      // Calculate position next to the clicked user card with viewport bounds checking
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const modalX = rect.right + 8; // 8px gap from the right edge
-      const modalY = rect.top; // Align with the top of the user card
+      const modalWidth = 320; // Approximate width of the modal
+      const modalHeight = 400; // Approximate height of the modal
+      const gap = 8;
+
+      // Check if there's enough space to the right
+      const spaceToRight = window.innerWidth - rect.right;
+      const spaceToLeft = rect.left;
+
+      let modalX: number;
+      let modalY: number;
+
+      // Position horizontally: prefer right, fallback to left
+      if (spaceToRight >= modalWidth + gap) {
+        modalX = rect.right + gap;
+      } else if (spaceToLeft >= modalWidth + gap) {
+        modalX = rect.left - modalWidth - gap;
+      } else {
+        // Center if neither side has enough space
+        modalX = Math.max(gap, (window.innerWidth - modalWidth) / 2);
+      }
+
+      // Position vertically: align with top of user card, but ensure modal stays in viewport
+      modalY = rect.top;
+
+      // Adjust if modal would go off-screen vertically
+      if (modalY + modalHeight > window.innerHeight) {
+        modalY = window.innerHeight - modalHeight - gap;
+      }
+      if (modalY < gap) {
+        modalY = gap;
+      }
 
       setSelectedUser(user);
       setSelectedUserPosition({ x: modalX, y: modalY });
+      setSelectedUserTriggerRect(rect);
       setSelectedUserProfileModalOpen(true);
     }
   };
@@ -190,7 +441,7 @@ export default function Dashboard() {
       </div>
 
       {/* Channel Sidebar */}
-      <div className="w-60 bg-gray-700 rounded-xl shadow-lg border border-gray-600 flex flex-col resize-x min-w-48 max-w-96">
+      <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96">
         {/* Server Header */}
         <div className="h-12 px-4 flex items-center justify-between border-b border-gray-800 shadow-sm">
           <h1 className="text-white font-semibold">General Server</h1>
@@ -298,7 +549,15 @@ export default function Dashboard() {
             <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <ThemeToggleWithIcon />
+            <button
+              onClick={() => setMembersListVisible(!membersListVisible)}
+              className="w-5 h-5 text-gray-400 hover:text-white transition-colors"
+              title="Toggle member list"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </button>
             <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
@@ -330,43 +589,120 @@ export default function Dashboard() {
           </div>
 
           {/* Sample Messages */}
-          <div className="flex items-start space-x-3">
-            <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+          <div
+            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+            onMouseEnter={() => setHoveredMessageId("alice")}
+            onMouseLeave={() => setHoveredMessageId(null)}
+            onContextMenu={(e) => handleMessageContextMenu("alice", e)}
+          >
+            <div
+              className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={(e) => handleUserClick("user456", "Alice", e)}
+            >
               <span className="text-white font-semibold">A</span>
             </div>
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
-                <span className="text-white font-medium select-text">Alice</span>
+                <span
+                  className="text-white font-medium select-text cursor-pointer hover:underline"
+                  onClick={(e) => handleUserClick("user456", "Alice", e)}
+                >
+                  Alice
+                </span>
                 <span className="text-gray-400 text-xs select-text">Today at 12:05 PM</span>
               </div>
               <div className="text-gray-300 font-mono select-text">
                 Hey everyone! Love the decentralized approach. No more worrying about server downtime! 🚀
               </div>
             </div>
+            {/* Hover Menu Button */}
+            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "alice" ? "opacity-100" : ""}`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMessageContextMenu({
+                    isOpen: true,
+                    position: { x: e.clientX, y: e.clientY }
+                  });
+                }}
+                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                title="More options"
+              >
+                ⋯
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-start space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+          <div
+            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+            onMouseEnter={() => setHoveredMessageId("bob")}
+            onMouseLeave={() => setHoveredMessageId(null)}
+            onContextMenu={(e) => handleMessageContextMenu("bob", e)}
+          >
+            <div
+              className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={(e) => handleUserClick("user789", "Bob", e)}
+            >
               <span className="text-white font-semibold">B</span>
             </div>
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
-                <span className="text-white font-medium select-text">Bob</span>
+                <div className="flex items-center space-x-2">
+                  <span
+                    className="text-white font-medium select-text cursor-pointer hover:underline"
+                    onClick={(e) => handleUserClick("user789", "Bob", e)}
+                  >
+                    Bob
+                  </span>
+                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                </div>
                 <span className="text-gray-400 text-xs select-text">Today at 12:07 PM</span>
               </div>
               <div className="text-gray-300 font-mono select-text">
                 The UI looks great! Very familiar coming from Discord. How does the decentralization work exactly?
               </div>
             </div>
+            {/* Hover Menu Button */}
+            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "bob" ? "opacity-100" : ""}`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMessageContextMenu({
+                    isOpen: true,
+                    position: { x: e.clientX, y: e.clientY }
+                  });
+                }}
+                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                title="More options"
+              >
+                ⋯
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-start space-x-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+          <div
+            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+            onMouseEnter={() => setHoveredMessageId("charlie")}
+            onMouseLeave={() => setHoveredMessageId(null)}
+            onContextMenu={(e) => handleMessageContextMenu("charlie", e)}
+          >
+            <div
+              className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={(e) => handleUserClick("user101", "Charlie", e)}
+            >
               <span className="text-white font-semibold">C</span>
             </div>
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
-                <span className="text-white font-medium select-text">Charlie</span>
+                <div className="flex items-center space-x-2">
+                  <span
+                    className="text-white font-medium select-text cursor-pointer hover:underline"
+                    onClick={(e) => handleUserClick("user101", "Charlie", e)}
+                  >
+                    Charlie
+                  </span>
+                  <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                </div>
                 <span className="text-gray-400 text-xs select-text">Today at 12:10 PM</span>
               </div>
               <div className="text-gray-300 font-mono select-text">
@@ -374,73 +710,199 @@ export default function Dashboard() {
                 your messages remain accessible through other nodes. Pretty cool tech! 💪
               </div>
             </div>
+            {/* Hover Menu Button */}
+            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "charlie" ? "opacity-100" : ""}`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMessageContextMenu({
+                    isOpen: true,
+                    position: { x: e.clientX, y: e.clientY }
+                  });
+                }}
+                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                title="More options"
+              >
+                ⋯
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Message Input */}
         <div className="p-4">
-          <div className="bg-gray-600 rounded-lg px-4 py-3">
-            <input
-              type="text"
-              placeholder="Message #general"
-              className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none"
-            />
+          <div ref={messageInputBarRef} className="bg-gray-600 rounded-lg px-4 py-3">
+            <div className="flex items-end space-x-3">
+              {/* File Upload Button */}
+              <label className="flex-shrink-0">
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx"
+                />
+                <button
+                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white"
+                  title="Upload file"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                </button>
+              </label>
+
+              {/* Message Input */}
+              <div className="flex-1">
+                <textarea
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Message #general"
+                  className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none min-h-[20px] max-h-32"
+                  rows={1}
+                  style={{ height: 'auto', minHeight: '20px' }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, 128) + 'px';
+                  }}
+                />
+              </div>
+
+              {/* Emoji Button */}
+              <button
+                onClick={handleEmojiClick}
+                className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+                  isEmojiPickerOpen
+                    ? 'bg-blue-600 text-white'
+                    : 'hover:bg-gray-500 text-gray-400 hover:text-white'
+                }`}
+                title="Add emoji"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.586a1 1 0 01.707.293l.707.707A1 1 0 0012.414 11H13m-3 3.5a.5.5 0 11-1 0 .5.5 0 011 0zM16 7a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </button>
+
+              {/* Send Button */}
+              <button
+                onClick={handleSendMessage}
+                disabled={!messageInput.trim()}
+                className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+                  messageInput.trim()
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-500 text-gray-400 cursor-not-allowed'
+                }`}
+                title="Send message"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </div>
           </div>
+
+          {/* Emoji Picker */}
+          <EmojiPicker
+            isOpen={isEmojiPickerOpen}
+            position={emojiPickerPosition}
+            onClose={() => setIsEmojiPickerOpen(false)}
+            onEmojiSelect={handleEmojiSelect}
+            onGifSelect={handleGifSelect}
+          />
         </div>
       </div>
 
       {/* Member List */}
-      <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4">
-        <div className="mb-4">
-          <h3 className="text-sm font-bold text-[var(--color-text-secondary)] uppercase tracking-wide mb-3 bg-[var(--color-surface-tertiary)] px-3 py-2 rounded-xl border border-[var(--color-border)]">Online — 4</h3>
-          <div className="space-y-2">
-            <div
-              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-              onClick={(e) => handleUserClick("user123", "User", e)}
+      <div className={`transition-all duration-300 ease-in-out ${membersListVisible ? 'w-60 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4">
+          {/* Header with close button */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-[var(--color-text-secondary)] uppercase tracking-wide">Members</h3>
+            <button
+              onClick={() => setMembersListVisible(false)}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-surface-secondary)] transition-colors"
+              title="Close member list"
             >
-              <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center shadow-md border-2 border-[var(--color-primary-hover)]">
-                  <span className="text-white text-sm font-bold drop-shadow-sm">U</span>
+              <svg className="w-4 h-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Admin Section */}
+          <div className="mb-4">
+            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
+            <div className="space-y-1">
+              <div
+                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                onClick={(e) => handleUserClick("user789", "Bob", e)}
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center shadow-md border-2 border-red-300">
+                    <span className="text-white text-xs font-bold drop-shadow-sm">B</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-3 border-[var(--color-surface)] shadow-sm"></div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
+                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                </div>
               </div>
-              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
             </div>
-            <div
-              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
-              onClick={(e) => handleUserClick("user456", "Alice", e)}
-            >
-              <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md border-2 border-green-300">
-                  <span className="text-white text-sm font-bold drop-shadow-sm">A</span>
+          </div>
+
+          {/* Moderators Section */}
+          <div className="mb-4">
+            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Moderators — 1</h4>
+            <div className="space-y-1">
+              <div
+                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-accent)]"
+                onClick={(e) => handleUserClick("user101", "Charlie", e)}
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center shadow-md border-2 border-purple-300">
+                    <span className="text-white text-xs font-bold drop-shadow-sm">C</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-3 border-[var(--color-surface)] shadow-sm"></div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
+                  <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                </div>
               </div>
-              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
             </div>
-            <div
-              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
-              onClick={(e) => handleUserClick("user789", "Bob", e)}
-            >
-              <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center shadow-md border-2 border-blue-300">
-                  <span className="text-white text-sm font-bold drop-shadow-sm">B</span>
+          </div>
+
+          {/* Members Section */}
+          <div className="mb-4">
+            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Members — 2</h4>
+            <div className="space-y-1">
+              <div
+                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                onClick={(e) => handleUserClick("user123", "User", e)}
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center shadow-md border-2 border-[var(--color-primary-hover)]">
+                    <span className="text-white text-xs font-bold drop-shadow-sm">U</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-3 border-[var(--color-surface)] shadow-sm"></div>
+                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
               </div>
-              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
-            </div>
-            <div
-              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-accent)]"
-              onClick={(e) => handleUserClick("user101", "Charlie", e)}
-            >
-              <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center shadow-md border-2 border-purple-300">
-                  <span className="text-white text-sm font-bold drop-shadow-sm">C</span>
+              <div
+                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
+                onClick={(e) => handleUserClick("user456", "Alice", e)}
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md border-2 border-green-300">
+                    <span className="text-white text-xs font-bold drop-shadow-sm">A</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-3 border-[var(--color-surface)] shadow-sm"></div>
+                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
               </div>
-              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
             </div>
           </div>
         </div>
@@ -464,6 +926,9 @@ export default function Dashboard() {
         onClose={() => setUserProfileModalOpen(false)}
         user={currentUser}
         currentUserId={currentUserId}
+        onReport={handleUserReport}
+        onCopyUserId={handleCopyUserId}
+        onSendMessage={handleSendMessageToUser}
       />
 
       <SearchModal
@@ -486,6 +951,37 @@ export default function Dashboard() {
         isOpen={messageContextMenu.isOpen}
         position={messageContextMenu.position}
         onClose={() => setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
+        onReply={() => handleMessageReply("current")}
+        onReact={() => {
+          // Open emoji picker for reactions
+          const rect = { left: messageContextMenu.position.x, top: messageContextMenu.position.y, right: messageContextMenu.position.x, bottom: messageContextMenu.position.y };
+          const pickerWidth = 320;
+          const pickerHeight = 400;
+          const gap = 8;
+
+          // Position to the right of the menu
+          let x = rect.right + gap;
+          let y = rect.top;
+
+          // If it would go off the right edge, position to the left
+          if (x + pickerWidth > window.innerWidth) {
+            x = rect.left - pickerWidth - gap;
+          }
+
+          // Adjust if picker would go off-screen vertically
+          if (y + pickerHeight > window.innerHeight) {
+            y = window.innerHeight - pickerHeight - gap;
+          }
+          if (y < gap) {
+            y = gap;
+          }
+
+          setEmojiPickerPosition({ x, y });
+          setIsEmojiPickerOpen(true);
+          setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } }); // Close context menu
+        }}
+        onCopyLink={() => handleMessageCopy("current")}
+        onReport={() => handleMessageReport("current")}
       />
 
       <UserContextMenu
@@ -500,6 +996,10 @@ export default function Dashboard() {
         user={selectedUser}
         currentUserId={currentUserId}
         position={selectedUserPosition}
+        triggerRect={selectedUserTriggerRect}
+        onReport={handleUserReport}
+        onCopyUserId={handleCopyUserId}
+        onSendMessage={handleSendMessageToUser}
       />
     </div>
   );
