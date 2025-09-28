@@ -17,13 +17,14 @@ export const getChannels = async (hostPort: string, serverId: string, authToken:
   });
 };
 
-export const createChannel = async (hostPort: string, serverId: string, channelData: CreateChannelRequest, authToken: string): Promise<ApiResponse<Channel>> => {
+export const listChannels = async (hostPort: string, authToken: string): Promise<ApiResponse<{ status_code: number; channels: Channel[] }>> => {
   const apiClient = createApiClient(hostPort);
-  return apiClient.post('/api/v1/channels', {
-    ...channelData,
-    server_id: serverId,
-    auth_token: authToken,
-  });
+  return apiClient.get(`/api/v1/channels/list?auth_token=${encodeURIComponent(authToken)}`);
+};
+
+export const createChannel = async (hostPort: string, channelData: { channel_name: string; is_private: boolean }, authToken: string): Promise<ApiResponse<Channel>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.post(`/api/v1/channels/create?auth_token=${encodeURIComponent(authToken)}`, channelData);
 };
 
 export const updateChannel = async (hostPort: string, channelId: string, channelData: Partial<CreateChannelRequest>, authToken: string): Promise<ApiResponse<Channel>> => {

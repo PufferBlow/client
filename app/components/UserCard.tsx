@@ -5,9 +5,9 @@ interface UserCardProps {
   bio?: string;
   avatarUrl?: string;
   backgroundUrl?: string;
-  status?: 'active' | 'inactive' | 'anon';
+  status?: 'active' | 'offline' | 'dnd' | 'idle';
   onUsernameChange?: (newUsername: string) => void;
-  onStatusChange?: (newStatus: 'active' | 'inactive' | 'anon') => void;
+  onStatusChange?: (newStatus: 'active' | 'offline' | 'dnd' | 'idle') => void;
   onPasswordChange?: () => void;
   onAuthTokenReset?: () => void;
 }
@@ -168,7 +168,7 @@ export function UserCard({
                 {isEditingStatus ? (
                   <select
                     value={tempStatus}
-                    onChange={(e) => setTempStatus(e.target.value as 'active' | 'inactive' | 'anon')}
+                    onChange={(e) => setTempStatus(e.target.value as 'active' | 'offline' | 'dnd' | 'idle')}
                     className="text-sm bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text)] focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                   >
                     <option value="active">Active</option>

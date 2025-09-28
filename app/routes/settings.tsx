@@ -1,9 +1,8 @@
 import type { Route } from "./+types/settings";
 import { Link } from "react-router";
-import { ThemeToggleWithIcon } from "../components/ThemeToggle";
-import { UserCard } from "../components/UserCard";
 import { useTheme } from "../components/ThemeProvider";
 import { useState, useEffect } from "react";
+import { updateUsername, updateUserStatus, updatePassword, resetAuthToken, getCurrentUserProfile, getAuthTokenFromCookies, getHostPortFromCookies, profileCache, type UpdateUsernameRequest, type UpdateStatusRequest, type UpdatePasswordRequest, type ResetAuthTokenRequest, type GetUserProfileResponse } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,36 +13,128 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('profile');
-  const [username, setUsername] = useState('johndoe');
-  const [userStatus, setUserStatus] = useState<'active' | 'inactive' | 'anon'>('active');
+  const [username, setUsername] = useState('');
+  const [userStatus, setUserStatus] = useState<'online' | 'offline' | 'idle' | 'inactive'>('online');
   const [userBio, setUserBio] = useState('Building the future of decentralized messaging');
   const [bioInputValue, setBioInputValue] = useState('Building the future of decentralized messaging');
   const [hasBioChanged, setHasBioChanged] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [newUsername, setNewUsername] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
+
+  const hostPort = getHostPortFromCookies() || 'localhost:7575';
+  const authToken = getAuthTokenFromCookies() || '';
 
   const changeSection = (sectionId: string) => {
     setActiveSection(sectionId);
   };
 
-  const handleUsernameChange = (newUsername: string) => {
-    setUsername(newUsername);
-    // Here you would typically make an API call to update the username
-    console.log('Username changed to:', newUsername);
+  const handleUsernameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim() || loading) return;
+    setLoading(true);
+    setMessage(null);
+    const response = await updateUsername(hostPort, { auth_token: authToken, new_username: newUsername });
+    setLoading(false);
+    if (response.success && response.data?.status_code === 200) {
+      setMessage({ type: 'success', text: response.data.message });
+      setUsername(newUsername);
+      setNewUsername('');
+      // Update cached profile
+      const cachedProfile = profileCache.get();
+      if (cachedProfile) {
+        cachedProfile.username = newUsername;
+        profileCache.set(cachedProfile);
+      }
+    } else {
+      setMessage({ type: 'error', text: response.error || 'Failed to update username' });
+    }
   };
 
-  const handleStatusChange = (newStatus: 'active' | 'inactive' | 'anon') => {
-    setUserStatus(newStatus);
-    // Here you would typically make an API call to update the status
-    console.log('Status changed to:', newStatus);
+  const handleStatusSubmit = async () => {
+    if (loading) return;
+    setLoading(true);
+    setMessage(null);
+    const response = await updateUserStatus(hostPort, { auth_token: authToken, status: userStatus });
+    setLoading(false);
+    if (response.success && response.data?.status_code === 200) {
+      setMessage({ type: 'success', text: response.data.message });
+      // Update cached profile
+      const cachedProfile = profileCache.get();
+      if (cachedProfile) {
+        cachedProfile.status = userStatus;
+        profileCache.set(cachedProfile);
+      }
+    } else {
+      setMessage({ type: 'error', text: response.error || 'Failed to update status' });
+    }
   };
 
-  const handlePasswordChange = () => {
-    // Here you would typically open a password change modal or navigate to a password change page
-    console.log('Password change requested');
+  const handlePasswordSubmit = async () => {
+    if (!currentPassword || !newPassword || newPassword !== confirmPassword || loading) return;
+    setLoading(true);
+    setMessage(null);
+    const response = await updatePassword(hostPort, { auth_token: authToken, new_password: newPassword, old_password: currentPassword });
+    setLoading(false);
+    if (response.success && response.data?.status_code === 200) {
+      setMessage({ type: 'success', text: response.data.message });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      // Check for specific password error
+      if (response.error?.includes('401') || response.error?.includes('Invalid password') || response.error?.includes('unauthorized')) {
+        setMessage({ type: 'error', text: 'Current password is incorrect. Please try again.' });
+      } else {
+        setMessage({ type: 'error', text: response.error || 'Failed to update password' });
+      }
+    }
   };
 
-  const handleAuthTokenReset = () => {
-    // Here you would typically show a confirmation dialog and then reset the auth token
-    console.log('Auth token reset requested');
+  const handleResetAuthToken = async () => {
+    if (!resetPassword || loading) return;
+    setLoading(true);
+    setMessage(null);
+    const response = await resetAuthToken(hostPort, { auth_token: authToken, password: resetPassword });
+    setLoading(false);
+    if (response.success && response.data?.status_code === 200) {
+      setMessage({ type: 'success', text: response.data.message });
+
+      // Save new auth token and expiration to cookies
+      const expireDate = new Date(response.data.auth_token_expire_time);
+      document.cookie = `authToken=${response.data.auth_token}; expires=${expireDate.toUTCString()}; path=/; secure; samesite=strict`;
+      document.cookie = `authTokenExpire=${response.data.auth_token_expire_time}; expires=${expireDate.toUTCString()}; path=/; secure; samesite=strict`;
+
+      // Update cached profile with new auth token
+      const cachedProfile = profileCache.get();
+      if (cachedProfile) {
+        cachedProfile.auth_token = response.data.auth_token;
+        cachedProfile.auth_token_expire_time = response.data.auth_token_expire_time;
+        profileCache.set(cachedProfile);
+      }
+
+      // Clear the password field
+      setResetPassword('');
+      setShowResetModal(false);
+
+      // Optionally redirect to login or refresh the page
+      setTimeout(() => {
+        window.location.reload(); // Refresh to ensure all components use the new token
+      }, 2000);
+    } else {
+      // Check for specific password error (404 for auth token reset)
+      if (response.error?.includes('404') || response.error?.includes('Incorrect password')) {
+        setMessage({ type: 'error', text: 'Password is incorrect. Please try again.' });
+      } else {
+        setMessage({ type: 'error', text: response.error || 'Failed to reset auth token' });
+      }
+    }
   };
 
   const handleBioChange = (newBio: string) => {
@@ -54,12 +145,48 @@ export default function Settings() {
   };
 
   useEffect(() => {
+    const loadProfile = async () => {
+      const cachedProfile = profileCache.get();
+      if (cachedProfile) {
+        setUsername(cachedProfile.username);
+        setUserStatus(cachedProfile.status);
+        setInitialLoading(false);
+      } else {
+        // No cached profile, fetch from API
+        const response = await getCurrentUserProfile(hostPort, authToken);
+        if (response.success && response.data?.status_code === 200) {
+          const userData = response.data.user_data;
+          setUsername(userData.username);
+          setUserStatus(userData.status);
+          // Cache the profile
+          profileCache.set(userData);
+          setInitialLoading(false);
+        } else {
+          setMessage({ type: 'error', text: 'Failed to load user profile' });
+          setInitialLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
     // Set initial active section based on URL hash or default to profile
     const hash = window.location.hash.replace('#', '');
     if (hash && ['profile', 'security', 'appearance'].includes(hash)) {
       setActiveSection(hash);
     }
-  }, []);
+  }, [hostPort, authToken]);
+
+  // Auto-hide messages after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
   return (
     <div className="min-h-screen bg-[var(--color-background)] animate-in fade-in slide-in-from-right-4 duration-300">
       {/* Main Content */}
@@ -88,6 +215,26 @@ export default function Settings() {
               </p>
             </div>
           </div>
+
+          {/* Error/Success Messages */}
+          {message && (
+            <div className={`mb-6 p-4 rounded-lg border relative ${message.type === 'success' ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">{message.text}</div>
+                <button
+                  onClick={() => setMessage(null)}
+                  className={`ml-4 p-1 rounded-full hover:bg-black hover:bg-opacity-10 transition-colors ${
+                    message.type === 'success' ? 'text-green-800' : 'text-red-800'
+                  }`}
+                  aria-label="Close message"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Settings Sidebar */}
@@ -152,7 +299,7 @@ export default function Settings() {
                       <h3 className="text-lg leading-6 font-medium text-[var(--color-text)] mb-4">
                         Change Username
                       </h3>
-                      <form className="space-y-4">
+                      <form onSubmit={handleUsernameSubmit} className="space-y-4">
                         <div>
                           <label htmlFor="currentUsername" className="block text-sm font-medium text-[var(--color-text-secondary)]">
                             Current Username
@@ -161,7 +308,7 @@ export default function Settings() {
                             type="text"
                             name="currentUsername"
                             id="currentUsername"
-                            defaultValue="johndoe"
+                            value={initialLoading ? 'Loading...' : username}
                             className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                             readOnly
                           />
@@ -175,15 +322,18 @@ export default function Settings() {
                             name="newUsername"
                             id="newUsername"
                             placeholder="New username"
+                            value={newUsername}
+                            onChange={e => setNewUsername(e.target.value)}
                             className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                           />
                         </div>
                         <div className="flex justify-end">
                           <button
                             type="submit"
-                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
+                            disabled={loading}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            Change Username
+                            {loading ? 'Updating...' : 'Change Username'}
                           </button>
                         </div>
                       </form>
@@ -207,12 +357,14 @@ export default function Settings() {
                             <select
                               id="accountStatus"
                               name="accountStatus"
-                              defaultValue="active"
+                              value={userStatus}
+                              onChange={e => setUserStatus(e.target.value as 'online' | 'offline' | 'idle' | 'inactive')}
                               className="mt-1 block w-full px-4 py-3 pr-10 border border-[var(--color-border)] rounded-xl shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] transition-all duration-200 sm:text-sm appearance-none cursor-pointer hover:border-[var(--color-primary)]/50 hover:shadow-md focus:shadow-lg"
                             >
-                              <option value="active">Active</option>
+                              <option value="online">Online</option>
+                              <option value="offline">Offline</option>
+                              <option value="idle">Idle</option>
                               <option value="inactive">Inactive</option>
-                              <option value="anon">ANON</option>
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
                               <svg className="w-5 h-5 text-[var(--color-text-secondary)] transition-transform duration-200 group-hover:text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,9 +376,11 @@ export default function Settings() {
                         <div className="flex justify-end">
                           <button
                             type="button"
-                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
+                            onClick={handleStatusSubmit}
+                            disabled={loading}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            Update Status
+                            {loading ? 'Updating...' : 'Update Status'}
                           </button>
                         </div>
                       </div>
@@ -303,6 +457,8 @@ export default function Settings() {
                               type="password"
                               name="currentPassword"
                               id="currentPassword"
+                              value={currentPassword}
+                              onChange={e => setCurrentPassword(e.target.value)}
                               className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                             />
                           </div>
@@ -314,6 +470,8 @@ export default function Settings() {
                               type="password"
                               name="newPassword"
                               id="newPassword"
+                              value={newPassword}
+                              onChange={e => setNewPassword(e.target.value)}
                               className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                             />
                           </div>
@@ -325,14 +483,18 @@ export default function Settings() {
                               type="password"
                               name="confirmPassword"
                               id="confirmPassword"
+                              value={confirmPassword}
+                              onChange={e => setConfirmPassword(e.target.value)}
                               className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                             />
                           </div>
                           <button
                             type="button"
-                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
+                            onClick={handlePasswordSubmit}
+                            disabled={loading}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            Update Password
+                            {loading ? 'Updating...' : 'Update Password'}
                           </button>
                         </div>
                       </div>
@@ -360,9 +522,37 @@ export default function Settings() {
                         <div className="mt-3">
                           <button
                             type="button"
+                            onClick={() => setShowResetModal(true)}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)]"
                           >
                             Reset Auth Token
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-[var(--color-border)] pt-6">
+                        <h4 className="text-sm font-medium text-[var(--color-text)]">Sign Out</h4>
+                        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                          Sign out of your account. You'll need to log in again to access your account.
+                        </p>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Clear auth token and related cookies
+                              document.cookie = 'authToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                              document.cookie = 'authTokenExpire=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                              document.cookie = 'hostPort=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+                              // Clear cached profile
+                              profileCache.clear();
+
+                              // Redirect to login
+                              window.location.href = '/login';
+                            }}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)]"
+                          >
+                            Sign Out
                           </button>
                         </div>
                       </div>
@@ -425,6 +615,59 @@ export default function Settings() {
           </div>
         </div>
       </main>
+
+      {/* Password Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[var(--color-surface)] rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-[var(--color-border)]">
+              <h3 className="text-lg font-medium text-[var(--color-text)]">Confirm Password Reset</h3>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+                Resetting your authentication token will log you out of all devices. You'll need to log in again with your new token. Please enter your current password to confirm.
+              </p>
+              <div>
+                <label htmlFor="modalPassword" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  id="modalPassword"
+                  value={resetPassword}
+                  onChange={e => setResetPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] transition-all duration-200"
+                  placeholder="Enter your password"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetPassword('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md hover:bg-[var(--color-surface-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!resetPassword.trim()) return;
+                  setShowResetModal(false);
+                  await handleResetAuthToken();
+                  setResetPassword('');
+                }}
+                disabled={!resetPassword.trim() || loading}
+                className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-error)] border border-transparent rounded-md hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? 'Resetting...' : 'Reset Token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

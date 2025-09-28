@@ -11,13 +11,15 @@ import { InviteModal } from "../components/InviteModal";
 import { ThemeToggleWithIcon } from "../components/ThemeToggle";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { logger } from "../utils/logger";
+import { getCurrentUserProfile, getAuthTokenFromCookies, getHostPortFromCookies, profileCache, userActivityTracker } from "../services/user";
+import { listChannels, createChannel } from "../services/channel";
+import type { Channel } from "../models";
 
 interface User {
   id: string;
   username: string;
-  discriminator: string;
   avatar?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
+  status: 'online' | 'idle' | 'offline' | 'dnd';
   bio?: string;
   joinedAt: string;
   roles: string[];
@@ -50,12 +52,32 @@ export default function Dashboard() {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
   const messageInputBarRef = useRef<HTMLDivElement>(null);
+  const serverDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Check authentication on component mount
+  // Handle click outside to close server dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (serverDropdownRef.current && !serverDropdownRef.current.contains(event.target as Node)) {
+        setServerDropdownOpen(false);
+      }
+    };
+
+    if (serverDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [serverDropdownOpen]);
+
+  // Check authentication and fetch user profile on component mount
   useEffect(() => {
     const checkAuth = () => {
       // Check cookies for auth token
@@ -78,6 +100,65 @@ export default function Dashboard() {
       return;
     }
 
+    const fetchUserProfile = async () => {
+      const hostPort = getHostPortFromCookies() || 'localhost:7575';
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const response = await getCurrentUserProfile(hostPort, authToken);
+      if (response.success && response.data?.status_code === 200) {
+        const userData = response.data.user_data;
+        // Generate avatar URL using DiceBear Bottts Neutral style
+        const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
+
+        // Assign roles based on API data
+        const defaultRoles = ['Member'];
+        if (userData.is_owner) defaultRoles.push('Owner');
+        if (userData.is_admin) defaultRoles.push('Admin');
+
+        const user: User = {
+          id: userData.user_id,
+          username: userData.username,
+          avatar: avatarUrl, // Auto-generated avatar
+          status: userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+          bio: 'Passionate about decentralized technology and building the future of secure communication. Always exploring new ways to make digital interactions more private and efficient.', // Random bio data
+          joinedAt: userData.created_at,
+          roles: defaultRoles // Auto-assigned roles
+        } as User;
+        setCurrentUser(user);
+        setCurrentUserId(userData.user_id);
+        // Cache the profile
+        profileCache.set(userData);
+        // Start activity tracking
+        userActivityTracker.startTracking();
+      }
+    };
+
+    fetchUserProfile();
+
+    // Fetch channels
+    const fetchChannels = async () => {
+      const hostPort = getHostPortFromCookies() || 'localhost:7575';
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const response = await listChannels(hostPort, authToken);
+      if (response.success && response.data && response.data.channels) {
+        setChannels(response.data.channels);
+        console.log("Channels fetched from API:", response.data.channels);
+        logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
+      } else {
+        console.error("Failed to fetch channels from API:", response.error);
+        logger.ui.error("Failed to fetch channels", { error: response.error });
+        // Don't show mock data - let it show "No channels" if API fails
+        setChannels([]);
+      }
+    };
+
+    fetchChannels();
+
     logger.system.info("Dashboard component mounted", {
       userId: currentUserId,
       serverId: currentServer.id,
@@ -96,19 +177,12 @@ export default function Dashboard() {
     };
   }, []);
 
+  // State for user data
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+
   // Mock data
-  const currentUserId = "user123";
   const currentServer = { id: "server1", name: "General Server" };
-  const currentUser = {
-    id: "user123",
-    username: "User",
-    discriminator: "1234",
-    avatar: undefined,
-    status: "online" as const,
-    bio: "Building the future of decentralized messaging",
-    joinedAt: "2023-01-15T00:00:00Z",
-    roles: ["Member"]
-  };
 
   // Event handlers
   const handleCreateServer = (serverData: { name: string; description: string; isPrivate: boolean }) => {
@@ -116,9 +190,45 @@ export default function Dashboard() {
     // TODO: Implement server creation
   };
 
-  const handleCreateChannel = (channelData: { name: string; type: 'text' | 'voice'; description?: string }) => {
-    console.log("Creating channel:", channelData);
-    // TODO: Implement channel creation
+  const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
+    try {
+      const hostPort = getHostPortFromCookies() || 'localhost:7575';
+      const authToken = getAuthTokenFromCookies() || '';
+
+      const response = await createChannel(hostPort, {
+        channel_name: channelData.name,
+        is_private: channelData.isPrivate || false
+      }, authToken);
+
+      if (response.success && response.data) {
+        logger.ui.info("Channel created successfully", {
+          channelName: channelData.name,
+          isPrivate: channelData.isPrivate
+        });
+
+        // Refresh channels list
+        const channelsResponse = await listChannels(hostPort, authToken);
+        if (channelsResponse.success && channelsResponse.data) {
+          setChannels(channelsResponse.data.channels);
+        }
+
+        // Close modal
+        setChannelCreationModalOpen(false);
+      } else {
+        // Handle specific error codes
+        if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
+          alert('Channel name already exists, please choose a different name.');
+        } else if (response.error?.includes('403') || response.error?.includes('Access forbidden')) {
+          alert('Access forbidden. Only admins can create channels and manage them.');
+        } else {
+          alert(`Failed to create channel: ${response.error || 'Unknown error'}`);
+        }
+        logger.ui.error("Failed to create channel", { error: response.error, channelData });
+      }
+    } catch (error) {
+      alert('An unexpected error occurred while creating the channel.');
+      logger.ui.error("Unexpected error creating channel", { error, channelData });
+    }
   };
 
   const handleSearch = async (query: string) => {
@@ -315,13 +425,12 @@ export default function Dashboard() {
   };
 
   const handleUserClick = (userId: string, username: string, event: React.MouseEvent) => {
-    // Create mock user data based on userId
+    // Create mock user data based on userId with generated avatars
     const mockUsers: Record<string, User> = {
       "user123": {
         id: "user123",
         username: "User",
-        discriminator: "1234",
-        avatar: undefined,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`,
         status: "online",
         bio: "Building the future of decentralized messaging",
         joinedAt: "2023-01-15T00:00:00Z",
@@ -330,8 +439,7 @@ export default function Dashboard() {
       "user456": {
         id: "user456",
         username: "Alice",
-        discriminator: "5678",
-        avatar: undefined,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`,
         status: "online",
         bio: "Frontend developer passionate about user experience",
         joinedAt: "2023-02-20T00:00:00Z",
@@ -340,8 +448,7 @@ export default function Dashboard() {
       "user789": {
         id: "user789",
         username: "Bob",
-        discriminator: "9012",
-        avatar: undefined,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`,
         status: "online",
         bio: "Backend engineer specializing in distributed systems",
         joinedAt: "2023-03-10T00:00:00Z",
@@ -350,8 +457,7 @@ export default function Dashboard() {
       "user101": {
         id: "user101",
         username: "Charlie",
-        discriminator: "3456",
-        avatar: undefined,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`,
         status: "online",
         bio: "DevOps engineer ensuring smooth deployments",
         joinedAt: "2023-04-05T00:00:00Z",
@@ -443,78 +549,107 @@ export default function Dashboard() {
       {/* Channel Sidebar */}
       <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96">
         {/* Server Header */}
-        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-800 shadow-sm">
+        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-800 shadow-sm relative">
           <h1 className="text-white font-semibold">General Server</h1>
-          <svg className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <div ref={serverDropdownRef}>
+            <button
+              onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
+              className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {serverDropdownOpen && (
+              <div className="absolute right-0 top-12 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 min-w-48 z-50">
+                <button
+                  onClick={() => {
+                    const hasPermission = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator');
+                    if (hasPermission) {
+                      setChannelCreationModalOpen(true);
+                      setServerDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator'))}
+                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
+                    currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator')
+                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
+                      : 'text-gray-500 cursor-not-allowed opacity-60'
+                  }`}
+                  title={
+                    currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator')
+                      ? 'Create a new channel'
+                      : 'Only admins and moderators can create channels'
+                  }
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Create Channel</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Channel List */}
         <div className="flex-1 overflow-y-auto">
-          {/* Text Channels */}
-          <div className="px-2 py-4">
-            <div className="flex items-center px-2 mb-1">
-              <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Text Channels</span>
+          {channels.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <div className="text-gray-400 text-sm">No channels</div>
             </div>
-            
-            <div className="space-y-0.5">
-              <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer bg-gray-600">
-                <span className="text-gray-400 mr-2">#</span>
-                <span className="text-gray-300 text-sm">general</span>
-              </div>
-              <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                <span className="text-gray-400 mr-2">#</span>
-                <span className="text-gray-400 text-sm">random</span>
-              </div>
-              <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                <span className="text-gray-400 mr-2">#</span>
-                <span className="text-gray-400 text-sm">development</span>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Channels */}
+              <div className="px-2 py-4">
+                <div className="flex items-center px-2 mb-1">
+                  <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
+                </div>
 
-          {/* Voice Channels */}
-          <div className="px-2 py-2">
-            <div className="flex items-center px-2 mb-1">
-              <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Voice Channels</span>
-            </div>
-            
-            <div className="space-y-0.5">
-              <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                <svg className="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-                <span className="text-gray-400 text-sm">General</span>
+                <div className="space-y-0.5">
+                  {channels.map(channel => (
+                    <div
+                      key={channel.channel_id}
+                      className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer"
+                    >
+                      <span className="text-gray-400 mr-2">#</span>
+                      <span className="text-gray-400 text-sm">{channel.channel_name}</span>
+                      {channel.is_private && (
+                        <svg className="w-4 h-4 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                <svg className="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-                <span className="text-gray-400 text-sm">Gaming</span>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* User Panel */}
         <div className="h-14 bg-gray-800 px-2 flex items-center">
           <div
             className="flex items-center flex-1 cursor-pointer hover:bg-gray-700 rounded-md transition-colors p-1 -m-1"
-            onClick={() => setUserProfileModalOpen(true)}
+            onClick={() => currentUser && setUserProfileModalOpen(true)}
           >
-            <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center mr-2">
-              <span className="text-white text-sm font-semibold">U</span>
-            </div>
+            {currentUser?.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.username}
+                className="w-8 h-8 rounded-full mr-2"
+              />
+            ) : (
+              <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center mr-2">
+                <span className="text-white text-sm font-semibold">U</span>
+              </div>
+            )}
             <div className="flex-1 min-w-0">
-              <div className="text-white text-sm font-medium truncate">User</div>
-              <div className="text-gray-400 text-xs">Online</div>
+              <div className="text-white text-sm font-medium truncate">{currentUser?.username || 'User'}</div>
+              <div className="text-gray-400 text-xs capitalize">{currentUser?.status || 'online'}</div>
             </div>
           </div>
           <div className="flex space-x-2">
@@ -581,7 +716,7 @@ export default function Dashboard() {
                 <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded">BOT</span>
                 <span className="text-gray-400 text-xs select-text">Today at 12:00 PM</span>
               </div>
-              <div className="text-gray-300 font-mono select-text">
+              <div className="text-gray-300 font-sans select-text">
                 Welcome to Pufferblow! 🎉 This is a decentralized messaging platform similar to Discord.
                 Your messages are distributed across decentralized servers for better privacy and reliability.
               </div>
@@ -595,12 +730,12 @@ export default function Dashboard() {
             onMouseLeave={() => setHoveredMessageId(null)}
             onContextMenu={(e) => handleMessageContextMenu("alice", e)}
           >
-            <div
-              className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+            <img
+              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
+              alt="Alice"
+              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={(e) => handleUserClick("user456", "Alice", e)}
-            >
-              <span className="text-white font-semibold">A</span>
-            </div>
+            />
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
                 <span
@@ -611,7 +746,7 @@ export default function Dashboard() {
                 </span>
                 <span className="text-gray-400 text-xs select-text">Today at 12:05 PM</span>
               </div>
-              <div className="text-gray-300 font-mono select-text">
+              <div className="text-gray-300 font-sans select-text">
                 Hey everyone! Love the decentralized approach. No more worrying about server downtime! 🚀
               </div>
             </div>
@@ -639,12 +774,12 @@ export default function Dashboard() {
             onMouseLeave={() => setHoveredMessageId(null)}
             onContextMenu={(e) => handleMessageContextMenu("bob", e)}
           >
-            <div
-              className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+            <img
+              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
+              alt="Bob"
+              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={(e) => handleUserClick("user789", "Bob", e)}
-            >
-              <span className="text-white font-semibold">B</span>
-            </div>
+            />
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
                 <div className="flex items-center space-x-2">
@@ -658,7 +793,7 @@ export default function Dashboard() {
                 </div>
                 <span className="text-gray-400 text-xs select-text">Today at 12:07 PM</span>
               </div>
-              <div className="text-gray-300 font-mono select-text">
+              <div className="text-gray-300 font-sans select-text">
                 The UI looks great! Very familiar coming from Discord. How does the decentralization work exactly?
               </div>
             </div>
@@ -686,12 +821,12 @@ export default function Dashboard() {
             onMouseLeave={() => setHoveredMessageId(null)}
             onContextMenu={(e) => handleMessageContextMenu("charlie", e)}
           >
-            <div
-              className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+            <img
+              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
+              alt="Charlie"
+              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={(e) => handleUserClick("user101", "Charlie", e)}
-            >
-              <span className="text-white font-semibold">C</span>
-            </div>
+            />
             <div className="flex-1">
               <div className="flex items-center space-x-2 mb-1">
                 <div className="flex items-center space-x-2">
@@ -705,7 +840,7 @@ export default function Dashboard() {
                 </div>
                 <span className="text-gray-400 text-xs select-text">Today at 12:10 PM</span>
               </div>
-              <div className="text-gray-300 font-mono select-text">
+              <div className="text-gray-300 font-sans select-text">
                 @Bob The messages are distributed across multiple nodes in the network. Even if some servers go down,
                 your messages remain accessible through other nodes. Pretty cool tech! 💪
               </div>
@@ -834,23 +969,25 @@ export default function Dashboard() {
           {/* Admin Section */}
           <div className="mb-4">
             <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
-            <div className="space-y-1">
-              <div
-                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                onClick={(e) => handleUserClick("user789", "Bob", e)}
-              >
-                <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center shadow-md border-2 border-red-300">
-                    <span className="text-white text-xs font-bold drop-shadow-sm">B</span>
+              <div className="space-y-1">
+                <div
+                  className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                  onClick={(e) => handleUserClick("user789", "Bob", e)}
+                >
+                  <div className="relative">
+                    <img
+                      src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
+                      alt="Bob"
+                      className="w-8 h-8 rounded-full shadow-md border-2 border-red-300"
+                    />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
-                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
+                    <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                  </div>
                 </div>
               </div>
-            </div>
           </div>
 
           {/* Moderators Section */}
@@ -862,9 +999,11 @@ export default function Dashboard() {
                 onClick={(e) => handleUserClick("user101", "Charlie", e)}
               >
                 <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center shadow-md border-2 border-purple-300">
-                    <span className="text-white text-xs font-bold drop-shadow-sm">C</span>
-                  </div>
+                  <img
+                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
+                    alt="Charlie"
+                    className="w-8 h-8 rounded-full shadow-md border-2 border-purple-300"
+                  />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -884,9 +1023,11 @@ export default function Dashboard() {
                 onClick={(e) => handleUserClick("user123", "User", e)}
               >
                 <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center shadow-md border-2 border-[var(--color-primary-hover)]">
-                    <span className="text-white text-xs font-bold drop-shadow-sm">U</span>
-                  </div>
+                  <img
+                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`}
+                    alt="User"
+                    className="w-8 h-8 rounded-full shadow-md border-2 border-[var(--color-primary-hover)]"
+                  />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
                 <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
@@ -896,9 +1037,11 @@ export default function Dashboard() {
                 onClick={(e) => handleUserClick("user456", "Alice", e)}
               >
                 <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-md border-2 border-green-300">
-                    <span className="text-white text-xs font-bold drop-shadow-sm">A</span>
-                  </div>
+                  <img
+                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
+                    alt="Alice"
+                    className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
+                  />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
                 </div>
                 <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>

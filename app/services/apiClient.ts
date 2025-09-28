@@ -25,7 +25,7 @@ export class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
+          ...(options.body && { 'Content-Type': 'application/json' }),
           ...options.headers,
         },
       });
@@ -47,6 +47,15 @@ export class ApiClient {
       };
     } catch (error) {
       logger.api.error('Request error', error);
+
+      // Check if it's a CORS error
+      if (error instanceof TypeError && error.message.includes('CORS')) {
+        return {
+          success: false,
+          error: 'CORS error: The server does not allow cross-origin requests from this domain. Please check server configuration.',
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -54,7 +63,7 @@ export class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
+  async get<T>(endpoint: string, params?: Record<string, string>, headers?: Record<string, string>): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
     if (params) {
       const url = new URL(`http://dummy${endpoint}`);
@@ -63,27 +72,28 @@ export class ApiClient {
       });
       fullEndpoint = url.pathname + url.search;
     }
-    return this.request<T>(fullEndpoint);
+    return this.request<T>(fullEndpoint, { headers });
   }
 
-  async post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+      headers,
+    });
+  }
+
+  async put<T>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
-    if (body) {
+    if (params) {
       const url = new URL(`http://dummy${endpoint}`);
-      Object.entries(body).forEach(([key, value]) => {
-        url.searchParams.append(key, String(value));
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, value);
       });
       fullEndpoint = url.pathname + url.search;
     }
     return this.request<T>(fullEndpoint, {
-      method: 'POST',
-    });
-  }
-
-  async put<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
     });
   }
 
@@ -95,6 +105,9 @@ export class ApiClient {
 }
 
 export const createApiClient = (hostPort: string): ApiClient => {
-  const baseUrl = `http://${hostPort}`;
+  // In development, use relative URLs so Vite proxy can handle CORS
+  // In production, use the full host:port URL
+  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
   return new ApiClient(baseUrl);
 };

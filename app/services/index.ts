@@ -19,6 +19,7 @@ export type {
 // Channel services
 export {
   getChannels,
+  listChannels,
   createChannel,
   updateChannel,
   deleteChannel

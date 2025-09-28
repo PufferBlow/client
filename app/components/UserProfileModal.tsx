@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 interface User {
   id: string;
   username: string;
-  discriminator: string;
   avatar?: string;
   status: 'online' | 'idle' | 'dnd' | 'offline';
   bio?: string;
@@ -61,7 +60,7 @@ export function UserProfileModal({
   if (!isOpen || !user) return null;
 
   // Additional safety check - ensure user has required properties
-  if (!user.id || !user.username || !user.discriminator) {
+  if (!user.id || !user.username) {
     console.error('UserProfileModal: Invalid user data provided', user);
     return null;
   }

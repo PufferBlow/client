@@ -3,13 +3,14 @@ import { useState } from "react";
 interface ChannelCreationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateChannel: (channelData: { name: string; type: 'text' | 'voice'; description?: string }) => void;
+  onCreateChannel: (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => void;
 }
 
 export function ChannelCreationModal({ isOpen, onClose, onCreateChannel }: ChannelCreationModalProps) {
   const [name, setName] = useState("");
   const [type, setType] = useState<'text' | 'voice'>('text');
   const [description, setDescription] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,11 +18,13 @@ export function ChannelCreationModal({ isOpen, onClose, onCreateChannel }: Chann
       onCreateChannel({
         name: name.trim(),
         type,
-        description: description.trim() || undefined
+        description: description.trim() || undefined,
+        isPrivate
       });
       setName("");
       setType('text');
       setDescription("");
+      setIsPrivate(false);
       onClose();
     }
   };
@@ -120,6 +123,27 @@ export function ChannelCreationModal({ isOpen, onClose, onCreateChannel }: Chann
               />
             </div>
           )}
+
+          <div className="flex items-start space-x-3">
+            <div className="flex items-center h-5">
+              <input
+                id="private"
+                name="private"
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+            </div>
+            <div className="text-sm">
+              <label htmlFor="private" className="font-medium text-gray-300">
+                Private Channel
+              </label>
+              <p className="text-gray-400 text-xs">
+                Only invited members can view and interact with this channel. Even server members need to be invited.
+              </p>
+            </div>
+          </div>
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
