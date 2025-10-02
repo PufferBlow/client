@@ -10,12 +10,15 @@ import { SearchModal } from "../components/SearchModal";
 import { InviteModal } from "../components/InviteModal";
 import { ThemeToggleWithIcon } from "../components/ThemeToggle";
 import { EmojiPicker } from "../components/EmojiPicker";
+import { UserCard } from "../components/UserCard";
+import { UserPanel } from "../components/UserPanel";
 import { logger } from "../utils/logger";
-import { getCurrentUserProfile, getAuthTokenFromCookies, getHostPortFromCookies, profileCache, userActivityTracker } from "../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, useCurrentUserProfile, useActivityTracker } from "../services/user";
 import { listChannels, createChannel } from "../services/channel";
 import type { Channel } from "../models";
+import type { User } from "../models";
 
-interface User {
+interface DisplayUser {
   id: string;
   username: string;
   avatar?: string;
@@ -38,12 +41,16 @@ export async function loader() {
 }
 
 export default function Dashboard() {
+  // React Query hooks for user authentication and data
+  const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
+  const { recordActivity } = useActivityTracker();
+
   // Modal states
   const [serverCreationModalOpen, setServerCreationModalOpen] = useState(false);
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
   const [selectedUserProfileModalOpen, setSelectedUserProfileModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<DisplayUser | null>(null);
   const [selectedUserPosition, setSelectedUserPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedUserTriggerRect, setSelectedUserTriggerRect] = useState<DOMRect | null>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
@@ -59,6 +66,14 @@ export default function Dashboard() {
   const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
   const messageInputBarRef = useRef<HTMLDivElement>(null);
   const serverDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle authentication redirects
+  if (userError?.message?.includes('No authentication token')) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    return null;
+  }
 
   // Handle click outside to close server dropdown
   useEffect(() => {
@@ -77,74 +92,14 @@ export default function Dashboard() {
     };
   }, [serverDropdownOpen]);
 
-  // Check authentication and fetch user profile on component mount
+  // Fetch channels on mount
   useEffect(() => {
-    const checkAuth = () => {
-      // Check cookies for auth token
-      const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        acc[key.trim()] = value;
-        return acc;
-      }, {} as Record<string, string>);
-
-      if (cookies.authToken && cookies.authToken.trim() !== '') {
-        return true; // Authenticated
-      }
-
-      return false; // Not authenticated
-    };
-
-    if (!checkAuth()) {
-      // Redirect to login if not authenticated
-      window.location.href = '/login';
-      return;
-    }
-
-    const fetchUserProfile = async () => {
-      const hostPort = getHostPortFromCookies() || 'localhost:7575';
-      const authToken = getAuthTokenFromCookies() || '';
-
-      if (!authToken) return;
-
-      const response = await getCurrentUserProfile(hostPort, authToken);
-      if (response.success && response.data?.status_code === 200) {
-        const userData = response.data.user_data;
-        // Generate avatar URL using DiceBear Bottts Neutral style
-        const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
-
-        // Assign roles based on API data
-        const defaultRoles = ['Member'];
-        if (userData.is_owner) defaultRoles.push('Owner');
-        if (userData.is_admin) defaultRoles.push('Admin');
-
-        const user: User = {
-          id: userData.user_id,
-          username: userData.username,
-          avatar: avatarUrl, // Auto-generated avatar
-          status: userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline',
-          bio: 'Passionate about decentralized technology and building the future of secure communication. Always exploring new ways to make digital interactions more private and efficient.', // Random bio data
-          joinedAt: userData.created_at,
-          roles: defaultRoles // Auto-assigned roles
-        } as User;
-        setCurrentUser(user);
-        setCurrentUserId(userData.user_id);
-        // Cache the profile
-        profileCache.set(userData);
-        // Start activity tracking
-        userActivityTracker.startTracking();
-      }
-    };
-
-    fetchUserProfile();
-
-    // Fetch channels
     const fetchChannels = async () => {
-      const hostPort = getHostPortFromCookies() || 'localhost:7575';
       const authToken = getAuthTokenFromCookies() || '';
 
       if (!authToken) return;
 
-      const response = await listChannels(hostPort, authToken);
+      const response = await listChannels(authToken);
       if (response.success && response.data && response.data.channels) {
         setChannels(response.data.channels);
         console.log("Channels fetched from API:", response.data.channels);
@@ -157,29 +112,113 @@ export default function Dashboard() {
       }
     };
 
-    fetchChannels();
+    if (currentUser) {
+      fetchChannels();
+    }
+  }, [currentUser]);
 
-    logger.system.info("Dashboard component mounted", {
-      userId: currentUserId,
-      serverId: currentServer.id,
-      serverName: currentServer.name
-    });
+  // Show skeleton loading state
+  if (userLoading) {
+    return (
+      <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
+        {/* Server Sidebar Skeleton */}
+        <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2">
+          {/* Pufferblow Logo */}
+          <div className="w-12 h-12 bg-gray-600 rounded-2xl flex items-center justify-center mb-2">
+            <div className="w-6 h-6 bg-gray-500 rounded"></div>
+          </div>
+          <div className="w-8 h-px bg-gray-600 rounded"></div>
+          {/* Server Icons */}
+          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
+          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
+          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
+          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
+        </div>
 
-    // Log sensitive data redaction example
-    logger.auth.debug("Testing sensitive data redaction", {
-      password: "secret123",
-      authToken: "token123",
-      normalData: "this is fine"
-    });
+        {/* Channel Sidebar Skeleton */}
+        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col">
+          <div className="h-12 px-4 bg-gray-700 rounded-t-xl"></div>
+          <div className="flex-1 p-4 space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+                <div className="flex-1 h-4 bg-gray-600 rounded"></div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-    return () => {
-      logger.system.info("Dashboard component unmounting");
-    };
-  }, []);
+        {/* Main Chat Area Skeleton */}
+        <div className="flex-1 flex flex-col bg-gray-800 rounded-xl shadow-lg border border-gray-600">
+          <div className="h-12 bg-gray-700 rounded-t-xl"></div>
+          <div className="flex-1 p-4 space-y-6">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-start space-x-3">
+                <div className="w-10 h-10 bg-gray-600 rounded-full"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-20 h-4 bg-gray-600 rounded"></div>
+                    <div className="w-16 h-3 bg-gray-700 rounded"></div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="w-full h-3 bg-gray-600 rounded"></div>
+                    <div className="w-3/4 h-3 bg-gray-600 rounded"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="p-4 border-t border-gray-600">
+            <div className="bg-gray-600 rounded-lg px-4 py-3 h-12"></div>
+          </div>
+        </div>
 
-  // State for user data
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
+        {/* Member List Skeleton */}
+        <div className="w-60 opacity-25">
+          <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-16 h-4 bg-gray-700 rounded"></div>
+              <div className="w-4 h-4 bg-gray-700 rounded"></div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                <div className="flex items-center space-x-3 px-3 py-2">
+                  <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                  <div className="flex-1 space-y-1">
+                    <div className="w-12 h-3 bg-gray-600 rounded"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                <div className="flex items-center space-x-3 px-3 py-2">
+                  <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                  <div className="flex-1 space-y-1">
+                    <div className="w-12 h-3 bg-gray-600 rounded"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center space-x-3 px-3 py-2">
+                    <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                    <div className="flex-1 space-y-1">
+                      <div className="w-16 h-3 bg-gray-600 rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Mock data
   const currentServer = { id: "server1", name: "General Server" };
@@ -192,10 +231,9 @@ export default function Dashboard() {
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
     try {
-      const hostPort = getHostPortFromCookies() || 'localhost:7575';
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await createChannel(hostPort, {
+      const response = await createChannel({
         channel_name: channelData.name,
         is_private: channelData.isPrivate || false
       }, authToken);
@@ -207,7 +245,7 @@ export default function Dashboard() {
         });
 
         // Refresh channels list
-        const channelsResponse = await listChannels(hostPort, authToken);
+        const channelsResponse = await listChannels(authToken);
         if (channelsResponse.success && channelsResponse.data) {
           setChannels(channelsResponse.data.channels);
         }
@@ -509,7 +547,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none">
+    <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
       {/* Server Sidebar */}
       <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
         {/* Pufferblow Logo */}
@@ -628,43 +666,6 @@ export default function Dashboard() {
               </div>
             </>
           )}
-        </div>
-
-        {/* User Panel */}
-        <div className="h-14 bg-gray-800 px-2 flex items-center">
-          <div
-            className="flex items-center flex-1 cursor-pointer hover:bg-gray-700 rounded-md transition-colors p-1 -m-1"
-            onClick={() => currentUser && setUserProfileModalOpen(true)}
-          >
-            {currentUser?.avatar ? (
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.username}
-                className="w-8 h-8 rounded-full mr-2"
-              />
-            ) : (
-              <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center mr-2">
-                <span className="text-white text-sm font-semibold">U</span>
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-white text-sm font-medium truncate">{currentUser?.username || 'User'}</div>
-              <div className="text-gray-400 text-xs capitalize">{currentUser?.status || 'online'}</div>
-            </div>
-          </div>
-          <div className="flex space-x-2">
-            <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-600">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-              </svg>
-            </button>
-            <Link to="/settings" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-600">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </Link>
-          </div>
         </div>
       </div>
 
@@ -1051,6 +1052,22 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* User Panel - Bottom Left */}
+      {currentUser ? (
+        <UserPanel
+          username={currentUser.username || ''}
+          avatar={currentUser.avatar || ''}
+          status={currentUser.status === 'online' ? 'online' :
+                 currentUser.status === 'offline' ? 'offline' :
+                 currentUser.status === 'idle' ? 'idle' :
+                 currentUser.status === 'dnd' ? 'dnd' :
+                 'offline'}
+          onClick={() => setUserProfileModalOpen(true)}
+          onSettingsClick={() => setUserProfileModalOpen(true)}
+          className="absolute bottom-2 left-2 z-50"
+        />
+      ) : null}
+
       {/* Modals */}
       <ServerCreationModal
         isOpen={serverCreationModalOpen}
@@ -1067,8 +1084,8 @@ export default function Dashboard() {
       <UserProfileModal
         isOpen={userProfileModalOpen}
         onClose={() => setUserProfileModalOpen(false)}
-        user={currentUser}
-        currentUserId={currentUserId}
+        user={currentUser || null}
+        currentUserId={currentUser?.user_id || ""}
         onReport={handleUserReport}
         onCopyUserId={handleCopyUserId}
         onSendMessage={handleSendMessageToUser}
@@ -1137,7 +1154,7 @@ export default function Dashboard() {
         isOpen={selectedUserProfileModalOpen}
         onClose={() => setSelectedUserProfileModalOpen(false)}
         user={selectedUser}
-        currentUserId={currentUserId}
+        currentUserId={currentUser?.user_id || ""}
         position={selectedUserPosition}
         triggerRect={selectedUserTriggerRect}
         onReport={handleUserReport}

@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { getHostPortFromStorage as getHostPort } from './user';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -104,10 +105,8 @@ export class ApiClient {
   }
 }
 
-export const createApiClient = (hostPort: string): ApiClient => {
-  // In development, use relative URLs so Vite proxy can handle CORS
-  // In production, use the full host:port URL
-  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
+export const createApiClient = (): ApiClient => {
+  const hostPort = getHostPort() || 'localhost:7575';
+  const baseUrl = `http://${hostPort}`;
   return new ApiClient(baseUrl);
 };

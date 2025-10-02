@@ -2,7 +2,7 @@ import type { Route } from "./+types/settings";
 import { Link } from "react-router";
 import { useTheme } from "../components/ThemeProvider";
 import { useState, useEffect } from "react";
-import { updateUsername, updateUserStatus, updatePassword, resetAuthToken, getCurrentUserProfile, getAuthTokenFromCookies, getHostPortFromCookies, profileCache, type UpdateUsernameRequest, type UpdateStatusRequest, type UpdatePasswordRequest, type ResetAuthTokenRequest, type GetUserProfileResponse } from "../services/user";
+import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, updatePassword, resetAuthToken, useLogout } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -12,14 +12,21 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Settings() {
+  // React Query hooks
+  const { data: currentUser } = useCurrentUserProfile();
+  const updateUsernameMutation = useUpdateUsername();
+  const updateStatusMutation = useUpdateStatus();
+  const { logout } = useLogout();
+
+  const [updatePasswordMutation, setUpdatePasswordMutation] = useState({ isPending: false });
+  const [resetAuthTokenMutation, setResetAuthTokenMutation] = useState({ isPending: false });
+
+  // Local state
   const [activeSection, setActiveSection] = useState('profile');
-  const [username, setUsername] = useState('');
-  const [userStatus, setUserStatus] = useState<'online' | 'offline' | 'idle' | 'inactive'>('online');
+  const [userStatus, setUserStatus] = useState<'online' | 'offline' | 'idle' | 'dnd'>('online');
   const [userBio, setUserBio] = useState('Building the future of decentralized messaging');
   const [bioInputValue, setBioInputValue] = useState('Building the future of decentralized messaging');
   const [hasBioChanged, setHasBioChanged] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [newUsername, setNewUsername] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -27,9 +34,41 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
+  const [newHostPort, setNewHostPort] = useState('');
 
-  const hostPort = getHostPortFromCookies() || 'localhost:7575';
-  const authToken = getAuthTokenFromCookies() || '';
+  const hostPort = getHostPortFromStorage() || 'localhost:7575';
+
+  // Set current user status when user data loads
+  useEffect(() => {
+    if (currentUser) {
+      // Map API status to UI status
+      const statusMap = {
+        'online': 'online' as const,
+        'offline': 'offline' as const,
+        'idle': 'idle' as const,
+        'inactive': 'offline' as const, // Map inactive to offline for UI
+      };
+      setUserStatus(statusMap[currentUser.status as keyof typeof statusMap] || 'online');
+      setUserBio('Building the future of decentralized messaging');
+      setBioInputValue('Building the future of decentralized messaging');
+    }
+  }, [currentUser]);
+
+  // Set initial active section based on URL hash
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash && ['profile', 'security', 'appearance', 'server'].includes(hash)) {
+      setActiveSection(hash);
+    }
+  }, []);
+
+  // Auto-hide messages after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const changeSection = (sectionId: string) => {
     setActiveSection(sectionId);
@@ -37,156 +76,105 @@ export default function Settings() {
 
   const handleUsernameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUsername.trim() || loading) return;
-    setLoading(true);
-    setMessage(null);
-    const response = await updateUsername(hostPort, { auth_token: authToken, new_username: newUsername });
-    setLoading(false);
-    if (response.success && response.data?.status_code === 200) {
-      setMessage({ type: 'success', text: response.data.message });
-      setUsername(newUsername);
+    if (!newUsername.trim() || updateUsernameMutation.isPending) return;
+
+    try {
+      await updateUsernameMutation.mutateAsync(newUsername);
+      setMessage({ type: 'success', text: 'Username updated successfully!' });
       setNewUsername('');
-      // Update cached profile
-      const cachedProfile = profileCache.get();
-      if (cachedProfile) {
-        cachedProfile.username = newUsername;
-        profileCache.set(cachedProfile);
-      }
-    } else {
-      setMessage({ type: 'error', text: response.error || 'Failed to update username' });
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update username' });
     }
   };
 
   const handleStatusSubmit = async () => {
-    if (loading) return;
-    setLoading(true);
-    setMessage(null);
-    const response = await updateUserStatus(hostPort, { auth_token: authToken, status: userStatus });
-    setLoading(false);
-    if (response.success && response.data?.status_code === 200) {
-      setMessage({ type: 'success', text: response.data.message });
-      // Update cached profile
-      const cachedProfile = profileCache.get();
-      if (cachedProfile) {
-        cachedProfile.status = userStatus;
-        profileCache.set(cachedProfile);
-      }
-    } else {
-      setMessage({ type: 'error', text: response.error || 'Failed to update status' });
+    if (updateStatusMutation.isPending) return;
+
+    const statusMap = {
+      online: 'online' as const,
+      idle: 'idle' as const,
+      dnd: 'dnd' as const,
+      offline: 'offline' as const,
+    };
+
+    try {
+      await updateStatusMutation.mutateAsync(statusMap[userStatus] || 'online');
+      setMessage({ type: 'success', text: 'Status updated successfully!' });
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update status' });
     }
   };
 
   const handlePasswordSubmit = async () => {
-    if (!currentPassword || !newPassword || newPassword !== confirmPassword || loading) return;
-    setLoading(true);
-    setMessage(null);
-    const response = await updatePassword(hostPort, { auth_token: authToken, new_password: newPassword, old_password: currentPassword });
-    setLoading(false);
-    if (response.success && response.data?.status_code === 200) {
-      setMessage({ type: 'success', text: response.data.message });
+    if (!currentPassword || !newPassword || newPassword !== confirmPassword || updatePasswordMutation.isPending) return;
+
+    try {
+      await updatePasswordMutation.mutateAsync({
+        auth_token: '', // Will be filled by the hook
+        new_password: newPassword,
+        old_password: currentPassword
+      });
+      setMessage({ type: 'success', text: 'Password updated successfully!' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } else {
-      // Check for specific password error
-      if (response.error?.includes('401') || response.error?.includes('Invalid password') || response.error?.includes('unauthorized')) {
-        setMessage({ type: 'error', text: 'Current password is incorrect. Please try again.' });
-      } else {
-        setMessage({ type: 'error', text: response.error || 'Failed to update password' });
-      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update password' });
     }
   };
 
   const handleResetAuthToken = async () => {
-    if (!resetPassword || loading) return;
-    setLoading(true);
-    setMessage(null);
-    const response = await resetAuthToken(hostPort, { auth_token: authToken, password: resetPassword });
-    setLoading(false);
-    if (response.success && response.data?.status_code === 200) {
-      setMessage({ type: 'success', text: response.data.message });
+    if (!resetPassword || resetAuthTokenMutation.isPending) return;
 
-      // Save new auth token and expiration to cookies
-      const expireDate = new Date(response.data.auth_token_expire_time);
-      document.cookie = `authToken=${response.data.auth_token}; expires=${expireDate.toUTCString()}; path=/; secure; samesite=strict`;
-      document.cookie = `authTokenExpire=${response.data.auth_token_expire_time}; expires=${expireDate.toUTCString()}; path=/; secure; samesite=strict`;
-
-      // Update cached profile with new auth token
-      const cachedProfile = profileCache.get();
-      if (cachedProfile) {
-        cachedProfile.auth_token = response.data.auth_token;
-        cachedProfile.auth_token_expire_time = response.data.auth_token_expire_time;
-        profileCache.set(cachedProfile);
-      }
-
-      // Clear the password field
+    try {
+      await resetAuthTokenMutation.mutateAsync({
+        auth_token: '', // Will be filled by the hook
+        password: resetPassword
+      });
+      setMessage({ type: 'success', text: 'Auth token reset successfully!' });
       setResetPassword('');
       setShowResetModal(false);
-
-      // Optionally redirect to login or refresh the page
-      setTimeout(() => {
-        window.location.reload(); // Refresh to ensure all components use the new token
-      }, 2000);
-    } else {
-      // Check for specific password error (404 for auth token reset)
-      if (response.error?.includes('404') || response.error?.includes('Incorrect password')) {
-        setMessage({ type: 'error', text: 'Password is incorrect. Please try again.' });
-      } else {
-        setMessage({ type: 'error', text: response.error || 'Failed to reset auth token' });
-      }
+      // Redirect after successful reset
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to reset auth token' });
     }
   };
 
   const handleBioChange = (newBio: string) => {
     setUserBio(newBio);
     setBioInputValue(newBio);
-    // Here you would typically make an API call to update the bio
+    // TODO: Implement bio update API
     console.log('Bio changed to:', newBio);
   };
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      const cachedProfile = profileCache.get();
-      if (cachedProfile) {
-        setUsername(cachedProfile.username);
-        setUserStatus(cachedProfile.status);
-        setInitialLoading(false);
-      } else {
-        // No cached profile, fetch from API
-        const response = await getCurrentUserProfile(hostPort, authToken);
-        if (response.success && response.data?.status_code === 200) {
-          const userData = response.data.user_data;
-          setUsername(userData.username);
-          setUserStatus(userData.status);
-          // Cache the profile
-          profileCache.set(userData);
-          setInitialLoading(false);
-        } else {
-          setMessage({ type: 'error', text: 'Failed to load user profile' });
-          setInitialLoading(false);
-        }
+  const handleHostPortSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHostPort.trim()) return;
+
+    // Validate host:port format
+    const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]):(\d+)$/;
+    if (!hostPortRegex.test(newHostPort)) {
+      setMessage({ type: 'error', text: 'Invalid host:port format. Please use format like \'127.0.0.1:7575\' or \'localhost:7575\'' });
+      return;
+    }
+
+    // Additional validation
+    try {
+      const testUrl = new URL(`http://${newHostPort}`);
+      if (!testUrl.hostname || !testUrl.port) {
+        throw new Error('Invalid host or port');
       }
-    };
-
-    loadProfile();
-
-    // Set initial active section based on URL hash or default to profile
-    const hash = window.location.hash.replace('#', '');
-    if (hash && ['profile', 'security', 'appearance'].includes(hash)) {
-      setActiveSection(hash);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Invalid host:port format. Please ensure the host and port are valid.' });
+      return;
     }
-  }, [hostPort, authToken]);
 
-  // Auto-hide messages after 5 seconds
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => {
-        setMessage(null);
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
+    // Save to localStorage
+    setHostPortToStorage(newHostPort);
+    setMessage({ type: 'success', text: 'Server host:port updated successfully. Changes will take effect on next login.' });
+    setNewHostPort('');
+  };
   return (
     <div className="min-h-screen bg-[var(--color-background)] animate-in fade-in slide-in-from-right-4 duration-300">
       {/* Main Content */}
@@ -285,6 +273,21 @@ export default function Settings() {
                   </svg>
                   Appearance
                 </button>
+                <button
+                  onClick={() => changeSection('server')}
+                  className={`w-full text-left border-l-4 px-3 py-2 flex items-center text-sm font-medium transition-colors ${
+                    activeSection === 'server'
+                      ? 'bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)]'
+                      : 'border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text)]'
+                  }`}
+                >
+                  <svg className={`mr-3 flex-shrink-0 h-6 w-6 ${
+                    activeSection === 'server' ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'
+                  }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  </svg>
+                  Server
+                </button>
               </nav>
             </div>
 
@@ -308,7 +311,7 @@ export default function Settings() {
                             type="text"
                             name="currentUsername"
                             id="currentUsername"
-                            value={initialLoading ? 'Loading...' : username}
+                            value={currentUser?.username || ''}
                             className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
                             readOnly
                           />
@@ -330,10 +333,10 @@ export default function Settings() {
                         <div className="flex justify-end">
                           <button
                             type="submit"
-                            disabled={loading}
+                            disabled={updateUsernameMutation.isPending}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            {loading ? 'Updating...' : 'Change Username'}
+                            {updateUsernameMutation.isPending ? 'Updating...' : 'Change Username'}
                           </button>
                         </div>
                       </form>
@@ -364,7 +367,7 @@ export default function Settings() {
                               <option value="online">Online</option>
                               <option value="offline">Offline</option>
                               <option value="idle">Idle</option>
-                              <option value="inactive">Inactive</option>
+
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
                               <svg className="w-5 h-5 text-[var(--color-text-secondary)] transition-transform duration-200 group-hover:text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -377,10 +380,10 @@ export default function Settings() {
                           <button
                             type="button"
                             onClick={handleStatusSubmit}
-                            disabled={loading}
+                            disabled={updateStatusMutation.isPending}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            {loading ? 'Updating...' : 'Update Status'}
+                            {updateStatusMutation.isPending ? 'Updating...' : 'Update Status'}
                           </button>
                         </div>
                       </div>
@@ -491,10 +494,10 @@ export default function Settings() {
                           <button
                             type="button"
                             onClick={handlePasswordSubmit}
-                            disabled={loading}
+                            disabled={updatePasswordMutation.isPending}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                           >
-                            {loading ? 'Updating...' : 'Update Password'}
+                            {updatePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
                           </button>
                         </div>
                       </div>
@@ -539,16 +542,10 @@ export default function Settings() {
                           <button
                             type="button"
                             onClick={() => {
-                              // Clear auth token and related cookies
-                              document.cookie = 'authToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                              document.cookie = 'authTokenExpire=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                              document.cookie = 'hostPort=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-
-                              // Clear cached profile
-                              profileCache.clear();
-
-                              // Redirect to login
-                              window.location.href = '/login';
+                              // Use React Query logout hook
+                              logout();
+                              // Redirect to login after clearing cache
+                              setTimeout(() => window.location.href = '/login', 100);
                             }}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)]"
                           >
@@ -611,6 +608,65 @@ export default function Settings() {
                   </div>
                 </div>
               )}
+
+              {/* Server Settings */}
+              {activeSection === 'server' && (
+                <div className="bg-[var(--color-surface)] shadow overflow-hidden sm:rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <h3 className="text-lg leading-6 font-medium text-[var(--color-text)] mb-4">
+                      Server Settings
+                    </h3>
+                    <div className="space-y-6">
+                      <div>
+                        <h4 className="text-sm font-medium text-[var(--color-text)]">Server Host:Port</h4>
+                        <p className="mt-1 text-sm text-[var(--color-text-secondary)] mb-4">
+                          Set the server host and port for API requests. This will take effect on your next login.
+                        </p>
+                        <div className="space-y-4">
+                          <div>
+                            <label htmlFor="currentHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">
+                              Current Server
+                            </label>
+                            <input
+                              type="text"
+                              name="currentHostPort"
+                              id="currentHostPort"
+                              value={hostPort}
+                              className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
+                              readOnly
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="newHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">
+                              New Server Host:Port
+                            </label>
+                            <input
+                              type="text"
+                              name="newHostPort"
+                              id="newHostPort"
+                              placeholder="127.0.0.1:7575"
+                              value={newHostPort}
+                              onChange={e => setNewHostPort(e.target.value)}
+                              className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm"
+                            />
+                            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                              Format: host:port (e.g., 127.0.0.1:7575, localhost:7575)
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleHostPortSubmit}
+                            disabled={!newHostPort.trim()}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Update Server
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -659,10 +715,10 @@ export default function Settings() {
                   await handleResetAuthToken();
                   setResetPassword('');
                 }}
-                disabled={!resetPassword.trim() || loading}
+                disabled={!resetPassword.trim() || resetAuthTokenMutation.isPending}
                 className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-error)] border border-transparent rounded-md hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {loading ? 'Resetting...' : 'Reset Token'}
+                {resetAuthTokenMutation.isPending ? 'Resetting...' : 'Reset Token'}
               </button>
             </div>
           </div>

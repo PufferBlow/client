@@ -11,6 +11,21 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import { ThemeProvider } from "./components/ThemeProvider";
+import {
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+      retry: 1,
+    },
+  },
+});
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", type: "image/png", href: "/pufferblow-art-pixel-32x32.png" },
@@ -46,9 +61,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <Outlet />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <Outlet />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

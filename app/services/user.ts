@@ -1,6 +1,8 @@
 import type { ApiResponse } from './apiClient';
-import { createApiClient } from './apiClient';
+import { ApiClient, createApiClient } from './apiClient';
 import type { User } from '../models';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef, useEffect } from 'react';
 
 // User authentication interfaces
 export interface LoginCredentials {
@@ -31,17 +33,21 @@ export interface UserProfile {
 
 // User authentication functions
 export const login = async (hostPort: string, credentials: LoginCredentials): Promise<ApiResponse<AuthToken>> => {
-  const apiClient = createApiClient(hostPort);
+  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
+  const apiClient = new ApiClient(baseUrl);
   return apiClient.get('/api/v1/users/signin', credentials as unknown as Record<string, string>);
 };
 
 export const signup = async (hostPort: string, credentials: SignupCredentials): Promise<ApiResponse<AuthToken>> => {
-  const apiClient = createApiClient(hostPort);
+  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
+  const apiClient = new ApiClient(baseUrl);
   return apiClient.post('/api/v1/users/signup', credentials as unknown as Record<string, string>);
 };
 
-export const getUserProfile = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
-  const apiClient = createApiClient(hostPort);
+export const getUserProfile = async (userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
+  const apiClient = createApiClient();
   return apiClient.get('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
@@ -68,13 +74,9 @@ export interface GetUserProfileResponse {
   };
 }
 
-export const getCurrentUserProfile = async (hostPort: string, authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
-  const apiClient = createApiClient(hostPort);
-  const userId = extractUserIdFromToken(authToken);
-  return apiClient.get('/api/v1/users/profile', {
-    user_id: userId,
-    auth_token: authToken,
-  });
+export const getCurrentUserProfile = async (authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(extractUserIdFromToken(authToken))}&auth_token=${encodeURIComponent(authToken)}`);
 };
 
 // Update user profile functions
@@ -109,23 +111,23 @@ export interface ResetAuthTokenResponse extends UpdateProfileResponse {
   auth_token_expire_time: string;
 }
 
-export const updateUsername = async (hostPort: string, request: UpdateUsernameRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
-  const apiClient = createApiClient(hostPort);
+export const updateUsername = async (request: UpdateUsernameRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
 };
 
-export const updateUserStatus = async (hostPort: string, request: UpdateStatusRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
-  const apiClient = createApiClient(hostPort);
+export const updateUserStatus = async (request: UpdateStatusRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
 };
 
-export const updatePassword = async (hostPort: string, request: UpdatePasswordRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
-  const apiClient = createApiClient(hostPort);
+export const updatePassword = async (request: UpdatePasswordRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
 };
 
-export const resetAuthToken = async (hostPort: string, request: ResetAuthTokenRequest): Promise<ApiResponse<ResetAuthTokenResponse>> => {
-  const apiClient = createApiClient(hostPort);
+export const resetAuthToken = async (request: ResetAuthTokenRequest): Promise<ApiResponse<ResetAuthTokenResponse>> => {
+  const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile/reset-auth-token', request as unknown as Record<string, string>);
 };
 
@@ -151,197 +153,241 @@ export const getHostPortFromCookies = (): string | null => {
     acc[key.trim()] = value;
     return acc;
   }, {} as Record<string, string>);
-  return cookies.hostPort || null;
+  return cookies.serverHostPort || null;
 };
 
-// Profile cache management
-class ProfileCache {
-  private cache: Map<string, any> = new Map();
-  private readonly CACHE_KEY = 'pufferblow_user_profile';
-  private readonly CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
-
-  constructor() {
-    this.loadFromStorage();
+export const getHostPortFromStorage = (): string | null => {
+  // First check cookies (both must match persistence)
+  let hostPort = getHostPortFromCookies();
+  if (hostPort) return decodeURIComponent(hostPort);
+  // Then check storage
+  if (typeof window !== 'undefined') {
+    // First check sessionStorage (for non-remember me)
+    hostPort = sessionStorage.getItem('serverHostPort');
+    if (hostPort) return hostPort;
+    // Then localStorage (for remember me)
+    return localStorage.getItem('serverHostPort');
   }
+  return null;
+};
 
-  private loadFromStorage() {
-    try {
-      if (typeof window === 'undefined') return;
+export const setHostPortToStorage = (hostPort: string, persistent: boolean = false): void => {
+  if (typeof window === 'undefined') return;
+  if (persistent) {
+    localStorage.setItem('serverHostPort', hostPort);
+    // Clear sessionStorage if setting persistent
+    sessionStorage.removeItem('serverHostPort');
+  } else {
+    sessionStorage.setItem('serverHostPort', hostPort);
+    // Clear localStorage if setting session
+    localStorage.removeItem('serverHostPort');
+  }
+};
 
-      const stored = localStorage.getItem(this.CACHE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.data && parsed.timestamp) {
-          const age = Date.now() - parsed.timestamp;
-          if (age < this.CACHE_EXPIRY) {
-            this.cache.set('profile', parsed.data);
-          } else {
-            // Expired, remove from storage
-            localStorage.removeItem(this.CACHE_KEY);
-          }
-        }
+// React Query hooks for user operations
+
+// Query keys
+export const USER_QUERY_KEYS = {
+  profile: (userId: string) => ['user', 'profile', userId],
+  currentProfile: () => ['user', 'profile', 'current'],
+} as const;
+
+// Hook to fetch current user profile
+export const useCurrentUserProfile = () => {
+  return useQuery({
+    queryKey: USER_QUERY_KEYS.currentProfile(),
+    queryFn: async () => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await getCurrentUserProfile(authToken);
+      if (!response.success || !response.data?.user_data) {
+        throw new Error(response.error || 'Failed to fetch user profile');
       }
-    } catch (error) {
-      console.warn('Failed to load profile from storage:', error);
-      // Clear corrupted data
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(this.CACHE_KEY);
+
+      const userData = response.data.user_data;
+      // Generate avatar URL using DiceBear Bottts Neutral style
+      const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
+
+      // Assign roles based on API data
+      const defaultRoles = ['Member'];
+      if (userData.is_owner) defaultRoles.push('Owner');
+      if (userData.is_admin) defaultRoles.push('Admin');
+
+      const user: User = {
+        id: userData.user_id,
+        username: userData.username,
+        avatar: avatarUrl,
+        status: userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+        bio: 'Passionate about decentralized technology and building the future of secure communication. Always exploring new ways to make digital interactions more private and efficient.',
+        joinedAt: userData.created_at,
+        roles: defaultRoles
+      } as unknown as User;
+
+      return user;
+    },
+    enabled: !!getAuthTokenFromCookies(), // Only run if we have a token
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+  });
+};
+
+// Hook to update username
+export const useUpdateUsername = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (newUsername: string) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await updateUsername({ auth_token: authToken, new_username: newUsername });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update username');
       }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch current user profile
+      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
+    },
+  });
+};
+
+// Hook to update status
+export const useUpdateStatus = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (status: 'online' | 'offline' | 'idle' | 'dnd') => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const apiStatus = status === 'dnd' ? 'offline' : status; // Map dnd to offline for API
+      const response = await updateUserStatus({ auth_token: authToken, status: apiStatus as any });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update status');
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch current user profile
+      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
+    },
+  });
+};
+
+// Hook to login user
+export const useLogin = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { username: string; password: string; hostPort: string; rememberMe: boolean }) => {
+      const response = await login(data.hostPort, {
+        username: data.username,
+        password: data.password
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Login failed');
+      }
+
+      return { data: response.data, rememberMe: data.rememberMe, hostPort: data.hostPort };
+    },
+    onSuccess: (result) => {
+      // Clear previous user data
+      queryClient.clear();
+
+      // Prefetch user profile
+      queryClient.prefetchQuery({
+        queryKey: USER_QUERY_KEYS.currentProfile(),
+        staleTime: 1000 * 60 * 5,
+      });
+    },
+  });
+};
+
+// Hook to logout user
+export const useLogout = () => {
+  const queryClient = useQueryClient();
+
+  return {
+    logout: () => {
+      queryClient.clear();
+      // Additional cleanup can be added here
     }
-  }
+  };
+};
 
-  private saveToStorage(data: any) {
-    try {
-      if (typeof window === 'undefined') return;
+// User activity tracker hook - replaced with simple activity management
+export const useActivityTracker = () => {
+  const updateStatusMutation = useUpdateStatus();
+  const inactivityTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastActivityRef = useRef(Date.now());
 
-      const toStore = {
-        data,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(this.CACHE_KEY, JSON.stringify(toStore));
-    } catch (error) {
-      console.warn('Failed to save profile to storage:', error);
+  const resetInactivityTimer = () => {
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current);
     }
-  }
 
-  get(): any | null {
-    return this.cache.get('profile') || null;
-  }
+    const INACTIVE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+    inactivityTimeoutRef.current = setTimeout(() => {
+      updateStatusMutation.mutate('idle');
+    }, INACTIVE_TIMEOUT);
+  };
 
-  set(data: any) {
-    this.cache.set('profile', data);
-    this.saveToStorage(data);
-  }
+  const recordActivity = () => {
+    lastActivityRef.current = Date.now();
+    updateStatusMutation.mutate('online');
+    resetInactivityTimer();
+  };
 
-  clear() {
-    this.cache.clear();
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(this.CACHE_KEY);
-    }
-  }
-
-  has(): boolean {
-    return this.cache.has('profile');
-  }
-}
-
-export const profileCache = new ProfileCache();
-
-// User activity and status management
-class UserActivityTracker {
-  private activityTimeout: NodeJS.Timeout | null = null;
-  private readonly INACTIVE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-  private isTracking = false;
-  private lastActivity = Date.now();
-
-  constructor() {
-    this.setupActivityListeners();
-    this.setupVisibilityListener();
-  }
-
-  private setupActivityListeners() {
-    if (typeof window === 'undefined') return;
-
+  useEffect(() => {
+    // Setup activity listeners
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
 
-    const handleActivity = () => {
-      this.lastActivity = Date.now();
-      this.resetInactiveTimer();
-    };
-
     events.forEach(event => {
-      document.addEventListener(event, handleActivity, { passive: true });
+      document.addEventListener(event, recordActivity, { passive: true });
     });
 
-    // Start the inactive timer
-    this.resetInactiveTimer();
-  }
-
-  private setupVisibilityListener() {
-    if (typeof document === 'undefined') return;
-
+    // Setup visibility listener
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab is hidden, could be switching tabs or minimizing
-        // We'll handle offline status in beforeunload
+        // Tab is hidden
       } else {
-        // Tab is visible again, update status to online and reset activity
-        this.lastActivity = Date.now();
-        this.resetInactiveTimer();
-        // Update status to online when user comes back
-        this.updateStatus('online');
+        // Tab is visible again
+        recordActivity();
+        updateStatusMutation.mutate('online');
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Handle tab/window close
-    const handleBeforeUnload = async () => {
-      await this.updateStatus('offline');
+    // Setup beforeunload
+    const handleBeforeUnload = () => {
+      updateStatusMutation.mutate('offline');
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-  }
 
-  private resetInactiveTimer() {
-    if (this.activityTimeout) {
-      clearTimeout(this.activityTimeout);
-    }
+    // Start tracking
+    recordActivity();
 
-    this.activityTimeout = setTimeout(async () => {
-      await this.updateStatus('inactive');
-    }, this.INACTIVE_TIMEOUT);
-  }
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, recordActivity);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
 
-  private async updateStatus(status: 'online' | 'offline' | 'idle' | 'inactive') {
-    try {
-      const hostPort = getHostPortFromCookies() || 'localhost:7575';
-      const authToken = getAuthTokenFromCookies();
-
-      if (!authToken) return;
-
-      const response = await updateUserStatus(hostPort, { auth_token: authToken, status });
-
-      if (response.success) {
-        // Update cached profile
-        const cachedProfile = profileCache.get();
-        if (cachedProfile) {
-          cachedProfile.status = status;
-          profileCache.set(cachedProfile);
-        }
-
-        console.log(`Status updated to: ${status}`);
-      } else {
-        console.error('Failed to update status:', response.error);
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current);
       }
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
-  }
+    };
+  }, []);
 
-  public startTracking() {
-    if (!this.isTracking) {
-      this.isTracking = true;
-      this.lastActivity = Date.now();
-      this.resetInactiveTimer();
-    }
-  }
-
-  public stopTracking() {
-    this.isTracking = false;
-    if (this.activityTimeout) {
-      clearTimeout(this.activityTimeout);
-      this.activityTimeout = null;
-    }
-  }
-
-  public getLastActivity(): number {
-    return this.lastActivity;
-  }
-
-  public getTimeSinceLastActivity(): number {
-    return Date.now() - this.lastActivity;
-  }
-}
-
-export const userActivityTracker = new UserActivityTracker();
+  return {
+    recordActivity,
+    lastActivity: lastActivityRef.current,
+  };
+};

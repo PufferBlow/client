@@ -53,24 +53,21 @@ export async function action({ request }: Route.ActionArgs) {
   const expireTime = data?.auth_token_expire_time;
 
   if (token) {
-    // Always save host:port in localStorage for easy access (only on client)
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem("serverHostPort", hostPort);
-    }
-
-    // Create redirect response with cookie
+    // Create redirect response with cookies
     const response = redirect("/dashboard");
 
     if (rememberMe) {
-      // Store token in cookie for longer persistence
+      // Store both host:port and token in cookies for longer persistence
       const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
       response.headers.append("Set-Cookie", `authToken=${token}; path=/; max-age=${maxAge}`);
+      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
     } else {
-      // Store token in session cookie (expires when browser closes)
+      // Store both in session cookies (expire when browser closes)
       response.headers.append("Set-Cookie", `authToken=${token}; path=/`);
+      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/`);
     }
 
-    console.log('Token saved to cookies via response headers:', token);
+    console.log('Tokens and host:port saved to cookies via response headers');
     return response;
   }
 
