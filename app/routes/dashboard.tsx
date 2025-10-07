@@ -13,9 +13,10 @@ import { EmojiPicker } from "../components/EmojiPicker";
 import { UserCard } from "../components/UserCard";
 import { UserPanel } from "../components/UserPanel";
 import { logger } from "../utils/logger";
-import { getAuthTokenFromCookies, getHostPortFromCookies, useCurrentUserProfile, useActivityTracker } from "../services/user";
-import { listChannels, createChannel } from "../services/channel";
+import { getAuthTokenFromCookies, getHostPortFromCookies, useCurrentUserProfile, useActivityTracker, getUserProfileById } from "../services/user";
+import { listChannels, createChannel, loadMessages, sendMessage } from "../services/channel";
 import type { Channel } from "../models";
+import type { Message } from "../models";
 import type { User } from "../models";
 
 interface DisplayUser {
@@ -61,7 +62,10 @@ export default function Dashboard() {
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
+  const [userProfiles, setUserProfiles] = useState<Record<string, any>>({});
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
   const messageInputBarRef = useRef<HTMLDivElement>(null);
@@ -116,6 +120,82 @@ export default function Dashboard() {
       fetchChannels();
     }
   }, [currentUser]);
+
+  // Function to fetch and cache user profiles
+  const getUserProfile = async (userId: string) => {
+    if (userProfiles[userId]) {
+      return userProfiles[userId];
+    }
+
+    try {
+      const authToken = getAuthTokenFromCookies() || '';
+      if (!authToken) {
+        console.error('No auth token available for user profile fetch');
+        return null;
+      }
+
+      const response = await getUserProfileById(userId, authToken);
+      if (response.success && response.data?.user_data) {
+        const userData = response.data.user_data;
+
+        // Create user profile object
+        const userProfile = {
+          id: userData.user_id,
+          username: userData.username,
+          avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`,
+          status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'inactive')
+            ? userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline'
+            : 'offline',
+          roles: userData.is_owner ? ['Owner', 'Admin'] :
+                 userData.is_admin ? ['Admin'] : ['Member']
+        };
+
+        // Cache the profile
+        setUserProfiles(prev => ({
+          ...prev,
+          [userId]: userProfile
+        }));
+
+        return userProfile;
+      } else {
+        console.error('Failed to fetch user profile:', userId, response.error);
+
+        // Return fallback user data
+        const fallbackUser = {
+          id: userId,
+          username: 'Unknown User',
+          avatar: '/pufferblow-art-pixel-32x32.png',
+          status: 'offline' as const,
+          roles: ['Member']
+        };
+
+        setUserProfiles(prev => ({
+          ...prev,
+          [userId]: fallbackUser
+        }));
+
+        return fallbackUser;
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', userId, error);
+
+      // Return fallback user data
+      const fallbackUser = {
+        id: userId,
+        username: 'Unknown User',
+        avatar: '/pufferblow-art-pixel-32x32.png',
+        status: 'offline' as const,
+        roles: ['Member']
+      };
+
+      setUserProfiles(prev => ({
+        ...prev,
+        [userId]: fallbackUser
+      }));
+
+      return fallbackUser;
+    }
+  };
 
   // Show skeleton loading state
   if (userLoading) {
@@ -332,6 +412,33 @@ export default function Dashboard() {
     // TODO: Implement direct message functionality
   };
 
+  const handleChannelSelect = async (channel: Channel) => {
+    console.log("Channel clicked:", channel);
+    setSelectedChannel(channel);
+
+    // Load messages for the selected channel
+    const authToken = getAuthTokenFromCookies() || '';
+    console.log("Loading messages - authToken:", authToken ? 'exists' : 'missing', "channel_id:", channel.channel_id);
+
+    if (authToken && channel.channel_id) {
+      console.log("Making loadMessages API call...");
+      const response = await loadMessages(channel.channel_id, authToken);
+      console.log("loadMessages response:", response);
+
+      if (response.success && response.data && response.data.messages) {
+        setMessages(response.data.messages);
+        logger.ui.info("Messages loaded successfully", { channelId: channel.channel_id, count: response.data.messages.length });
+        console.log("Messages set:", response.data.messages.length, "messages");
+      } else {
+        console.error("Failed to load messages:", response.error);
+        logger.ui.error("Failed to load messages", { channelId: channel.channel_id, error: response.error });
+        setMessages([]); // Clear messages if failed
+      }
+    } else {
+      console.log("Not loading messages - missing authToken or channel_id");
+    }
+  };
+
   const handleMessageContextMenu = (messageId: string, event: React.MouseEvent) => {
     event.preventDefault();
     setMessageContextMenu({
@@ -341,18 +448,59 @@ export default function Dashboard() {
   };
 
   // Message input handlers
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (messageInput.trim()) {
-      logger.ui.info("Sending message", { channel: "general", messageLength: messageInput.length });
-      // TODO: Implement message sending
-      setMessageInput('');
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!selectedChannel || !authToken) {
+        logger.ui.warn("Cannot send message - no channel selected or no auth token");
+        return;
+      }
+
+      try {
+        console.log('Sending message:', {
+          channelId: selectedChannel.channel_id,
+          message: messageInput.trim(),
+          authToken: authToken.substring(0, 20) + '...'
+        });
+
+        const response = await sendMessage(selectedChannel.channel_id, messageInput.trim(), authToken);
+        console.log('Send message response:', response);
+
+        if (response.success) {
+          logger.ui.info("Message sent successfully", {
+            channelId: selectedChannel.channel_id,
+            messageLength: messageInput.length
+          });
+
+          // Clear input
+          setMessageInput('');
+
+          // Refresh messages list
+          const messagesResponse = await loadMessages(selectedChannel.channel_id, authToken);
+          console.log('Refresh messages response:', messagesResponse);
+
+          if (messagesResponse.success && messagesResponse.data && messagesResponse.data.messages) {
+            setMessages(messagesResponse.data.messages);
+            logger.ui.info("Messages refreshed after sending");
+          } else {
+            logger.ui.error("Failed to refresh messages after sending", { error: messagesResponse.error });
+          }
+        } else {
+          logger.ui.error("Failed to send message", { error: response.error });
+          alert(`Failed to send message: ${response.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        logger.ui.error("Unexpected error sending message", { error });
+        alert('An unexpected error occurred while sending the message.');
+      }
     }
   };
 
-  const handleKeyPress = (event: React.KeyboardEvent) => {
+  const handleKeyPress = async (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleSendMessage();
+      await handleSendMessage();
     }
   };
 
@@ -464,7 +612,7 @@ export default function Dashboard() {
 
   const handleUserClick = (userId: string, username: string, event: React.MouseEvent) => {
     // Create mock user data based on userId with generated avatars
-    const mockUsers: Record<string, User> = {
+    const mockUsers: Record<string, DisplayUser> = {
       "user123": {
         id: "user123",
         username: "User",
@@ -539,7 +687,19 @@ export default function Dashboard() {
         modalY = gap;
       }
 
-      setSelectedUser(user);
+      const displayUser: DisplayUser = {
+        id: user.id,
+        username: user.username || '',
+        avatar: user.avatar,
+        status: (user.status === 'online' || user.status === 'idle' || user.status === 'offline' || user.status === 'dnd')
+          ? user.status as 'online' | 'idle' | 'offline' | 'dnd'
+          : 'offline',
+        bio: user.bio,
+        joinedAt: user.joinedAt,
+        roles: user.roles || []
+      };
+
+      setSelectedUser(displayUser);
       setSelectedUserPosition({ x: modalX, y: modalY });
       setSelectedUserTriggerRect(rect);
       setSelectedUserProfileModalOpen(true);
@@ -599,7 +759,108 @@ export default function Dashboard() {
               </svg>
             </button>
             {serverDropdownOpen && (
-              <div className="absolute right-0 top-12 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 min-w-48 z-50">
+              <div className="absolute right-0 top-12 bg-gray-800/80 backdrop-blur-md border border-gray-700 rounded-lg shadow-lg py-1 min-w-48 z-50">
+                <button
+                  onClick={() => {
+                    // TODO: Open server info modal/page
+                    console.log('Server Info clicked');
+                    setServerDropdownOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
+                  title="View server information"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Server Info</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const hasPermission = (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner;
+                    if (hasPermission) {
+                      setInviteModalOpen(true);
+                      setServerDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!(currentUser?.roles?.includes('Admin') || currentUser?.roles?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)}
+                    className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
+                      (currentUser?.roles?.includes?.('Admin') || currentUser?.roles?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                        ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
+                        : 'text-gray-500 cursor-not-allowed opacity-60'
+                    }`}
+                  title={
+                    (currentUser?.roles?.includes('Admin') || currentUser?.roles?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                      ? 'Create invite code'
+                      : 'Only admins, moderators, and owners can create invite codes'
+                  }
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Create Invite Code</span>
+                </button>
+
+                <Link
+                  to="/control-panel"
+                  onClick={(e) => {
+                    const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
+                    if (!hasAccess) {
+                      e.preventDefault();
+                    } else {
+                      setServerDropdownOpen(false);
+                    }
+                  }}
+                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
+                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
+                      : 'text-gray-500 cursor-not-allowed opacity-60'
+                  }`}
+                  title={
+                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                      ? 'Access server control panel'
+                      : 'Only server admins and owners can access control panel'
+                  }
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Control Panel</span>
+                </Link>
+
+                <button
+                  onClick={() => {
+                    const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
+                    if (isOwner) {
+                      // TODO: Implement delete server confirmation
+                      const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                      if (confirmed) {
+                        console.log('Delete Server confirmed');
+                      }
+                      setServerDropdownOpen(false);
+                    }
+                  }}
+                  disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
+                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
+                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                      ? 'text-red-300 hover:bg-red-900 hover:text-red-100 cursor-pointer'
+                      : 'text-gray-500 cursor-not-allowed opacity-60'
+                  }`}
+                  title={
+                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                      ? 'Delete this server'
+                      : 'Only server owner can delete the server'
+                  }
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete Server</span>
+                </button>
+
+                <div className="border-t border-gray-700 my-1"></div>
+
                 <button
                   onClick={() => {
                     const hasPermission = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator');
@@ -651,7 +912,10 @@ export default function Dashboard() {
                   {channels.map(channel => (
                     <div
                       key={channel.channel_id}
-                      className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer"
+                      className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${
+                        selectedChannel?.channel_id === channel.channel_id ? 'bg-gray-600' : ''
+                      }`}
+                      onClick={() => handleChannelSelect(channel)}
                     >
                       <span className="text-gray-400 mr-2">#</span>
                       <span className="text-gray-400 text-sm">{channel.channel_name}</span>
@@ -667,6 +931,22 @@ export default function Dashboard() {
             </>
           )}
         </div>
+
+        {/* User Panel - Bottom of Channel Sidebar */}
+        {currentUser && (
+          <UserPanel
+            username={currentUser.username || ''}
+            avatar={currentUser.avatar || ''}
+            status={currentUser.status === 'online' ? 'online' :
+                   currentUser.status === 'offline' ? 'offline' :
+                   currentUser.status === 'idle' ? 'idle' :
+                   currentUser.status === 'dnd' ? 'dnd' :
+                   'offline'}
+            onClick={() => setUserProfileModalOpen(true)}
+            onSettingsClick={() => setUserProfileModalOpen(true)}
+            className="m-2 mt-auto"
+          />
+        )}
       </div>
 
       {/* Main Chat Area */}
@@ -675,8 +955,8 @@ export default function Dashboard() {
         <div className="h-12 px-4 flex items-center justify-between border-b border-gray-700 bg-gray-800">
           <div className="flex items-center">
             <span className="text-gray-400 mr-2">#</span>
-            <h2 className="text-white font-semibold">general</h2>
-            <div className="ml-2 text-gray-400 text-sm">Decentralized general discussion</div>
+            <h2 className="text-white font-semibold">{selectedChannel?.channel_name || 'general'}</h2>
+            <div className="ml-2 text-gray-400 text-sm">Decentralized {selectedChannel?.channel_name || 'general'} discussion</div>
           </div>
           <div className="flex items-center space-x-4">
             <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -702,167 +982,106 @@ export default function Dashboard() {
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Welcome Message */}
-          <div className="flex items-start space-x-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <img
-                src="/pufferblow-art-pixel-32x32.png"
-                alt="Pufferblow Bot"
-                className="w-6 h-6"
-              />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-1">
-                <span className="text-white font-medium select-text">Pufferblow Bot</span>
-                <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded">BOT</span>
-                <span className="text-gray-400 text-xs select-text">Today at 12:00 PM</span>
-              </div>
-              <div className="text-gray-300 font-sans select-text">
-                Welcome to Pufferblow! 🎉 This is a decentralized messaging platform similar to Discord.
-                Your messages are distributed across decentralized servers for better privacy and reliability.
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-gray-400">
+                <div className="text-gray-500 text-sm">No messages yet</div>
+                <div className="text-gray-600 text-xs mt-1">
+                  {selectedChannel ? `This is the beginning of #${selectedChannel.channel_name}` : 'Select a channel to view messages'}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            messages.map((message) => {
+              // Get cached user profile or fetch it
+              const [userInfo, setUserInfo] = useState<any>(null);
 
-          {/* Sample Messages */}
-          <div
-            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
-            onMouseEnter={() => setHoveredMessageId("alice")}
-            onMouseLeave={() => setHoveredMessageId(null)}
-            onContextMenu={(e) => handleMessageContextMenu("alice", e)}
-          >
-            <img
-              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
-              alt="Alice"
-              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={(e) => handleUserClick("user456", "Alice", e)}
-            />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-1">
-                <span
-                  className="text-white font-medium select-text cursor-pointer hover:underline"
-                  onClick={(e) => handleUserClick("user456", "Alice", e)}
+              useEffect(() => {
+                const loadUserInfo = async () => {
+                  const profile = await getUserProfile(message.sender_user_id);
+                  setUserInfo(profile);
+                };
+                loadUserInfo();
+              }, [message.sender_user_id]);
+
+              const messageTimestamp = new Date(message.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+              // Show loading state while fetching user info
+              if (!userInfo) {
+                return (
+                  <div
+                    key={message.message_id}
+                    className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-gray-600 rounded-full flex-shrink-0 animate-pulse"></div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <div className="w-20 h-4 bg-gray-600 rounded animate-pulse"></div>
+                        <div className="w-16 h-3 bg-gray-700 rounded animate-pulse"></div>
+                      </div>
+                      <div className="w-full h-3 bg-gray-600 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={message.message_id}
+                  className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+                  onMouseEnter={() => setHoveredMessageId(message.message_id)}
+                  onMouseLeave={() => setHoveredMessageId(null)}
+                  onContextMenu={(e) => handleMessageContextMenu(message.message_id, e)}
                 >
-                  Alice
-                </span>
-                <span className="text-gray-400 text-xs select-text">Today at 12:05 PM</span>
-              </div>
-              <div className="text-gray-300 font-sans select-text">
-                Hey everyone! Love the decentralized approach. No more worrying about server downtime! 🚀
-              </div>
-            </div>
-            {/* Hover Menu Button */}
-            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "alice" ? "opacity-100" : ""}`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMessageContextMenu({
-                    isOpen: true,
-                    position: { x: e.clientX, y: e.clientY }
-                  });
-                }}
-                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
-                title="More options"
-              >
-                ⋯
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
-            onMouseEnter={() => setHoveredMessageId("bob")}
-            onMouseLeave={() => setHoveredMessageId(null)}
-            onContextMenu={(e) => handleMessageContextMenu("bob", e)}
-          >
-            <img
-              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
-              alt="Bob"
-              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={(e) => handleUserClick("user789", "Bob", e)}
-            />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-1">
-                <div className="flex items-center space-x-2">
-                  <span
-                    className="text-white font-medium select-text cursor-pointer hover:underline"
-                    onClick={(e) => handleUserClick("user789", "Bob", e)}
-                  >
-                    Bob
-                  </span>
-                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                  <img
+                    src={userInfo.avatar}
+                    alt={userInfo.username}
+                    className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(e) => handleUserClick(message.sender_user_id, userInfo.username, e)}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span
+                        className="text-white font-medium select-text cursor-pointer hover:underline"
+                        onClick={(e) => handleUserClick(message.sender_user_id, userInfo.username, e)}
+                      >
+                        {userInfo.username}
+                      </span>
+                      {userInfo.roles.includes("Admin") && (
+                        <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                      )}
+                      {userInfo.roles.includes("Owner") && (
+                        <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                      )}
+                      {userInfo.roles.includes("Moderator") && (
+                        <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                      )}
+                      <span className="text-gray-400 text-xs select-text">{messageTimestamp}</span>
+                    </div>
+                    <div className="text-gray-300 font-sans select-text">
+                      {message.message}
+                    </div>
+                  </div>
+                  {/* Hover Menu Button */}
+                  <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === message.message_id ? "opacity-100" : ""}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMessageContextMenu({
+                          isOpen: true,
+                          position: { x: e.clientX, y: e.clientY }
+                        });
+                      }}
+                      className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                      title="More options"
+                    >
+                      ⋯
+                    </button>
+                  </div>
                 </div>
-                <span className="text-gray-400 text-xs select-text">Today at 12:07 PM</span>
-              </div>
-              <div className="text-gray-300 font-sans select-text">
-                The UI looks great! Very familiar coming from Discord. How does the decentralization work exactly?
-              </div>
-            </div>
-            {/* Hover Menu Button */}
-            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "bob" ? "opacity-100" : ""}`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMessageContextMenu({
-                    isOpen: true,
-                    position: { x: e.clientX, y: e.clientY }
-                  });
-                }}
-                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
-                title="More options"
-              >
-                ⋯
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
-            onMouseEnter={() => setHoveredMessageId("charlie")}
-            onMouseLeave={() => setHoveredMessageId(null)}
-            onContextMenu={(e) => handleMessageContextMenu("charlie", e)}
-          >
-            <img
-              src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
-              alt="Charlie"
-              className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={(e) => handleUserClick("user101", "Charlie", e)}
-            />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-1">
-                <div className="flex items-center space-x-2">
-                  <span
-                    className="text-white font-medium select-text cursor-pointer hover:underline"
-                    onClick={(e) => handleUserClick("user101", "Charlie", e)}
-                  >
-                    Charlie
-                  </span>
-                  <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                </div>
-                <span className="text-gray-400 text-xs select-text">Today at 12:10 PM</span>
-              </div>
-              <div className="text-gray-300 font-sans select-text">
-                @Bob The messages are distributed across multiple nodes in the network. Even if some servers go down,
-                your messages remain accessible through other nodes. Pretty cool tech! 💪
-              </div>
-            </div>
-            {/* Hover Menu Button */}
-            <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === "charlie" ? "opacity-100" : ""}`}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMessageContextMenu({
-                    isOpen: true,
-                    position: { x: e.clientX, y: e.clientY }
-                  });
-                }}
-                className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
-                title="More options"
-              >
-                ⋯
-              </button>
-            </div>
-          </div>
+              );
+            })
+          )}
         </div>
 
         {/* Message Input */}
@@ -894,7 +1113,7 @@ export default function Dashboard() {
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="Message #general"
+                  placeholder={`Message #${selectedChannel?.channel_name || 'general'}`}
                   className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none min-h-[20px] max-h-32"
                   rows={1}
                   style={{ height: 'auto', minHeight: '20px' }}
@@ -952,9 +1171,9 @@ export default function Dashboard() {
 
       {/* Member List */}
       <div className={`transition-all duration-300 ease-in-out ${membersListVisible ? 'w-60 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
-        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4">
+        <div className="w-60 h-full bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col">
           {/* Header with close button */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
             <h3 className="text-sm font-bold text-[var(--color-text-secondary)] uppercase tracking-wide">Members</h3>
             <button
               onClick={() => setMembersListVisible(false)}
@@ -967,106 +1186,97 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Admin Section */}
-          <div className="mb-4">
-            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
-              <div className="space-y-1">
-                <div
-                  className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                  onClick={(e) => handleUserClick("user789", "Bob", e)}
-                >
-                  <div className="relative">
-                    <img
-                      src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
-                      alt="Bob"
-                      className="w-8 h-8 rounded-full shadow-md border-2 border-red-300"
-                    />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+          {/* Scrollable Members Content */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
+            <div className="p-4 space-y-4">
+              {/* Admin Section */}
+              <div>
+                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
+                <div className="space-y-1">
+                  <div
+                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                    onClick={(e) => handleUserClick("user789", "Bob", e)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
+                        alt="Bob"
+                        className="w-8 h-8 rounded-full shadow-md border-2 border-red-300"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
+                      <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
-                    <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                </div>
+              </div>
+
+              {/* Moderators Section */}
+              <div>
+                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Moderators — 1</h4>
+                <div className="space-y-1">
+                  <div
+                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-accent)]"
+                    onClick={(e) => handleUserClick("user101", "Charlie", e)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
+                        alt="Charlie"
+                        className="w-8 h-8 rounded-full shadow-md border-2 border-purple-300"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
+                      <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                    </div>
                   </div>
                 </div>
               </div>
-          </div>
 
-          {/* Moderators Section */}
-          <div className="mb-4">
-            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Moderators — 1</h4>
-            <div className="space-y-1">
-              <div
-                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-accent)]"
-                onClick={(e) => handleUserClick("user101", "Charlie", e)}
-              >
-                <div className="relative">
-                  <img
-                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
-                    alt="Charlie"
-                    className="w-8 h-8 rounded-full shadow-md border-2 border-purple-300"
-                  />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+              {/* Members Section */}
+              <div>
+                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Members — 2</h4>
+                <div className="space-y-1">
+                  <div
+                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                    onClick={(e) => handleUserClick("user123", "User", e)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`}
+                        alt="User"
+                        className="w-8 h-8 rounded-full shadow-md border-2 border-[var(--color-primary-hover)]"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+                    </div>
+                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
+                  </div>
+                  <div
+                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
+                    onClick={(e) => handleUserClick("user456", "Alice", e)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
+                        alt="Alice"
+                        className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+                    </div>
+                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
-                  <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Members Section */}
-          <div className="mb-4">
-            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Members — 2</h4>
-            <div className="space-y-1">
-              <div
-                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                onClick={(e) => handleUserClick("user123", "User", e)}
-              >
-                <div className="relative">
-                  <img
-                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`}
-                    alt="User"
-                    className="w-8 h-8 rounded-full shadow-md border-2 border-[var(--color-primary-hover)]"
-                  />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                </div>
-                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
-              </div>
-              <div
-                className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
-                onClick={(e) => handleUserClick("user456", "Alice", e)}
-              >
-                <div className="relative">
-                  <img
-                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
-                    alt="Alice"
-                    className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
-                  />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                </div>
-                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* User Panel - Bottom Left */}
-      {currentUser ? (
-        <UserPanel
-          username={currentUser.username || ''}
-          avatar={currentUser.avatar || ''}
-          status={currentUser.status === 'online' ? 'online' :
-                 currentUser.status === 'offline' ? 'offline' :
-                 currentUser.status === 'idle' ? 'idle' :
-                 currentUser.status === 'dnd' ? 'dnd' :
-                 'offline'}
-          onClick={() => setUserProfileModalOpen(true)}
-          onSettingsClick={() => setUserProfileModalOpen(true)}
-          className="absolute bottom-2 left-2 z-50"
-        />
-      ) : null}
+
 
       {/* Modals */}
       <ServerCreationModal
@@ -1084,7 +1294,17 @@ export default function Dashboard() {
       <UserProfileModal
         isOpen={userProfileModalOpen}
         onClose={() => setUserProfileModalOpen(false)}
-        user={currentUser || null}
+        user={currentUser ? {
+          id: currentUser.user_id || currentUser.id,
+          username: currentUser.username || '',
+          avatar: currentUser.avatar,
+          status: (currentUser.status === 'online' || currentUser.status === 'idle' || currentUser.status === 'offline' || currentUser.status === 'dnd')
+            ? currentUser.status as 'online' | 'idle' | 'offline' | 'dnd'
+            : 'offline',
+          bio: currentUser.bio,
+          joinedAt: currentUser.joinedAt || currentUser.created_at,
+          roles: currentUser.roles || []
+        } : null}
         currentUserId={currentUser?.user_id || ""}
         onReport={handleUserReport}
         onCopyUserId={handleCopyUserId}

@@ -74,6 +74,11 @@ export interface GetUserProfileResponse {
   };
 }
 
+export const getUserProfileById = async (userId: string, authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(userId)}&auth_token=${encodeURIComponent(authToken)}`);
+};
+
 export const getCurrentUserProfile = async (authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
   const apiClient = createApiClient();
   return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(extractUserIdFromToken(authToken))}&auth_token=${encodeURIComponent(authToken)}`);
@@ -99,6 +104,16 @@ export interface UpdatePasswordRequest {
 export interface ResetAuthTokenRequest {
   auth_token: string;
   password: string;
+}
+
+export interface UpdateAvatarRequest {
+  auth_token: string;
+  avatar?: File | string; // Can be a File object or a URL string
+}
+
+export interface UpdateBannerRequest {
+  auth_token: string;
+  banner?: File | string; // Can be a File object or a URL string
 }
 
 export interface UpdateProfileResponse {
@@ -129,6 +144,38 @@ export const updatePassword = async (request: UpdatePasswordRequest): Promise<Ap
 export const resetAuthToken = async (request: ResetAuthTokenRequest): Promise<ApiResponse<ResetAuthTokenResponse>> => {
   const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile/reset-auth-token', request as unknown as Record<string, string>);
+};
+
+export const updateAvatar = async (request: UpdateAvatarRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
+  const formData = new FormData();
+
+  formData.append('auth_token', request.auth_token);
+  if (request.avatar) {
+    if (request.avatar instanceof File) {
+      formData.append('avatar', request.avatar);
+    } else {
+      formData.append('avatar_url', request.avatar);
+    }
+  }
+
+  return apiClient.put('/api/v1/users/profile/avatar', formData as unknown as Record<string, string>);
+};
+
+export const updateBanner = async (request: UpdateBannerRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
+  const formData = new FormData();
+
+  formData.append('auth_token', request.auth_token);
+  if (request.banner) {
+    if (request.banner instanceof File) {
+      formData.append('banner', request.banner);
+    } else {
+      formData.append('banner_url', request.banner);
+    }
+  }
+
+  return apiClient.put('/api/v1/users/profile/banner', formData as unknown as Record<string, string>);
 };
 
 // Utility functions
@@ -227,8 +274,8 @@ export const useCurrentUserProfile = () => {
       return user;
     },
     enabled: !!getAuthTokenFromCookies(), // Only run if we have a token
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 0, // No caching, always fetch fresh data
+    gcTime: 0, // No garbage collection, remove immediately
   });
 };
 
@@ -297,12 +344,95 @@ export const useLogin = () => {
     onSuccess: (result) => {
       // Clear previous user data
       queryClient.clear();
+    },
+  });
+};
 
-      // Prefetch user profile
-      queryClient.prefetchQuery({
-        queryKey: USER_QUERY_KEYS.currentProfile(),
-        staleTime: 1000 * 60 * 5,
+// Hook to update avatar
+export const useUpdateAvatar = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (avatar: File | string) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await updateAvatar({ auth_token: authToken, avatar });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update avatar');
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch current user profile
+      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
+    },
+  });
+};
+
+// Hook to update banner
+export const useUpdateBanner = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (banner: File | string) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await updateBanner({ auth_token: authToken, banner });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update banner');
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch current user profile
+      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
+    },
+  });
+};
+
+// Hook to update password
+export const useUpdatePassword = () => {
+  return useMutation({
+    mutationFn: async (data: { new_password: string; old_password: string }) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await updatePassword({
+        auth_token: authToken,
+        new_password: data.new_password,
+        old_password: data.old_password,
       });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update password');
+      }
+      return response.data;
+    },
+  });
+};
+
+// Hook to reset auth token
+export const useResetAuthToken = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (password: string) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await resetAuthToken({
+        auth_token: authToken,
+        password,
+      });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to reset auth token');
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Clear query cache after token reset
+      queryClient.clear();
     },
   });
 };
@@ -322,7 +452,7 @@ export const useLogout = () => {
 // User activity tracker hook - replaced with simple activity management
 export const useActivityTracker = () => {
   const updateStatusMutation = useUpdateStatus();
-  const inactivityTimeoutRef = useRef<NodeJS.Timeout>();
+  const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef(Date.now());
 
   const resetInactivityTimer = () => {
@@ -330,7 +460,7 @@ export const useActivityTracker = () => {
       clearTimeout(inactivityTimeoutRef.current);
     }
 
-    const INACTIVE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+    const INACTIVE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
     inactivityTimeoutRef.current = setTimeout(() => {
       updateStatusMutation.mutate('idle');
     }, INACTIVE_TIMEOUT);

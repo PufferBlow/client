@@ -5,11 +5,11 @@ export interface Message {
   /** Unique identifier for the message */
   message_id: string;
 
+  /** Raw message content from API response */
+  message: string;
+
   /** Hashed version of the message content for security/storage */
   hashed_message: string;
-
-  /** Raw message content (decrypted) */
-  raw_message?: string;
 
   /** ID of the user who sent the message */
   sender_user_id: string;

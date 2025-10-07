@@ -3,6 +3,9 @@
  */
 export interface User {
   /** Unique identifier for the user */
+  id: string;
+
+  /** Unique identifier for the user (alias for id) */
   user_id: string;
 
   /** Username chosen by the user */
@@ -46,4 +49,16 @@ export interface User {
 
   /** Whether the user is the owner of a server */
   is_owner?: boolean;
+
+  /** List of roles the user has */
+  roles?: string[];
+
+  /** User's avatar URL */
+  avatar?: string;
+
+  /** Timestamp when the user joined (for display purposes) */
+  joinedAt?: string;
+
+  /** User's bio */
+  bio?: string;
 }

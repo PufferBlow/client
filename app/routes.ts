@@ -6,4 +6,5 @@ export default [
   route("/signup", "routes/signup.tsx"),
   route("/dashboard", "routes/dashboard.tsx"),
   route("/settings", "routes/settings.tsx"),
+  route("/control-panel", "routes/control-panel.tsx"),
 ] satisfies RouteConfig;
