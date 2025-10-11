@@ -22,6 +22,7 @@ export default function Settings() {
   const updatePasswordMutation = useUpdatePassword();
   const resetAuthTokenMutation = useResetAuthToken();
   const { logout } = useLogout();
+  const { setTheme } = useTheme();
 
   // Get current theme from localStorage without hook calls in conditional
   const getCurrentTheme = () => {
@@ -987,10 +988,10 @@ export default function Settings() {
                                 if (typeof window !== 'undefined') {
                                   localStorage.removeItem('pufferblow-theme');
                                   const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                                  useTheme().setTheme(systemTheme);
+                                  setTheme(systemTheme);
                                 }
                               } else {
-                                useTheme().setTheme(value as 'light' | 'dark');
+                                setTheme(value as 'light' | 'dark');
                               }
                             }}
                             className="block w-full px-4 py-3 pr-10 border border-[var(--color-border)] rounded-xl shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] transition-all duration-200 sm:text-sm appearance-none cursor-pointer hover:border-[var(--color-primary)]/50 hover:shadow-md focus:shadow-lg"

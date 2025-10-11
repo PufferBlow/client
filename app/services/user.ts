@@ -60,7 +60,7 @@ export interface GetUserProfileResponse {
     user_id: string;
     username: string;
     password: string;
-    status: 'online' | 'offline' | 'idle' | 'inactive';
+    status: 'online' | 'offline' | 'idle' | 'dnd';
     last_seen: string;
     conversations: any[];
     contacts: any[];
@@ -82,6 +82,30 @@ export const getUserProfileById = async (userId: string, authToken: string): Pro
 export const getCurrentUserProfile = async (authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
   const apiClient = createApiClient();
   return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(extractUserIdFromToken(authToken))}&auth_token=${encodeURIComponent(authToken)}`);
+};
+
+export interface ListUsersResponse {
+  status_code: number;
+  users: Array<{
+    user_id: string;
+    username: string;
+    status: 'online' | 'offline' | 'idle' | 'inactive' | 'dnd';
+    last_seen: string;
+    conversations: any[];
+    contacts: any[];
+    joined_servers_ids: any[];
+    auth_token: string;
+    auth_token_expire_time: string;
+    created_at: string;
+    updated_at: string;
+    is_admin: boolean;
+    is_owner: boolean;
+  }>;
+}
+
+export const listUsers = async (authToken: string): Promise<ApiResponse<ListUsersResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/users/list?auth_token=${encodeURIComponent(authToken)}`);
 };
 
 // Update user profile functions

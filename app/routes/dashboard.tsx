@@ -8,13 +8,17 @@ import { MessageContextMenu } from "../components/MessageContextMenu";
 import { UserContextMenu } from "../components/UserContextMenu";
 import { SearchModal } from "../components/SearchModal";
 import { InviteModal } from "../components/InviteModal";
-import { ThemeToggleWithIcon } from "../components/ThemeToggle";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { UserCard } from "../components/UserCard";
 import { UserPanel } from "../components/UserPanel";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
+import { MessageReportModal } from "../components/MessageReportModal";
+import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
+import { usePersistedUIState } from "../utils/uiStatePersistence";
 import { getAuthTokenFromCookies, getHostPortFromCookies, useCurrentUserProfile, useActivityTracker, getUserProfileById } from "../services/user";
-import { listChannels, createChannel, loadMessages, sendMessage } from "../services/channel";
+import { listChannels, createChannel, loadMessages, sendMessage, deleteChannel } from "../services/channel";
+import { listUsers, type ListUsersResponse } from "../services/user";
 import type { Channel } from "../models";
 import type { Message } from "../models";
 import type { User } from "../models";
@@ -46,6 +50,17 @@ export default function Dashboard() {
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
   const { recordActivity } = useActivityTracker();
 
+  // UI persistence hook
+  const {
+    selectedChannelId: persistedChannelId,
+    messageDrafts,
+    setSelectedChannel: persistSelectedChannel,
+    setMessageDraft,
+    getMessageDraft,
+    clearMessageDraft,
+    clearAllState
+  } = usePersistedUIState(currentUser?.user_id);
+
   // Modal states
   const [serverCreationModalOpen, setServerCreationModalOpen] = useState(false);
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
@@ -56,20 +71,50 @@ export default function Dashboard() {
   const [selectedUserTriggerRect, setSelectedUserTriggerRect] = useState<DOMRect | null>(null);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const [messageContextMenu, setMessageContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [messageContextMenu, setMessageContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    customCopyLinkLabel?: string;
+    customReportLabel?: string;
+    onCopyLink?: () => void;
+    onReport?: () => void;
+  }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [channelContextMenu, setChannelContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number }; channel: Channel | null }>({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+  const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null }>({ isOpen: false, channel: null });
+  const [successToast, setSuccessToast] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
+  const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [messageInput, setMessageInput] = useState('');
+  const [users, setUsers] = useState<ListUsersResponse['users']>([]);
+  const [messageInput, setMessageInput] = useState(() => {
+    // Initialize with persisted draft if we have a selected channel
+    if (persistedChannelId) {
+      return getMessageDraft(persistedChannelId);
+    }
+    return '';
+  });
   const [userProfiles, setUserProfiles] = useState<Record<string, any>>({});
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
+  const [maxMessageLength, setMaxMessageLength] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pufferblow-max-message-length');
+      return saved ? parseInt(saved) : 4000;
+    }
+    return 4000; // Default value for SSR
+  });
+  const [messageTooLongAlert, setMessageTooLongAlert] = useState<string | null>(null);
   const messageInputBarRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const serverDropdownRef = useRef<HTMLDivElement>(null);
+  const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle authentication redirects
   if (userError?.message?.includes('No authentication token')) {
@@ -96,7 +141,81 @@ export default function Dashboard() {
     };
   }, [serverDropdownOpen]);
 
-  // Fetch channels on mount
+  // Save maxMessageLength to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pufferblow-max-message-length', maxMessageLength.toString());
+    }
+  }, [maxMessageLength]);
+
+  // Optimized auto-resize message input textarea with debouncing
+  useEffect(() => {
+    // Clear any pending resize timeout
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+
+    // Debounce the resize operation to avoid excessive calculations during typing
+    resizeTimeoutRef.current = setTimeout(() => {
+      if (messageInputRef.current) {
+        const textarea = messageInputRef.current;
+        const minHeight = 24; // 1.5rem = 24px
+        const maxHeight = 200; // Maximum height before scrolling
+
+        // Use requestAnimationFrame for smooth DOM updates
+        requestAnimationFrame(() => {
+          if (!textarea) return;
+
+          // Reset height to auto to get the correct scrollHeight
+          textarea.style.height = 'auto';
+
+          // Calculate new height
+          const scrollHeight = textarea.scrollHeight;
+          let newHeight = scrollHeight;
+
+          // Apply minimum height
+          newHeight = Math.max(newHeight, minHeight);
+
+          // Avoid unnecessary DOM updates if height hasn't changed significantly
+          if (Math.abs(newHeight - cachedTextareaHeight) > 2) {
+            setCachedTextareaHeight(newHeight);
+
+            // If content exceeds max height, make it scrollable, otherwise expand
+            if (scrollHeight > maxHeight) {
+              newHeight = maxHeight;
+              textarea.style.overflowY = 'auto';
+            } else {
+              textarea.style.overflowY = 'hidden';
+            }
+
+            textarea.style.height = `${newHeight}px`;
+          }
+        });
+      }
+    }, 50); // 50ms debounce delay
+
+    // Cleanup timeout on unmount or next effect
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [messageInput]);
+
+  // Auto-scroll messages to bottom when new messages arrive or are first loaded
+  useEffect(() => {
+    if (messagesContainerRef.current && messages.length > 0) {
+      // Use setTimeout to ensure DOM has updated with new messages
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          const container = messagesContainerRef.current;
+          container.scrollTop = container.scrollHeight;
+        }
+      }, 50); // Small delay to ensure DOM update
+    }
+  }, [messages]);
+
+  // Fetch channels and users on mount
   useEffect(() => {
     const fetchChannels = async () => {
       const authToken = getAuthTokenFromCookies() || '';
@@ -111,15 +230,58 @@ export default function Dashboard() {
       } else {
         console.error("Failed to fetch channels from API:", response.error);
         logger.ui.error("Failed to fetch channels", { error: response.error });
-        // Don't show mock data - let it show "No channels" if API fails
         setChannels([]);
+      }
+    };
+
+    const fetchUsers = async () => {
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const response = await listUsers(authToken);
+      if (response.success && response.data && response.data.users) {
+        setUsers(response.data.users);
+        console.log("Users fetched from API:", response.data.users);
+        logger.ui.info("Users fetched successfully", { count: response.data.users.length });
+      } else {
+        console.error("Failed to fetch users from API:", response.error);
+        logger.ui.error("Failed to fetch users", { error: response.error });
+        setUsers([]);
       }
     };
 
     if (currentUser) {
       fetchChannels();
+      fetchUsers();
     }
   }, [currentUser]);
+
+  // Initialize from persisted state after channels are loaded
+  useEffect(() => {
+    if (channels.length > 0 && !selectedChannel) {
+      // Try to restore previously selected channel
+      if (persistedChannelId) {
+        const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
+        if (persistedChannel) {
+          console.log("Restoring previously selected channel:", persistedChannel);
+          // Don't call handleChannelSelect here as it will handle persistence itself
+          setSelectedChannel(persistedChannel);
+          persistSelectedChannel(persistedChannel.channel_id);
+        } else {
+          console.log("Persisted channel not found, selecting first available channel");
+          // Persisted channel no longer exists, select the first available channel
+          const firstChannel = channels[0];
+          handleChannelSelect(firstChannel);
+        }
+      } else {
+        // No persisted channel, select the first available channel
+        console.log("No persisted channel, selecting first available");
+        const firstChannel = channels[0];
+        handleChannelSelect(firstChannel);
+      }
+    }
+  }, [channels, persistedChannelId, selectedChannel]);
 
   // Function to fetch and cache user profiles
   const getUserProfile = async (userId: string) => {
@@ -143,8 +305,8 @@ export default function Dashboard() {
           id: userData.user_id,
           username: userData.username,
           avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`,
-          status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'inactive')
-            ? userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline'
+          status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'offline')
+            ? userData.status === 'dnd' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline'
             : 'offline',
           roles: userData.is_owner ? ['Owner', 'Admin'] :
                  userData.is_admin ? ['Admin'] : ['Member']
@@ -196,6 +358,37 @@ export default function Dashboard() {
       return fallbackUser;
     }
   };
+
+  // Load user profiles for current messages
+  useEffect(() => {
+    const loadUserProfilesForMessages = async () => {
+      if (!messages.length) return;
+
+      const authToken = getAuthTokenFromCookies() || '';
+      if (!authToken) return;
+
+      const uniqueSenderIds = [...new Set(messages.map(m => m.sender_user_id))];
+      const profilesToLoad = uniqueSenderIds.filter(id => !userProfiles[id]);
+
+      if (profilesToLoad.length > 0) {
+        console.log('Loading user profiles for messages:', profilesToLoad.length, 'profiles');
+        await Promise.all(profilesToLoad.map(id => getUserProfile(id)));
+      }
+    };
+
+    loadUserProfilesForMessages();
+  }, [messages, userProfiles]);
+
+  // Auto-hide message too long alert after 5 seconds
+  useEffect(() => {
+    if (messageTooLongAlert) {
+      const timeout = setTimeout(() => {
+        setMessageTooLongAlert(null);
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timeout);
+    }
+  }, [messageTooLongAlert]);
 
   // Show skeleton loading state
   if (userLoading) {
@@ -324,6 +517,10 @@ export default function Dashboard() {
           isPrivate: channelData.isPrivate
         });
 
+        // Show success toast
+        setSuccessToast({ isOpen: true, message: `Channel #${channelData.name} created successfully!` });
+        setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+
         // Refresh channels list
         const channelsResponse = await listChannels(authToken);
         if (channelsResponse.success && channelsResponse.data) {
@@ -388,13 +585,77 @@ export default function Dashboard() {
   };
 
   const handleMessageReport = (messageId: string) => {
-    console.log("Report message:", messageId);
-    // TODO: Implement report functionality
+    // Handle single message report by opening modal
+    setMessageReportModal({ isOpen: true, messages: [messageId] });
   };
 
-  const handleMessageCopy = (messageId: string) => {
-    console.log("Copy message:", messageId);
-    // TODO: Implement copy functionality
+  const handleMessageReportSubmit = async (report: { category: string; description: string }) => {
+    const { category, description } = report;
+
+    // TODO: Send report to API - for now just simulate submission
+    console.log("Submitting message report:", {
+      messageIds: messageReportModal.messages,
+      category,
+      description
+    });
+
+    // Show success toast
+    setSuccessToast({
+      isOpen: true,
+      message: `Report submitted successfully. Thank you for helping keep our community safe!`
+    });
+    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 4000);
+
+    // Close modal
+    setMessageReportModal({ isOpen: false, messages: [] });
+
+    // Log the report
+    logger.ui.info("Message report submitted", {
+      messageCount: messageReportModal.messages.length,
+      category,
+      descriptionLength: description.length
+    });
+  };
+
+  const handleMessageGroupContextMenu = (messageIds: string[], event: React.MouseEvent) => {
+    event.preventDefault();
+
+    // Set up group-specific handlers
+    const groupCopyHandler = async () => {
+      try {
+        await navigator.clipboard.writeText(messageIds.join(','));
+        logger.ui.info("Message group IDs copied to clipboard", { count: messageIds.length });
+        alert(`${messageIds.length} message IDs copied to clipboard!`);
+      } catch (error) {
+        logger.ui.error("Failed to copy message group IDs to clipboard", { error });
+        alert("Failed to copy message IDs to clipboard. Please try again.");
+      }
+    };
+
+    const groupReportHandler = () => {
+      // Report all messages in the group
+      setMessageReportModal({ isOpen: true, messages: messageIds });
+    };
+
+    setMessageContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+      customCopyLinkLabel: 'Copy Message IDs',
+      customReportLabel: 'Report Messages',
+      onCopyLink: groupCopyHandler,
+      onReport: groupReportHandler
+    });
+  };
+
+  const handleMessageCopy = async (messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(messageId);
+      logger.ui.info("Message ID copied to clipboard", { messageId: "[REDACTED]" });
+      alert("Message ID copied to clipboard!");
+    } catch (error) {
+      logger.ui.error("Failed to copy message ID to clipboard", { error });
+      alert("Failed to copy message ID to clipboard. Please try again.");
+    }
   };
 
   const handleUserReport = (userId: string) => {
@@ -402,9 +663,15 @@ export default function Dashboard() {
     // TODO: Implement user report functionality
   };
 
-  const handleCopyUserId = (userId: string) => {
-    navigator.clipboard.writeText(userId);
-    logger.ui.info("User ID copied to clipboard", { userId: "[REDACTED]" });
+  const handleCopyUserId = async (userId: string) => {
+    try {
+      await navigator.clipboard.writeText(userId);
+      logger.ui.info("User ID copied to clipboard", { userId: "[REDACTED]" });
+      alert("User ID copied to clipboard!");
+    } catch (error) {
+      logger.ui.error("Failed to copy user ID to clipboard", { error });
+      alert("Failed to copy user ID to clipboard. Please try again.");
+    }
   };
 
   const handleSendMessageToUser = (userId: string) => {
@@ -414,7 +681,20 @@ export default function Dashboard() {
 
   const handleChannelSelect = async (channel: Channel) => {
     console.log("Channel clicked:", channel);
+
+    // Save current channel's message draft before switching
+    if (selectedChannel && messageInput) {
+      setMessageDraft(selectedChannel.channel_id, messageInput);
+    }
+
     setSelectedChannel(channel);
+
+    // Persist the selected channel
+    persistSelectedChannel(channel.channel_id);
+
+    // Restore message draft for the new channel
+    const restoredDraft = getMessageDraft(channel.channel_id);
+    setMessageInput(restoredDraft);
 
     // Load messages for the selected channel
     const authToken = getAuthTokenFromCookies() || '';
@@ -447,9 +727,29 @@ export default function Dashboard() {
     });
   };
 
+  const handleChannelContextMenu = (event: React.MouseEvent, channel: Channel) => {
+    event.preventDefault();
+    // Only show context menu for owners
+    if (currentUser?.roles?.includes('Owner') || currentUser?.is_owner) {
+      setChannelContextMenu({
+        isOpen: true,
+        position: { x: event.clientX, y: event.clientY },
+        channel: channel
+      });
+    }
+  };
+
   // Message input handlers
   const handleSendMessage = async () => {
-    if (messageInput.trim()) {
+    const trimmedMessage = messageInput.trim();
+    if (trimmedMessage) {
+      // Validate message for security and length
+      const validationResult = validateMessageInput(trimmedMessage, maxMessageLength);
+      if (!validationResult.isValid) {
+        setMessageTooLongAlert(validationResult.error || 'Invalid message content');
+        return;
+      }
+
       const authToken = getAuthTokenFromCookies() || '';
 
       if (!selectedChannel || !authToken) {
@@ -460,11 +760,11 @@ export default function Dashboard() {
       try {
         console.log('Sending message:', {
           channelId: selectedChannel.channel_id,
-          message: messageInput.trim(),
+          message: trimmedMessage,
           authToken: authToken.substring(0, 20) + '...'
         });
 
-        const response = await sendMessage(selectedChannel.channel_id, messageInput.trim(), authToken);
+        const response = await sendMessage(selectedChannel.channel_id, trimmedMessage, authToken);
         console.log('Send message response:', response);
 
         if (response.success) {
@@ -473,8 +773,11 @@ export default function Dashboard() {
             messageLength: messageInput.length
           });
 
-          // Clear input
+          // Clear input and draft
           setMessageInput('');
+          if (selectedChannel) {
+            clearMessageDraft(selectedChannel.channel_id);
+          }
 
           // Refresh messages list
           const messagesResponse = await loadMessages(selectedChannel.channel_id, authToken);
@@ -610,99 +913,90 @@ export default function Dashboard() {
     // TODO: Implement GIF sending functionality
   };
 
-  const handleUserClick = (userId: string, username: string, event: React.MouseEvent) => {
-    // Create mock user data based on userId with generated avatars
-    const mockUsers: Record<string, DisplayUser> = {
-      "user123": {
-        id: "user123",
-        username: "User",
-        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`,
-        status: "online",
-        bio: "Building the future of decentralized messaging",
-        joinedAt: "2023-01-15T00:00:00Z",
-        roles: ["Member"]
-      },
-      "user456": {
-        id: "user456",
-        username: "Alice",
-        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`,
-        status: "online",
-        bio: "Frontend developer passionate about user experience",
-        joinedAt: "2023-02-20T00:00:00Z",
-        roles: ["Member", "Developer"]
-      },
-      "user789": {
-        id: "user789",
-        username: "Bob",
-        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`,
-        status: "online",
-        bio: "Backend engineer specializing in distributed systems",
-        joinedAt: "2023-03-10T00:00:00Z",
-        roles: ["Member", "Admin"]
-      },
-      "user101": {
-        id: "user101",
-        username: "Charlie",
-        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`,
-        status: "online",
-        bio: "DevOps engineer ensuring smooth deployments",
-        joinedAt: "2023-04-05T00:00:00Z",
-        roles: ["Member", "Moderator"]
-      }
-    };
+  const handleUserClick = async (userId: string, username: string, event: React.MouseEvent) => {
+    event.preventDefault();
 
-    const user = mockUsers[userId];
-    if (user) {
-      // Calculate position next to the clicked user card with viewport bounds checking
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const modalWidth = 320; // Approximate width of the modal
-      const modalHeight = 400; // Approximate height of the modal
-      const gap = 8;
+    // If it's the current user, use their profile
+    if (currentUser && userId === currentUser.user_id) {
+      setUserProfileModalOpen(true);
+      return;
+    }
 
-      // Check if there's enough space to the right
-      const spaceToRight = window.innerWidth - rect.right;
-      const spaceToLeft = rect.left;
+    // Calculate position next to the clicked element with viewport bounds checking
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const modalWidth = 320; // Approximate width of the modal
+    const modalHeight = 400; // Approximate height of the modal
+    const gap = 8;
 
-      let modalX: number;
-      let modalY: number;
+    // Check if there's enough space to the right
+    const spaceToRight = window.innerWidth - rect.right;
+    const spaceToLeft = rect.left;
 
-      // Position horizontally: prefer right, fallback to left
-      if (spaceToRight >= modalWidth + gap) {
-        modalX = rect.right + gap;
-      } else if (spaceToLeft >= modalWidth + gap) {
-        modalX = rect.left - modalWidth - gap;
-      } else {
-        // Center if neither side has enough space
-        modalX = Math.max(gap, (window.innerWidth - modalWidth) / 2);
-      }
+    let modalX: number;
+    let modalY: number;
 
-      // Position vertically: align with top of user card, but ensure modal stays in viewport
-      modalY = rect.top;
+    // Position horizontally: prefer right, fallback to left
+    if (spaceToRight >= modalWidth + gap) {
+      modalX = rect.right + gap;
+    } else if (spaceToLeft >= modalWidth + gap) {
+      modalX = rect.left - modalWidth - gap;
+    } else {
+      // Center if neither side has enough space
+      modalX = Math.max(gap, (window.innerWidth - modalWidth) / 2);
+    }
 
-      // Adjust if modal would go off-screen vertically
-      if (modalY + modalHeight > window.innerHeight) {
-        modalY = window.innerHeight - modalHeight - gap;
-      }
-      if (modalY < gap) {
-        modalY = gap;
-      }
+    // Position vertically: align with top of element, but ensure modal stays in viewport
+    modalY = rect.top;
 
+    // Adjust if modal would go off-screen vertically
+    if (modalY + modalHeight > window.innerHeight) {
+      modalY = window.innerHeight - modalHeight - gap;
+    }
+    if (modalY < gap) {
+      modalY = gap;
+    }
+
+    // Get cached user profile or load it
+    const userInfo = userProfiles[userId];
+    if (userInfo) {
+      // Use cached profile
       const displayUser: DisplayUser = {
-        id: user.id,
-        username: user.username || '',
-        avatar: user.avatar,
-        status: (user.status === 'online' || user.status === 'idle' || user.status === 'offline' || user.status === 'dnd')
-          ? user.status as 'online' | 'idle' | 'offline' | 'dnd'
+        id: userInfo.id,
+        username: userInfo.username || '',
+        avatar: userInfo.avatar,
+        status: (userInfo.status === 'online' || userInfo.status === 'idle' || userInfo.status === 'offline' || userInfo.status === 'dnd')
+          ? userInfo.status as 'online' | 'idle' | 'offline' | 'dnd'
           : 'offline',
-        bio: user.bio,
-        joinedAt: user.joinedAt,
-        roles: user.roles || []
+        bio: userInfo.bio || '',
+        joinedAt: userInfo.created_at || '',
+        roles: userInfo.roles || []
       };
 
       setSelectedUser(displayUser);
       setSelectedUserPosition({ x: modalX, y: modalY });
       setSelectedUserTriggerRect(rect);
       setSelectedUserProfileModalOpen(true);
+    } else {
+      // Load profile if not cached
+      const profile = await getUserProfile(userId);
+      if (profile) {
+        const displayUser: DisplayUser = {
+          id: profile.id,
+          username: profile.username || '',
+          avatar: profile.avatar,
+          status: (profile.status === 'online' || profile.status === 'idle' || profile.status === 'offline' || profile.status === 'dnd')
+            ? profile.status as 'online' | 'idle' | 'offline' | 'dnd'
+            : 'offline',
+          bio: profile.bio || '',
+          joinedAt: profile.created_at || '',
+          roles: profile.roles || []
+        };
+
+        setSelectedUser(displayUser);
+        setSelectedUserPosition({ x: modalX, y: modalY });
+        setSelectedUserTriggerRect(rect);
+        setSelectedUserProfileModalOpen(true);
+      }
     }
   };
 
@@ -777,13 +1071,13 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => {
-                    const hasPermission = (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner;
+                    const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
                     if (hasPermission) {
                       setInviteModalOpen(true);
                       setServerDropdownOpen(false);
                     }
                   }}
-                  disabled={!(currentUser?.roles?.includes('Admin') || currentUser?.roles?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)}
+                  disabled={!currentUser?.is_admin && !currentUser?.is_owner && !(currentUser?.roles?.includes('Admin')) && !(currentUser?.roles?.includes('Moderator'))}
                     className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
                       (currentUser?.roles?.includes?.('Admin') || currentUser?.roles?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
                         ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
@@ -909,23 +1203,37 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-0.5">
-                  {channels.map(channel => (
-                    <div
-                      key={channel.channel_id}
-                      className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${
-                        selectedChannel?.channel_id === channel.channel_id ? 'bg-gray-600' : ''
-                      }`}
-                      onClick={() => handleChannelSelect(channel)}
-                    >
-                      <span className="text-gray-400 mr-2">#</span>
-                      <span className="text-gray-400 text-sm">{channel.channel_name}</span>
-                      {channel.is_private && (
-                        <svg className="w-4 h-4 text-gray-500 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      )}
-                    </div>
-                  ))}
+                  {channels.map(channel => {
+                    const hasDraft = getMessageDraft(channel.channel_id).trim().length > 0;
+
+                    return (
+                      <div
+                        key={channel.channel_id}
+                        className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${
+                          selectedChannel?.channel_id === channel.channel_id ? 'bg-gray-600' : ''
+                        }`}
+                        onClick={() => handleChannelSelect(channel)}
+                        onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                      >
+                        <span className="text-gray-400 mr-2">#</span>
+                        <span className="text-gray-400 text-sm break-words overflow-wrap-anywhere flex-1">{channel.channel_name}</span>
+                        <div className="flex items-center ml-auto">
+                          {hasDraft && (
+                            <div className="flex items-center mr-1" title="Has unsent message">
+                              <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </div>
+                          )}
+                          {channel.is_private && (
+                            <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>
@@ -981,7 +1289,10 @@ export default function Dashboard() {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 break-words"
+        >
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center text-gray-400">
@@ -992,101 +1303,143 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            messages.map((message) => {
-              // Get cached user profile or fetch it
-              const [userInfo, setUserInfo] = useState<any>(null);
+            (() => {
+              // Group messages by sender and time
+              const messageGroups: Message[][] = [];
+              let currentGroup: Message[] = [];
 
-              useEffect(() => {
-                const loadUserInfo = async () => {
-                  const profile = await getUserProfile(message.sender_user_id);
-                  setUserInfo(profile);
-                };
-                loadUserInfo();
-              }, [message.sender_user_id]);
+              messages.forEach((message, index) => {
+                const messageTime = new Date(message.sent_at);
 
-              const messageTimestamp = new Date(message.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                if (currentGroup.length === 0) {
+                  // Start a new group
+                  currentGroup = [message];
+                } else {
+                  const prevMessageTime = new Date(currentGroup[currentGroup.length - 1].sent_at);
+                  const timeDiff = (messageTime.getTime() - prevMessageTime.getTime()) / 1000; // seconds
 
-              // Show loading state while fetching user info
-              if (!userInfo) {
+                  // Continue group if same sender and within 20 seconds
+                  if (message.sender_user_id === currentGroup[0].sender_user_id && timeDiff <= 20) {
+                    currentGroup.push(message);
+                  } else {
+                    // Start a new group
+                    messageGroups.push(currentGroup);
+                    currentGroup = [message];
+                  }
+                }
+
+                // Add the last group
+                if (index === messages.length - 1) {
+                  messageGroups.push(currentGroup);
+                }
+              });
+
+              return messageGroups.map((group) => {
+                const firstMessage = group[0];
+                const userInfo = userProfiles[firstMessage.sender_user_id];
+                const messageTimestamp = new Date(firstMessage.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                const groupMessageIds = group.map(m => m.message_id);
+
+                // Show loading state while fetching user info
+                if (!userInfo) {
+                  return (
+                    <div
+                      key={firstMessage.message_id}
+                      className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${
+                        firstMessage.sender_user_id === currentUser?.user_id
+                          ? 'bg-blue-900/20 border-l-4 border-blue-500 hover:bg-blue-900/30'
+                          : ''
+                      }`}
+                    >
+                      <div className="w-10 h-10 bg-gray-600 rounded-full flex-shrink-0 animate-pulse"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <div className="w-20 h-4 bg-gray-600 rounded animate-pulse"></div>
+                          <div className="w-16 h-3 bg-gray-700 rounded animate-pulse"></div>
+                        </div>
+                        <div className="space-y-2">
+                          {group.map((msg, idx) => (
+                            <div key={msg.message_id} className="min-h-3">
+                              {idx === 0 && <div className="w-3/4 h-3 bg-gray-600 rounded animate-pulse"></div>}
+                              <div className="w-full h-3 bg-gray-600 rounded animate-pulse"></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
-                    key={message.message_id}
-                    className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
+                    key={firstMessage.message_id}
+                    className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${
+                      firstMessage.sender_user_id === currentUser?.user_id
+                        ? 'bg-blue-900/20 border-l-4 border-blue-500 hover:bg-blue-900/30'
+                        : ''
+                    }`}
+                    onMouseEnter={() => setHoveredMessageId(firstMessage.message_id)}
+                    onMouseLeave={() => setHoveredMessageId(null)}
+                    onContextMenu={(e) => handleMessageGroupContextMenu(groupMessageIds, e)}
                   >
-                    <div className="w-10 h-10 bg-gray-600 rounded-full flex-shrink-0 animate-pulse"></div>
+                    <img
+                      src={userInfo.avatar}
+                      alt={userInfo.username}
+                      className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={(e) => handleUserClick(firstMessage.sender_user_id, userInfo.username, e)}
+                    />
                     <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <div className="w-20 h-4 bg-gray-600 rounded animate-pulse"></div>
-                        <div className="w-16 h-3 bg-gray-700 rounded animate-pulse"></div>
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span
+                          className="text-white font-medium select-text cursor-pointer hover:underline"
+                          onClick={(e) => handleUserClick(firstMessage.sender_user_id, userInfo.username, e)}
+                        >
+                          {userInfo.username}
+                        </span>
+                        {userInfo.roles.includes("Owner") ? (
+                          <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                        ) : userInfo.roles.includes("Admin") ? (
+                          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                        ) : userInfo.roles.includes("Moderator") ? (
+                          <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                        ) : null}
+                        <span className="text-gray-400 text-xs select-text">{messageTimestamp}</span>
                       </div>
-                      <div className="w-full h-3 bg-gray-600 rounded animate-pulse"></div>
+                      <div className="space-y-1">
+                        {group.map((message) => (
+                          <MarkdownRenderer key={message.message_id} content={message.message} className="text-gray-300" />
+                        ))}
+                      </div>
+                      {/* Hover Menu Button */}
+                      <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === firstMessage.message_id ? "opacity-100" : ""}`}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMessageContextMenu({
+                              isOpen: true,
+                              position: { x: e.clientX, y: e.clientY }
+                            });
+                          }}
+                          className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                          title="More options"
+                        >
+                          ⋯
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
-              }
-
-              return (
-                <div
-                  key={message.message_id}
-                  className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors"
-                  onMouseEnter={() => setHoveredMessageId(message.message_id)}
-                  onMouseLeave={() => setHoveredMessageId(null)}
-                  onContextMenu={(e) => handleMessageContextMenu(message.message_id, e)}
-                >
-                  <img
-                    src={userInfo.avatar}
-                    alt={userInfo.username}
-                    className="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={(e) => handleUserClick(message.sender_user_id, userInfo.username, e)}
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span
-                        className="text-white font-medium select-text cursor-pointer hover:underline"
-                        onClick={(e) => handleUserClick(message.sender_user_id, userInfo.username, e)}
-                      >
-                        {userInfo.username}
-                      </span>
-                      {userInfo.roles.includes("Admin") && (
-                        <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                      )}
-                      {userInfo.roles.includes("Owner") && (
-                        <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
-                      )}
-                      {userInfo.roles.includes("Moderator") && (
-                        <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                      )}
-                      <span className="text-gray-400 text-xs select-text">{messageTimestamp}</span>
-                    </div>
-                    <div className="text-gray-300 font-sans select-text">
-                      {message.message}
-                    </div>
-                  </div>
-                  {/* Hover Menu Button */}
-                  <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === message.message_id ? "opacity-100" : ""}`}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMessageContextMenu({
-                          isOpen: true,
-                          position: { x: e.clientX, y: e.clientY }
-                        });
-                      }}
-                      className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
-                      title="More options"
-                    >
-                      ⋯
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+              });
+            })()
           )}
         </div>
 
         {/* Message Input */}
         <div className="p-4">
-          <div ref={messageInputBarRef} className="bg-gray-600 rounded-lg px-4 py-3">
+          <div
+            ref={messageInputBarRef}
+            className={`bg-gray-600 rounded-lg px-4 py-2 transition-opacity ${!selectedChannel ? 'opacity-50 pointer-events-none' : ''}`}
+          >
             <div className="flex items-end space-x-3">
               {/* File Upload Button */}
               <label className="flex-shrink-0">
@@ -1094,11 +1447,13 @@ export default function Dashboard() {
                   type="file"
                   multiple
                   onChange={handleFileUpload}
+                  disabled={!selectedChannel}
                   className="hidden"
                   accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx"
                 />
                 <button
-                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white"
+                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!selectedChannel}
                   title="Upload file"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1108,27 +1463,31 @@ export default function Dashboard() {
               </label>
 
               {/* Message Input */}
-              <div className="flex-1">
+              <div className="flex-1 min-h-0">
                 <textarea
+                  ref={messageInputRef}
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  placeholder={`Message #${selectedChannel?.channel_name || 'general'}`}
-                  className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none min-h-[20px] max-h-32"
-                  rows={1}
-                  style={{ height: 'auto', minHeight: '20px' }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, 128) + 'px';
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setMessageInput(newValue);
+                    // Save draft when typing if we have a selected channel
+                    if (selectedChannel) {
+                      setMessageDraft(selectedChannel.channel_id, newValue);
+                    }
                   }}
+                  onKeyDown={handleKeyPress}
+                  placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
+                  disabled={!selectedChannel}
+                  className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+                  rows={1}
                 />
               </div>
 
               {/* Emoji Button */}
               <button
                 onClick={handleEmojiClick}
-                className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+                disabled={!selectedChannel}
+                className={`w-8 h-8 flex items-center justify-center rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isEmojiPickerOpen
                     ? 'bg-blue-600 text-white'
                     : 'hover:bg-gray-500 text-gray-400 hover:text-white'
@@ -1140,23 +1499,42 @@ export default function Dashboard() {
                 </svg>
               </button>
 
-              {/* Send Button */}
-              <button
-                onClick={handleSendMessage}
-                disabled={!messageInput.trim()}
-                className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
-                  messageInput.trim()
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-gray-500 text-gray-400 cursor-not-allowed'
-                }`}
-                title="Send message"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              </button>
+              {/* Send Button - Only show when message has content */}
+              {messageInput.trim() && selectedChannel && (
+                <button
+                  onClick={handleSendMessage}
+                  className="w-8 h-8 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
+                  title="Send message"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Auto-hide floating alert for too long messages */}
+          {messageTooLongAlert && (
+            <div className="absolute bottom-2 right-2 w-auto max-w-xs p-3 rounded-lg border bg-red-50 text-red-800 border-red-200 z-10 shadow-md">
+              <div className="flex items-center space-x-2">
+                <svg className="w-4 h-4 text-red-800 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span className="text-xs font-medium">{messageTooLongAlert}</span>
+                <button
+                  onClick={() => setMessageTooLongAlert(null)}
+                  className="p-1 rounded-full hover:bg-black hover:bg-opacity-10 transition-colors text-red-800 flex-shrink-0"
+                  aria-label="Close message"
+                  title="Dismiss"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Emoji Picker */}
           <EmojiPicker
@@ -1189,88 +1567,66 @@ export default function Dashboard() {
           {/* Scrollable Members Content */}
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
             <div className="p-4 space-y-4">
-              {/* Admin Section */}
-              <div>
-                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
-                <div className="space-y-1">
-                  <div
-                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                    onClick={(e) => handleUserClick("user789", "Bob", e)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Bob")}&backgroundColor=5865f2`}
-                        alt="Bob"
-                        className="w-8 h-8 rounded-full shadow-md border-2 border-red-300"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
-                      <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {(() => {
+                // Group users by role
+                const owners = users.filter(user => user.is_owner);
+                const admins = users.filter(user => user.is_admin && !user.is_owner);
+                const moderators = users.filter(user => !user.is_owner && !user.is_admin);
+                const members = users.filter(user => !user.is_owner && !user.is_admin && !moderators.includes(user));
 
-              {/* Moderators Section */}
-              <div>
-                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Moderators — 1</h4>
-                <div className="space-y-1">
-                  <div
-                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-accent)]"
-                    onClick={(e) => handleUserClick("user101", "Charlie", e)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Charlie")}&backgroundColor=5865f2`}
-                        alt="Charlie"
-                        className="w-8 h-8 rounded-full shadow-md border-2 border-purple-300"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
-                      <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                const renderUserGroup = (title: string, userList: typeof users, roleColor: string, roleLabel: string) => {
+                  if (userList.length === 0) return null;
 
-              {/* Members Section */}
-              <div>
-                <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Members — 2</h4>
-                <div className="space-y-1">
-                  <div
-                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                    onClick={(e) => handleUserClick("user123", "User", e)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("User")}&backgroundColor=5865f2`}
-                        alt="User"
-                        className="w-8 h-8 rounded-full shadow-md border-2 border-[var(--color-primary-hover)]"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
+                  return (
+                    <div>
+                      <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">
+                        {title} — {userList.length}
+                      </h4>
+                      <div className="space-y-1">
+                        {userList.map(user => (
+                          <div
+                            key={user.user_id}
+                            className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                            onClick={(e) => handleUserClick(user.user_id, user.username, e)}
+                          >
+                            <div className="relative">
+                              <img
+                                src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
+                                alt={user.username}
+                                className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
+                              />
+                              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${
+                                user.status === 'online' ? 'bg-green-400' :
+                                user.status === 'idle' ? 'bg-yellow-400' :
+                                user.status === 'dnd' ? 'bg-red-400' :
+                                'bg-gray-400'
+                              }`}></div>
+                            </div>
+                            <div className="flex items-center space-x-2 flex-1">
+                              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text truncate">{user.username}</span>
+                              {user.is_owner && (
+                                <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                              )}
+                              {user.is_admin && !user.is_owner && (
+                                <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
-                  </div>
-                  <div
-                    className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-secondary)]"
-                    onClick={(e) => handleUserClick("user456", "Alice", e)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent("Alice")}&backgroundColor=5865f2`}
-                        alt="Alice"
-                        className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                    </div>
-                    <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
-                  </div>
-                </div>
-              </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {renderUserGroup("Owner", owners, "red-300", "OWNER")}
+                    {renderUserGroup("Admin", admins, "red-300", "ADMIN")}
+                    {renderUserGroup("Moderators", moderators, "purple-300", "MOD")}
+                    {renderUserGroup("Members", members, "green-300", "MEMBER")}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1370,6 +1726,98 @@ export default function Dashboard() {
         onClose={() => setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
       />
 
+      {/* Channel Context Menu for Deletion */}
+      {channelContextMenu.isOpen && channelContextMenu.channel && (
+        <div
+          className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 w-48"
+          style={{
+            left: Math.min(channelContextMenu.position.x, window.innerWidth - 200),
+            top: Math.min(channelContextMenu.position.y, window.innerHeight - 100),
+          }}
+        >
+          <button
+            onClick={() => {
+              setChannelDeleteConfirm({ isOpen: true, channel: channelContextMenu.channel });
+              setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+            }}
+            className="w-full px-3 py-2 text-left text-sm flex items-center text-red-400 hover:bg-red-900 hover:bg-opacity-20 transition-colors"
+          >
+            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Delete Channel</span>
+          </button>
+        </div>
+      )}
+
+      {/* Channel Deletion Confirmation Modal */}
+      {channelDeleteConfirm.isOpen && channelDeleteConfirm.channel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-white">Delete Channel</h3>
+            </div>
+            <div className="mb-6">
+              <p className="text-gray-300 mb-2">
+                Are you sure you want to delete <span className="font-semibold text-white">#{channelDeleteConfirm.channel.channel_name}</span>?
+              </p>
+              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
+                ⚠️ This action cannot be undone. All messages in this channel will be permanently deleted.
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setChannelDeleteConfirm({ isOpen: false, channel: null })}
+                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const authToken = getAuthTokenFromCookies() || '';
+                  if (!authToken) return;
+
+                  // Call delete API
+                  deleteChannel(channelDeleteConfirm.channel.channel_id, authToken).then(async (response) => {
+                  if (response.success) {
+                    logger.ui.info("Channel deleted successfully from dashboard", {
+                      channelId: channelDeleteConfirm.channel.channel_id,
+                      channelName: channelDeleteConfirm.channel.channel_name
+                    });
+
+                    // Show success toast
+                    setSuccessToast({ isOpen: true, message: `Channel #${channelDeleteConfirm.channel.channel_name} deleted successfully!` });
+                    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+
+                    // Refresh channels list
+                    try {
+                      const listResponse = await listChannels(authToken);
+                      if (listResponse.success && listResponse.data?.channels) {
+                        setChannels(listResponse.data.channels);
+                      }
+                    } catch (error) {
+                      console.error("Failed to refresh channels after deletion:", error);
+                    }
+                  } else {
+                      console.error("Failed to delete channel:", response.error);
+                      alert(`Failed to delete channel: ${response.error || 'Unknown error'}`);
+                    }
+                  }).catch((error) => {
+                    console.error("Error deleting channel:", error);
+                    alert('An unexpected error occurred while deleting the channel.');
+                  });
+
+                  setChannelDeleteConfirm({ isOpen: false, channel: null });
+                }}
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
+              >
+                Delete Channel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <UserProfileModal
         isOpen={selectedUserProfileModalOpen}
         onClose={() => setSelectedUserProfileModalOpen(false)}
@@ -1380,6 +1828,34 @@ export default function Dashboard() {
         onReport={handleUserReport}
         onCopyUserId={handleCopyUserId}
         onSendMessage={handleSendMessageToUser}
+      />
+
+      {/* Success Toast Notification */}
+      {successToast.isOpen && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div className="bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 animate-in slide-in-from-right-4 fade-in duration-300">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm font-medium">{successToast.message}</span>
+            <button
+              onClick={() => setSuccessToast({ isOpen: false, message: '' })}
+              className="text-white hover:bg-black hover:bg-opacity-25 rounded-full p-1 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <MessageReportModal
+        isOpen={messageReportModal.isOpen}
+        onClose={() => setMessageReportModal({ isOpen: false, messages: [] })}
+        onSubmit={handleMessageReportSubmit}
+        messageCount={messageReportModal.messages.length}
       />
     </div>
   );

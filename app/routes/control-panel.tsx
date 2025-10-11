@@ -1,6 +1,11 @@
 import { Link } from "react-router";
 import { useState, useEffect } from "react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
+import { UserProfileModal } from "../components/UserProfileModal";
+import { getAuthTokenFromCookies } from "../services/user";
+import { listChannels, deleteChannel, createChannel } from "../services/channel";
+import { logger } from "../utils/logger";
+import type { Channel } from "../models";
 
 export function meta() {
   return [
@@ -10,9 +15,25 @@ export function meta() {
 }
 
 export default function ControlPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'channels' | 'settings' | 'security'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'settings' | 'security'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Mock loading state
+
+  // Settings state
+  const [serverName, setServerName] = useState('General Server');
+  const [description, setDescription] = useState('A decentralized messaging community');
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [maxImageSize, setMaxImageSize] = useState(5); // MB
+  const [maxVideoSize, setMaxVideoSize] = useState(100); // MB
+  const [maxFileSize, setMaxFileSize] = useState(50); // MB
+  const [maxMessageLength, setMaxMessageLength] = useState(4000);
+  const [allowedImageTypes, setAllowedImageTypes] = useState('PNG, JPG, JPEG, GIF, WebP');
+  const [allowedVideoTypes, setAllowedVideoTypes] = useState('MP4, WebM');
+  const [allowedFileTypes, setAllowedFileTypes] = useState('PDF, DOC, DOCX, TXT, ZIP');
+
+  // Channels state for the control panel
+  const [controlPanelChannels, setControlPanelChannels] = useState<Channel[]>([]);
+  const [successToast, setSuccessToast] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
 
   // Mock loading simulation
   useEffect(() => {
@@ -24,108 +45,180 @@ export default function ControlPanel() {
   }, []);
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
-    // Mock channel creation - in a real app, this would call an API
-    console.log('Creating channel:', channelData);
-    setChannelCreationModalOpen(false);
+    try {
+      const authToken = getAuthTokenFromCookies() || '';
+
+      const response = await createChannel({
+        channel_name: channelData.name,
+        is_private: channelData.isPrivate || false
+      }, authToken);
+
+      if (response.success && response.data) {
+        logger.ui.info("Channel created successfully from control panel", {
+          channelName: channelData.name,
+          isPrivate: channelData.isPrivate
+        });
+
+        // Show success alert
+        setSuccessToast({ isOpen: true, message: `Channel #${channelData.name} created successfully!` });
+        setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+
+        // Refresh channels list
+        const channelsResponse = await listChannels(authToken);
+        if (channelsResponse.success && channelsResponse.data) {
+          setControlPanelChannels(channelsResponse.data.channels);
+        }
+
+        // Close modal
+        setChannelCreationModalOpen(false);
+      } else {
+        // Handle specific error codes
+        if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
+          alert('Channel name already exists, please choose a different name.');
+        } else if (response.error?.includes('403') || response.error?.includes('Access denied')) {
+          alert('Access denied. Only admins and moderators can create channels.');
+        } else {
+          alert(`Failed to create channel: ${response.error || 'Unknown error'}`);
+        }
+        logger.ui.error("Failed to create channel from control panel", { error: response.error, channelData });
+      }
+    } catch (error) {
+      alert('An unexpected error occurred while creating the channel.');
+      logger.ui.error("Unexpected error creating channel from control panel", { error, channelData });
+    }
   };
 
   // Show skeleton loading state
   if (isLoading) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
-        {/* Sidebar Skeleton */}
-        <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-4 space-y-2">
-          {/* Back to Dashboard Skeleton */}
-          <div className="w-12 h-12 bg-gray-600 rounded-2xl flex items-center justify-center mb-4">
-            <div className="w-6 h-6 bg-gray-500 rounded"></div>
-          </div>
-          {/* Tab Icons Skeleton */}
-          <div className="space-y-1">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
-            ))}
-          </div>
-        </div>
-
-        {/* Main Content Skeleton */}
-        <div className="flex-1 flex flex-col">
-          {/* Header Skeleton */}
-          <div className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6">
-            <div className="w-64 h-6 bg-gray-700 rounded"></div>
-            <div className="ml-auto w-16 h-6 bg-gray-700 rounded"></div>
-          </div>
-
-          {/* Content Area Skeleton */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            {/* Statistics Cards Skeleton */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="h-4 bg-gray-600 rounded mb-2 w-20"></div>
-                      <div className="h-8 bg-gray-600 rounded w-12"></div>
-                    </div>
-                    <div className="w-8 h-8 bg-gray-600 rounded"></div>
-                  </div>
-                </div>
+      <>
+        <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
+          {/* Sidebar Skeleton */}
+          <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-4 space-y-2">
+            {/* Back to Dashboard Skeleton */}
+            <div className="w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-2xl flex items-center justify-center text-white mb-4">
+              <div className="w-6 h-6 bg-gray-500 rounded"></div>
+            </div>
+            {/* Tab Icons Skeleton */}
+            <div className="space-y-1">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
               ))}
             </div>
+          </div>
 
-            {/* Detailed Stats Grid Skeleton */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-gray-700 rounded-lg p-4">
-                  <div className="flex items-center mb-3">
-                    <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
-                    <div className="h-4 bg-gray-600 rounded w-24"></div>
-                  </div>
-                  {i === 2 ? (
-                    <div>
-                      <div className="h-6 bg-gray-600 rounded mb-2"></div>
-                      <div className="w-full bg-gray-600 rounded-full h-2"></div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center">
-                        <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                        <div className="h-3 bg-gray-600 rounded"></div>
-                      </div>
-                      <div className="text-center">
-                        <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                        <div className="h-3 bg-gray-600 rounded"></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+          {/* Main Content Skeleton */}
+          <div className="flex-1 flex flex-col">
+            {/* Header Skeleton */}
+            <div className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6">
+              <div className="w-64 h-6 bg-gray-700 rounded"></div>
+              <div className="ml-auto w-16 h-6 bg-gray-700 rounded"></div>
             </div>
 
-            {/* Recent Activity Skeleton */}
-            <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)] mt-6">
-              <div className="h-6 bg-gray-700 rounded mb-4 w-48"></div>
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
-                    <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
-                    <div className="flex-1">
-                      <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
-                      <div className="h-3 bg-gray-600 rounded w-32"></div>
+            {/* Content Area Skeleton */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              {/* Statistics Cards Skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="h-4 bg-gray-600 rounded mb-2 w-20"></div>
+                        <div className="h-8 bg-gray-600 rounded w-12"></div>
+                      </div>
+                      <div className="w-8 h-8 bg-gray-600 rounded"></div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Detailed Stats Grid Skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center mb-3">
+                      <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
+                      <div className="h-4 bg-gray-600 rounded w-24"></div>
+                    </div>
+                    {i === 2 ? (
+                      <div>
+                        <div className="h-6 bg-gray-600 rounded mb-2"></div>
+                        <div className="w-full bg-gray-600 rounded-full h-2"></div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center">
+                          <div className="h-6 bg-gray-600 rounded mb-1"></div>
+                          <div className="h-3 bg-gray-600 rounded"></div>
+                        </div>
+                        <div className="text-center">
+                          <div className="h-6 bg-gray-600 rounded mb-1"></div>
+                          <div className="h-3 bg-gray-600 rounded"></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Recent Activity Skeleton */}
+              <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)] mt-6">
+                <div className="h-6 bg-gray-700 rounded mb-4 w-48"></div>
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
+                      <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
+                        <div className="h-3 bg-gray-600 rounded w-32"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
+      <ChannelCreationModal
+        isOpen={channelCreationModalOpen}
+        onClose={() => setChannelCreationModalOpen(false)}
+        onCreateChannel={handleCreateChannel}
+      />
+
+      {/* Success Toast Notification */}
+      {successToast.isOpen && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div className="bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 animate-in slide-in-from-right-4 fade-in duration-300">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm font-medium">{successToast.message}</span>
+            <button
+              onClick={() => setSuccessToast({ isOpen: false, message: '' })}
+              className="text-white hover:bg-black hover:bg-opacity-25 rounded-full p-1 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ) },
+    { id: 'moderation', label: 'Moderation', icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
       </svg>
     ) },
     { id: 'members', label: 'Members', icon: (
@@ -152,69 +245,76 @@ export default function ControlPanel() {
   ];
 
   return (
-    <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
-      {/* Sidebar */}
-      <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-4 space-y-2">
-        {/* Back to Dashboard */}
-        <Link
-          to="/dashboard"
-          className="w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-2xl flex items-center justify-center text-white mb-4 transition-colors"
-          title="Back to Dashboard"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </Link>
-
-        {/* Navigation Tabs */}
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg transition-colors cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-            title={`${tab.label} - ${tab.id === 'overview' ? 'View server statistics and recent activity' :
-                                  tab.id === 'members' ? 'Manage server members and roles' :
-                                  tab.id === 'channels' ? 'Create and manage channels' :
-                                  tab.id === 'settings' ? 'Configure server settings and limits' :
-                                  'Manage security and moderation'}`}
+    <>
+      <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
+        {/* Sidebar */}
+        <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-4 space-y-2">
+          {/* Back to Dashboard */}
+          <Link
+            to="/dashboard"
+            className="w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-2xl flex items-center justify-center text-white mb-4 transition-colors"
+            title="Back to Dashboard"
           >
-            {tab.icon}
-          </button>
-        ))}
-      </div>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </Link>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-semibold text-white">
-              {tabs.find(tab => tab.id === activeTab)?.label} - Server Control Panel
-            </h1>
-            <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded">OWNER</span>
+          {/* Navigation Tabs */}
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg transition-colors cursor-pointer ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+              title={`${tab.label} - ${tab.id === 'overview' ? 'View server statistics and recent activity' :
+                                    tab.id === 'members' ? 'Manage server members and roles' :
+                                    tab.id === 'channels' ? 'Create and manage channels' :
+                                    tab.id === 'settings' ? 'Configure server settings and limits' :
+                                    'Manage security and moderation'}`}
+            >
+              {tab.icon}
+            </button>
+          ))}
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <div className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-xl font-semibold text-white">
+                {tabs.find(tab => tab.id === activeTab)?.label} - Server Control Panel
+              </h1>
+              <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded">OWNER</span>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="flex-1 p-6 overflow-y-auto">
+            {activeTab === 'overview' && <OverviewTab />}
+            {activeTab === 'moderation' && <ModerationTab setSuccessToast={setSuccessToast} />}
+            {activeTab === 'members' && <MembersTab />}
+            {activeTab === 'channels' && <ChannelsTab
+              onOpenChannelModal={() => setChannelCreationModalOpen(true)}
+              channels={controlPanelChannels}
+              setChannels={setControlPanelChannels}
+              setSuccessToast={setSuccessToast}
+            />}
+            {activeTab === 'settings' && <SettingsTab />}
+            {activeTab === 'security' && <SecurityTab />}
           </div>
         </div>
-
-        {/* Content Area */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          {activeTab === 'overview' && <OverviewTab />}
-          {activeTab === 'members' && <MembersTab />}
-          {activeTab === 'channels' && <ChannelsTab onOpenChannelModal={() => setChannelCreationModalOpen(true)} />}
-          {activeTab === 'settings' && <SettingsTab />}
-          {activeTab === 'security' && <SecurityTab />}
-        </div>
       </div>
-
       <ChannelCreationModal
         isOpen={channelCreationModalOpen}
         onClose={() => setChannelCreationModalOpen(false)}
         onCreateChannel={handleCreateChannel}
       />
-    </div>
+    </>
   );
 }
 
@@ -580,13 +680,51 @@ function MembersTab() {
 }
 
 // Channels Tab Component
-function ChannelsTab({ onOpenChannelModal }: { onOpenChannelModal: () => void }) {
-  const [channels, setChannels] = useState([
-    { id: '1', name: 'general', type: 'text', isPrivate: false },
-    { id: '2', name: 'random', type: 'text', isPrivate: false },
-    { id: '3', name: 'announcements', type: 'text', isPrivate: false },
-    { id: '4', name: 'voice-chat', type: 'voice', isPrivate: true },
-  ]);
+function ChannelsTab({
+  onOpenChannelModal,
+  channels,
+  setChannels,
+  setSuccessToast
+}: {
+  onOpenChannelModal: () => void;
+  channels: Channel[];
+  setChannels: (channels: Channel[]) => void;
+  setSuccessToast: (toast: { isOpen: boolean; message: string }) => void;
+}) {
+  const [deleteConfirmChannel, setDeleteConfirmChannel] = useState<Channel | null>(null);
+
+  // No need for local fetch - channels are passed down from parent
+
+  const handleDeleteChannel = async (channel: Channel) => {
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) return;
+
+    try {
+      const response = await deleteChannel(channel.channel_id, authToken);
+    if (response.success) {
+      logger.ui.info("Channel deleted successfully", { channelId: channel.channel_id, channelName: channel.channel_name });
+
+      // Show success toast
+      setSuccessToast({ isOpen: true, message: `Channel #${channel.channel_name} deleted successfully!` });
+      setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+
+      // Refresh the channel list
+      const listResponse = await listChannels(authToken);
+      if (listResponse.success && listResponse.data && listResponse.data.channels) {
+        setChannels(listResponse.data.channels);
+      }
+      setDeleteConfirmChannel(null);
+      } else {
+        console.error("Failed to delete channel:", response.error);
+        logger.ui.error("Failed to delete channel", { channelId: channel.channel_id, error: response.error });
+        alert(`Failed to delete channel: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error("Error deleting channel:", error);
+      logger.ui.error("Error deleting channel", { channelId: channel.channel_id, error });
+      alert('An unexpected error occurred while deleting the channel.');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -603,19 +741,17 @@ function ChannelsTab({ onOpenChannelModal }: { onOpenChannelModal: () => void })
 
         <div className="space-y-3">
           {channels.map((channel) => (
-            <div key={channel.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+            <div key={channel.channel_id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
               <div className="flex items-center space-x-3">
                 <span className="text-gray-400">#</span>
-                <span className="text-white font-medium">{channel.name}</span>
-                {channel.isPrivate && (
+                <span className="text-white font-medium">{channel.channel_name}</span>
+                {channel.is_private && (
                   <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 )}
-                <span className={`px-2 py-1 text-xs rounded text-white ${
-                  channel.type === 'voice' ? 'bg-purple-600' : 'bg-gray-600'
-                }`}>
-                  {channel.type}
+                <span className="px-2 py-1 text-xs rounded text-white bg-gray-600">
+                  text
                 </span>
               </div>
               <div className="flex space-x-2">
@@ -624,7 +760,11 @@ function ChannelsTab({ onOpenChannelModal }: { onOpenChannelModal: () => void })
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 </button>
-                <button className="text-gray-400 hover:text-red-400 transition-colors">
+                <button
+                  onClick={() => setDeleteConfirmChannel(channel)}
+                  className="text-gray-400 hover:text-red-400 transition-colors"
+                  title={`Delete ${channel.channel_name}`}
+                >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
@@ -634,6 +774,39 @@ function ChannelsTab({ onOpenChannelModal }: { onOpenChannelModal: () => void })
           ))}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmChannel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-white">Delete Channel</h3>
+            </div>
+            <div className="mb-6">
+              <p className="text-gray-300 mb-2">
+                Are you sure you want to delete <span className="font-semibold text-white">#{deleteConfirmChannel.channel_name}</span>?
+              </p>
+              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
+                ⚠️ This action cannot be undone. All messages in this channel will be permanently deleted.
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setDeleteConfirmChannel(null)}
+                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteChannel(deleteConfirmChannel)}
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
+              >
+                Delete Channel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -885,6 +1058,465 @@ function SecurityTab() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Moderation Tab Component
+function ModerationTab({
+  setSuccessToast
+}: {
+  setSuccessToast: (toast: { isOpen: boolean; message: string }) => void;
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<'reports' | 'users' | 'messages'>('reports');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [touchTimeout, setTouchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Long-press message selection handlers
+  const handleMessagePointerDown = (messageId: string) => {
+    const timeout = setTimeout(() => {
+      setSelectedMessageId(messageId);
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms for long-press
+    setTouchTimeout(timeout);
+  };
+
+  const handleMessagePointerUp = () => {
+    if (touchTimeout) {
+      clearTimeout(touchTimeout);
+      setTouchTimeout(null);
+    }
+  };
+
+  const handleMessagePointerLeave = () => {
+    if (touchTimeout) {
+      clearTimeout(touchTimeout);
+      setTouchTimeout(null);
+    }
+  };
+
+  const clearMessageSelection = () => {
+    setSelectedMessageId(null);
+  };
+  const [userProfileModal, setUserProfileModal] = useState<{
+    isOpen: boolean;
+    user: any;
+    position?: { x: number; y: number };
+    triggerRect?: DOMRect | null;
+  }>({ isOpen: false, user: null });
+
+  // Mock reported messages data
+  const mockReportedMessages = [
+    {
+      id: '1',
+      messageId: 'msg_12345',
+      messageContent: 'This is a reported message with inappropriate content',
+      senderUser: 'EvilUser123',
+      senderId: 'user_s01',
+      reportedBy: 'Alice',
+      reporterId: 'user_001',
+      category: 'Nudity or Sexual Content',
+      description: 'This message contains inappropriate content',
+      reportedAt: '2024-01-15T10:30:00Z',
+      status: 'pending'
+    },
+    {
+      id: '2',
+      messageId: 'msg_12346',
+      messageContent: 'Another reported message',
+      senderUser: 'ToxicPlayer',
+      senderId: 'user_s02',
+      reportedBy: 'Bob',
+      reporterId: 'user_002',
+      category: 'Harassment or Bullying',
+      description: 'User is being harassed',
+      reportedAt: '2024-01-14T14:22:00Z',
+      status: 'pending'
+    },
+    {
+      id: '3',
+      messageId: 'msg_12347',
+      messageContent: 'Spam message example',
+      senderUser: 'SpammerBot',
+      senderId: 'user_s03',
+      reportedBy: 'Charlie',
+      reporterId: 'user_003',
+      category: 'Spam or Solicitation',
+      description: 'This appears to be spam',
+      reportedAt: '2024-01-13T09:15:00Z',
+      status: 'resolved'
+    }
+  ];
+
+  // Mock reported users data
+  const mockReportedUsers = [
+    {
+      id: '1',
+      userId: 'user_123',
+      username: 'BadUser',
+      reportedBy: 'Alice',
+      reportCount: 5,
+      lastReport: '2024-01-15T10:30:00Z',
+      status: 'active',
+      reason: 'Multiple harassment reports'
+    }
+  ];
+
+  const handleResolveReport = (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
+    clearMessageSelection();
+    setSuccessToast({
+      isOpen: true,
+      message: `Report ${action === 'delete' ? 'deleted message' :
+                      action === 'warn' ? 'sent warning' :
+                      action === 'ban' ? 'banned user' : 'dismissed'} successfully!`
+    });
+    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+  };
+
+  const handleUserAction = (userId: string, action: 'warn' | 'ban' | 'timeout' | 'clear') => {
+    setSuccessToast({
+      isOpen: true,
+      message: `User ${action === 'warn' ? 'warned' :
+                      action === 'ban' ? 'banned' :
+                      action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`
+    });
+    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+  };
+
+  const handleOpenUserProfile = (report: any, userType: 'sender' | 'reporter', event: React.MouseEvent) => {
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+
+    const userId = userType === 'sender' ? report.senderId : report.reporterId;
+    const username = userType === 'sender' ? report.senderUser : report.reportedBy;
+
+    // Mock user data for display
+    const user = {
+      id: userId,
+      username: username,
+      avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
+      status: 'online' as const, // Mock status
+      bio: `${username} is ${userType === 'sender' ? 'the sender of this reported message' : 'the user who reported this message'}`,
+      joinedAt: '2023-01-15', // Mock join date
+      roles: userType === 'reporter' ? ['Member'] : ['Member'] // Mock roles
+    };
+
+    // Position the modal relative to the clicked username
+    const position = {
+      x: rect.left + window.scrollX,
+      y: rect.bottom + window.scrollY + 5
+    };
+
+    setUserProfileModal({
+      isOpen: true,
+      user,
+      position,
+      triggerRect: rect
+    });
+  };
+
+  const handleCloseUserProfile = () => {
+    setUserProfileModal({ isOpen: false, user: null });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Sub-tabs */}
+      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+        <div className="flex items-center space-x-4 mb-6">
+          <button
+            onClick={() => setActiveSubTab('reports')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeSubTab === 'reports'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            Reports ({mockReportedMessages.filter(r => r.status === 'pending').length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('users')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeSubTab === 'users'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            Reported Users
+          </button>
+          <button
+            onClick={() => setActiveSubTab('messages')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeSubTab === 'messages'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            Message Queue
+          </button>
+        </div>
+
+        {/* Content based on active sub-tab */}
+        {activeSubTab === 'reports' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-medium text-white">Reported Messages & Users</h2>
+              <input
+                type="text"
+                placeholder="Search reports..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500 w-64"
+              />
+            </div>
+
+            <div className="space-y-4">
+              {mockReportedMessages
+                .filter(report =>
+                  searchTerm === '' ||
+                  report.messageContent.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  report.reportedBy.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((report) => (
+                  <div key={report.id} className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-red-400 text-sm font-medium">Message by</span>
+                            <span
+                              onClick={(e) => handleOpenUserProfile(report, 'sender', e)}
+                              className="text-red-400 text-sm font-medium hover:text-red-300 cursor-pointer transition-colors hover:underline"
+                              title={`View ${report.senderUser}'s profile`}
+                            >
+                              {report.senderUser}
+                            </span>
+                            <span className="text-gray-400">•</span>
+                            <span className="text-gray-400 text-sm">Reported by</span>
+                            <span
+                              onClick={(e) => handleOpenUserProfile(report, 'reporter', e)}
+                              className="text-gray-400 text-sm hover:text-gray-300 cursor-pointer transition-colors hover:underline"
+                              title={`View ${report.reportedBy}'s profile`}
+                            >
+                              {report.reportedBy}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            report.status === 'pending' ? 'bg-yellow-600 text-white' :
+                            'bg-green-600 text-white'
+                          }`}>
+                            {report.status}
+                          </span>
+                        </div>
+                        <div
+                          className="bg-gray-800 rounded p-3 mb-2 cursor-pointer hover:bg-gray-750 transition-colors duration-200"
+                          onPointerDown={() => handleMessagePointerDown(report.messageId)}
+                          onPointerUp={handleMessagePointerUp}
+                          onPointerLeave={handleMessagePointerLeave}
+                        >
+                          <p className="text-white text-sm">{report.messageContent}</p>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {report.category} • {new Date(report.reportedAt).toLocaleString()}
+                        </div>
+                        {report.description && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            "{report.description}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleResolveReport(report.id, 'delete')}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                      >
+                        Delete Message
+                      </button>
+                      <button
+                        onClick={() => handleResolveReport(report.id, 'warn')}
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                      >
+                        Warn User
+                      </button>
+                      <button
+                        onClick={() => handleResolveReport(report.id, 'dismiss')}
+                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {activeSubTab === 'users' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-medium text-white">Reported Users</h2>
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500 w-64"
+              />
+            </div>
+
+            <div className="space-y-4">
+              {mockReportedUsers
+                .filter(user =>
+                  searchTerm === '' ||
+                  user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  user.reason.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((user) => (
+                  <div key={user.id} className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
+                          alt={user.username}
+                          className="w-10 h-10 rounded-full"
+                        />
+                        <div>
+                          <div className="text-white font-medium">{user.username}</div>
+                          <div className="text-gray-400 text-sm">{user.reportCount} reports</div>
+                          <div className="text-gray-500 text-xs">{user.reason}</div>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleUserAction(user.id, 'warn')}
+                          className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                        >
+                          Warn
+                        </button>
+                        <button
+                          onClick={() => handleUserAction(user.id, 'timeout')}
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                        >
+                          Timeout
+                        </button>
+                        <button
+                          onClick={() => handleUserAction(user.id, 'ban')}
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                        >
+                          Ban
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {activeSubTab === 'messages' && (
+          <div>
+            <h2 className="text-lg font-medium text-white mb-6">Message Moderation Queue</h2>
+            <div className="text-center text-gray-400 py-8">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p>No messages in moderation queue</p>
+              <p className="text-sm text-gray-500 mt-2">
+                All messages are currently passing automatic moderation
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Message Selection Modal Overlay */}
+      {selectedMessageId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-700 transform scale-105">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Message Options</h3>
+                <button
+                  onClick={clearMessageSelection}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="bg-gray-700 rounded-lg p-4 mb-4">
+                <p className="text-white text-sm">
+                  {mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.messageContent}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleResolveReport(
+                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
+                    'delete'
+                  )}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete Message</span>
+                </button>
+
+                <button
+                  onClick={() => handleResolveReport(
+                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
+                    'warn'
+                  )}
+                  className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <span>Send Warning</span>
+                </button>
+
+                <button
+                  onClick={() => handleResolveReport(
+                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
+                    'dismiss'
+                  )}
+                  className="w-full bg-gray-600 hover:bg-gray-500 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Dismiss Report</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Profile Modal */}
+      {userProfileModal.isOpen && (
+        <UserProfileModal
+          isOpen={true}
+          onClose={handleCloseUserProfile}
+          user={userProfileModal.user}
+          currentUserId="user_current_admin" // Mock current admin user ID
+          position={userProfileModal.position}
+          triggerRect={userProfileModal.triggerRect}
+        />
+      )}
     </div>
   );
 }
