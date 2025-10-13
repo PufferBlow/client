@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useToast } from '../components/Toast';
 
 interface FileUploadInputProps {
   label: string;
@@ -21,6 +22,8 @@ export function FileUploadInput({
   currentFile,
   className = ""
 }: FileUploadInputProps) {
+  const showToast = useToast();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [urlInput, setUrlInput] = useState('');
@@ -30,7 +33,7 @@ export function FileUploadInput({
     const file = event.target.files?.[0];
     if (file) {
       if (file.size > maxSize) {
-        alert(`File size must be less than ${Math.floor(maxSize / (1024 * 1024))}MB`);
+        showToast(`File size must be less than ${Math.floor(maxSize / (1024 * 1024))}MB`, 'error');
         return;
       }
       onFileSelected(file);
@@ -54,13 +57,13 @@ export function FileUploadInput({
     const file = e.dataTransfer.files?.[0];
     if (file) {
       if (file.size > maxSize) {
-        alert(`File size must be less than ${Math.floor(maxSize / (1024 * 1024))}MB`);
+        showToast(`File size must be less than ${Math.floor(maxSize / (1024 * 1024))}MB`, 'error');
         return;
       }
       if (file.type.startsWith('image/')) {
         onFileSelected(file);
       } else {
-        alert('Please select an image file');
+        showToast('Please select an image file', 'error');
       }
     }
   };

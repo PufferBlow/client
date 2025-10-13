@@ -11,6 +11,7 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { ToastProvider } from "./components/Toast";
 import {
   QueryClient,
   QueryClientProvider,
@@ -51,7 +52,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -60,13 +67,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <Outlet />
-      </ThemeProvider>
-    </QueryClientProvider>
-  );
+  return <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

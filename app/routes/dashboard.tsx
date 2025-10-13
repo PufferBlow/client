@@ -13,6 +13,7 @@ import { UserCard } from "../components/UserCard";
 import { UserPanel } from "../components/UserPanel";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { MessageReportModal } from "../components/MessageReportModal";
+import { useToast } from "../components/Toast";
 import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
 import { usePersistedUIState } from "../utils/uiStatePersistence";
@@ -46,6 +47,9 @@ export async function loader() {
 }
 
 export default function Dashboard() {
+  // Toast hook
+  const showToast = useToast();
+
   // React Query hooks for user authentication and data
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
   const { recordActivity } = useActivityTracker();
@@ -84,7 +88,6 @@ export default function Dashboard() {
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [channelContextMenu, setChannelContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number }; channel: Channel | null }>({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
   const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null }>({ isOpen: false, channel: null });
-  const [successToast, setSuccessToast] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
   const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -108,7 +111,6 @@ export default function Dashboard() {
     }
     return 4000; // Default value for SSR
   });
-  const [messageTooLongAlert, setMessageTooLongAlert] = useState<string | null>(null);
   const messageInputBarRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -379,16 +381,7 @@ export default function Dashboard() {
     loadUserProfilesForMessages();
   }, [messages, userProfiles]);
 
-  // Auto-hide message too long alert after 5 seconds
-  useEffect(() => {
-    if (messageTooLongAlert) {
-      const timeout = setTimeout(() => {
-        setMessageTooLongAlert(null);
-      }, 3000); // 3 seconds
 
-      return () => clearTimeout(timeout);
-    }
-  }, [messageTooLongAlert]);
 
   // Show skeleton loading state
   if (userLoading) {
@@ -518,8 +511,7 @@ export default function Dashboard() {
         });
 
         // Show success toast
-        setSuccessToast({ isOpen: true, message: `Channel #${channelData.name} created successfully!` });
-        setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+        showToast(`Channel #${channelData.name} created successfully!`, 'success');
 
         // Refresh channels list
         const channelsResponse = await listChannels(authToken);
@@ -532,16 +524,16 @@ export default function Dashboard() {
       } else {
         // Handle specific error codes
         if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
-          alert('Channel name already exists, please choose a different name.');
+          showToast('Channel name already exists, please choose a different name.', 'error');
         } else if (response.error?.includes('403') || response.error?.includes('Access forbidden')) {
-          alert('Access forbidden. Only admins can create channels and manage them.');
+          showToast('Access forbidden. Only admins can create channels and manage them.', 'error');
         } else {
-          alert(`Failed to create channel: ${response.error || 'Unknown error'}`);
+          showToast(`Failed to create channel: ${response.error || 'Unknown error'}`, 'error');
         }
         logger.ui.error("Failed to create channel", { error: response.error, channelData });
       }
     } catch (error) {
-      alert('An unexpected error occurred while creating the channel.');
+      showToast('An unexpected error occurred while creating the channel.', 'error');
       logger.ui.error("Unexpected error creating channel", { error, channelData });
     }
   };
@@ -600,11 +592,7 @@ export default function Dashboard() {
     });
 
     // Show success toast
-    setSuccessToast({
-      isOpen: true,
-      message: `Report submitted successfully. Thank you for helping keep our community safe!`
-    });
-    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 4000);
+    showToast(`Report submitted successfully. Thank you for helping keep our community safe!`, 'success');
 
     // Close modal
     setMessageReportModal({ isOpen: false, messages: [] });
@@ -625,10 +613,10 @@ export default function Dashboard() {
       try {
         await navigator.clipboard.writeText(messageIds.join(','));
         logger.ui.info("Message group IDs copied to clipboard", { count: messageIds.length });
-        alert(`${messageIds.length} message IDs copied to clipboard!`);
+        showToast(`${messageIds.length} message IDs copied to clipboard!`, 'success');
       } catch (error) {
         logger.ui.error("Failed to copy message group IDs to clipboard", { error });
-        alert("Failed to copy message IDs to clipboard. Please try again.");
+        showToast("Failed to copy message IDs to clipboard. Please try again.", 'error');
       }
     };
 
@@ -651,10 +639,10 @@ export default function Dashboard() {
     try {
       await navigator.clipboard.writeText(messageId);
       logger.ui.info("Message ID copied to clipboard", { messageId: "[REDACTED]" });
-      alert("Message ID copied to clipboard!");
+      showToast("Message ID copied to clipboard!", 'success');
     } catch (error) {
       logger.ui.error("Failed to copy message ID to clipboard", { error });
-      alert("Failed to copy message ID to clipboard. Please try again.");
+      showToast("Failed to copy message ID to clipboard. Please try again.", 'error');
     }
   };
 
@@ -667,10 +655,10 @@ export default function Dashboard() {
     try {
       await navigator.clipboard.writeText(userId);
       logger.ui.info("User ID copied to clipboard", { userId: "[REDACTED]" });
-      alert("User ID copied to clipboard!");
+      showToast("User ID copied to clipboard!", 'success');
     } catch (error) {
       logger.ui.error("Failed to copy user ID to clipboard", { error });
-      alert("Failed to copy user ID to clipboard. Please try again.");
+      showToast("Failed to copy user ID to clipboard. Please try again.", 'error');
     }
   };
 
@@ -746,7 +734,7 @@ export default function Dashboard() {
       // Validate message for security and length
       const validationResult = validateMessageInput(trimmedMessage, maxMessageLength);
       if (!validationResult.isValid) {
-        setMessageTooLongAlert(validationResult.error || 'Invalid message content');
+        showToast(validationResult.error || 'Invalid message content', 'error');
         return;
       }
 
@@ -791,11 +779,11 @@ export default function Dashboard() {
           }
         } else {
           logger.ui.error("Failed to send message", { error: response.error });
-          alert(`Failed to send message: ${response.error || 'Unknown error'}`);
+          showToast(`Failed to send message: ${response.error || 'Unknown error'}`, 'error');
         }
       } catch (error) {
         logger.ui.error("Unexpected error sending message", { error });
-        alert('An unexpected error occurred while sending the message.');
+        showToast('An unexpected error occurred while sending the message.', 'error');
       }
     }
   };
@@ -835,7 +823,7 @@ export default function Dashboard() {
           extension,
           reason: "potentially exploitable file type"
         });
-        alert(`File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`);
+        showToast(`File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`, 'error');
         event.target.value = ''; // Clear the input
         return;
       }
@@ -848,7 +836,7 @@ export default function Dashboard() {
           fileSize: file.size,
           maxSize
         });
-        alert(`File "${file.name}" is too large. Maximum file size is 10MB.`);
+        showToast(`File "${file.name}" is too large. Maximum file size is 10MB.`, 'error');
         event.target.value = '';
         return;
       }
@@ -1318,8 +1306,8 @@ export default function Dashboard() {
                   const prevMessageTime = new Date(currentGroup[currentGroup.length - 1].sent_at);
                   const timeDiff = (messageTime.getTime() - prevMessageTime.getTime()) / 1000; // seconds
 
-                  // Continue group if same sender and within 20 seconds
-                  if (message.sender_user_id === currentGroup[0].sender_user_id && timeDiff <= 20) {
+                  // Continue group if same sender and within 30 seconds
+                  if (message.sender_user_id === currentGroup[0].sender_user_id && timeDiff <= 30) {
                     currentGroup.push(message);
                   } else {
                     // Start a new group
@@ -1514,27 +1502,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Auto-hide floating alert for too long messages */}
-          {messageTooLongAlert && (
-            <div className="absolute bottom-2 right-2 w-auto max-w-xs p-3 rounded-lg border bg-red-50 text-red-800 border-red-200 z-10 shadow-md">
-              <div className="flex items-center space-x-2">
-                <svg className="w-4 h-4 text-red-800 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                <span className="text-xs font-medium">{messageTooLongAlert}</span>
-                <button
-                  onClick={() => setMessageTooLongAlert(null)}
-                  className="p-1 rounded-full hover:bg-black hover:bg-opacity-10 transition-colors text-red-800 flex-shrink-0"
-                  aria-label="Close message"
-                  title="Dismiss"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {/* Emoji Picker */}
           <EmojiPicker
@@ -1571,8 +1539,8 @@ export default function Dashboard() {
                 // Group users by role
                 const owners = users.filter(user => user.is_owner);
                 const admins = users.filter(user => user.is_admin && !user.is_owner);
-                const moderators = users.filter(user => !user.is_owner && !user.is_admin);
-                const members = users.filter(user => !user.is_owner && !user.is_admin && !moderators.includes(user));
+                const moderators: typeof users = []; // No moderator role defined in API
+                const members = users.filter(user => !user.is_owner && !user.is_admin);
 
                 const renderUserGroup = (title: string, userList: typeof users, roleColor: string, roleLabel: string) => {
                   if (userList.length === 0) return null;
@@ -1752,7 +1720,7 @@ export default function Dashboard() {
 
       {/* Channel Deletion Confirmation Modal */}
       {channelDeleteConfirm.isOpen && channelDeleteConfirm.channel && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Delete Channel</h3>
@@ -1786,8 +1754,7 @@ export default function Dashboard() {
                     });
 
                     // Show success toast
-                    setSuccessToast({ isOpen: true, message: `Channel #${channelDeleteConfirm.channel.channel_name} deleted successfully!` });
-                    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+                    showToast(`Channel #${channelDeleteConfirm.channel.channel_name} deleted successfully!`, 'success');
 
                     // Refresh channels list
                     try {
@@ -1800,11 +1767,11 @@ export default function Dashboard() {
                     }
                   } else {
                       console.error("Failed to delete channel:", response.error);
-                      alert(`Failed to delete channel: ${response.error || 'Unknown error'}`);
+                      showToast(`Failed to delete channel: ${response.error || 'Unknown error'}`, 'error');
                     }
                   }).catch((error) => {
                     console.error("Error deleting channel:", error);
-                    alert('An unexpected error occurred while deleting the channel.');
+                    showToast('An unexpected error occurred while deleting the channel.', 'error');
                   });
 
                   setChannelDeleteConfirm({ isOpen: false, channel: null });
@@ -1829,27 +1796,6 @@ export default function Dashboard() {
         onCopyUserId={handleCopyUserId}
         onSendMessage={handleSendMessageToUser}
       />
-
-      {/* Success Toast Notification */}
-      {successToast.isOpen && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm">
-          <div className="bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 animate-in slide-in-from-right-4 fade-in duration-300">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm font-medium">{successToast.message}</span>
-            <button
-              onClick={() => setSuccessToast({ isOpen: false, message: '' })}
-              className="text-white hover:bg-black hover:bg-opacity-25 rounded-full p-1 transition-colors"
-              aria-label="Close"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
 
       <MessageReportModal
         isOpen={messageReportModal.isOpen}

@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useState, useEffect } from "react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
 import { UserProfileModal } from "../components/UserProfileModal";
-import { getAuthTokenFromCookies } from "../services/user";
+import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../services/user";
 import { listChannels, deleteChannel, createChannel } from "../services/channel";
 import { logger } from "../utils/logger";
 import type { Channel } from "../models";
@@ -15,7 +15,7 @@ export function meta() {
 }
 
 export default function ControlPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'settings' | 'security'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'settings' | 'security'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Mock loading state
 
@@ -33,7 +33,21 @@ export default function ControlPanel() {
 
   // Channels state for the control panel
   const [controlPanelChannels, setControlPanelChannels] = useState<Channel[]>([]);
-  const [successToast, setSuccessToast] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
+
+  // Users state for the control panel
+  const [controlPanelUsers, setControlPanelUsers] = useState<ListUsersResponse['users']>([]);
+
+  // Toast notifications - replace browser alerts
+  const [toast, setToast] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({ isOpen: false, message: '', type: 'success' });
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ isOpen: true, message, type });
+    setTimeout(() => setToast({ isOpen: false, message: '', type: 'success' }), 3000);
+  };
 
   // Mock loading simulation
   useEffect(() => {
@@ -42,6 +56,42 @@ export default function ControlPanel() {
     }, 2000); // Simulate 2 second loading
 
     return () => clearTimeout(timer);
+  }, []);
+
+  // Fetch channels and users for control panel
+  useEffect(() => {
+    const fetchChannels = async () => {
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const response = await listChannels(authToken);
+      if (response.success && response.data && response.data.channels) {
+        setControlPanelChannels(response.data.channels);
+        logger.ui.info("Channels fetched successfully for control panel", { count: response.data.channels.length });
+      } else {
+        logger.ui.error("Failed to fetch channels for control panel", { error: response.error });
+        setControlPanelChannels([]);
+      }
+    };
+
+    const fetchUsers = async () => {
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const response = await listUsers(authToken);
+      if (response.success && response.data && response.data.users) {
+        setControlPanelUsers(response.data.users);
+        logger.ui.info("Users fetched successfully for control panel", { count: response.data.users.length });
+      } else {
+        logger.ui.error("Failed to fetch users for control panel", { error: response.error });
+        setControlPanelUsers([]);
+      }
+    };
+
+    fetchChannels();
+    fetchUsers();
   }, []);
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
@@ -59,9 +109,8 @@ export default function ControlPanel() {
           isPrivate: channelData.isPrivate
         });
 
-        // Show success alert
-        setSuccessToast({ isOpen: true, message: `Channel #${channelData.name} created successfully!` });
-        setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+        // Show success toast
+        showToast(`Channel #${channelData.name} created successfully!`, 'success');
 
         // Refresh channels list
         const channelsResponse = await listChannels(authToken);
@@ -74,16 +123,16 @@ export default function ControlPanel() {
       } else {
         // Handle specific error codes
         if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
-          alert('Channel name already exists, please choose a different name.');
+      showToast('Channel name already exists, please choose a different name.', 'error');
         } else if (response.error?.includes('403') || response.error?.includes('Access denied')) {
-          alert('Access denied. Only admins and moderators can create channels.');
+          showToast('Access denied. Only admins and moderators can create channels.', 'error');
         } else {
-          alert(`Failed to create channel: ${response.error || 'Unknown error'}`);
+          showToast(`Failed to create channel: ${response.error || 'Unknown error'}`, 'error');
         }
         logger.ui.error("Failed to create channel from control panel", { error: response.error, channelData });
       }
     } catch (error) {
-      alert('An unexpected error occurred while creating the channel.');
+      showToast('An unexpected error occurred while creating the channel.', 'error');
       logger.ui.error("Unexpected error creating channel from control panel", { error, channelData });
     }
   };
@@ -185,26 +234,7 @@ export default function ControlPanel() {
         onCreateChannel={handleCreateChannel}
       />
 
-      {/* Success Toast Notification */}
-      {successToast.isOpen && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm">
-          <div className="bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 animate-in slide-in-from-right-4 fade-in duration-300">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm font-medium">{successToast.message}</span>
-            <button
-              onClick={() => setSuccessToast({ isOpen: false, message: '' })}
-              className="text-white hover:bg-black hover:bg-opacity-25 rounded-full p-1 transition-colors"
-              aria-label="Close"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+
     </>
   );
 }
@@ -217,8 +247,7 @@ export default function ControlPanel() {
     ) },
     { id: 'moderation', label: 'Moderation', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
       </svg>
     ) },
     { id: 'members', label: 'Members', icon: (
@@ -228,7 +257,12 @@ export default function ControlPanel() {
     ) },
     { id: 'channels', label: 'Channels', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 01-9 9H9l-6 3V9a9 9 0 019-9h3a9 9 0 019 9z" />
+      </svg>
+    ) },
+    { id: 'tasks', label: 'Tasks', icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
       </svg>
     ) },
     { id: 'settings', label: 'Settings', icon: (
@@ -239,7 +273,7 @@ export default function ControlPanel() {
     ) },
     { id: 'security', label: 'Security', icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
       </svg>
     ) },
   ];
@@ -296,14 +330,15 @@ export default function ControlPanel() {
           {/* Content Area */}
           <div className="flex-1 p-6 overflow-y-auto">
             {activeTab === 'overview' && <OverviewTab />}
-            {activeTab === 'moderation' && <ModerationTab setSuccessToast={setSuccessToast} />}
-            {activeTab === 'members' && <MembersTab />}
+            {activeTab === 'moderation' && <ModerationTab showToast={showToast} />}
+            {activeTab === 'members' && <MembersTab users={controlPanelUsers} showToast={showToast} />}
             {activeTab === 'channels' && <ChannelsTab
               onOpenChannelModal={() => setChannelCreationModalOpen(true)}
               channels={controlPanelChannels}
               setChannels={setControlPanelChannels}
-              setSuccessToast={setSuccessToast}
+              showToast={showToast}
             />}
+            {activeTab === 'tasks' && <TasksTab showToast={showToast} />}
             {activeTab === 'settings' && <SettingsTab />}
             {activeTab === 'security' && <SecurityTab />}
           </div>
@@ -315,6 +350,219 @@ export default function ControlPanel() {
         onCreateChannel={handleCreateChannel}
       />
     </>
+  );
+}
+
+function TasksTab({
+  showToast
+}: {
+  showToast: (message: string, type: 'success' | 'error') => void;
+}) {
+  const [tasks, setTasks] = useState([
+    {
+      id: '1',
+      name: 'Daily Backup',
+      description: 'Automatically backup the database every day at midnight',
+      script: 'backup.py',
+      isEnabled: true,
+      isManual: false,
+      lastRun: '2024-01-16T02:00:00Z',
+      schedule: 'Daily at 00:00',
+      status: 'running'
+    },
+    {
+      id: '2',
+      name: 'User Activity Report',
+      description: 'Generate weekly user activity statistics',
+      script: 'user_reports.py',
+      isEnabled: true,
+      isManual: true,
+      lastRun: '2024-01-14T09:30:00Z',
+      schedule: 'On Demand',
+      status: 'idle'
+    },
+    {
+      id: '3',
+      name: 'Database Cleanup',
+      description: 'Remove old logs and temporary files',
+      script: 'cleanup.py',
+      isEnabled: false,
+      isManual: false,
+      lastRun: '2024-01-10T23:00:00Z',
+      schedule: 'Weekly on Sunday',
+      status: 'disabled'
+    },
+    {
+      id: '4',
+      name: 'Spam Detection Training',
+      description: 'Update AI spam detection models with new data',
+      script: 'spam_train.py',
+      isEnabled: true,
+      isManual: true,
+      lastRun: '2024-01-15T18:15:00Z',
+      schedule: 'On Demand',
+      status: 'idle'
+    }
+  ]);
+
+  const handleToggleTask = (taskId: string) => {
+    setTasks(prev => prev.map(task =>
+      task.id === taskId
+        ? { ...task, isEnabled: !task.isEnabled, status: task.isEnabled ? 'disabled' : 'idle' }
+        : task
+    ));
+    showToast('Task status updated successfully!', 'success');
+  };
+
+  const handleRunTask = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'running' } : t
+    ));
+
+    // Simulate running the task
+    setTimeout(() => {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, status: 'completed', lastRun: new Date().toISOString() }
+          : t
+      ));
+      showToast(`Task "${task.name}" completed successfully!`, 'success');
+    }, 3000);
+  };
+
+  const statusColors = {
+    idle: 'text-gray-400',
+    running: 'text-green-400',
+    completed: 'text-blue-400',
+    disabled: 'text-red-400',
+    error: 'text-red-500'
+  };
+
+  const statusIcons = {
+    idle: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    running: (
+      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    ),
+    completed: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    disabled: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    ),
+    error: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    )
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-medium text-white">Automated Tasks</h2>
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            Add New Task
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {tasks.map((task) => (
+            <div key={task.id} className="bg-gray-700 rounded-lg p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <h3 className="text-lg font-medium text-white">{task.name}</h3>
+                    <span className={`flex items-center space-x-1 text-sm ${statusColors[task.status as keyof typeof statusColors]}`}>
+                      {statusIcons[task.status as keyof typeof statusIcons]}
+                      <span>{task.status}</span>
+                    </span>
+                    {task.isManual ? (
+                      <span className="px-2 py-1 rounded text-xs bg-blue-600 text-white">Manual</span>
+                    ) : (
+                      <span className="px-2 py-1 rounded text-xs bg-green-600 text-white">Scheduled</span>
+                    )}
+                  </div>
+                  <p className="text-gray-400 text-sm mb-2">{task.description}</p>
+                  <div className="flex items-center space-x-4 text-xs text-gray-500">
+                    <span>Script: {task.script}</span>
+                    <span>Schedule: {task.schedule}</span>
+                    <span>Last Run: {new Date(task.lastRun).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={task.isEnabled}
+                      onChange={() => handleToggleTask(task.id)}
+                      className="rounded border-gray-600 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-300">Enabled</span>
+                  </label>
+                </div>
+
+                <div className="flex space-x-2">
+                  {task.isManual && task.isEnabled && (
+                    <button
+                      onClick={() => handleRunTask(task.id)}
+                      disabled={task.status === 'running'}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors flex items-center space-x-1"
+                    >
+                      {task.status === 'running' ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span>Running...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <span>Run Now</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button className="text-gray-400 hover:text-white transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-500/30">
+          <h3 className="text-lg font-medium text-white mb-2">About Automated Tasks</h3>
+          <p className="text-gray-400 text-sm">
+            Tasks are Python scripts that run scheduled operations for server maintenance, reporting, or automation.
+            You can enable/disable automatic execution or run tasks manually. Scripts should be placed in the server's
+            tasks directory and follow the established API conventions.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -607,24 +855,69 @@ function OverviewTab() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
 
 // Members Tab Component
-function MembersTab() {
+function MembersTab({
+  users,
+  showToast
+}: {
+  users: ListUsersResponse['users'];
+  showToast: (message: string, type: 'success' | 'error') => void;
+}) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [membersListVisible, setMembersListVisible] = useState(true); // For control panel
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [selectedUserMenu, setSelectedUserMenu] = useState<typeof users[0] | null>(null);
+  const [userMenuPosition, setUserMenuPosition] = useState({ x: 0, y: 0 });
 
-  const mockMembers = [
-    { id: '1', username: 'Alice', role: 'Member', status: 'online', joinedAt: '2023-01-15' },
-    { id: '2', username: 'Bob', role: 'Admin', status: 'offline', joinedAt: '2023-01-10' },
-    { id: '3', username: 'Charlie', role: 'Moderator', status: 'online', joinedAt: '2023-02-20' },
-    { id: '4', username: 'Diana', role: 'Member', status: 'idle', joinedAt: '2023-03-05' },
-  ];
+  const handleUserMenu = (user: typeof users[0], event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-  const filteredMembers = mockMembers.filter(member =>
-    member.username.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setSelectedUserMenu(user);
+    setUserMenuPosition({
+      x: Math.min(rect.left + window.scrollX, window.innerWidth - 200),
+      y: rect.bottom + window.scrollY + 5
+    });
+    setUserMenuOpen(!userMenuOpen || selectedUserMenu?.user_id !== user.user_id);
+  };
+
+  const handleUserAction = (action: 'editRoles' | 'mute' | 'ban') => {
+    if (!selectedUserMenu) return;
+
+    switch (action) {
+      case 'editRoles':
+        showToast(`Edit roles for ${selectedUserMenu.username}`, 'success');
+        break;
+      case 'mute':
+        showToast(`${selectedUserMenu.username} has been muted`, 'success');
+        break;
+      case 'ban':
+        showToast(`${selectedUserMenu.username} has been banned`, 'success');
+        break;
+    }
+
+    setUserMenuOpen(false);
+    setSelectedUserMenu(null);
+  };
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      setUserMenuOpen(false);
+      setSelectedUserMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [userMenuOpen]);
 
   return (
     <div className="space-y-6">
@@ -646,26 +939,52 @@ function MembersTab() {
         </div>
 
         <div className="space-y-3">
-          {filteredMembers.map((member) => (
-            <div key={member.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  member.status === 'online' ? 'bg-green-500' :
-                  member.status === 'idle' ? 'bg-yellow-500' : 'bg-gray-500'
-                }`}></div>
-                <span className="text-white font-medium">{member.username}</span>
-                <span className={`px-2 py-1 text-xs rounded ${
-                  member.role === 'Admin' ? 'bg-red-600' :
-                  member.role === 'Moderator' ? 'bg-purple-600' : 'bg-gray-600'
-                } text-white`}>
-                  {member.role}
-                </span>
+          {/* Filter users based on search term */}
+          {users.filter(user =>
+            searchTerm === '' ||
+            user.username.toLowerCase().includes(searchTerm.toLowerCase())
+          ).map((user) => (
+            <div
+              key={user.user_id}
+              className="flex items-center px-4 py-3 hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
+            >
+              {/* User info on the left */}
+              <div className="flex items-center space-x-3 flex-1">
+                <div className="relative">
+                  <img
+                    src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
+                    alt={user.username}
+                    className="w-10 h-10 rounded-full shadow-md border-2 border-green-300"
+                  />
+                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${
+                    user.status === 'online' ? 'bg-green-400' :
+                    user.status === 'idle' ? 'bg-yellow-400' :
+                    user.status === 'dnd' ? 'bg-red-400' :
+                    'bg-gray-400'
+                  }`}></div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-white font-medium">{user.username}</span>
+                  {user.is_owner && (
+                    <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                  )}
+                  {user.is_admin && !user.is_owner && (
+                    <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                  )}
+                </div>
               </div>
-              <div className="text-sm text-gray-400">
-                Joined {member.joinedAt}
+
+              {/* Joined date in the middle */}
+              <div className="flex-1 text-center text-gray-400">
+                Joined {new Date(user.created_at || '2023-01-01').toLocaleDateString()}
               </div>
-              <div className="flex space-x-2">
-                <button className="text-gray-400 hover:text-white transition-colors">
+
+              {/* Three dots menu on the right */}
+              <div className="w-12 flex justify-end">
+                <button
+                  onClick={(event) => { event.stopPropagation(); handleUserMenu(user, event); }}
+                  className="text-gray-400 hover:text-white transition-colors p-1"
+                >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                   </svg>
@@ -675,21 +994,59 @@ function MembersTab() {
           ))}
         </div>
       </div>
+
+      {/* User Menu Dropdown */}
+      {userMenuOpen && selectedUserMenu && (
+        <div
+          className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 w-48"
+          style={{ left: userMenuPosition.x, top: userMenuPosition.y }}
+        >
+          <button
+            onClick={() => handleUserAction('editRoles')}
+            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span>Edit Roles</span>
+          </button>
+
+          <button
+            onClick={() => handleUserAction('mute')}
+            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+            <span>Mute</span>
+          </button>
+
+          <button
+            onClick={() => handleUserAction('ban')}
+            className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-900 hover:bg-opacity-20 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Ban</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// Channels Tab Component
 function ChannelsTab({
   onOpenChannelModal,
   channels,
   setChannels,
-  setSuccessToast
+  showToast
 }: {
   onOpenChannelModal: () => void;
   channels: Channel[];
   setChannels: (channels: Channel[]) => void;
-  setSuccessToast: (toast: { isOpen: boolean; message: string }) => void;
+  showToast: (message: string, type: 'success' | 'error') => void;
 }) {
   const [deleteConfirmChannel, setDeleteConfirmChannel] = useState<Channel | null>(null);
 
@@ -705,8 +1062,7 @@ function ChannelsTab({
       logger.ui.info("Channel deleted successfully", { channelId: channel.channel_id, channelName: channel.channel_name });
 
       // Show success toast
-      setSuccessToast({ isOpen: true, message: `Channel #${channel.channel_name} deleted successfully!` });
-      setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+      showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
 
       // Refresh the channel list
       const listResponse = await listChannels(authToken);
@@ -717,12 +1073,12 @@ function ChannelsTab({
       } else {
         console.error("Failed to delete channel:", response.error);
         logger.ui.error("Failed to delete channel", { channelId: channel.channel_id, error: response.error });
-        alert(`Failed to delete channel: ${response.error || 'Unknown error'}`);
+        showToast(`Failed to delete channel: ${response.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error("Error deleting channel:", error);
       logger.ui.error("Error deleting channel", { channelId: channel.channel_id, error });
-      alert('An unexpected error occurred while deleting the channel.');
+      showToast('An unexpected error occurred while deleting the channel.', 'error');
     }
   };
 
@@ -777,7 +1133,7 @@ function ChannelsTab({
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmChannel && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Delete Channel</h3>
@@ -1064,9 +1420,9 @@ function SecurityTab() {
 
 // Moderation Tab Component
 function ModerationTab({
-  setSuccessToast
+  showToast
 }: {
-  setSuccessToast: (toast: { isOpen: boolean; message: string }) => void;
+  showToast: (message: string, type: 'success' | 'error') => void;
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'reports' | 'users' | 'messages'>('reports');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1169,23 +1525,15 @@ function ModerationTab({
 
   const handleResolveReport = (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
     clearMessageSelection();
-    setSuccessToast({
-      isOpen: true,
-      message: `Report ${action === 'delete' ? 'deleted message' :
+    showToast(`Report ${action === 'delete' ? 'deleted message' :
                       action === 'warn' ? 'sent warning' :
-                      action === 'ban' ? 'banned user' : 'dismissed'} successfully!`
-    });
-    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+                      action === 'ban' ? 'banned user' : 'dismissed'} successfully!`, 'success');
   };
 
   const handleUserAction = (userId: string, action: 'warn' | 'ban' | 'timeout' | 'clear') => {
-    setSuccessToast({
-      isOpen: true,
-      message: `User ${action === 'warn' ? 'warned' :
+    showToast(`User ${action === 'warn' ? 'warned' :
                       action === 'ban' ? 'banned' :
-                      action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`
-    });
-    setTimeout(() => setSuccessToast({ isOpen: false, message: '' }), 3000);
+                      action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`, 'success');
   };
 
   const handleOpenUserProfile = (report: any, userType: 'sender' | 'reporter', event: React.MouseEvent) => {

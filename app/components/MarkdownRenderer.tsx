@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -9,6 +9,34 @@ interface MarkdownRendererProps {
 }
 
 export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
+  const CodeBlock = ({ className, children, text }: any) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    };
+
+    return (
+      <div className="relative">
+        <button
+          onClick={handleCopy}
+          className="absolute top-2 right-2 bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded"
+          title="Copy code"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+        <pre className="bg-gray-700 rounded px-3 py-2 overflow-x-auto text-sm">
+          <code className={className}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    );
+  };
+
   return (
     <div className={`break-words overflow-wrap-anywhere ${className}`}>
       <ReactMarkdown
@@ -32,12 +60,11 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
           // Custom code blocks
           code: ({ className, children, ...props }) => {
             const isInline = !className?.startsWith('language-');
+            const text = React.Children.toArray(children).join('');
             return !isInline ? (
-              <pre className="bg-gray-700 rounded px-3 py-2 overflow-x-auto text-sm">
-                <code className={className} {...props}>
-                  {children}
-                </code>
-              </pre>
+              <CodeBlock className={className} text={text}>
+                {children}
+              </CodeBlock>
             ) : (
               <code className="bg-gray-700 text-red-300 px-1 py-0.5 rounded text-sm" {...props}>
                 {children}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useToast } from '../components/Toast';
 
 interface Device {
   deviceId: string;
@@ -23,6 +24,8 @@ export function UserPanel({
   onSettingsClick,
   className = ""
 }: UserPanelProps) {
+  const showToast = useToast();
+
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedMic, setSelectedMic] = useState<string>('');
@@ -70,7 +73,7 @@ export function UserPanel({
 
     } catch (error) {
       console.error('Error accessing audio devices:', error);
-      alert('Unable to access audio devices. Please check your permissions.');
+      showToast('Unable to access audio devices. Please check your permissions.', 'error');
     }
   };
 
