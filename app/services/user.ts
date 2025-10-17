@@ -60,7 +60,7 @@ export interface GetUserProfileResponse {
     user_id: string;
     username: string;
     password: string;
-    status: 'online' | 'offline' | 'idle' | 'dnd';
+    status: 'online' | 'offline' | 'idle' | 'inactive' | 'dnd';
     last_seen: string;
     conversations: any[];
     contacts: any[];

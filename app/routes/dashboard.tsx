@@ -519,7 +519,7 @@ export default function Dashboard() {
           setChannels(channelsResponse.data.channels);
         }
 
-        // Close modal
+        // Close modals
         setChannelCreationModalOpen(false);
       } else {
         // Handle specific error codes
