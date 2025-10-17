@@ -1,6 +1,6 @@
 import type { Route } from "./+types/dashboard";
 import { Link, redirect } from "react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { ServerCreationModal } from "../components/ServerCreationModal";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
 import { UserProfileModal } from "../components/UserProfileModal";
@@ -302,16 +302,28 @@ export default function Dashboard() {
       if (response.success && response.data?.user_data) {
         const userData = response.data.user_data;
 
-        // Create user profile object
+        // Create user profile object - use avatar_url if available, otherwise generate one
+        const finalAvatarUrl = userData.avatar_url || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
+
+        // Assign roles based on API data - use roles_ids and check for admin/owner roles
+        const defaultRoles = ['Member'];
+        if (userData.roles_ids?.includes('owner') || userData.roles_ids?.includes('Owner')) {
+          defaultRoles.push('Owner');
+        }
+        if (userData.roles_ids?.includes('admin') || userData.roles_ids?.includes('Admin')) {
+          defaultRoles.push('Admin');
+        }
+
         const userProfile = {
           id: userData.user_id,
           username: userData.username,
-          avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`,
+          avatar: finalAvatarUrl,
           status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'offline')
-            ? userData.status === 'dnd' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline'
+            ? userData.status as 'online' | 'idle' | 'dnd' | 'offline'
             : 'offline',
-          roles: userData.is_owner ? ['Owner', 'Admin'] :
-                 userData.is_admin ? ['Admin'] : ['Member']
+          bio: userData.about || 'Passionate about decentralized technology.',
+          joinedAt: userData.created_at,
+          roles: defaultRoles
         };
 
         // Cache the profile
@@ -323,42 +335,61 @@ export default function Dashboard() {
         return userProfile;
       } else {
         console.error('Failed to fetch user profile:', userId, response.error);
-
-        // Return fallback user data
-        const fallbackUser = {
-          id: userId,
-          username: 'Unknown User',
-          avatar: '/pufferblow-art-pixel-32x32.png',
-          status: 'offline' as const,
-          roles: ['Member']
-        };
-
-        setUserProfiles(prev => ({
-          ...prev,
-          [userId]: fallbackUser
-        }));
-
-        return fallbackUser;
+        return createFallbackUser(userId);
       }
     } catch (error) {
       console.error('Error fetching user profile:', userId, error);
+      return createFallbackUser(userId);
+    }
+  };
 
-      // Return fallback user data
-      const fallbackUser = {
-        id: userId,
-        username: 'Unknown User',
-        avatar: '/pufferblow-art-pixel-32x32.png',
-        status: 'offline' as const,
-        roles: ['Member']
+  // Helper function to create fallback user data
+  const createFallbackUser = (userId: string) => {
+    return {
+      id: userId,
+      username: 'Unknown User',
+      avatar: '/pufferblow-art-pixel-32x32.png',
+      status: 'offline' as const,
+      bio: 'User information not available',
+      joinedAt: new Date().toISOString(),
+      roles: ['Member']
+    };
+  };
+
+  // Function to load user profiles with fallback for API list data
+  const getUserProfileWithFallback = async (userId: string) => {
+    // First try to get detailed profile via API
+    const profile = await getUserProfile(userId);
+    if (profile) return profile;
+
+    // If that fails, try to construct from users list data
+    const user = users.find(u => u.user_id === userId);
+    if (user) {
+      // Create profile from list data - but this won't have the new fields, just adapt what we have
+      const profileFromList = {
+        id: user.user_id,
+        username: user.username,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`,
+        status: (user.status === 'online' || user.status === 'idle' || user.status === 'dnd' || user.status === 'offline')
+          ? user.status as 'online' | 'idle' | 'dnd' | 'offline'
+          : 'offline',
+        bio: 'User profile data not fully loaded',
+        joinedAt: user.created_at || user.last_seen,
+        roles: user.is_owner ? ['Owner', 'Admin'] :
+               user.is_admin ? ['Admin'] : ['Member']
       };
 
+      // Cache it
       setUserProfiles(prev => ({
         ...prev,
-        [userId]: fallbackUser
+        [userId]: profileFromList
       }));
 
-      return fallbackUser;
+      return profileFromList;
     }
+
+    // Complete fallback
+    return createFallbackUser(userId);
   };
 
   // Load user profiles for current messages
@@ -718,7 +749,7 @@ export default function Dashboard() {
   const handleChannelContextMenu = (event: React.MouseEvent, channel: Channel) => {
     event.preventDefault();
     // Only show context menu for owners
-    if (currentUser?.roles?.includes('Owner') || currentUser?.is_owner) {
+    if (currentUser?.roles?.includes('Owner')) {
       setChannelContextMenu({
         isOpen: true,
         position: { x: event.clientX, y: event.clientY },
@@ -1065,14 +1096,14 @@ export default function Dashboard() {
                       setServerDropdownOpen(false);
                     }
                   }}
-                  disabled={!currentUser?.is_admin && !currentUser?.is_owner && !(currentUser?.roles?.includes('Admin')) && !(currentUser?.roles?.includes('Moderator'))}
+                  disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
                     className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                      (currentUser?.roles?.includes?.('Admin') || currentUser?.roles?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                      ((currentUser?.roles || [])?.includes?.('Admin') || (currentUser?.roles || [])?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
                         ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
                         : 'text-gray-500 cursor-not-allowed opacity-60'
                     }`}
                   title={
-                    (currentUser?.roles?.includes('Admin') || currentUser?.roles?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                    ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
                       ? 'Create invite code'
                       : 'Only admins, moderators, and owners can create invite codes'
                   }
@@ -1145,20 +1176,20 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => {
-                    const hasPermission = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator');
+                    const hasPermission = (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator');
                     if (hasPermission) {
                       setChannelCreationModalOpen(true);
                       setServerDropdownOpen(false);
                     }
                   }}
-                  disabled={!(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator'))}
+                  disabled={!((currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator'))}
                   className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                    currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator')
+                    (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
                       ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
                       : 'text-gray-500 cursor-not-allowed opacity-60'
                   }`}
                   title={
-                    currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Moderator')
+                    (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
                       ? 'Create a new channel'
                       : 'Only admins and moderators can create channels'
                   }

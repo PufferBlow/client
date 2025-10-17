@@ -6,6 +6,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  Navigate,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -67,6 +68,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // In Electron, skip the homepage and go directly to login
+  // Only check window.electronAPI on the client side
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  if (isElectron) {
+    return <Navigate to="/login" replace />;
+  }
   return <Outlet />;
 }
 

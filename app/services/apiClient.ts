@@ -64,7 +64,7 @@ export class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string, params?: Record<string, string>, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+  async get<T>(endpoint: string, params?: Record<string, string>, headers?: Record<string, string>, method?: string): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
     if (params) {
       const url = new URL(`http://dummy${endpoint}`);
@@ -73,7 +73,7 @@ export class ApiClient {
       });
       fullEndpoint = url.pathname + url.search;
     }
-    return this.request<T>(fullEndpoint, { headers });
+    return this.request<T>(fullEndpoint, { headers, method: method || 'GET' });
   }
 
   async post<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {

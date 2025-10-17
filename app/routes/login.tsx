@@ -10,11 +10,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const username = formData.get("username") as string;
-  const password = formData.get("password") as string;
-  const hostPort = formData.get("hostPort") as string;
-  const rememberMe = formData.get("remember-me") === "on";
+  const url = new URL(request.url);
+  const username = url.searchParams.get("username");
+  const password = url.searchParams.get("password");
+  const hostPort = url.searchParams.get("hostPort");
+  const rememberMe = url.searchParams.get("remember-me") === "on";
 
   if (!username || !password || !hostPort) {
     return { error: "All fields are required" };
@@ -97,7 +97,7 @@ export default function Login() {
           )}
 
           {/* Login Form */}
-          <form method="post" className="space-y-6">
+          <form method="get" className="space-y-6">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 Username
