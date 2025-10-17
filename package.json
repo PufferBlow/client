@@ -1,11 +1,21 @@
 {
-  "name": "pufferblow-ui",
+  "name": "pufferblow",
+  "version": "1.0.0",
+  "description": "PufferBlow Desktop App",
+  "homepage": "./",
+  "main": "main.js",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "react-router build",
+    "build:electron": "npm run build && electron-builder",
+    "build:electron:win": "npm run build && electron-builder --win",
+    "build:electron:linux": "npm run build && electron-builder --linux",
+    "build:electron:mac": "npm run build && electron-builder --mac",
     "dev": "react-router dev",
+    "dev:electron": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron . --dev\"",
     "start": "react-router-serve ./build/server/index.js",
+    "start:electron": "electron .",
     "preview": "npm run build && npx serve ./build/client",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
@@ -40,11 +50,46 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/ui": "^3.2.4",
+    "concurrently": "^8.2.2",
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12",
     "jsdom": "^27.0.0",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.pufferblow.desktop",
+    "productName": "PufferBlow",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "main.js",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.social-networking"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/favicon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/favicon.ico"
+    },
+    "nsis": {
+      "installerIcon": "public/favicon.ico",
+      "uninstallerIcon": "public/favicon.ico",
+      "installerHeaderIcon": "public/favicon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

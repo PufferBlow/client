@@ -26,6 +26,7 @@ export default function Home() {
 
     setIsAuthenticated(checkAuth());
   }, []);
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Navigation */}
@@ -117,6 +118,16 @@ export default function Home() {
                 className="border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)] px-8 py-4 rounded-lg text-lg font-semibold transition-colors"
               >
                 Sign In
+              </Link>
+              <Link
+                to="/download"
+                className="border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-green-400 hover:text-green-400 px-8 py-4 rounded-lg text-lg font-semibold transition-colors flex items-center gap-2"
+                title="Download Desktop App"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Desktop App
               </Link>
             </div>
           </div>
@@ -355,21 +366,6 @@ export default function Home() {
                   <span className="text-white font-semibold text-lg">G</span>
                   <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
-                <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#22c55e] transition-all duration-200 cursor-pointer group relative">
-                  <span className="text-white font-semibold text-lg">D</span>
-                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#f59e0b] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </div>
-                <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#ef4444] transition-all duration-200 cursor-pointer group relative">
-                  <span className="text-white font-semibold text-lg">T</span>
-                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                </div>
-
-                {/* Add Server Button */}
-                <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group">
-                  <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                </div>
               </div>
 
               {/* Channel Sidebar */}
@@ -398,48 +394,13 @@ export default function Home() {
                         <span className="text-gray-400 mr-2">#</span>
                         <span className="text-gray-300 text-sm">general</span>
                       </div>
-                      <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                        <span className="text-gray-400 mr-2">#</span>
-                        <span className="text-gray-400 text-sm">random</span>
-                      </div>
-                      <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                        <span className="text-gray-400 mr-2">#</span>
-                        <span className="text-gray-400 text-sm">development</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Voice Channels */}
-                  <div className="px-2 py-2">
-                    <div className="flex items-center px-2 mb-1">
-                      <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Voice Channels</span>
-                    </div>
-
-                    <div className="space-y-0.5">
-                      <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                        <svg className="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                        </svg>
-                        <span className="text-gray-400 text-sm">General</span>
-                      </div>
-                      <div className="flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer">
-                        <svg className="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                        </svg>
-                        <span className="text-gray-400 text-sm">Gaming</span>
-                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* User Panel */}
                 <div className="h-14 bg-gray-800 px-2 flex items-center">
-                  <div
-                    className="flex items-center flex-1 cursor-pointer hover:bg-gray-700 rounded-md transition-colors p-1 -m-1"
-                  >
+                  <div className="flex items-center flex-1 cursor-pointer hover:bg-gray-700 rounded-md transition-colors p-1 -m-1">
                     <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center mr-2">
                       <span className="text-white text-sm font-semibold">U</span>
                     </div>
@@ -447,19 +408,6 @@ export default function Home() {
                       <div className="text-white text-sm font-medium truncate">User</div>
                       <div className="text-gray-400 text-xs">Online</div>
                     </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-600">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-                      </svg>
-                    </button>
-                    <Link to="/settings" className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-600">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </Link>
                   </div>
                 </div>
               </div>
@@ -472,22 +420,6 @@ export default function Home() {
                     <span className="text-gray-400 mr-2">#</span>
                     <h2 className="text-white font-semibold">general</h2>
                     <div className="ml-2 text-gray-400 text-sm">Decentralized general discussion</div>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <button className="w-5 h-5 text-gray-400 hover:text-white transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    </button>
-                    <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                    </svg>
                   </div>
                 </div>
 
@@ -514,170 +446,14 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Sample Messages */}
-                  <div className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors">
-                    <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-semibold">A</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-white font-medium select-text">Alice</span>
-                        <span className="text-gray-400 text-xs select-text">Today at 12:05 PM</span>
-                      </div>
-                      <div className="text-gray-300 select-text">
-                        Hey everyone! Love the decentralized approach. No more worrying about server downtime! 🚀
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-semibold">B</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white font-medium select-text">Bob</span>
-                          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                        </div>
-                        <span className="text-gray-400 text-xs select-text">Today at 12:07 PM</span>
-                      </div>
-                      <div className="text-gray-300 select-text">
-                        The UI looks great! Very familiar coming from Discord. How does the decentralization work exactly?
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors">
-                    <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-semibold">C</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white font-medium select-text">Charlie</span>
-                          <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                        </div>
-                        <span className="text-gray-400 text-xs select-text">Today at 12:10 PM</span>
-                      </div>
-                      <div className="text-gray-300 select-text">
-                        @Bob The messages are distributed across multiple nodes in the network. Even if some servers go down,
-                        your messages remain accessible through other nodes. Pretty cool tech! 💪
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Message Input */}
                 <div className="p-4">
                   <div className="bg-gray-600 rounded-lg px-4 py-3">
                     <div className="flex items-end space-x-3">
-                      {/* File Upload Button */}
-                      <label className="flex-shrink-0">
-                        <input
-                          type="file"
-                          multiple
-                          className="hidden"
-                        />
-                        <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                          </svg>
-                        </button>
-                      </label>
-
-                      {/* Message Input */}
                       <div className="flex-1">
                         <div className="text-gray-400 text-sm">Message #general</div>
-                      </div>
-
-                      {/* Emoji Button */}
-                      <button className="w-8 h-8 flex items-center justify-center rounded transition-colors hover:bg-gray-500 text-gray-400 hover:text-white">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.586a1 1 0 01.707.293l.707.707A1 1 0 0012.414 11H13m-3 3.5a.5.5 0 11-1 0 .5.5 0 011 0zM16 7a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                      </button>
-
-                      {/* Send Button */}
-                      <button className="w-8 h-8 flex items-center justify-center rounded transition-colors bg-blue-600 hover:bg-blue-700 text-white">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Member List */}
-              <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4 flex flex-col">
-                {/* Header with close button */}
-                <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                  <h3 className="text-sm font-bold text-[var(--color-text-secondary)] uppercase tracking-wide">Members</h3>
-                </div>
-
-                {/* Scrollable member content */}
-                <div className="flex-1 overflow-y-auto">
-                  {/* Admin Section */}
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Admin — 1</h4>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-3 px-3 py-2 rounded-xl border border-[var(--color-border)]">
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center shadow-md border-2 border-red-300">
-                            <span className="text-white text-xs font-bold drop-shadow-sm">B</span>
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Bob</span>
-                          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Moderators Section */}
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Moderators — 1</h4>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-3 px-3 py-2 rounded-xl border border-[var(--color-border)]">
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center shadow-md border-2 border-purple-400/50">
-                            <span className="text-white text-xs font-bold drop-shadow-sm">C</span>
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Charlie</span>
-                          <span className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Members Section */}
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">Members — 2</h4>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-3 px-3 py-2 rounded-xl border border-[var(--color-border)]">
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-md border-2 border-blue-400/50">
-                            <span className="text-white text-xs font-bold drop-shadow-sm">U</span>
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                        </div>
-                        <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">User</span>
-                      </div>
-                      <div className="flex items-center space-x-3 px-3 py-2 rounded-xl border border-[var(--color-border)]">
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-md border-2 border-green-400/50">
-                            <span className="text-white text-xs font-bold drop-shadow-sm">A</span>
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[var(--color-surface)] shadow-sm"></div>
-                        </div>
-                        <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text">Alice</span>
                       </div>
                     </div>
                   </div>
@@ -693,8 +469,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-
 
       {/* Newsletter Section */}
       <section className="py-16 bg-[var(--color-surface)] border-t border-[var(--color-border)]">
@@ -739,6 +513,16 @@ export default function Home() {
               className="border-2 border-white text-white hover:bg-white hover:text-[var(--color-primary)] px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-200"
             >
               Sign In
+            </Link>
+            <Link
+              to="/download"
+              className="border-2 border-white text-white hover:bg-green-400 hover:text-black px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-200 flex items-center gap-2"
+              title="Download Desktop App"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download Desktop App
             </Link>
           </div>
         </div>

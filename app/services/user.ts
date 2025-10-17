@@ -43,7 +43,7 @@ export const signup = async (hostPort: string, credentials: SignupCredentials): 
   const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
   const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
   const apiClient = new ApiClient(baseUrl);
-  return apiClient.post('/api/v1/users/signup', credentials as unknown as Record<string, string>);
+  return apiClient.post(`/api/v1/users/signup?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}`);
 };
 
 export const getUserProfile = async (userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
@@ -60,17 +60,19 @@ export interface GetUserProfileResponse {
     user_id: string;
     username: string;
     password: string;
-    status: 'online' | 'offline' | 'idle' | 'inactive' | 'dnd';
+    about: string;
+    avatar_url: string;
+    banner_url: string;
+    status: 'online' | 'offline' | 'idle' | 'dnd';
+    origin_server: string;
+    inbox_id: string;
+    roles_ids: string[];
     last_seen: string;
-    conversations: any[];
-    contacts: any[];
     joined_servers_ids: any[];
     auth_token: string;
     auth_token_expire_time: string;
     created_at: string;
     updated_at: string;
-    is_admin: boolean;
-    is_owner: boolean;
   };
 }
 
@@ -280,20 +282,27 @@ export const useCurrentUserProfile = () => {
       // Generate avatar URL using DiceBear Bottts Neutral style
       const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
 
-      // Assign roles based on API data
-      const defaultRoles = ['Member'];
-      if (userData.is_owner) defaultRoles.push('Owner');
-      if (userData.is_admin) defaultRoles.push('Admin');
+    // Use avatar_url if available, otherwise generate one
+    const finalAvatarUrl = userData.avatar_url || avatarUrl;
 
-      const user: User = {
-        id: userData.user_id,
-        username: userData.username,
-        avatar: avatarUrl,
-        status: userData.status === 'inactive' ? 'offline' : userData.status as 'online' | 'idle' | 'dnd' | 'offline',
-        bio: 'Passionate about decentralized technology and building the future of secure communication. Always exploring new ways to make digital interactions more private and efficient.',
-        joinedAt: userData.created_at,
-        roles: defaultRoles
-      } as unknown as User;
+    // Assign roles based on API data - use roles_ids and check for admin/owner roles
+    const defaultRoles = ['Member'];
+    if (userData.roles_ids?.includes('owner') || userData.roles_ids?.includes('Owner')) {
+      defaultRoles.push('Owner');
+    }
+    if (userData.roles_ids?.includes('admin') || userData.roles_ids?.includes('Admin')) {
+      defaultRoles.push('Admin');
+    }
+
+    const user: User = {
+      id: userData.user_id,
+      username: userData.username,
+      avatar: finalAvatarUrl,
+      status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+      bio: userData.about || 'Passionate about decentralized technology and building the future of secure communication.',
+      joinedAt: userData.created_at,
+      roles: defaultRoles
+    } as unknown as User;
 
       return user;
     },

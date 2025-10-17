@@ -30,10 +30,7 @@ export const createChannel = async (channelData: { channel_name: string; is_priv
 
 export const updateChannel = async (channelId: string, channelData: Partial<CreateChannelRequest>, authToken: string): Promise<ApiResponse<Channel>> => {
   const apiClient = createApiClient();
-  return apiClient.put(`/api/v1/channels/${channelId}`, {
-    ...channelData,
-    auth_token: authToken,
-  });
+  return apiClient.get(`/api/v1/channels/${channelId}/update?auth_token=${encodeURIComponent(authToken)}&${new URLSearchParams(channelData as any).toString()}`);
 };
 
 export const deleteChannel = async (channelId: string, authToken: string): Promise<ApiResponse<void>> => {
@@ -44,6 +41,18 @@ export const deleteChannel = async (channelId: string, authToken: string): Promi
 export const loadMessages = async (channelId: string, authToken: string): Promise<ApiResponse<{ status_code: number; messages: Message[] }>> => {
   const apiClient = createApiClient();
   return apiClient.get(`/api/v1/channels/${channelId}/load_messages?auth_token=${encodeURIComponent(authToken)}`);
+};
+
+// Get a specific message by ID
+export const getMessageById = async (messageId: string, authToken: string): Promise<ApiResponse<{ message: Message }>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/messages/${messageId}?auth_token=${encodeURIComponent(authToken)}`);
+};
+
+// Get messages around a specific message for context
+export const loadChannelMessagesAroundMessage = async (messageId: string, authToken: string, limit = 20): Promise<ApiResponse<{ messages: Message[] }>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/messages/${messageId}/context?auth_token=${encodeURIComponent(authToken)}&limit=${limit}`);
 };
 
 export const sendMessage = async (channelId: string, message: string, authToken: string): Promise<ApiResponse<Message>> => {

@@ -5,3 +5,6 @@
 # React Router
 /.react-router/
 /build/
+
+# Ignore the release build directory
+dist/
