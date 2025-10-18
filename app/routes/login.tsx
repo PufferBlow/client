@@ -20,10 +20,10 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "All fields are required" };
   }
 
-  // Validate host:port format
-  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]):(\d+)$/;
+  // Validate host:port format - support IP addresses, hostnames, and domain names
+  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b):(\d+)$/;
   if (!hostPortRegex.test(hostPort)) {
-    return { error: "Invalid host:port format. Please use format like '127.0.0.1:7575' or 'localhost:7575'" };
+    return { error: "Invalid host:port format. Please use format like '127.0.0.1:7575', 'localhost:7575', or 'api.example.com:7575'" };
   }
 
   // Additional validation: try to create a URL to check if it's a valid format
@@ -138,7 +138,7 @@ export default function Login() {
                 type="text"
                 required
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="127.0.0.1:7575"
+                placeholder="127.0.0.1:7575 or api.example.com:7575"
               />
             </div>
 
