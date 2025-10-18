@@ -10,11 +10,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const url = new URL(request.url);
-  const username = url.searchParams.get("username");
-  const password = url.searchParams.get("password");
-  const hostPort = url.searchParams.get("hostPort");
-  const rememberMe = url.searchParams.get("remember-me") === "on";
+  const formData = await request.formData();
+  const username = formData.get("username") as string;
+  const password = formData.get("password") as string;
+  const hostPort = formData.get("hostPort") as string;
+  const rememberMe = formData.get("remember-me") === "on";
 
   if (!username || !password || !hostPort) {
     return { error: "All fields are required" };
@@ -36,16 +36,16 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Invalid host:port format. Please ensure the host and port are valid." };
   }
 
+  console.log(`🔄 Attempting login to: http://${hostPort}/api/v1/users/signin`);
+
   const response = await login(hostPort, { username, password });
 
   if (!response.success) {
-    // Check for specific error message from server
-    const errorData = response.data as any;
-    if (errorData?.error) {
-      return { error: errorData.error };
-    }
+    console.error('❌ Login failed:', response.error);
     return { error: response.error || "Login failed" };
   }
+
+  console.log('✅ Login successful, received token');
 
   // Handle server response format
   const data = response.data as any;
@@ -59,12 +59,12 @@ export async function action({ request }: Route.ActionArgs) {
     if (rememberMe) {
       // Store both host:port and token in cookies for longer persistence
       const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-      response.headers.append("Set-Cookie", `authToken=${token}; path=/; max-age=${maxAge}`);
-      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
+      response.headers.append("Set-Cookie", `auth_token=${token}; path=/; max-age=${maxAge}`);
+      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
     } else {
       // Store both in session cookies (expire when browser closes)
-      response.headers.append("Set-Cookie", `authToken=${token}; path=/`);
-      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/`);
+      response.headers.append("Set-Cookie", `auth_token=${token}; path=/`);
+      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/`);
     }
 
     console.log('Tokens and host:port saved to cookies via response headers');
@@ -97,7 +97,7 @@ export default function Login() {
           )}
 
           {/* Login Form */}
-          <form method="get" className="space-y-6">
+          <form method="post" className="space-y-6">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 Username

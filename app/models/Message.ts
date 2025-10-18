@@ -22,4 +22,7 @@ export interface Message {
 
   /** Timestamp when the message was sent */
   sent_at: string;
+
+  /** List of attachment URLs (optional) */
+  attachments?: string[];
 }

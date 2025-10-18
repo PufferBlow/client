@@ -17,9 +17,12 @@ import { useToast } from "../components/Toast";
 import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
 import { usePersistedUIState } from "../utils/uiStatePersistence";
-import { getAuthTokenFromCookies, getHostPortFromCookies, useCurrentUserProfile, useActivityTracker, getUserProfileById } from "../services/user";
-import { listChannels, createChannel, loadMessages, sendMessage, deleteChannel } from "../services/channel";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById } from "../services/user";
+import { listChannels, createChannel, loadMessages, deleteChannel } from "../services/channel";
+import { sendMessage } from "../services/message";
+import { ChannelWebSocket, createChannelWebSocket, getHostPortForWebSocket } from "../services/websocket";
 import { listUsers, type ListUsersResponse } from "../services/user";
+import { type ServerInfo } from "../services/system";
 import type { Channel } from "../models";
 import type { Message } from "../models";
 import type { User } from "../models";
@@ -41,8 +44,29 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader() {
-  // Authentication check moved to component to work with SSR
+export async function loader({ request }: Route.LoaderArgs) {
+  // Check for authentication token in cookies
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) {
+    throw redirect('/login');
+  }
+
+  // Parse cookies manually
+  const cookies: Record<string, string> = {};
+  cookieHeader.split(';').forEach(cookie => {
+    const [key, value] = cookie.trim().split('=');
+    if (key && value) {
+      cookies[key] = decodeURIComponent(value);
+    }
+  });
+
+  const authToken = cookies.auth_token;
+
+  // Redirect to login if not authenticated
+  if (!authToken) {
+    throw redirect('/login');
+  }
+
   return null;
 }
 
@@ -52,7 +76,6 @@ export default function Dashboard() {
 
   // React Query hooks for user authentication and data
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
-  const { recordActivity } = useActivityTracker();
 
   // UI persistence hook
   const {
@@ -83,6 +106,7 @@ export default function Dashboard() {
     onCopyLink?: () => void;
     onReport?: () => void;
   }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [currentMenuMessageId, setCurrentMenuMessageId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
@@ -90,10 +114,12 @@ export default function Dashboard() {
   const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null }>({ isOpen: false, channel: null });
   const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<ListUsersResponse['users']>([]);
+  const [webSocketConnection, setWebSocketConnection] = useState<ChannelWebSocket | null>(null);
   const [messageInput, setMessageInput] = useState(() => {
     // Initialize with persisted draft if we have a selected channel
     if (persistedChannelId) {
@@ -101,6 +127,7 @@ export default function Dashboard() {
     }
     return '';
   });
+  const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
   const [userProfiles, setUserProfiles] = useState<Record<string, any>>({});
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
@@ -217,7 +244,7 @@ export default function Dashboard() {
     }
   }, [messages]);
 
-  // Fetch channels and users on mount
+  // Fetch channels, users, and server info on mount
   useEffect(() => {
     const fetchChannels = async () => {
       const authToken = getAuthTokenFromCookies() || '';
@@ -253,9 +280,27 @@ export default function Dashboard() {
       }
     };
 
+    const fetchServerInfo = async () => {
+      const authToken = getAuthTokenFromCookies() || '';
+
+      if (!authToken) return;
+
+      const { getServerInfo } = await import('../services/system');
+      const response = await getServerInfo();
+      if (response.success && response.data && response.data.server_info) {
+        setServerInfo(response.data.server_info);
+        console.log("Server info fetched from API:", response.data.server_info);
+        logger.ui.info("Server info fetched successfully");
+      } else {
+        console.error("Failed to fetch server info from API:", response.error);
+        logger.ui.error("Failed to fetch server info", { error: response.error });
+      }
+    };
+
     if (currentUser) {
       fetchChannels();
       fetchUsers();
+      fetchServerInfo();
     }
   }, [currentUser]);
 
@@ -298,7 +343,12 @@ export default function Dashboard() {
         return null;
       }
 
-      const response = await getUserProfileById(userId, authToken);
+      const hostPort = getHostPortFromStorage();
+      if (!hostPort) {
+        console.error('No host port available for user profile fetch');
+        return null;
+      }
+      const response = await getUserProfileById(hostPort, userId, authToken);
       if (response.success && response.data?.user_data) {
         const userData = response.data.user_data;
 
@@ -417,95 +467,95 @@ export default function Dashboard() {
   // Show skeleton loading state
   if (userLoading) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
         {/* Server Sidebar Skeleton */}
-        <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2">
+        <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 backdrop-blur-sm">
           {/* Pufferblow Logo */}
-          <div className="w-12 h-12 bg-gray-600 rounded-2xl flex items-center justify-center mb-2">
-            <div className="w-6 h-6 bg-gray-500 rounded"></div>
+          <div className="w-12 h-12 bg-[var(--color-surface-tertiary)] rounded-2xl flex items-center justify-center mb-2 shadow-lg">
+            <div className="w-6 h-6 bg-[var(--color-border)] rounded"></div>
           </div>
-          <div className="w-8 h-px bg-gray-600 rounded"></div>
+          <div className="w-8 h-px bg-[var(--color-border)] rounded"></div>
           {/* Server Icons */}
-          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
-          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
-          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
-          <div className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
+          <div className="w-12 h-12 bg-[var(--color-surface-secondary)] rounded-2xl shadow-lg"></div>
+          <div className="w-12 h-12 bg-[var(--color-surface-secondary)] rounded-2xl shadow-lg"></div>
+          <div className="w-12 h-12 bg-[var(--color-surface-secondary)] rounded-2xl shadow-lg"></div>
+          <div className="w-12 h-12 bg-[var(--color-surface-secondary)] rounded-2xl shadow-lg"></div>
         </div>
 
         {/* Channel Sidebar Skeleton */}
-        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col">
-          <div className="h-12 px-4 bg-gray-700 rounded-t-xl"></div>
+        <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col backdrop-blur-sm">
+          <div className="h-12 px-4 bg-[var(--color-surface-secondary)] rounded-t-2xl border-b border-[var(--color-border)]"></div>
           <div className="flex-1 p-4 space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
-                <div className="flex-1 h-4 bg-gray-600 rounded"></div>
+                <div className="w-2 h-2 bg-[var(--color-border)] rounded-full"></div>
+                <div className="flex-1 h-4 bg-[var(--color-surface-secondary)] rounded"></div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Main Chat Area Skeleton */}
-        <div className="flex-1 flex flex-col bg-gray-800 rounded-xl shadow-lg border border-gray-600">
-          <div className="h-12 bg-gray-700 rounded-t-xl"></div>
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] backdrop-blur-sm">
+          <div className="h-12 bg-[var(--color-surface-secondary)] rounded-t-2xl border-b border-[var(--color-border)]"></div>
           <div className="flex-1 p-4 space-y-6">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-gray-600 rounded-full"></div>
+                <div className="w-10 h-10 bg-[var(--color-surface-secondary)] rounded-full shadow-lg"></div>
                 <div className="flex-1 space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-20 h-4 bg-gray-600 rounded"></div>
-                    <div className="w-16 h-3 bg-gray-700 rounded"></div>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <div className="w-20 h-4 bg-[var(--color-surface-secondary)] rounded"></div>
+                    <div className="w-16 h-3 bg-[var(--color-border)] rounded"></div>
                   </div>
                   <div className="space-y-1">
-                    <div className="w-full h-3 bg-gray-600 rounded"></div>
-                    <div className="w-3/4 h-3 bg-gray-600 rounded"></div>
+                    <div className="w-full h-3 bg-[var(--color-surface-secondary)] rounded"></div>
+                    <div className="w-3/4 h-3 bg-[var(--color-surface-secondary)] rounded"></div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="p-4 border-t border-gray-600">
-            <div className="bg-gray-600 rounded-lg px-4 py-3 h-12"></div>
+          <div className="p-4 border-t border-[var(--color-border)]">
+            <div className="bg-[var(--color-surface-secondary)] rounded-lg px-4 py-3 h-12 shadow-inner"></div>
           </div>
         </div>
 
         {/* Member List Skeleton */}
         <div className="w-60 opacity-25">
-          <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] p-4">
+          <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] p-4 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-16 h-4 bg-gray-700 rounded"></div>
-              <div className="w-4 h-4 bg-gray-700 rounded"></div>
+              <div className="w-16 h-4 bg-[var(--color-surface-secondary)] rounded"></div>
+              <div className="w-4 h-4 bg-[var(--color-surface-secondary)] rounded"></div>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                <div className="w-full h-4 bg-[var(--color-surface-secondary)] rounded mb-2"></div>
                 <div className="flex items-center space-x-3 px-3 py-2">
-                  <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                  <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-full shadow-lg"></div>
                   <div className="flex-1 space-y-1">
-                    <div className="w-12 h-3 bg-gray-600 rounded"></div>
+                    <div className="w-12 h-3 bg-[var(--color-border)] rounded"></div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                <div className="w-full h-4 bg-[var(--color-surface-secondary)] rounded mb-2"></div>
                 <div className="flex items-center space-x-3 px-3 py-2">
-                  <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                  <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-full shadow-lg"></div>
                   <div className="flex-1 space-y-1">
-                    <div className="w-12 h-3 bg-gray-600 rounded"></div>
+                    <div className="w-12 h-3 bg-[var(--color-border)] rounded"></div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="w-full h-4 bg-gray-700 rounded mb-2"></div>
+                <div className="w-full h-4 bg-[var(--color-surface-secondary)] rounded mb-2"></div>
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="flex items-center space-x-3 px-3 py-2">
-                    <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                    <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-full shadow-lg"></div>
                     <div className="flex-1 space-y-1">
-                      <div className="w-16 h-3 bg-gray-600 rounded"></div>
+                      <div className="w-16 h-3 bg-[var(--color-border)] rounded"></div>
                     </div>
                   </div>
                 ))}
@@ -706,6 +756,12 @@ export default function Dashboard() {
       setMessageDraft(selectedChannel.channel_id, messageInput);
     }
 
+    // Disconnect from previous WebSocket if exists
+    if (webSocketConnection) {
+      webSocketConnection.disconnect();
+      setWebSocketConnection(null);
+    }
+
     setSelectedChannel(channel);
 
     // Persist the selected channel
@@ -717,9 +773,11 @@ export default function Dashboard() {
 
     // Load messages for the selected channel
     const authToken = getAuthTokenFromCookies() || '';
+    const hostPort = getHostPortForWebSocket();
+
     console.log("Loading messages - authToken:", authToken ? 'exists' : 'missing', "channel_id:", channel.channel_id);
 
-    if (authToken && channel.channel_id) {
+    if (authToken && channel.channel_id && hostPort) {
       console.log("Making loadMessages API call...");
       const response = await loadMessages(channel.channel_id, authToken);
       console.log("loadMessages response:", response);
@@ -728,13 +786,59 @@ export default function Dashboard() {
         setMessages(response.data.messages);
         logger.ui.info("Messages loaded successfully", { channelId: channel.channel_id, count: response.data.messages.length });
         console.log("Messages set:", response.data.messages.length, "messages");
+
+        // Establish WebSocket connection after loading messages
+        if (currentUser) {
+          console.log("Establishing WebSocket connection for channel:", channel.channel_id);
+          const wsConnection = createChannelWebSocket(channel.channel_id, authToken, hostPort, {
+            onMessage: (message) => {
+              console.log("WebSocket message received:", message);
+              // Handle incoming messages from WebSocket
+              if (message.type === 'message') {
+                // Add new message to the list
+                setMessages(prevMessages => {
+                  // Generate a temporary message ID if none provided
+                  const msgId = message.message_id || `ws-${Date.now()}-${Math.random()}`;
+
+                  // Check if message already exists (avoid duplicates)
+                  const exists = prevMessages.some(m => m.message_id === msgId);
+                  if (!exists) {
+                    return [...prevMessages, {
+                      message_id: msgId,
+                      sender_user_id: message.user_id || '',
+                      message: message.content || '',
+                      hashed_message: message.content || '',
+                      sent_at: message.timestamp || new Date().toISOString(),
+                      channel_id: channel.channel_id
+                    }];
+                  }
+                  return prevMessages;
+                });
+              }
+            },
+            onConnected: () => {
+              console.log("WebSocket connected for channel:", channel.channel_id);
+              showToast(`Connected to #${channel.channel_name}`, 'success');
+            },
+            onDisconnected: (reason) => {
+              console.log("WebSocket disconnected:", reason);
+              showToast(`Disconnected from #${channel.channel_name}`, 'error');
+            },
+            onError: (error) => {
+              console.error("WebSocket error:", error);
+              showToast("Connection error - messages may not update in real-time", 'error');
+            }
+          });
+          wsConnection.connect();
+          setWebSocketConnection(wsConnection);
+        }
       } else {
         console.error("Failed to load messages:", response.error);
         logger.ui.error("Failed to load messages", { channelId: channel.channel_id, error: response.error });
         setMessages([]); // Clear messages if failed
       }
     } else {
-      console.log("Not loading messages - missing authToken or channel_id");
+      console.log("Not loading messages - missing authToken, channel_id, or hostPort");
     }
   };
 
@@ -761,61 +865,84 @@ export default function Dashboard() {
   // Message input handlers
   const handleSendMessage = async () => {
     const trimmedMessage = messageInput.trim();
+
+    // Require either a message or attachments
+    const hasContent = trimmedMessage || messageAttachments.length > 0;
+
+    if (!hasContent) {
+      return;
+    }
+
+    // Validate message for security and length if present
     if (trimmedMessage) {
-      // Validate message for security and length
       const validationResult = validateMessageInput(trimmedMessage, maxMessageLength);
       if (!validationResult.isValid) {
         showToast(validationResult.error || 'Invalid message content', 'error');
         return;
       }
+    }
 
-      const authToken = getAuthTokenFromCookies() || '';
+    const authToken = getAuthTokenFromCookies() || '';
 
-      if (!selectedChannel || !authToken) {
-        logger.ui.warn("Cannot send message - no channel selected or no auth token");
-        return;
-      }
+    if (!selectedChannel || !authToken) {
+      logger.ui.warn("Cannot send message - no channel selected or no auth token");
+      return;
+    }
 
-      try {
-        console.log('Sending message:', {
+    try {
+      console.log('Sending message:', {
+        channelId: selectedChannel.channel_id,
+        message: trimmedMessage,
+        attachments: messageAttachments.length,
+        authToken: authToken.substring(0, 20) + '...'
+      });
+
+      // Send via REST API (attachments require multipart/form-data)
+      const messageData = {
+        content: trimmedMessage || '', // Empty string if only attachments
+        attachments: messageAttachments.length > 0 ? messageAttachments : undefined
+      };
+
+      const hostPort = getHostPortForWebSocket();
+      const { sendMessage: sendMessageWithAttachments } = await import('../services/message');
+
+      const response = await sendMessageWithAttachments(hostPort, selectedChannel.channel_id, messageData, authToken);
+      console.log('Send message response:', response);
+
+      if (response.success) {
+        logger.ui.info("Message sent successfully", {
           channelId: selectedChannel.channel_id,
-          message: trimmedMessage,
-          authToken: authToken.substring(0, 20) + '...'
+          messageLength: trimmedMessage.length,
+          attachmentCount: messageAttachments.length
         });
 
-        const response = await sendMessage(selectedChannel.channel_id, trimmedMessage, authToken);
-        console.log('Send message response:', response);
-
-        if (response.success) {
-          logger.ui.info("Message sent successfully", {
-            channelId: selectedChannel.channel_id,
-            messageLength: messageInput.length
-          });
-
-          // Clear input and draft
-          setMessageInput('');
-          if (selectedChannel) {
-            clearMessageDraft(selectedChannel.channel_id);
-          }
-
-          // Refresh messages list
-          const messagesResponse = await loadMessages(selectedChannel.channel_id, authToken);
-          console.log('Refresh messages response:', messagesResponse);
-
-          if (messagesResponse.success && messagesResponse.data && messagesResponse.data.messages) {
-            setMessages(messagesResponse.data.messages);
-            logger.ui.info("Messages refreshed after sending");
-          } else {
-            logger.ui.error("Failed to refresh messages after sending", { error: messagesResponse.error });
-          }
-        } else {
-          logger.ui.error("Failed to send message", { error: response.error });
-          showToast(`Failed to send message: ${response.error || 'Unknown error'}`, 'error');
+        // Clear input, draft, and attachments
+        setMessageInput('');
+        setMessageAttachments([]);
+        if (selectedChannel) {
+          clearMessageDraft(selectedChannel.channel_id);
         }
-      } catch (error) {
-        logger.ui.error("Unexpected error sending message", { error });
-        showToast('An unexpected error occurred while sending the message.', 'error');
+
+        // Add the message to the UI immediately (optimistic update)
+        const tempMessage = {
+          message_id: `temp-${Date.now()}`,
+          sender_user_id: currentUser?.user_id || '',
+          message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`, // Display text for attachment-only messages
+          hashed_message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`,
+          sent_at: new Date().toISOString(),
+          channel_id: selectedChannel.channel_id
+          // Note: Attachment URLs will be available when the API responds
+        };
+        setMessages(prevMessages => [...prevMessages, tempMessage]);
+
+        showToast('Message sent successfully!', 'success');
+      } else {
+        logger.ui.error("Failed to send message", { error: response.error });
+        showToast(`Failed to send message: ${response.error || 'Unknown error'}`, 'error');
       }
+    } catch (error) {
+      logger.ui.error("Unexpected error sending message", { error });
+      showToast('An unexpected error occurred while sending the message.', 'error');
     }
   };
 
@@ -844,6 +971,10 @@ export default function Dashboard() {
       'reg', 'inf', 'url', 'lnk', 'scf', 'shb', 'shs'
     ];
 
+    const attachments: File[] = [];
+    const maxTotalSize = 50 * 1024 * 1024; // 50MB total for all attachments
+    let totalSize = 0;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const extension = file.name.split('.').pop()?.toLowerCase();
@@ -859,7 +990,7 @@ export default function Dashboard() {
         return;
       }
 
-      // Check file size (limit to 10MB)
+      // Check individual file size (limit to 10MB per file)
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
         logger.ui.warn("Rejected large file upload", {
@@ -867,17 +998,42 @@ export default function Dashboard() {
           fileSize: file.size,
           maxSize
         });
-        showToast(`File "${file.name}" is too large. Maximum file size is 10MB.`, 'error');
+        showToast(`File "${file.name}" is too large. Maximum file size is 10MB per file.`, 'error');
         event.target.value = '';
         return;
       }
+
+      // Check total size
+      totalSize += file.size;
+
+      attachments.push(file);
     }
 
-    logger.ui.info("File(s) selected for upload", {
-      count: files.length,
-      fileNames: Array.from(files).map(f => f.name)
+    if (totalSize > maxTotalSize) {
+      logger.ui.warn("Rejected attachments - total size too large", {
+        totalSize,
+        maxTotalSize
+      });
+      showToast(`Total attachment size is too large. Maximum total size is 50MB.`, 'error');
+      event.target.value = '';
+      return;
+    }
+
+    // Add new attachments to existing ones
+    setMessageAttachments(prev => [...prev, ...attachments]);
+
+    logger.ui.info("Attachments added to message", {
+      count: attachments.length,
+      fileNames: attachments.map(f => f.name),
+      totalSize
     });
-    // TODO: Implement file upload
+
+    // Clear the input so same files can be selected again if needed
+    event.target.value = '';
+  };
+
+  const removeAttachment = (indexToRemove: number) => {
+    setMessageAttachments(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
   const handleEmojiClick = (event: React.MouseEvent) => {
@@ -1020,37 +1176,41 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
+    <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
       {/* Server Sidebar */}
-      <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
+      <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm">
         {/* Pufferblow Logo */}
-        <div className="w-12 h-12 bg-[#5865f2] rounded-2xl flex items-center justify-center mb-2 hover:rounded-xl hover:bg-[#4752c4] transition-all duration-200 cursor-pointer group relative">
+        <div className="w-12 h-12 bg-[var(--color-primary)] rounded-2xl flex items-center justify-center mb-2 hover:bg-[var(--color-primary-hover)] transition-all duration-200 cursor-pointer group relative shadow-lg">
           <img
             src="/pufferblow-art-pixel-32x32.png"
             alt="Pufferblow"
             className="w-8 h-8"
           />
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-[var(--color-success)] rounded-full border-2 border-[var(--color-surface)] opacity-0 group-hover:opacity-100 transition-opacity shadow-md"></div>
         </div>
 
         <div className="w-8 h-px bg-[#35373c] rounded"></div>
 
-        {/* Server Icons */}
-        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#404eed] transition-all duration-200 cursor-pointer group relative">
-          <span className="text-white font-semibold text-lg">G</span>
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        </div>
-        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#22c55e] transition-all duration-200 cursor-pointer group relative">
-          <span className="text-white font-semibold text-lg">D</span>
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#f59e0b] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        </div>
-        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#ef4444] transition-all duration-200 cursor-pointer group relative">
-          <span className="text-white font-semibold text-lg">T</span>
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        </div>
+        {/* Current Server */}
+        {serverInfo && (
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 cursor-pointer group relative">
+            {serverInfo.avatar_url ? (
+              <img
+                src={serverInfo.avatar_url}
+                alt={`${serverInfo.server_name} avatar`}
+                className="w-12 h-12 rounded-2xl object-cover"
+              />
+            ) : (
+              <span className="text-white font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
+                {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
+              </span>
+            )}
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-100"></div>
+          </div>
+        )}
 
         {/* Add Server Button */}
-        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group">
+        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
           <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
@@ -1058,157 +1218,201 @@ export default function Dashboard() {
       </div>
 
       {/* Channel Sidebar */}
-      <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96">
-        {/* Server Header */}
-        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-800 shadow-sm relative">
-          <h1 className="text-white font-semibold">General Server</h1>
-          <div ref={serverDropdownRef}>
-            <button
-              onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
-              className="w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors"
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {serverDropdownOpen && (
-              <div className="absolute right-0 top-12 bg-gray-800/80 backdrop-blur-md border border-gray-700 rounded-lg shadow-lg py-1 min-w-48 z-50">
-                <button
-                  onClick={() => {
-                    // TODO: Open server info modal/page
-                    console.log('Server Info clicked');
-                    setServerDropdownOpen(false);
-                  }}
-                  className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
-                  title="View server information"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Server Info</span>
-                </button>
+      <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm">
+        {/* Modern Server Header */}
+        <div className="relative">
+          {/* Server Banner */}
+          {serverInfo?.banner_url && (
+            <div className="relative h-20 w-full rounded-t-2xl overflow-hidden">
+              <img
+                src={serverInfo.banner_url}
+                alt={`${serverInfo.server_name} banner`}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+            </div>
+          )}
 
-                <button
-                  onClick={() => {
-                    const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
-                    if (hasPermission) {
-                      setInviteModalOpen(true);
-                      setServerDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
-                    className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                      ((currentUser?.roles || [])?.includes?.('Admin') || (currentUser?.roles || [])?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
-                        ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
-                        : 'text-gray-500 cursor-not-allowed opacity-60'
-                    }`}
-                  title={
-                    ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
-                      ? 'Create invite code'
-                      : 'Only admins, moderators, and owners can create invite codes'
-                  }
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span>Create Invite Code</span>
-                </button>
-
-                <Link
-                  to="/control-panel"
-                  onClick={(e) => {
-                    const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
-                    if (!hasAccess) {
-                      e.preventDefault();
-                    } else {
-                      setServerDropdownOpen(false);
-                    }
-                  }}
-                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
-                      : 'text-gray-500 cursor-not-allowed opacity-60'
-                  }`}
-                  title={
-                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                      ? 'Access server control panel'
-                      : 'Only server admins and owners can access control panel'
-                  }
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span>Control Panel</span>
-                </Link>
-
-                <button
-                  onClick={() => {
-                    const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
-                    if (isOwner) {
-                      // TODO: Implement delete server confirmation
-                      const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                      if (confirmed) {
-                        console.log('Delete Server confirmed');
-                      }
-                      setServerDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
-                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                      ? 'text-red-300 hover:bg-red-900 hover:text-red-100 cursor-pointer'
-                      : 'text-gray-500 cursor-not-allowed opacity-60'
-                  }`}
-                  title={
-                    (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                      ? 'Delete this server'
-                      : 'Only server owner can delete the server'
-                  }
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <span>Delete Server</span>
-                </button>
-
-                <div className="border-t border-gray-700 my-1"></div>
-
-                <button
-                  onClick={() => {
-                    const hasPermission = (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator');
-                    if (hasPermission) {
-                      setChannelCreationModalOpen(true);
-                      setServerDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!((currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator'))}
-                  className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-2 ${
-                    (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
-                      ? 'text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer'
-                      : 'text-gray-500 cursor-not-allowed opacity-60'
-                  }`}
-                  title={
-                    (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
-                      ? 'Create a new channel'
-                      : 'Only admins and moderators can create channels'
-                  }
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <span>Create Channel</span>
-                </button>
+          {/* Server Info Section */}
+          <div className={`px-4 py-3 ${serverInfo?.banner_url ? 'relative' : 'border-b border-[var(--color-border)]'}`}>
+            <div className="flex items-center justify-between">
+              {/* Server Info */}
+              <div className="min-w-0 flex-1">
+                <h1 className="text-white font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
+                  {serverInfo?.server_name || 'Loading...'}
+                </h1>
+                <p className="text-gray-400 text-xs truncate">{serverInfo?.server_description}</p>
               </div>
-            )}
+
+              {/* Server Dropdown */}
+              <div className="relative" ref={serverDropdownRef}>
+                <button
+                  onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-tertiary)] transition-all duration-200 group"
+                  title="Server options"
+                >
+                  <svg
+                    className={`w-4 h-4 text-gray-400 group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {serverDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 bg-[var(--color-surface-secondary)]/95 backdrop-blur-md border border-[var(--color-border)] rounded-lg shadow-xl py-2 min-w-56 z-50">
+                    {/* Server Actions */}
+                    <div className="px-2 py-1">
+                      <button
+                        onClick={() => {
+                          console.log('Server Info clicked');
+                          setServerDropdownOpen(false);
+                        }}
+                        className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
+                        title="View server information"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">Server Info</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
+                          if (hasPermission) {
+                            setInviteModalOpen(true);
+                            setServerDropdownOpen(false);
+                          }
+                        }}
+                        disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
+                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${
+                          ((currentUser?.roles || [])?.includes?.('Admin') || (currentUser?.roles || [])?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                            ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                            : 'text-gray-500 cursor-not-allowed opacity-60'
+                        }`}
+                        title={
+                          ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                            ? 'Create invite code'
+                            : 'Only admins, moderators, and owners can create invite codes'
+                        }
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">Create Invite</span>
+                      </button>
+
+                      <Link
+                        to="/control-panel"
+                        onClick={(e) => {
+                          const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
+                          if (!hasAccess) {
+                            e.preventDefault();
+                          } else {
+                            setServerDropdownOpen(false);
+                          }
+                        }}
+                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${
+                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                            ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                            : 'text-gray-500 cursor-not-allowed opacity-60'
+                        }`}
+                        title={
+                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                            ? 'Access server control panel'
+                            : 'Only server admins and owners can access control panel'
+                        }
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                        <span className="text-sm font-medium">Control Panel</span>
+                      </Link>
+
+                      <button
+                        onClick={() => {
+                          const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
+                          if (isOwner) {
+                            const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                            if (confirmed) {
+                              console.log('Delete Server confirmed');
+                            }
+                            setServerDropdownOpen(false);
+                          }
+                        }}
+                        disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
+                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${
+                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                            ? 'text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer'
+                            : 'text-gray-500 cursor-not-allowed opacity-60'
+                        }`}
+                        title={
+                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                            ? 'Delete this server'
+                            : 'Only server owner can delete the server'
+                        }
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="text-sm font-medium">Delete Server</span>
+                      </button>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-[var(--color-border)] my-2"></div>
+
+                    {/* Channel Actions */}
+                    <div className="px-2 py-1">
+                      <button
+                        onClick={() => {
+                          const hasPermission = (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator');
+                          if (hasPermission) {
+                            setChannelCreationModalOpen(true);
+                            setServerDropdownOpen(false);
+                          }
+                        }}
+                        disabled={!((currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator'))}
+                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${
+                          (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
+                            ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                            : 'text-gray-500 cursor-not-allowed opacity-60'
+                        }`}
+                        title={
+                          (currentUser?.roles || []).includes('Admin') || (currentUser?.roles || []).includes('Moderator')
+                            ? 'Create a new channel'
+                            : 'Only admins and moderators can create channels'
+                        }
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span className="text-sm font-medium">Create Channel</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Channel List */}
         <div className="flex-1 overflow-y-auto">
           {channels.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <div className="text-gray-400 text-sm">No channels</div>
+            <div className="px-4 py-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium mb-2 text-gray-400">No channels available</p>
+              <p className="text-gray-500">Ask a server admin to create some channels to get started.</p>
             </div>
           ) : (
             <>
@@ -1277,31 +1481,31 @@ export default function Dashboard() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-gray-800 rounded-xl shadow-lg border border-gray-600 resize-x min-w-96">
+      <div className="flex-1 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] resize-x min-w-96 backdrop-blur-sm">
         {/* Channel Header */}
-        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-700 bg-gray-800">
+        <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
           <div className="flex items-center">
-            <span className="text-gray-400 mr-2">#</span>
-            <h2 className="text-white font-semibold">{selectedChannel?.channel_name || 'general'}</h2>
-            <div className="ml-2 text-gray-400 text-sm">Decentralized {selectedChannel?.channel_name || 'general'} discussion</div>
+            <span className="text-[var(--color-text-secondary)] mr-2">#</span>
+            <h2 className="text-[var(--color-text)] font-semibold">{selectedChannel?.channel_name || 'general'}</h2>
+            <div className="ml-2 text-[var(--color-text-muted)] text-sm">Decentralized {selectedChannel?.channel_name || 'general'} discussion</div>
           </div>
           <div className="flex items-center space-x-4">
-            <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <button
               onClick={() => setMembersListVisible(!membersListVisible)}
-              className="w-5 h-5 text-gray-400 hover:text-white transition-colors"
+              className="w-5 h-5 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors rounded-md hover:bg-[var(--color-hover)] p-1"
               title="Toggle member list"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </button>
-            <svg className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text)] transition-colors rounded-md hover:bg-[var(--color-hover)] p-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
           </div>
@@ -1426,7 +1630,30 @@ export default function Dashboard() {
                       </div>
                       <div className="space-y-1">
                         {group.map((message) => (
-                          <MarkdownRenderer key={message.message_id} content={message.message} className="text-gray-300" />
+                          <div key={message.message_id}>
+                            <MarkdownRenderer content={message.message} className="text-gray-300" />
+
+                            {/* Render attachments if they exist */}
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {message.attachments.map((attachment, index) => (
+                                  <a
+                                    key={index}
+                                    href={attachment}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-lg border border-gray-600 hover:bg-gray-600 transition-colors text-sm text-gray-300 hover:text-white max-w-xs truncate"
+                                    title="Attachment"
+                                  >
+                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                    </svg>
+                                    <span className="truncate">Attachment {index + 1}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                       {/* Hover Menu Button */}
@@ -1434,9 +1661,12 @@ export default function Dashboard() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            setCurrentMenuMessageId(firstMessage.message_id);
                             setMessageContextMenu({
                               isOpen: true,
-                              position: { x: e.clientX, y: e.clientY }
+                              position: { x: e.clientX, y: e.clientY },
+                              onCopyLink: () => handleMessageCopy(firstMessage.message_id),
+                              onReport: () => handleMessageReport(firstMessage.message_id)
                             });
                           }}
                           className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
@@ -1455,6 +1685,72 @@ export default function Dashboard() {
 
         {/* Message Input */}
         <div className="p-4">
+          {/* Attachments Preview */}
+          {messageAttachments.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {messageAttachments.map((file, index) => (
+                <div
+                  key={index}
+                  className="relative bg-gray-700 rounded-lg p-3 border border-gray-600 group hover:border-gray-500 transition-colors"
+                >
+                  {/* File content preview */}
+                  {file.type.startsWith('image/') ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="max-w-24 max-h-24 object-cover rounded"
+                      />
+                      <div className="text-center">
+                        <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {(file.size / (1024 * 1024)).toFixed(1)}MB
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center space-y-2 text-center">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <div>
+                        <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {(file.size / (1024 * 1024)).toFixed(1)}MB • {file.type || 'Unknown type'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Remove button */}
+                  <button
+                    onClick={() => removeAttachment(index)}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    title="Remove attachment"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+
+              {/* Clear all attachments button */}
+              {messageAttachments.length > 1 && (
+                <button
+                  onClick={() => setMessageAttachments([])}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          )}
+
           <div
             ref={messageInputBarRef}
             className={`bg-gray-600 rounded-lg px-4 py-2 transition-opacity ${!selectedChannel ? 'opacity-50 pointer-events-none' : ''}`}
@@ -1650,7 +1946,7 @@ export default function Dashboard() {
         isOpen={userProfileModalOpen}
         onClose={() => setUserProfileModalOpen(false)}
         user={currentUser ? {
-          id: currentUser.user_id || currentUser.id,
+          id: currentUser.user_id || currentUser.id || '',
           username: currentUser.username || '',
           avatar: currentUser.avatar,
           status: (currentUser.status === 'online' || currentUser.status === 'idle' || currentUser.status === 'offline' || currentUser.status === 'dnd')
@@ -1676,8 +1972,7 @@ export default function Dashboard() {
       <InviteModal
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
-        serverName={currentServer.name}
-        serverId={currentServer.id}
+        serverName={serverInfo?.server_name || 'General Server'}
         onGenerateInvite={handleGenerateInvite}
         onCopyInvite={handleCopyInvite}
       />
@@ -1774,18 +2069,19 @@ export default function Dashboard() {
               <button
                 onClick={() => {
                   const authToken = getAuthTokenFromCookies() || '';
-                  if (!authToken) return;
+                  const channel = channelDeleteConfirm.channel;
+                  if (!authToken || !channel) return;
 
                   // Call delete API
-                  deleteChannel(channelDeleteConfirm.channel.channel_id, authToken).then(async (response) => {
+                  deleteChannel(channel.channel_id, authToken).then(async (response) => {
                   if (response.success) {
                     logger.ui.info("Channel deleted successfully from dashboard", {
-                      channelId: channelDeleteConfirm.channel.channel_id,
-                      channelName: channelDeleteConfirm.channel.channel_name
+                      channelId: channel.channel_id,
+                      channelName: channel.channel_name
                     });
 
                     // Show success toast
-                    showToast(`Channel #${channelDeleteConfirm.channel.channel_name} deleted successfully!`, 'success');
+                    showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
 
                     // Refresh channels list
                     try {

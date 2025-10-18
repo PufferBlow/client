@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useTheme } from "../components/ThemeProvider";
 import { useState, useEffect } from "react";
 import { FileUploadInput } from "../components/FileUploadInput";
-import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../services/user";
+import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -13,10 +13,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Settings() {
-  // React Query hooks
+  // React Query hooks - must be called before any early returns
   const { data: currentUser, isLoading: userLoading } = useCurrentUserProfile();
   const updateUsernameMutation = useUpdateUsername();
   const updateStatusMutation = useUpdateStatus();
+  const updateBioMutation = useUpdateBio();
   const updateAvatarMutation = useUpdateAvatar();
   const updateBannerMutation = useUpdateBanner();
   const updatePasswordMutation = useUpdatePassword();
@@ -24,7 +25,7 @@ export default function Settings() {
   const { logout } = useLogout();
   const { setTheme } = useTheme();
 
-  // Get current theme from localStorage without hook calls in conditional
+  // Get current theme from localStorage
   const getCurrentTheme = () => {
     if (typeof window === 'undefined') return 'dark'; // SSR fallback
     const savedTheme = localStorage.getItem('pufferblow-theme');
@@ -34,6 +35,33 @@ export default function Settings() {
     return savedTheme;
   };
   const currentTheme = getCurrentTheme();
+
+  // Local state - must be called before any conditional returns
+  const [activeSection, setActiveSection] = useState('profile');
+  const [userStatus, setUserStatus] = useState<'online' | 'idle' | 'dnd'>('online');
+  const [userBio, setUserBio] = useState('');
+  const [bioInputValue, setBioInputValue] = useState('');
+  const [hasBioChanged, setHasBioChanged] = useState(false);
+  const [defaultStatus, setDefaultStatus] = useState<'online' | 'offline' | 'idle' | 'dnd'>('online');
+  const [isDndModeEnabled, setIsDndModeEnabled] = useState(false);
+  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [newUsername, setNewUsername] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [newHostPort, setNewHostPort] = useState('');
+
+  // Audio settings state
+  const [micVolume, setMicVolume] = useState(80);
+  const [speakerVolume, setSpeakerVolume] = useState(80);
+  const [isTestingMicrophone, setIsTestingMicrophone] = useState(false);
+  const [isTestingSpeakers, setIsTestingSpeakers] = useState(false);
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [gainNode, setGainNode] = useState<GainNode | null>(null);
 
   // Show skeleton loading state
   if (userLoading) {
@@ -95,51 +123,15 @@ export default function Settings() {
     );
   }
 
-  // Local state
-  const [activeSection, setActiveSection] = useState('profile');
-  const [userStatus, setUserStatus] = useState<'online' | 'idle' | 'dnd'>('online');
-  const [userBio, setUserBio] = useState('Building the future of decentralized messaging');
-  const [bioInputValue, setBioInputValue] = useState('Building the future of decentralized messaging');
-  const [hasBioChanged, setHasBioChanged] = useState(false);
-  const [defaultStatus, setDefaultStatus] = useState<'online' | 'offline' | 'idle' | 'dnd'>('online');
-  const [isDndModeEnabled, setIsDndModeEnabled] = useState(false);
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [newUsername, setNewUsername] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [resetPassword, setResetPassword] = useState('');
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [newHostPort, setNewHostPort] = useState('');
-
-  // Audio settings state
-  const [micVolume, setMicVolume] = useState(80);
-  const [speakerVolume, setSpeakerVolume] = useState(80);
-  const [isTestingMicrophone, setIsTestingMicrophone] = useState(false);
-  const [isTestingSpeakers, setIsTestingSpeakers] = useState(false);
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [gainNode, setGainNode] = useState<GainNode | null>(null);
-
   const hostPort = getHostPortFromStorage() || 'localhost:7575';
 
-  // Set current user status when user data loads
+  // Sync bio input field with current user bio
   useEffect(() => {
-    if (currentUser) {
-      // Map API status to UI status (offline/inactive states are no longer user-selectable)
-      const statusMap = {
-        'online': 'online' as const,
-        'offline': 'online' as const, // Map offline to online since offline is not user-selectable
-        'idle': 'idle' as const,
-        'inactive': 'online' as const, // Map inactive to online
-        'dnd': 'dnd' as const,
-      };
-      setUserStatus(statusMap[currentUser.status as keyof typeof statusMap] || 'online');
-      setUserBio('Building the future of decentralized messaging');
-      setBioInputValue('Building the future of decentralized messaging');
+    if (currentUser?.about) {
+      setUserBio(currentUser.about);
+      setBioInputValue(currentUser.about);
     }
-  }, [currentUser]);
+  }, [currentUser?.about]);
 
   // Load default status preference and DND mode
   useEffect(() => {
@@ -170,29 +162,27 @@ export default function Settings() {
   useEffect(() => {
     let previousStatus: 'online' | 'idle' | 'dnd' = userStatus;
 
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab/window is hidden - set status to offline
+        // Tab/window is hidden - just store current status for restoration
         previousStatus = userStatus;
-        if (updateStatusMutation.isIdle) {
-          await updateStatusMutation.mutateAsync('offline');
-        }
       } else {
-        // Tab/window is visible again - restore previous status
-        if (updateStatusMutation.isIdle) {
-          await updateStatusMutation.mutateAsync(previousStatus);
+        // Tab/window is visible again - status will be handled manually or by activity tracker
+        if (previousStatus !== userStatus) {
+          // If status changed due to tab hiding, the activity tracker will handle restoration
+          // Don't trigger mutations here to avoid hook order issues
         }
       }
     };
 
-    // Listen for visibility changes
+    // Listen for visibility changes (no async operations to avoid hook issues)
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [userStatus, updateStatusMutation]);
+  }, [userStatus]);
 
   const changeSection = (sectionId: string) => {
     setActiveSection(sectionId);
@@ -242,11 +232,16 @@ export default function Settings() {
     setTimeout(() => window.location.reload(), 2000);
   };
 
-  const handleBioChange = (newBio: string) => {
-    setUserBio(newBio);
-    setBioInputValue(newBio);
-    // TODO: Implement bio update API
-    console.log('Bio changed to:', newBio);
+  const handleBioChange = async () => {
+    if (updateBioMutation.isPending || !hasBioChanged) return;
+
+    try {
+      await updateBioMutation.mutateAsync(bioInputValue);
+      setMessage({ type: 'success', text: 'Bio updated successfully!' });
+      setHasBioChanged(false);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update bio' });
+    }
   };
 
   const handleAvatarFileSubmit = async (file: File) => {
@@ -488,6 +483,32 @@ export default function Settings() {
           </Link>
         </div>
         <div className="px-4 py-6 sm:px-0">
+          {/* User Profile Card */}
+          <div className="bg-[var(--color-surface)] shadow overflow-hidden sm:rounded-md mb-6">
+            <div className="px-4 py-5 sm:px-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0 h-16 w-16">
+                  <img
+                    className="h-16 w-16 rounded-full object-cover border-4 border-white shadow-lg"
+                    src={(currentUser as any)?.avatar || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(currentUser?.username || 'user')}&backgroundColor=5865f2`}
+                    alt={currentUser?.username || 'User'}
+                  />
+                </div>
+                <div className="ml-6">
+                  <h1 className="text-xl font-bold text-[var(--color-text)]">
+                    {currentUser?.username}
+                  </h1>
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Member of <span className="font-medium text-[var(--color-primary)]">{currentUser?.origin_server || 'Unknown Server'}</span>
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--color-text-secondary)] italic">
+                    "{currentUser?.bio || 'No bio provided.'}"
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Settings Navigation */}
           <div className="bg-[var(--color-surface)] shadow overflow-hidden sm:rounded-md mb-6">
             <div className="px-4 py-5 sm:px-6">
@@ -780,18 +801,18 @@ export default function Settings() {
                             type="button"
                             onClick={() => {
                               if (bioInputValue !== userBio) {
-                                handleBioChange(bioInputValue);
+                                handleBioChange();
                                 setHasBioChanged(false);
                               }
                             }}
-                            disabled={!hasBioChanged}
+                            disabled={!hasBioChanged || updateBioMutation.isPending}
                             className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] ${
-                              hasBioChanged
+                              hasBioChanged && !updateBioMutation.isPending
                                 ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] animate-pulse'
                                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] cursor-not-allowed'
                             }`}
                           >
-                            Update Bio
+                            {updateBioMutation.isPending ? 'Updating...' : 'Update Bio'}
                           </button>
                         </div>
                       </div>

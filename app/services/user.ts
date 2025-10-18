@@ -4,6 +4,49 @@ import type { User } from '../models';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect } from 'react';
 
+// Role definitions
+export enum UserRole {
+  OWNER = 'owner',
+  ADMIN = 'admin',
+  MODERATOR = 'moderator',
+  USER = 'user'
+}
+
+export interface RoleInfo {
+  id: UserRole;
+  name: string;
+  color: string;
+  description: string;
+}
+
+// Role configurations
+export const USER_ROLES: Record<UserRole, RoleInfo> = {
+  [UserRole.OWNER]: {
+    id: UserRole.OWNER,
+    name: 'Server Owner',
+    color: '#ff6b6b',
+    description: 'Full server control and management'
+  },
+  [UserRole.ADMIN]: {
+    id: UserRole.ADMIN,
+    name: 'Administrator',
+    color: '#4ecdc4',
+    description: 'Server administration and moderation'
+  },
+  [UserRole.MODERATOR]: {
+    id: UserRole.MODERATOR,
+    name: 'Moderator',
+    color: '#45b7d1',
+    description: 'Content moderation and community management'
+  },
+  [UserRole.USER]: {
+    id: UserRole.USER,
+    name: 'Member',
+    color: '#96ceb4',
+    description: 'Regular server member'
+  }
+};
+
 // User authentication interfaces
 export interface LoginCredentials {
   username: string;
@@ -28,26 +71,67 @@ export interface UserProfile {
   status: 'online' | 'idle' | 'dnd' | 'offline';
   bio?: string;
   joinedAt: string;
-  roles: string[];
+  roles: UserRole[];
+  primaryRole: UserRole;
+}
+
+export interface ApiUserProfile {
+  user_id: string;
+  username: string;
+  about?: string;
+  avatar_url?: string;
+  banner_url?: string;
+  status: 'online' | 'offline' | 'idle' | 'dnd';
+  origin_server: string;
+  inbox_id?: string;
+  roles_ids: string[];
+  last_seen?: string;
+  joined_servers_ids: any[];
+  created_at: string;
+  updated_at: string;
 }
 
 // User authentication functions
 export const login = async (hostPort: string, credentials: LoginCredentials): Promise<ApiResponse<AuthToken>> => {
-  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
-  const apiClient = new ApiClient(baseUrl);
-  return apiClient.get('/api/v1/users/signin', credentials as unknown as Record<string, string>);
+  console.log(`📡 Login function called. Sending request to: http://${hostPort}/api/v1/users/signin`);
+  console.log('📤 Request data:', { username: credentials.username, password: '[REDACTED]' });
+
+  const apiClient = new ApiClient(`http://${hostPort}`);
+  const response = await apiClient.get<AuthToken>('/api/v1/users/signin', {
+    username: credentials.username,
+    password: credentials.password,
+  });
+
+  console.log('📥 Response received:', { success: response.success, error: response.error, hasData: !!response.data });
+  return response;
 };
 
 export const signup = async (hostPort: string, credentials: SignupCredentials): Promise<ApiResponse<AuthToken>> => {
-  const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  const baseUrl = isDevelopment ? '' : `http://${hostPort}`;
-  const apiClient = new ApiClient(baseUrl);
-  return apiClient.post(`/api/v1/users/signup?username=${encodeURIComponent(credentials.username)}&password=${encodeURIComponent(credentials.password)}`);
+  const apiClient = new ApiClient(`http://${hostPort}`);
+  return apiClient.post('/api/v1/users/signup', {
+    username: credentials.username,
+    password: credentials.password,
+  });
 };
 
-export const getUserProfile = async (userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
-  const apiClient = createApiClient();
+export const getUserProfile = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
+  const apiClient = new ApiClient(`http://${hostPort}`);
+  return apiClient.post('/api/v1/users/profile', {
+    user_id: userId,
+    auth_token: authToken,
+  });
+};
+
+export const getUserProfileById = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<{ user_data: any }>> => {
+  const apiClient = new ApiClient(`http://${hostPort}`);
+  return apiClient.post('/api/v1/users/profile', {
+    user_id: userId,
+    auth_token: authToken,
+  });
+};
+
+export const getUserProfileByIdWithQuery = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
+  const apiClient = new ApiClient(`http://${hostPort}`);
   return apiClient.get('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
@@ -59,31 +143,28 @@ export interface GetUserProfileResponse {
   user_data: {
     user_id: string;
     username: string;
-    password: string;
-    about: string;
-    avatar_url: string;
-    banner_url: string;
+    about?: string;
+    avatar_url?: string;
+    banner_url?: string;
     status: 'online' | 'offline' | 'idle' | 'dnd';
     origin_server: string;
-    inbox_id: string;
+    inbox_id?: string;
     roles_ids: string[];
-    last_seen: string;
+    last_seen?: string;
     joined_servers_ids: any[];
-    auth_token: string;
-    auth_token_expire_time: string;
     created_at: string;
     updated_at: string;
+    auth_token_expire_time?: string;
   };
 }
 
-export const getUserProfileById = async (userId: string, authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
-  const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(userId)}&auth_token=${encodeURIComponent(authToken)}`);
-};
 
-export const getCurrentUserProfile = async (authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
-  const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/users/profile?user_id=${encodeURIComponent(extractUserIdFromToken(authToken))}&auth_token=${encodeURIComponent(authToken)}`);
+
+export const getCurrentUserProfile = async (hostPort: string, authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
+  const apiClient = new ApiClient(`http://${hostPort}`);
+  return apiClient.post('/api/v1/users/profile', {
+    auth_token: authToken,
+  });
 };
 
 export interface ListUsersResponse {
@@ -107,7 +188,7 @@ export interface ListUsersResponse {
 
 export const listUsers = async (authToken: string): Promise<ApiResponse<ListUsersResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/users/list?auth_token=${encodeURIComponent(authToken)}`);
+  return apiClient.get('/api/v1/users/list', { auth_token: authToken });
 };
 
 // Update user profile functions
@@ -132,6 +213,11 @@ export interface ResetAuthTokenRequest {
   password: string;
 }
 
+export interface UpdateBioRequest {
+  auth_token: string;
+  about: string;
+}
+
 export interface UpdateAvatarRequest {
   auth_token: string;
   avatar?: File | string; // Can be a File object or a URL string
@@ -154,22 +240,40 @@ export interface ResetAuthTokenResponse extends UpdateProfileResponse {
 
 export const updateUsername = async (request: UpdateUsernameRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
+  return apiClient.put('/api/v1/users/profile', {
+    auth_token: request.auth_token,
+    new_username: request.new_username
+  });
 };
 
 export const updateUserStatus = async (request: UpdateStatusRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
+  return apiClient.put('/api/v1/users/profile', {
+    auth_token: request.auth_token,
+    status: request.status
+  });
 };
 
 export const updatePassword = async (request: UpdatePasswordRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.put('/api/v1/users/profile', request as unknown as Record<string, string>);
+  return apiClient.put('/api/v1/users/profile', {
+    auth_token: request.auth_token,
+    new_password: request.new_password,
+    old_password: request.old_password
+  });
 };
 
 export const resetAuthToken = async (request: ResetAuthTokenRequest): Promise<ApiResponse<ResetAuthTokenResponse>> => {
   const apiClient = createApiClient();
   return apiClient.put('/api/v1/users/profile/reset-auth-token', request as unknown as Record<string, string>);
+};
+
+export const updateBio = async (request: UpdateBioRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.put('/api/v1/users/profile', {
+    auth_token: request.auth_token,
+    about: request.about
+  });
 };
 
 export const updateAvatar = async (request: UpdateAvatarRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
@@ -179,13 +283,13 @@ export const updateAvatar = async (request: UpdateAvatarRequest): Promise<ApiRes
   formData.append('auth_token', request.auth_token);
   if (request.avatar) {
     if (request.avatar instanceof File) {
-      formData.append('avatar', request.avatar);
+      formData.append('file', request.avatar);
     } else {
       formData.append('avatar_url', request.avatar);
     }
   }
 
-  return apiClient.put('/api/v1/users/profile/avatar', formData as unknown as Record<string, string>);
+  return apiClient.post('/api/v1/users/profile/avatar', formData as unknown as Record<string, string>);
 };
 
 export const updateBanner = async (request: UpdateBannerRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
@@ -195,13 +299,70 @@ export const updateBanner = async (request: UpdateBannerRequest): Promise<ApiRes
   formData.append('auth_token', request.auth_token);
   if (request.banner) {
     if (request.banner instanceof File) {
-      formData.append('banner', request.banner);
+      formData.append('file', request.banner);
     } else {
       formData.append('banner_url', request.banner);
     }
   }
 
-  return apiClient.put('/api/v1/users/profile/banner', formData as unknown as Record<string, string>);
+  return apiClient.post('/api/v1/users/profile/banner', formData as unknown as Record<string, string>);
+};
+
+// Role utility functions
+export const getUserRoles = (rolesIds: string[] | undefined): UserRole[] => {
+  if (!rolesIds || !Array.isArray(rolesIds)) return [UserRole.USER];
+
+  // Map API role IDs to our enum, filtering out invalid ones
+  const validRoles: UserRole[] = [];
+  for (const roleId of rolesIds) {
+    switch (roleId.toLowerCase()) {
+      case 'owner': validRoles.push(UserRole.OWNER); break;
+      case 'admin': validRoles.push(UserRole.ADMIN); break;
+      case 'moderator': validRoles.push(UserRole.MODERATOR); break;
+      case 'user': validRoles.push(UserRole.USER); break;
+      default: break; // Ignore unknown roles
+    }
+  }
+
+  // Always include USER role if no valid roles found
+  return validRoles.length > 0 ? validRoles : [UserRole.USER];
+};
+
+export const getPrimaryRole = (roles: UserRole[]): UserRole => {
+  // Return the highest priority role (order: owner > admin > moderator > user)
+  const priorityOrder = [UserRole.OWNER, UserRole.ADMIN, UserRole.MODERATOR, UserRole.USER];
+  for (const role of priorityOrder) {
+    if (roles.includes(role)) return role;
+  }
+  return UserRole.USER;
+};
+
+export const hasRole = (userRoles: UserRole[], requiredRole: UserRole): boolean => {
+  return userRoles.includes(requiredRole);
+};
+
+export const hasRoleOrHigher = (userRoles: UserRole[], minimumRole: UserRole): boolean => {
+  const roleHierarchy = [UserRole.USER, UserRole.MODERATOR, UserRole.ADMIN, UserRole.OWNER];
+  const userRoleIndex = Math.max(...userRoles.map(role => roleHierarchy.indexOf(role)));
+  const minimumRoleIndex = roleHierarchy.indexOf(minimumRole);
+  return userRoleIndex >= minimumRoleIndex;
+};
+
+export const getRoleInfo = (role: UserRole): RoleInfo => {
+  return USER_ROLES[role] || USER_ROLES[UserRole.USER];
+};
+
+// Permission checking functions
+export const canManageServer = (userRoles: UserRole[]): boolean => {
+  return hasRoleOrHigher(userRoles, UserRole.ADMIN);
+};
+
+export const canModerateContent = (userRoles: UserRole[]): boolean => {
+  return hasRoleOrHigher(userRoles, UserRole.MODERATOR);
+};
+
+export const canManageChannels = (userRoles: UserRole[]): boolean => {
+  return hasRoleOrHigher(userRoles, UserRole.MODERATOR);
 };
 
 // Utility functions
@@ -216,7 +377,7 @@ export const getAuthTokenFromCookies = (): string | null => {
     acc[key.trim()] = value;
     return acc;
   }, {} as Record<string, string>);
-  return cookies.authToken || null;
+  return cookies.auth_token || null;
 };
 
 export const getHostPortFromCookies = (): string | null => {
@@ -226,7 +387,7 @@ export const getHostPortFromCookies = (): string | null => {
     acc[key.trim()] = value;
     return acc;
   }, {} as Record<string, string>);
-  return cookies.serverHostPort || null;
+  return cookies.host_port || null;
 };
 
 export const getHostPortFromStorage = (): string | null => {
@@ -236,10 +397,10 @@ export const getHostPortFromStorage = (): string | null => {
   // Then check storage
   if (typeof window !== 'undefined') {
     // First check sessionStorage (for non-remember me)
-    hostPort = sessionStorage.getItem('serverHostPort');
+    hostPort = sessionStorage.getItem('host_port');
     if (hostPort) return hostPort;
     // Then localStorage (for remember me)
-    return localStorage.getItem('serverHostPort');
+    return localStorage.getItem('host_port');
   }
   return null;
 };
@@ -247,13 +408,13 @@ export const getHostPortFromStorage = (): string | null => {
 export const setHostPortToStorage = (hostPort: string, persistent: boolean = false): void => {
   if (typeof window === 'undefined') return;
   if (persistent) {
-    localStorage.setItem('serverHostPort', hostPort);
+    localStorage.setItem('host_port', hostPort);
     // Clear sessionStorage if setting persistent
-    sessionStorage.removeItem('serverHostPort');
+    sessionStorage.removeItem('host_port');
   } else {
-    sessionStorage.setItem('serverHostPort', hostPort);
+    sessionStorage.setItem('host_port', hostPort);
     // Clear localStorage if setting session
-    localStorage.removeItem('serverHostPort');
+    localStorage.removeItem('host_port');
   }
 };
 
@@ -273,42 +434,63 @@ export const useCurrentUserProfile = () => {
       const authToken = getAuthTokenFromCookies();
       if (!authToken) throw new Error('No authentication token');
 
-      const response = await getCurrentUserProfile(authToken);
+      const hostPort = getHostPortFromStorage();
+      if (!hostPort) throw new Error('No server host:port configured');
+
+      const response = await getCurrentUserProfile(hostPort, authToken);
       if (!response.success || !response.data?.user_data) {
         throw new Error(response.error || 'Failed to fetch user profile');
       }
 
       const userData = response.data.user_data;
-      // Generate avatar URL using DiceBear Bottts Neutral style
+      // Generate avatar URL using DiceBear Bottts Neutral style as fallback
       const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
 
-    // Use avatar_url if available, otherwise generate one
-    const finalAvatarUrl = userData.avatar_url || avatarUrl;
+      // Use avatar_url if available, otherwise generate one
+      const finalAvatarUrl = userData.avatar_url || avatarUrl;
 
-    // Assign roles based on API data - use roles_ids and check for admin/owner roles
-    const defaultRoles = ['Member'];
-    if (userData.roles_ids?.includes('owner') || userData.roles_ids?.includes('Owner')) {
-      defaultRoles.push('Owner');
-    }
-    if (userData.roles_ids?.includes('admin') || userData.roles_ids?.includes('Admin')) {
-      defaultRoles.push('Admin');
-    }
+      // Parse roles from API response
+      const userRoles = getUserRoles(userData.roles_ids);
+      const primaryRole = getPrimaryRole(userRoles);
 
-    const user: User = {
-      id: userData.user_id,
-      username: userData.username,
-      avatar: finalAvatarUrl,
-      status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
-      bio: userData.about || 'Passionate about decentralized technology and building the future of secure communication.',
-      joinedAt: userData.created_at,
-      roles: defaultRoles
-    } as unknown as User;
+      const user: User = {
+        // Core API fields
+        user_id: userData.user_id,
+        username: userData.username,
+        about: userData.about,
+        avatar_url: userData.avatar_url,
+        banner_url: userData.banner_url,
+        inbox_id: userData.inbox_id,
+        origin_server: userData.origin_server,
+        status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+        roles_ids: userData.roles_ids,
+        last_seen: userData.last_seen,
+        joined_servers_ids: userData.joined_servers_ids,
+        auth_token: authToken,
+        raw_auth_token: authToken,
+        auth_token_expire_time: userData.auth_token_expire_time,
+        created_at: userData.created_at,
+        updated_at: userData.updated_at,
+
+        // Legacy alias fields for backward compatibility
+        id: userData.user_id,
+        bio: userData.about || 'No bio provided.',
+        avatar: finalAvatarUrl,
+        password: '', // Not returned by API for security
+        conversations: [], // Legacy field
+        contacts: [], // Legacy field
+        is_admin: hasRole(userRoles, UserRole.ADMIN),
+        is_owner: hasRole(userRoles, UserRole.OWNER),
+        roles: userRoles,
+        joinedAt: userData.created_at,
+      };
 
       return user;
     },
     enabled: !!getAuthTokenFromCookies(), // Only run if we have a token
-    staleTime: 0, // No caching, always fetch fresh data
-    gcTime: 0, // No garbage collection, remove immediately
+    staleTime: 5 * 60 * 1000, // 5 minutes - consider data fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after unmount
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   });
 };
 
@@ -334,10 +516,8 @@ export const useUpdateUsername = () => {
   });
 };
 
-// Hook to update status
+// Hook to update status (frequent updates - no profile invalidation to prevent excessive API calls)
 export const useUpdateStatus = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (status: 'online' | 'offline' | 'idle' | 'dnd') => {
       const authToken = getAuthTokenFromCookies();
@@ -350,10 +530,7 @@ export const useUpdateStatus = () => {
       }
       return response.data;
     },
-    onSuccess: () => {
-      // Invalidate and refetch current user profile
-      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
-    },
+    // Removed onSuccess callback to prevent constant profile invalidation
   });
 };
 
@@ -393,6 +570,28 @@ export const useUpdateAvatar = () => {
       const response = await updateAvatar({ auth_token: authToken, avatar });
       if (!response.success) {
         throw new Error(response.error || 'Failed to update avatar');
+      }
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch current user profile
+      queryClient.invalidateQueries({ queryKey: USER_QUERY_KEYS.currentProfile() });
+    },
+  });
+};
+
+// Hook to update bio
+export const useUpdateBio = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (about: string) => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const response = await updateBio({ auth_token: authToken, about });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update bio');
       }
       return response.data;
     },
@@ -482,75 +681,23 @@ export const useLogout = () => {
   };
 };
 
-// User activity tracker hook - replaced with simple activity management
-export const useActivityTracker = () => {
-  const updateStatusMutation = useUpdateStatus();
-  const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastActivityRef = useRef(Date.now());
-
-  const resetInactivityTimer = () => {
-    if (inactivityTimeoutRef.current) {
-      clearTimeout(inactivityTimeoutRef.current);
-    }
-
-    const INACTIVE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
-    inactivityTimeoutRef.current = setTimeout(() => {
-      updateStatusMutation.mutate('idle');
-    }, INACTIVE_TIMEOUT);
+// Server statistics functions
+export interface ServerStatsResponse {
+  statistics: {
+    total_users?: number;
+    active_users?: number;
+    total_channels?: number;
+    total_messages?: number;
+    server_health?: number;
+    message_rate_per_hour?: number;
+    peak_online_users?: number;
+    messages_today?: number;
+    storage_used?: string;
+    channels_created_this_month?: number;
   };
+}
 
-  const recordActivity = () => {
-    lastActivityRef.current = Date.now();
-    updateStatusMutation.mutate('online');
-    resetInactivityTimer();
-  };
-
-  useEffect(() => {
-    // Setup activity listeners
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-
-    events.forEach(event => {
-      document.addEventListener(event, recordActivity, { passive: true });
-    });
-
-    // Setup visibility listener
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Tab is hidden
-      } else {
-        // Tab is visible again
-        recordActivity();
-        updateStatusMutation.mutate('online');
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Setup beforeunload
-    const handleBeforeUnload = () => {
-      updateStatusMutation.mutate('offline');
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // Start tracking
-    recordActivity();
-
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, recordActivity);
-      });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-
-      if (inactivityTimeoutRef.current) {
-        clearTimeout(inactivityTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  return {
-    recordActivity,
-    lastActivity: lastActivityRef.current,
-  };
+export const getServerStats = async (authToken: string): Promise<ApiResponse<ServerStatsResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get('/api/v1/system/server-stats');
 };

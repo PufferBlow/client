@@ -4,7 +4,7 @@ interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
   serverName: string;
-  serverId: string;
+  serverId?: string;
   onGenerateInvite: (options: { maxUses?: number; expiresAt?: Date; isPermanent?: boolean }) => Promise<string>;
   onCopyInvite: (inviteCode: string) => void;
 }
