@@ -132,7 +132,13 @@ export class ApiClient {
 }
 
 export const createApiClient = (hostPort?: string): ApiClient => {
-  const selectedHostPort = hostPort || getHostPort() || 'localhost:7575';
+  let selectedHostPort = hostPort || getHostPort() || 'localhost:7575';
+
+  // If no port is specified, default to 7575
+  if (selectedHostPort && !selectedHostPort.includes(':')) {
+    selectedHostPort = `${selectedHostPort}:7575`;
+  }
+
   const baseUrl = `http://${selectedHostPort}`;
   return new ApiClient(baseUrl);
 };

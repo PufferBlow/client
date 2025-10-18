@@ -29,10 +29,10 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Password must be at least 8 characters long" };
   }
 
-  // Validate host:port format - support IP addresses, hostnames, and domain names
-  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b):(\d+)$/;
+  // Validate host:port format - support IP addresses, hostnames, domain names with or without port
+  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b)(?::(\d+))?$/;
   if (!hostPortRegex.test(hostPort)) {
-    return { error: "Invalid host:port format. Please use format like '127.0.0.1:7575', 'localhost:7575', or 'api.example.com:7575'" };
+    return { error: "Invalid host format. Please use format like '127.0.0.1:7575', 'localhost:7575', 'api.example.com:7575', or just 'api.example.com' (port 7575 will be used automatically)" };
   }
 
   // Additional validation: try to create a URL to check if it's a valid format
@@ -161,7 +161,7 @@ export default function Signup() {
                 type="text"
                 required
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="127.0.0.1:7575 or api.example.com:7575"
+                placeholder="127.0.0.1:7575, api.example.com:7575, or api.example.com"
               />
             </div>
 
