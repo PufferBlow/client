@@ -85,6 +85,8 @@ export type {
 
 // WebSocket Real-time Messaging
 export {
+  GlobalWebSocket,
+  createGlobalWebSocket,
   createChannelWebSocket,
   getHostPortForWebSocket
 } from './websocket';

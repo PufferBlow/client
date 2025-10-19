@@ -14,6 +14,18 @@ export interface Message {
   /** ID of the user who sent the message */
   sender_user_id: string;
 
+  /** Username of the message sender */
+  username?: string;
+
+  /** Avatar URL of the message sender */
+  sender_avatar_url?: string | null;
+
+  /** Current status of the message sender */
+  sender_status?: string;
+
+  /** Roles/permissions of the message sender */
+  sender_roles?: string[];
+
   /** ID of the channel this message belongs to (optional) */
   channel_id?: string | null;
 

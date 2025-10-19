@@ -1,7 +1,6 @@
 import { Link } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
-import { UserProfileModal } from "../components/UserProfileModal";
 import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../services/user";
 import { listChannels, deleteChannel, createChannel } from "../services/channel";
 import {
@@ -18,6 +17,8 @@ import {
   getServerUsage,
   getActivityMetrics,
   getServerOverview,
+  getServerLogs,
+  clearServerLogs,
   type Period,
   type ChartData,
   type RawStats,
@@ -76,7 +77,7 @@ type CDNFile = {
 };
 
 export default function ControlPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'settings' | 'cdn' | 'security' | 'blocked-ips'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'cdn' | 'security' | 'blocked-ips'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -199,7 +200,7 @@ export default function ControlPanel() {
       } else {
         // Handle specific error codes
         if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
-      showToast('Channel name already exists, please choose a different name.', 'error');
+          showToast('Channel name already exists, please choose a different name.', 'error');
         } else if (response.error?.includes('403') || response.error?.includes('Access denied')) {
           showToast('Access denied. Only admins and moderators can create channels.', 'error');
         } else {
@@ -217,81 +218,222 @@ export default function ControlPanel() {
   if (isLoading) {
     return (
       <>
-        <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative animate-pulse">
-          {/* Sidebar Skeleton */}
-          <div className="w-16 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] flex flex-col items-center py-4 space-y-2">
-            {/* Back to Dashboard Skeleton */}
-            <div className="w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-2xl flex items-center justify-center text-white mb-4">
-              <div className="w-6 h-6 bg-gray-500 rounded"></div>
+        <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+          {/* Nord-themed Sidebar Skeleton */}
+          <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
+            {/* Server Branding Header Skeleton */}
+            <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                <div className="h-4 bg-gray-600 rounded w-32"></div>
+              </div>
+              <div className="ml-auto">
+                <div className="w-6 h-6 bg-gray-600 rounded"></div>
+              </div>
             </div>
-            {/* Tab Icons Skeleton */}
-            <div className="space-y-1">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="w-12 h-12 bg-gray-700 rounded-2xl"></div>
-              ))}
+
+            {/* Navigation Section Skeleton */}
+            <div className="flex-1 overflow-y-auto py-3">
+              <div className="px-2">
+                {/* Overview/Dashboard Section */}
+                <div className="mb-6">
+                  <div className="px-4 py-2 mb-2">
+                    <div className="h-4 bg-gray-600 rounded w-24"></div>
+                  </div>
+                  <div className="space-y-1">
+                    {Array.from({ length: 1 }).map((_, i) => (
+                      <div key={`overview-${i}`} className="px-3 py-2 rounded-md">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                          <div className="h-4 bg-gray-600 rounded w-20"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Management Section */}
+                <div className="mb-6">
+                  <div className="px-4 py-2 mb-2">
+                    <div className="h-4 bg-gray-600 rounded w-40"></div>
+                  </div>
+                  <div className="space-y-1">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={`management-${i}`} className="px-3 py-2 rounded-md">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                          <div className="h-4 bg-gray-600 rounded w-16"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Configuration Section */}
+                <div className="mb-6">
+                  <div className="px-4 py-2 mb-2">
+                    <div className="h-4 bg-gray-600 rounded w-44"></div>
+                  </div>
+                  <div className="space-y-1">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={`config-${i}`} className="px-3 py-2 rounded-md">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                          <div className="h-4 bg-gray-600 rounded w-18"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Security Section */}
+                <div className="mb-6">
+                  <div className="px-4 py-2 mb-2">
+                    <div className="h-4 bg-gray-600 rounded w-32"></div>
+                  </div>
+                  <div className="space-y-1">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <div key={`security-${i}`} className="px-3 py-2 rounded-md">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                          <div className="h-4 bg-gray-600 rounded w-20"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Back to Dashboard Button Skeleton */}
+            <div className="m-2 p-2">
+              <div className="hover:bg-gray-700 rounded-lg transition-all duration-200 flex items-center space-x-3 text-gray-300 cursor-pointer p-2">
+                <div className="w-5 h-5 ml-3">
+                  <div className="w-5 h-5 bg-gray-600 rounded"></div>
+                </div>
+                <div className="h-4 bg-gray-600 rounded w-28"></div>
+              </div>
             </div>
           </div>
 
           {/* Main Content Skeleton */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col bg-[var(--color-background)] overflow-hidden">
             {/* Header Skeleton */}
-            <div className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6">
-              <div className="w-64 h-6 bg-gray-700 rounded"></div>
-              <div className="ml-auto w-16 h-6 bg-gray-700 rounded"></div>
+            <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
+              <div className="flex items-center space-x-4">
+                <div className="h-4 bg-gray-600 rounded w-40"></div>
+              </div>
+              <div className="ml-auto">
+                <div className="h-6 bg-gray-600 rounded w-12 px-2 py-1"></div>
+              </div>
             </div>
 
             {/* Content Area Skeleton */}
-            <div className="flex-1 p-6 overflow-y-auto">
-              {/* Statistics Cards Skeleton */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="h-4 bg-gray-600 rounded mb-2 w-20"></div>
-                        <div className="h-8 bg-gray-600 rounded w-12"></div>
+            <div className="flex-1 p-6 overflow-y-auto bg-[var(--color-background)]">
+              {/* Server Information Card Skeleton */}
+              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-4 bg-gray-600 rounded w-32"></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                    <div className="h-4 bg-gray-600 rounded w-12"></div>
+                  </div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-16 h-16 bg-gray-600 rounded-xl"></div>
+                    <div className="flex-1">
+                      <div className="h-6 bg-gray-600 rounded w-48 mb-2"></div>
+                      <div className="h-4 bg-gray-600 rounded w-64 mb-3"></div>
+                      <div className="flex items-center space-x-4">
+                        <div className="h-4 bg-gray-600 rounded w-20"></div>
+                        <div className="h-4 bg-gray-600 rounded w-4"></div>
+                        <div className="h-4 bg-gray-600 rounded w-24"></div>
                       </div>
-                      <div className="w-8 h-8 bg-gray-600 rounded"></div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
 
-              {/* Detailed Stats Grid Skeleton */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="bg-gray-700 rounded-lg p-4">
+              {/* Server Statistics Cards Skeleton */}
+              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600 mb-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="h-4 bg-gray-600 rounded w-36"></div>
+                  <div className="flex space-x-2">
+                    <div className="px-4 py-2 bg-gray-600 rounded-lg">
+                      <div className="h-4 bg-gray-500 rounded w-12"></div>
+                    </div>
+                    <div className="px-4 py-2 bg-gray-800 rounded-lg">
+                      <div className="h-4 bg-gray-500 rounded w-10"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Key Metrics Skeleton */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="h-4 bg-gray-600 rounded mb-2 w-20"></div>
+                            <div className="h-8 bg-gray-600 rounded w-12"></div>
+                          </div>
+                          <div className="w-8 h-8 bg-gray-600 rounded"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Detailed Stats Grid Skeleton */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="bg-gray-800 rounded-lg p-4">
+                        <div className="flex items-center mb-3">
+                          <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
+                          <div className="h-4 bg-gray-600 rounded w-24"></div>
+                        </div>
+                        {i === 2 ? (
+                          <div>
+                            <div className="h-6 bg-gray-600 rounded mb-2"></div>
+                            <div className="w-full bg-gray-600 rounded-full h-2"></div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="text-center">
+                              <div className="h-6 bg-gray-600 rounded mb-1"></div>
+                              <div className="h-3 bg-gray-600 rounded"></div>
+                            </div>
+                            <div className="text-center">
+                              <div className="h-6 bg-gray-600 rounded mb-1"></div>
+                              <div className="h-3 bg-gray-600 rounded"></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Additional Stats Skeleton */}
+                  <div className="bg-gray-800 rounded-lg p-4">
                     <div className="flex items-center mb-3">
                       <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
-                      <div className="h-4 bg-gray-600 rounded w-24"></div>
+                      <div className="h-4 bg-gray-600 rounded w-32"></div>
                     </div>
-                    {i === 2 ? (
-                      <div>
-                        <div className="h-6 bg-gray-600 rounded mb-2"></div>
-                        <div className="w-full bg-gray-600 rounded-full h-2"></div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center">
-                          <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                          <div className="h-3 bg-gray-600 rounded"></div>
-                        </div>
-                        <div className="text-center">
-                          <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                          <div className="h-3 bg-gray-600 rounded"></div>
-                        </div>
-                      </div>
-                    )}
+                    <div className="text-center">
+                      <div className="h-6 bg-gray-600 rounded mb-1 w-8 mx-auto"></div>
+                      <div className="h-3 bg-gray-600 rounded w-32 mx-auto"></div>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
 
               {/* Recent Activity Skeleton */}
-              <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)] mt-6">
-                <div className="h-6 bg-gray-700 rounded mb-4 w-48"></div>
+              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                <div className="h-4 bg-gray-600 rounded mb-4 w-32"></div>
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
+                    <div key={i} className="flex items-center space-x-3 p-3 bg-gray-800 rounded-lg">
                       <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
                       <div className="flex-1">
                         <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
@@ -304,57 +446,82 @@ export default function ControlPanel() {
             </div>
           </div>
         </div>
-    </>
-  );
-}
+      </>
+    );
+  }
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ) },
-    { id: 'moderation', label: 'Moderation', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ) },
-    { id: 'members', label: 'Members', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-      </svg>
-    ) },
-    { id: 'channels', label: 'Channels', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 01-9 9H9l-6 3V9a9 9 0 019-9h3a9 9 0 019 9z" />
-      </svg>
-    ) },
-    { id: 'tasks', label: 'Tasks', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-      </svg>
-    ) },
-    { id: 'settings', label: 'Settings', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ) },
-    { id: 'cdn', label: 'CDN', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-      </svg>
-    ) },
-    { id: 'security', label: 'Security', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ) },
-    { id: 'blocked-ips', label: 'Blocked IPs', icon: (
-      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ) },
+    {
+      id: 'overview', label: 'Overview', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      )
+    },
+    {
+      id: 'moderation', label: 'Moderation', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      )
+    },
+    {
+      id: 'members', label: 'Members', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'channels', label: 'Channels', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 01-9 9H9l-6 3V9a9 9 0 019-9h3a9 9 0 019 9z" />
+        </svg>
+      )
+    },
+    {
+      id: 'tasks', label: 'Tasks', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+      )
+    },
+    {
+      id: 'settings', label: 'Settings', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'cdn', label: 'CDN', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+        </svg>
+      )
+    },
+    {
+      id: 'security', label: 'Security', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      )
+    },
+    {
+      id: 'blocked-ips', label: 'Blocked IPs', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'logs', label: 'Logs', icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      )
+    },
   ];
 
   // FileViewerModal Component
@@ -381,9 +548,8 @@ export default function ControlPanel() {
           const response = await fetch(file.url);
           if (response.ok) {
             const text = await response.text();
-            setContent(text);
-          } else {
-            setContent('Failed to load file content');
+            setContent(text); // Display text content
+            logger.ui.info('File content loaded successfully', { filename: file.filename });
           }
         }
       } catch (error) {
@@ -493,7 +659,7 @@ export default function ControlPanel() {
             <div>
               <h3 className="text-lg font-semibold text-white truncate max-w-md">{file.filename}</h3>
               <p className="text-gray-400 text-sm mt-1">
-                {formatFileSize(file.size)} • {file.type} • 
+                {formatFileSize(file.size)} • {file.type} •
                 Uploaded {new Date(file.uploaded_at).toLocaleDateString()} by {file.uploader}
               </p>
             </div>
@@ -506,11 +672,11 @@ export default function ControlPanel() {
               </svg>
             </button>
           </div>
-          
+
           <div className="p-6 overflow-y-auto max-h-full">
             {renderFileContent()}
           </div>
-          
+
           <div className="flex justify-end space-x-3 p-6 border-t border-gray-700 bg-gray-750">
             <button
               onClick={onClose}
@@ -565,11 +731,10 @@ export default function ControlPanel() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${
-                      activeTab === tab.id
+                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
                         ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                    }`}
+                      }`}
                   >
                     <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
                       {tab.icon}
@@ -591,11 +756,10 @@ export default function ControlPanel() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${
-                      activeTab === tab.id
+                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
                         ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                    }`}
+                      }`}
                   >
                     <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
                       {tab.icon}
@@ -617,11 +781,10 @@ export default function ControlPanel() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${
-                      activeTab === tab.id
+                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
                         ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                    }`}
+                      }`}
                   >
                     <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
                       {tab.icon}
@@ -643,11 +806,10 @@ export default function ControlPanel() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${
-                      activeTab === tab.id
+                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
                         ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                    }`}
+                      }`}
                   >
                     <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
                       {tab.icon}
@@ -703,6 +865,7 @@ export default function ControlPanel() {
               showToast={showToast}
             />}
             {activeTab === 'tasks' && <TasksTab showToast={showToast} />}
+            {activeTab === 'logs' && <LogsTab showToast={showToast} />}
             {activeTab === 'settings' && <SettingsTab showToast={showToast} />}
             {activeTab === 'cdn' && <CDNTab
               showToast={showToast}
@@ -942,6 +1105,7 @@ function TasksTab({
 }
 
 // CDN Tab Component
+// CDN Tab Component
 function CDNTab({
   showToast,
   fileViewerModal,
@@ -960,6 +1124,7 @@ function CDNTab({
   const [isCleaningOrphaned, setIsCleaningOrphaned] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1106,15 +1271,19 @@ function CDNTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await fetch(`/api/v1/cdn/files/${file.id}`, {
-        method: 'DELETE',
+      const response = await fetch('/api/v1/cdn/delete-file', {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          auth_token: authToken,
+          file_url: file.url
+        })
       });
 
       if (response.ok) {
-        setFiles(prev => prev.filter(f => f.id !== file.id));
+        setFiles(prev => prev.filter(f => f !== file));
         showToast(`File "${file.filename}" deleted successfully!`, 'success');
         setDeleteConfirmFile(null);
       } else {
@@ -1548,34 +1717,74 @@ function CDNTab({
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete File Confirmation Modal */}
       {deleteConfirmFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-white">Delete File</h3>
-            </div>
-            <div className="mb-6">
-              <p className="text-gray-300 mb-2">
-                Are you sure you want to delete <span className="font-semibold text-white">{deleteConfirmFile.filename}</span>?
-              </p>
-              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
-                ⚠️ This action cannot be undone. The file will be permanently deleted from the CDN.
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--color-surface)]/95 backdrop-blur-md rounded-xl w-full max-w-md mx-auto shadow-2xl border border-[var(--color-border)]">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-[var(--color-text)]">Delete File</h3>
+                <button
+                  onClick={() => setDeleteConfirmFile(null)}
+                  className="text-gray-400 hover:text-white transition-colors p-2"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirmFile(null)}
-                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteFile(deleteConfirmFile)}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
-              >
-                Delete File
-              </button>
+
+              {/* File Info */}
+              <div className="bg-[var(--color-background-secondary)] rounded-lg p-4 mb-6 border border-[var(--color-border)]">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 flex items-center justify-center text-lg bg-[var(--color-surface-tertiary)] rounded-lg">
+                    {getFileTypeIcon(deleteConfirmFile.type || 'unknown')}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[var(--color-text)] font-medium truncate">{deleteConfirmFile.filename}</h4>
+                    <div className="text-sm text-[var(--color-text-secondary)]">
+                      {formatFileSize(deleteConfirmFile.size)} • {deleteConfirmFile.type}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[var(--color-text-secondary)] text-sm">
+                  Uploaded {new Date(deleteConfirmFile.uploaded_at).toLocaleDateString()} by {deleteConfirmFile.uploader}
+                </p>
+              </div>
+
+              {/* Warning Message */}
+              <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <svg className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="text-sm">
+                    <h4 className="text-red-400 font-medium mb-1">Permanently Delete File</h4>
+                    <p className="text-gray-300">
+                      This action cannot be undone. The file will be permanently removed from the CDN and cannot be recovered.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setDeleteConfirmFile(null)}
+                  className="px-4 py-2 text-[var(--color-text-secondary)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-hover)] rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteFile(deleteConfirmFile)}
+                  className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Delete File</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1651,7 +1860,7 @@ function RecentActivity() {
     if (description.includes('updated') && description.includes('to')) {
       // Look for patterns like "User updated server settings" or "server_settings_updated by username"
       const match = description.match(/updated by (\w+): (.+ changed to .+)/) ||
-                   description.match(/(\w+) changed (.+)/);
+        description.match(/(\w+) changed (.+)/);
 
       if (match) {
         const username = match[1];
@@ -1836,6 +2045,7 @@ function RecentActivity() {
 
 function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
   const [viewMode, setViewMode] = useState<'numbers' | 'diagram'>('numbers');
+  const [bannerExpanded, setBannerExpanded] = useState(false);
   const [chartData, setChartData] = useState<{
     userRegistrations?: ChartData;
     messageActivity?: ChartData;
@@ -2108,11 +2318,10 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
         <button
           key={period}
           onClick={() => setSelectedPeriod({ period })}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
-            selectedPeriod.period === period
+          className={`px-3 py-1 rounded text-sm transition-colors ${selectedPeriod.period === period
               ? 'bg-blue-600 text-white'
               : 'bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600'
-          }`}
+            }`}
         >
           {period}
         </button>
@@ -2120,7 +2329,7 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
     </div>
   );
 
-    const [serverInfo, setServerInfo] = useState<{
+  const [serverInfo, setServerInfo] = useState<{
     server_name: string;
     version: string;
     creation_date: string | null;
@@ -2201,22 +2410,20 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
           <div className="flex space-x-2">
             <button
               onClick={() => setViewMode('numbers')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                viewMode === 'numbers'
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${viewMode === 'numbers'
                   ? 'bg-[var(--color-primary)] text-[var(--color-background)] shadow-lg'
                   : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-              }`}
+                }`}
             >
               Numbers
             </button>
 
             <button
               onClick={() => setViewMode('diagram')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                viewMode === 'diagram'
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${viewMode === 'diagram'
                   ? 'bg-[var(--color-primary)] text-[var(--color-background)] shadow-lg'
                   : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-              }`}
+                }`}
             >
               Diagram
             </button>
@@ -2349,8 +2556,8 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
                         getServerUsage().then(response => {
                           if (response.success && response.data) {
                             // Force state update with new data
-            setServerUsage(prevState => ({ ...prevState, ...response.data!.server_usage, timestamp: Date.now() }));
-            console.log('Updated server usage data:', response.data!.server_usage);
+                            setServerUsage(prevState => ({ ...prevState, ...response.data!.server_usage, timestamp: Date.now() }));
+                            console.log('Updated server usage data:', response.data!.server_usage);
                           } else {
                             setUsageError('Failed to load server usage data');
                           }
@@ -2860,12 +3067,11 @@ function MembersTab({
                     alt={user.username}
                     className="w-10 h-10 rounded-full shadow-md border-2 border-green-300"
                   />
-                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${
-                    user.status === 'online' ? 'bg-green-400' :
-                    user.status === 'idle' ? 'bg-yellow-400' :
-                    user.status === 'dnd' ? 'bg-red-400' :
-                    'bg-gray-400'
-                  }`}></div>
+                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-green-400' :
+                      user.status === 'idle' ? 'bg-yellow-400' :
+                        user.status === 'dnd' ? 'bg-red-400' :
+                          'bg-gray-400'
+                    }`}></div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="text-white font-medium">{user.username}</span>
@@ -2964,18 +3170,18 @@ function ChannelsTab({
 
     try {
       const response = await deleteChannel(channel.channel_id, authToken);
-    if (response.success) {
-      logger.ui.info("Channel deleted successfully", { channelId: channel.channel_id, channelName: channel.channel_name });
+      if (response.success) {
+        logger.ui.info("Channel deleted successfully", { channelId: channel.channel_id, channelName: channel.channel_name });
 
-      // Show success toast
-      showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
+        // Show success toast
+        showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
 
-      // Refresh the channel list
-      const listResponse = await listChannels(authToken);
-      if (listResponse.success && listResponse.data && listResponse.data.channels) {
-        setChannels(listResponse.data.channels);
-      }
-      setDeleteConfirmChannel(null);
+        // Refresh the channel list
+        const listResponse = await listChannels(authToken);
+        if (listResponse.success && listResponse.data && listResponse.data.channels) {
+          setChannels(listResponse.data.channels);
+        }
+        setDeleteConfirmChannel(null);
       } else {
         console.error("Failed to delete channel:", response.error);
         logger.ui.error("Failed to delete channel", { channelId: channel.channel_id, error: response.error });
@@ -3194,8 +3400,9 @@ function SettingsTab({
 
       if (response.ok) {
         const result = await response.json();
-        setServerInfo(prev => ({ ...prev, avatar_url: result.avatar_url }));
-        setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: result.avatar_url } : null); // Update original to avoid "unsaved changes"
+        const fullAvatarUrl = convertToFullCdnUrl(result.avatar_url);
+        setServerInfo(prev => ({ ...prev, avatar_url: fullAvatarUrl }));
+        setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null); // Update original to avoid "unsaved changes"
         logger.ui.info('Server avatar updated successfully', result);
       } else {
         setError('Failed to upload avatar');
@@ -3330,10 +3537,10 @@ function SettingsTab({
   // Avatar and banner are uploaded immediately when selected, so they shouldn't count as "unsaved changes"
   const hasChanges = originalServerInfo &&
     (serverInfo.server_name !== originalServerInfo.server_name ||
-     serverInfo.server_description !== originalServerInfo.server_description ||
-     serverInfo.is_private !== originalServerInfo.is_private ||
-     serverInfo.max_users !== originalServerInfo.max_users ||
-     serverInfo.max_message_length !== originalServerInfo.max_message_length);
+      serverInfo.server_description !== originalServerInfo.server_description ||
+      serverInfo.is_private !== originalServerInfo.is_private ||
+      serverInfo.max_users !== originalServerInfo.max_users ||
+      serverInfo.max_message_length !== originalServerInfo.max_message_length);
 
   if (loading) {
     return (
@@ -4040,7 +4247,7 @@ function BlockedIPsTab({
 
       {/* Unblock Confirmation Modal */}
       {deleteConfirmIP && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 backdrop-blur-lg bg-white bg-opacity-5 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Unblock IP Address</h3>
@@ -4071,6 +4278,439 @@ function BlockedIPsTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Simple User Profile Modal for viewing user information
+function UserProfileModal({
+  isOpen,
+  onClose,
+  user,
+  currentUserId,
+  position,
+  triggerRect
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  user: any;
+  currentUserId: string;
+  position?: { x: number; y: number };
+  triggerRect?: DOMRect | null;
+}) {
+  if (!isOpen || !user) return null;
+
+  return (
+    <div
+      className="fixed z-50 bg-gray-800 rounded-lg shadow-lg border border-gray-600 py-2 w-64"
+      style={{
+        left: position?.x || '50%',
+        top: position?.y || '50%',
+        transform: position ? 'none' : 'translate(-50%, -50%)'
+      }}
+    >
+      <div className="px-4 py-2">
+        {/* Header */}
+        <div className="flex items-center space-x-3 mb-3">
+          <img
+            src={user.avatar}
+            alt={user.username}
+            className="w-8 h-8 rounded-full border border-gray-600"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-medium truncate">{user.username}</div>
+            <div className="text-xs text-gray-400">{user.bio}</div>
+          </div>
+        </div>
+
+        {/* Joined date */}
+        <div className="text-xs text-gray-500 pb-2">
+          Joined {new Date(user.joinedAt).toLocaleDateString()}
+        </div>
+
+        {/* Actions (if different from current user) */}
+        {user.id !== currentUserId && (
+          <div className="border-t border-gray-600 pt-2">
+            <button className="w-full text-left px-2 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors">
+              Start Conversation
+            </button>
+            <button className="w-full text-left px-2 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors">
+              Add Friend
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Logs Tab Component
+function LogsTab({
+  showToast
+}: {
+  showToast: (message: string, type: 'success' | 'error') => void;
+}) {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [filteredLogs, setFilteredLogs] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [logLevel, setLogLevel] = useState<string>('all');
+  const [autoScroll, setAutoScroll] = useState(true);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    if (autoScroll && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [filteredLogs]);
+
+  const loadLogs = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const authToken = getAuthTokenFromCookies() || '';
+      if (!authToken) {
+        setError('Authentication token not found');
+        setLoading(false);
+        return;
+      }
+
+      const request: any = {};
+      // Add search and level filters if provided
+      if (searchTerm.trim()) {
+        request.lines = 1000; // Fetch more lines when searching to ensure results
+        // Note: server-side filtering would be better, but implementing client-side for now
+      }
+      // Add level filter
+      if (logLevel !== 'all') {
+        request.level = logLevel.toUpperCase() as 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+      }
+
+      const response = await getServerLogs(authToken, request);
+      if (response.success && response.data) {
+        // Extract the actual log lines from the content field if available
+        let logLines: string[] = [];
+        const logsData = response.data.logs;
+
+        if (logsData) {
+          if (Array.isArray(logsData)) {
+            // If logs is an array of objects with content/raw fields
+            logLines = (logsData as any[]).map((log: any) => {
+              // Ensure we always return a string, even if the field contains other types
+              const raw = log.raw || log.content || log;
+              return typeof raw === 'string' ? raw : String(raw);
+            });
+          } else if (typeof logsData === 'string') {
+            // If logs is a string, split by newlines
+            logLines = (logsData as string).split('\n').filter((line: string) => line.trim() !== '');
+          } else {
+            logLines = [];
+          }
+        } else {
+          logLines = [];
+        }
+
+        setLogs(logLines);
+        applyFilters(logLines, searchTerm, logLevel);
+      } else {
+        setError(response.error || 'Failed to load logs');
+      }
+    } catch (err) {
+      setError('Failed to load logs');
+      console.error('Failed to load logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyFilters = (logList: string[], search: string, level: string) => {
+    let filtered = logList;
+
+    // Filter by log level
+    if (level !== 'all') {
+      filtered = filtered.filter(line => {
+        const upperLine = line.toUpperCase();
+        switch (level) {
+          case 'error':
+            return upperLine.includes('ERROR') || upperLine.includes('[ERROR]');
+          case 'warning':
+            return upperLine.includes('WARN') || upperLine.includes('[WARN]') ||
+                   upperLine.includes('WARNING') || upperLine.includes('[WARNING]');
+          case 'info':
+            return upperLine.includes('INFO') || upperLine.includes('[INFO]');
+          case 'debug':
+            return upperLine.includes('DEBUG') || upperLine.includes('[DEBUG]');
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Filter by search term
+    if (search.trim()) {
+      filtered = filtered.filter(line =>
+        line.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    setFilteredLogs(filtered);
+  };
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  useEffect(() => {
+    applyFilters(logs, searchTerm, logLevel);
+  }, [logs, searchTerm, logLevel]);
+
+  const ansiToHtml = (text: any): string => {
+    // Ensure text is a string
+    if (typeof text !== 'string') {
+      text = String(text);
+    }
+
+    // Basic ANSI color parsing - converts common ANSI codes to HTML spans
+    // \x1b[31m = red, \x1b[32m = green, \x1b[33m = yellow, etc.
+    // Using CSS custom properties to match the app's color scheme
+    let html = text
+      .replace(/\x1b\[31m/g, '<span style="color: var(--color-error);">') // Red for errors
+      .replace(/\x1b\[32m/g, '<span style="color: var(--color-success);">') // Green for success
+      .replace(/\x1b\[33m/g, '<span style="color: var(--color-warning);">') // Yellow for warnings
+      .replace(/\x1b\[34m/g, '<span style="color: var(--color-primary);">') // Blue for info
+      .replace(/\x1b\[35m/g, '<span style="color: var(--color-accent);">') // Magenta/purple
+      .replace(/\x1b\[36m/g, '<span style="color: var(--color-info);">') // Cyan/blue
+      .replace(/\x1b\[37m/g, '<span style="color: var(--color-text);">') // White/bright text
+      .replace(/\x1b\[0m/g, '</span>') // Reset
+      .replace(/\x1b\[1m/g, '<span style="font-weight: bold;">') // Bold
+      .replace(/\x1b\[4m/g, '<span style="text-decoration: underline;">'); // Underline
+
+    // Close any unclosed spans
+    const openSpans = (html.match(/<span/g) || []).length;
+    const closeSpans = (html.match(/<\/span>/g) || []).length;
+    if (openSpans > closeSpans) {
+      html += '</span>'.repeat(openSpans - closeSpans);
+    }
+
+    return html;
+  };
+
+  const downloadLogs = () => {
+    const logContent = logs.join('\n');
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `server-logs-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Logs downloaded successfully!', 'success');
+  };
+
+  const clearLogs = async () => {
+    try {
+      const authToken = getAuthTokenFromCookies() || '';
+      if (!authToken) {
+        showToast('Authentication token not found', 'error');
+        return;
+      }
+
+      const response = await fetch('/api/v1/system/logs/clear', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        setLogs([]);
+        setFilteredLogs([]);
+        showToast('Logs cleared successfully!', 'success');
+      } else {
+        showToast('Failed to clear logs', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to clear logs', 'error');
+      console.error('Failed to clear logs:', err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Logs Header */}
+      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-medium text-white">Server Logs</h2>
+            <p className="text-gray-400 text-sm mt-1">Live server logs with filtering and color support</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-gray-400">
+              {filteredLogs.length} / {logs.length} entries
+            </div>
+            <button
+              onClick={loadLogs}
+              disabled={loading}
+              className={`bg-[var(--color-primary)] hover:opacity-90 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-text-secondary)] text-[var(--color-background)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 border border-transparent hover:border-[var(--color-primary-dark)]`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{loading ? 'Loading...' : 'Refresh'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+          {/* Search */}
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search logs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* Filter by level */}
+          <div className="flex items-center space-x-2">
+            <label className="text-white font-medium">Level:</label>
+            <select
+              value={logLevel}
+              onChange={(e) => setLogLevel(e.target.value)}
+              className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">All</option>
+              <option value="error">Errors</option>
+              <option value="warning">Warnings</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+            </select>
+          </div>
+
+          {/* Auto-scroll toggle */}
+          <div className="flex items-center space-x-2">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={(e) => setAutoScroll(e.target.checked)}
+                className="rounded border-gray-600 text-blue-600"
+              />
+              <span className="text-sm text-gray-300">Auto-scroll</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex space-x-2">
+            <button
+              onClick={downloadLogs}
+              className="bg-[var(--color-success)] hover:opacity-90 text-[var(--color-text)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm border border-transparent hover:border-[var(--color-success-dark)]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Download Logs</span>
+            </button>
+            <button
+              onClick={clearLogs}
+              className="bg-[var(--color-error)] hover:opacity-90 text-[var(--color-background)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm border border-transparent hover:border-[var(--color-error-dark)]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Clear Logs</span>
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center text-gray-400 py-12">
+            <svg className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <p>Loading server logs...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center text-red-400 py-8">
+            <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-lg font-semibold mb-2">Error Loading Logs</h3>
+            <p className="text-sm mb-4">{error}</p>
+            <button
+              onClick={loadLogs}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          /* Logs Display */
+          <div className="bg-[var(--color-background-secondary)] rounded-lg border border-[var(--color-border)]">
+            <div className="p-4 border-b border-[var(--color-border)]">
+              <h3 className="text-white font-medium">
+                Server Logs
+                {filteredLogs.length !== logs.length && (
+                  <span className="text-gray-400 text-sm ml-2">
+                    (filtered)
+                  </span>
+                )}
+              </h3>
+            </div>
+            <div className="p-4 max-h-96 overflow-y-auto font-mono text-sm bg-[var(--color-background-tertiary)]">
+              {filteredLogs.length === 0 ? (
+                <div className="text-center text-gray-400 py-8">
+                  {logs.length === 0 ? (
+                    <>
+                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p>No logs available</p>
+                      <p className="text-xs text-gray-500 mt-2">Server logs will appear here when they become available</p>
+                    </>
+                  ) : (
+                    <p>No logs match your search criteria</p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {filteredLogs.map((line, index) => (
+                    <div
+                      key={index}
+                      className="mb-1 hover:bg-gray-800 px-2 py-1 rounded text-gray-300"
+                      dangerouslySetInnerHTML={{ __html: ansiToHtml(line) }}
+                    />
+                  ))}
+                  <div ref={logsEndRef} />
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Information Panel */}
+        <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-500/30">
+          <h3 className="text-lg font-medium text-white mb-2">About Server Logs</h3>
+          <p className="text-gray-400 text-sm">
+            Server logs capture all system activity including requests, errors, warnings, and debug information.
+            Color codes are preserved for better readability. Use filters to focus on specific types of logs or search by content.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4183,14 +4823,14 @@ function ModerationTab({
   const handleResolveReport = (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
     clearMessageSelection();
     showToast(`Report ${action === 'delete' ? 'deleted message' :
-                      action === 'warn' ? 'sent warning' :
-                      action === 'ban' ? 'banned user' : 'dismissed'} successfully!`, 'success');
+      action === 'warn' ? 'sent warning' :
+        action === 'ban' ? 'banned user' : 'dismissed'} successfully!`, 'success');
   };
 
   const handleUserAction = (userId: string, action: 'warn' | 'ban' | 'timeout' | 'clear') => {
     showToast(`User ${action === 'warn' ? 'warned' :
-                      action === 'ban' ? 'banned' :
-                      action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`, 'success');
+      action === 'ban' ? 'banned' :
+        action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`, 'success');
   };
 
   const handleOpenUserProfile = (report: any, userType: 'sender' | 'reporter', event: React.MouseEvent) => {
@@ -4237,31 +4877,28 @@ function ModerationTab({
         <div className="flex items-center space-x-4 mb-6">
           <button
             onClick={() => setActiveSubTab('reports')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeSubTab === 'reports'
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'reports'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Reports ({mockReportedMessages.filter(r => r.status === 'pending').length})
           </button>
           <button
             onClick={() => setActiveSubTab('users')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeSubTab === 'users'
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'users'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Reported Users
           </button>
           <button
             onClick={() => setActiveSubTab('messages')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeSubTab === 'messages'
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'messages'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-400 hover:text-white'
-            }`}
+              }`}
           >
             Message Queue
           </button>
@@ -4312,10 +4949,9 @@ function ModerationTab({
                               {report.reportedBy}
                             </span>
                           </div>
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            report.status === 'pending' ? 'bg-yellow-600 text-white' :
-                            'bg-green-600 text-white'
-                          }`}>
+                          <span className={`px-2 py-1 rounded text-xs ${report.status === 'pending' ? 'bg-yellow-600 text-white' :
+                              'bg-green-600 text-white'
+                            }`}>
                             {report.status}
                           </span>
                         </div>

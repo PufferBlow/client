@@ -278,3 +278,43 @@ export const getServerOverview = async (authToken: string): Promise<ApiResponse<
     auth_token: authToken,
   });
 };
+
+// Server Logs interfaces
+export interface ServerLogEntry {
+  content: string;
+  raw: string;
+}
+
+export interface ServerLogsResponse {
+  status_code: number;
+  logs: ServerLogEntry[];
+  total_lines: number;
+  filtered: boolean;
+  log_file?: string;
+  message?: string;
+  available_log_files?: string[];
+  searched_paths?: string[];
+  note?: string;
+}
+
+export interface ServerLogsRequest {
+  lines?: number;
+  search?: string;
+  level?: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+}
+
+// Server Logs functions (Server Owner Only)
+export const getServerLogs = async (authToken: string, request: ServerLogsRequest = {}): Promise<ApiResponse<ServerLogsResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/logs', {
+    auth_token: authToken,
+    ...request,
+  });
+};
+
+export const clearServerLogs = async (authToken: string): Promise<ApiResponse<{ status_code: number; message: string; lines_cleared?: number }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/logs/clear', {
+    auth_token: authToken,
+  });
+};

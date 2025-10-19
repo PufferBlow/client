@@ -79,13 +79,22 @@ export function InviteModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white">Invite Friends</h2>
+    <div className="fixed inset-0 flex items-center justify-center z-50 animate-fade-in">
+      {/* Glassmorphism backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-md"
+        onClick={onClose}
+      ></div>
+
+      {/* Modal */}
+      <div className="relative glassmorphism animate-scale-in rounded-2xl p-8 w-full max-w-md mx-4 border border-white/20 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
+            Invite Friends
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            className="text-white/70 hover:text-white hover:bg-white/10 rounded-full p-2 transition-all duration-200 hover:scale-110"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -94,15 +103,17 @@ export function InviteModal({
         </div>
 
         <div className="mb-6">
-          <div className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
-            <img
-              src="/pufferblow-art-pixel-32x32.png"
-              alt="Server Icon"
-              className="w-10 h-10 rounded-full"
-            />
+          <div className="glassmorphism-light flex items-center space-x-3 p-4 rounded-xl border border-white/10 hover-lift">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center animate-float">
+              <img
+                src="/pufferblow-art-pixel-32x32.png"
+                alt="Server Icon"
+                className="w-8 h-8 rounded-full"
+              />
+            </div>
             <div>
-              <h3 className="text-white font-medium">{serverName}</h3>
-              <p className="text-gray-400 text-sm">Decentralized Server</p>
+              <h3 className="text-white font-semibold text-lg">{serverName}</h3>
+              <p className="text-white/70 text-sm">Decentralized Server</p>
             </div>
           </div>
         </div>
@@ -116,7 +127,7 @@ export function InviteModal({
 
               <div className="space-y-3">
                 <div>
-                  <label htmlFor="maxUses" className="block text-sm text-gray-300 mb-1">
+                  <label htmlFor="maxUses" className="block text-sm text-white/80 mb-2 font-medium">
                     Maximum Uses (optional)
                   </label>
                   <input
@@ -125,13 +136,13 @@ export function InviteModal({
                     min="1"
                     value={maxUses || ''}
                     onChange={(e) => setMaxUses(e.target.value ? parseInt(e.target.value) : undefined)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="glassmorphism-light w-full px-4 py-3 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus-glow focus:border-white/40 hover:border-white/30 transition-all duration-200"
                     placeholder="Unlimited"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="expiresIn" className="block text-sm text-gray-300 mb-1">
+                  <label htmlFor="expiresIn" className="block text-sm text-white/80 mb-2 font-medium">
                     Expires In
                   </label>
                   <select
@@ -141,14 +152,14 @@ export function InviteModal({
                       setExpiresIn(e.target.value);
                       setIsPermanent(e.target.value === 'never');
                     }}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="glassmorphism-light w-full px-4 py-3 border border-white/20 rounded-xl text-white focus:outline-none focus-glow focus:border-white/40 hover:border-white/30 transition-all duration-200 appearance-none bg-transparent"
                   >
-                    <option value="never">Never</option>
-                    <option value="30min">30 minutes</option>
-                    <option value="1hour">1 hour</option>
-                    <option value="6hours">6 hours</option>
-                    <option value="1day">1 day</option>
-                    <option value="7days">7 days</option>
+                    <option value="never" className="bg-gray-700">Never</option>
+                    <option value="30min" className="bg-gray-700">30 minutes</option>
+                    <option value="1hour" className="bg-gray-700">1 hour</option>
+                    <option value="6hours" className="bg-gray-700">6 hours</option>
+                    <option value="1day" className="bg-gray-700">1 day</option>
+                    <option value="7days" className="bg-gray-700">7 days</option>
                   </select>
                 </div>
               </div>
@@ -157,52 +168,59 @@ export function InviteModal({
             <button
               onClick={handleGenerateInvite}
               disabled={isGenerating}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center"
+              className="w-full glassmorphism-light border border-white/20 hover:border-white/40 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-semibold transition-all duration-200 hover:scale-105 hover-lift flex items-center justify-center shadow-lg"
             >
               {isGenerating ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Generating...
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-3"></div>
+                  <span className="animate-pulse">Generating...</span>
                 </>
               ) : (
-                'Generate Invite Link'
+                <>
+                  <span>✨ Generate Invite Link</span>
+                </>
               )}
             </button>
           </div>
         ) : (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Invite Link
+            <div className="animate-bounce-in">
+              <label className="block text-lg font-semibold text-white mb-3 bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                🎉 Invite Link Generated!
               </label>
               <div className="flex">
                 <input
                   type="text"
                   value={`https://pufferblow.app/invite/${inviteCode}`}
                   readOnly
-                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-l-md text-white focus:outline-none"
+                  className="glassmorphism-light flex-1 px-4 py-3 border border-white/20 rounded-l-xl text-white focus:outline-none focus-glow focus:border-white/40 transition-all duration-200"
                 />
                 <button
                   onClick={handleCopyInvite}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-r-md font-medium transition-colors"
+                  className="glassmorphism-light px-6 py-3 border border-white/20 hover:border-white/40 text-white rounded-r-xl font-semibold transition-all duration-200 hover:scale-105 hover-lift flex items-center"
                 >
+                  <span className="mr-2">📋</span>
                   Copy
                 </button>
               </div>
             </div>
 
-            <div className="text-sm text-gray-400">
-              <p>Share this link with friends to invite them to {serverName}!</p>
-              {maxUses && <p className="mt-1">• Can be used {maxUses} time{maxUses === 1 ? '' : 's'}</p>}
-              {!isPermanent && expiresIn !== 'never' && (
-                <p className="mt-1">• Expires in {expiresIn.replace(/(\d+)/, '$1 ').trim()}</p>
-              )}
+            <div className="glassmorphism-light p-4 rounded-xl border border-white/20 bg-green-500/10">
+              <p className="text-white/90 font-medium mb-2">📢 Share this link with friends!</p>
+              <div className="text-sm text-white/70 space-y-1">
+                {maxUses && <p className="flex items-center"><span className="mr-2">🔢</span> Can be used {maxUses} time{maxUses === 1 ? '' : 's'}</p>}
+                {!isPermanent && expiresIn !== 'never' && (
+                  <p className="flex items-center"><span className="mr-2">⏰</span> Expires in {expiresIn.replace(/(\d+)/, '$1 ').trim()}</p>
+                )}
+                {isPermanent && <p className="flex items-center"><span className="mr-2">♾️</span> Never expires</p>}
+              </div>
             </div>
 
             <button
               onClick={() => setInviteCode(null)}
-              className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md font-medium transition-colors"
+              className="w-full glassmorphism-light border border-white/20 hover:border-white/40 text-white px-6 py-4 rounded-xl font-semibold transition-all duration-200 hover:scale-105 hover-lift flex items-center justify-center shadow-lg"
             >
+              <span className="mr-2">🔄</span>
               Generate New Link
             </button>
           </div>
