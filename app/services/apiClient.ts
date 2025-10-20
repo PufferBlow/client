@@ -16,7 +16,8 @@ export class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isFormData: boolean = false
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
@@ -26,17 +27,39 @@ export class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers: {
-          ...(options.body && { 'Content-Type': 'application/json' }),
+          // Don't set Content-Type for FormData - let the browser set it with boundary
+          ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
           ...options.headers,
         },
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        logger.api.error(`Request failed: ${response.status} ${response.statusText}`, errorText);
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+        // Try to parse error response as JSON to get FastAPI detail messages
+        try {
+          const errorJson = await response.json();
+          if (errorJson.detail) {
+            errorMessage = errorJson.detail;
+          } else if (errorJson.error) {
+            errorMessage = errorJson.error;
+          }
+        } catch {
+          // If JSON parsing fails, use text or fallback
+          try {
+            const errorText = await response.text();
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch {
+            // Use default error message
+          }
+        }
+
+        logger.api.error(`Request failed: ${response.status} ${response.statusText}`, errorMessage);
         return {
           success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
+          error: errorMessage,
         };
       }
 
@@ -77,14 +100,23 @@ export class ApiClient {
   }
 
   async post<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    const isFormData = body instanceof FormData;
     return this.request<T>(endpoint, {
       method: 'POST',
+      body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+      headers,
+    }, isFormData);
+  }
+
+  async put<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
       headers,
     });
   }
 
-  async put<T>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
+  async delete<T>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
     if (params) {
       const url = new URL(`http://dummy${endpoint}`);
@@ -94,19 +126,84 @@ export class ApiClient {
       fullEndpoint = url.pathname + url.search;
     }
     return this.request<T>(fullEndpoint, {
-      method: 'PUT',
-    });
-  }
-
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
       method: 'DELETE',
     });
   }
 }
 
-export const createApiClient = (): ApiClient => {
-  const hostPort = getHostPort() || 'localhost:7575';
-  const baseUrl = `http://${hostPort}`;
+export const createApiClient = (hostPort?: string): ApiClient => {
+  let selectedHostPort = hostPort || getHostPort() || 'localhost:7575';
+
+  // If no port is specified, default to 7575
+  if (selectedHostPort && !selectedHostPort.includes(':')) {
+    selectedHostPort = `${selectedHostPort}:7575`;
+  }
+
+  const baseUrl = `http://${selectedHostPort}`;
   return new ApiClient(baseUrl);
+};
+
+// Utility function to convert relative CDN URLs to full API URLs
+export const convertToFullCdnUrl = (cdnUrl: string): string => {
+  if (cdnUrl.startsWith('http://') || cdnUrl.startsWith('https://')) {
+    // Already a full URL, return as-is
+    return cdnUrl;
+  }
+
+  // If it's a relative CDN URL starting with /cdn, convert it to full API URL
+  if (cdnUrl.startsWith('/cdn')) {
+    const hostPort = getHostPort() || 'localhost:7575';
+    const baseUrl = `http://${hostPort}`;
+    return `${baseUrl}${cdnUrl}`;
+  }
+
+  // Otherwise return as-is (might be unrelated URL)
+  return cdnUrl;
+};
+
+// Blocked IPs API service functions
+export interface BlockedIP {
+  ip: string;
+  reason: string;
+  blocked_at: string;
+}
+
+export interface BlockIPRequest {
+  auth_token: string;
+  ip: string;
+  reason: string;
+}
+
+export interface UnblockIPRequest {
+  auth_token: string;
+  ip: string;
+}
+
+export interface ListBlockedIPsResponse {
+  blocked_ips: BlockedIP[];
+}
+
+// Blocked IPs API service functions
+export const listBlockedIPs = async (authToken: string): Promise<ApiResponse<ListBlockedIPsResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.post<ListBlockedIPsResponse>('/api/v1/blocked-ips/list', {
+    auth_token: authToken
+  });
+};
+
+export const blockIP = async (authToken: string, ip: string, reason: string): Promise<ApiResponse<{ message: string; reason: string }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post<{ message: string; reason: string }>('/api/v1/blocked-ips/block', {
+    auth_token: authToken,
+    ip,
+    reason
+  });
+};
+
+export const unblockIP = async (authToken: string, ip: string): Promise<ApiResponse<{ message: string }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post<{ message: string }>('/api/v1/blocked-ips/unblock', {
+    auth_token: authToken,
+    ip
+  });
 };

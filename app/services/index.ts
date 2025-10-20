@@ -16,51 +16,81 @@ export type {
   UserProfile
 } from './user';
 
-// Channel services
+// Channel services (enhanced with all API reference features)
 export {
   getChannels,
   listChannels,
   createChannel,
   updateChannel,
-  deleteChannel
+  deleteChannel,
+  loadMessages,
+  sendMessage,
+  addUserToChannel,
+  removeUserFromChannel,
+  deleteMessage,
+  markMessageAsRead
 } from './channel';
 export type {
   CreateChannelRequest
 } from './channel';
 
-// Message services
+// CDN services (Server Owner only)
 export {
-  getMessages,
-  sendMessage,
-  updateMessage,
-  deleteMessage,
-  addReaction,
-  removeReaction,
-  searchMessages
-} from './message';
+  listCDNFiles,
+  deleteCDNFile,
+  getCDNFileInfo,
+  cleanupOrphanedFiles
+} from './cdn';
 export type {
-  Attachment,
-  Reaction,
-  SendMessageRequest,
-  SearchResult
-} from './message';
+  CDNFile,
+  CDNFileInfo
+} from './cdn';
 
-// Server services
+// Security services (Server Owner only)
 export {
-  getServers,
-  getServer,
-  createServer,
-  updateServer,
-  deleteServer,
-  joinServer,
-  leaveServer,
-  getServerInvites,
-  createInvite,
-  deleteInvite
-} from './server';
+  listBlockedIPs,
+  blockIP,
+  unblockIP
+} from './security';
 export type {
-  Server,
-  CreateServerRequest,
-  Invite,
-  CreateInviteRequest
-} from './server';
+  BlockedIP,
+  BlockIPRequest
+} from './security';
+
+// Background Tasks services (Server Owner only)
+export {
+  getBackgroundTaskStatuses,
+  runBackgroundTask
+} from './backgroundTasks';
+export type {
+  BackgroundTask
+} from './backgroundTasks';
+
+// System Statistics & Charts
+export {
+  getServerStats,
+  getLatestRelease,
+  getUserRegistrationsChart,
+  getMessageActivityChart,
+  getOnlineUsersChart,
+  getChannelCreationChart,
+  getUserStatusChart
+} from './system';
+export type {
+  ServerStats,
+  GithubRelease,
+  ChartData,
+  Period
+} from './system';
+
+// WebSocket Real-time Messaging
+export {
+  GlobalWebSocket,
+  createGlobalWebSocket,
+  createChannelWebSocket,
+  getHostPortForWebSocket
+} from './websocket';
+export type {
+  WebSocketMessage,
+  WebSocketCallbacks
+} from './websocket';

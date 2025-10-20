@@ -10,12 +10,12 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const url = new URL(request.url);
-  const username = url.searchParams.get("username");
-  const password = url.searchParams.get("password");
-  const confirmPassword = url.searchParams.get("confirmPassword");
-  const hostPort = url.searchParams.get("hostPort");
-  const rememberMe = url.searchParams.get("remember-me") === "on";
+  const formData = await request.formData();
+  const username = formData.get("username") as string;
+  const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+  const hostPort = formData.get("hostPort") as string;
+  const rememberMe = formData.get("remember-me") === "on";
 
   if (!username || !password || !confirmPassword || !hostPort) {
     return { error: "All fields are required" };
@@ -29,30 +29,26 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Password must be at least 8 characters long" };
   }
 
-  // Validate host:port format
-  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]):(\d+)$/;
+  // Validate host:port format - support both development (host:port) and production (domain) formats
+  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b)(?::(\d+))?$/;
   if (!hostPortRegex.test(hostPort)) {
-    return { error: "Invalid host:port format. Please use format like '127.0.0.1:7575' or 'localhost:7575'" };
+    return { error: "Invalid server format. For development use '127.0.0.1:7575' or 'localhost:7575'. For production use 'api.example.com'" };
   }
 
   // Additional validation: try to create a URL to check if it's a valid format
   try {
     const testUrl = new URL(`http://${hostPort}`);
-    if (!testUrl.hostname || !testUrl.port) {
-      throw new Error('Invalid host or port');
+    if (!testUrl.hostname) {
+      throw new Error('Invalid hostname');
     }
   } catch (error) {
-    return { error: "Invalid host:port format. Please ensure the host and port are valid." };
+    return { error: "Invalid server format. Please ensure the server address is valid." };
   }
 
   const response = await signup(hostPort, { username, password });
 
   if (!response.success) {
-    // Check for specific error message from server
-    const errorData = response.data as any;
-    if (errorData?.error) {
-      return { error: errorData.error };
-    }
+    console.error('❌ Signup failed:', response.error);
     return { error: response.error || "Signup failed" };
   }
 
@@ -68,12 +64,12 @@ export async function action({ request }: Route.ActionArgs) {
     if (rememberMe) {
       // Store both host:port and token in cookies for longer persistence
       const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-      response.headers.append("Set-Cookie", `authToken=${token}; path=/; max-age=${maxAge}`);
-      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
+      response.headers.append("Set-Cookie", `auth_token=${token}; path=/; max-age=${maxAge}`);
+      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
     } else {
       // Store both in session cookies (expire when browser closes)
-      response.headers.append("Set-Cookie", `authToken=${token}; path=/`);
-      response.headers.append("Set-Cookie", `serverHostPort=${encodeURIComponent(hostPort)}; path=/`);
+      response.headers.append("Set-Cookie", `auth_token=${token}; path=/`);
+      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/`);
     }
 
     console.log('Tokens and host:port saved to cookies via response headers');
@@ -165,7 +161,7 @@ export default function Signup() {
                 type="text"
                 required
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="127.0.0.1:7575"
+                placeholder="127.0.0.1:7575, localhost:7575, or api.example.com"
               />
             </div>
 

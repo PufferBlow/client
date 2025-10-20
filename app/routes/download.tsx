@@ -11,6 +11,22 @@ export function meta({}: any) {
 export default function Download() {
   const [detectedPlatform, setDetectedPlatform] = useState<string>('unknown');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Check if user is authenticated by looking for auth cookie
+    const checkAuth = () => {
+    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key.trim()] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    return !!(cookies.auth_token && cookies.auth_token.trim() !== '');
+    };
+
+    setIsAuthenticated(checkAuth());
+  }, []);
 
   useEffect(() => {
     // Detect platform from user agent
@@ -18,8 +34,6 @@ export default function Download() {
 
     if (userAgent.includes('win')) {
       setDetectedPlatform('windows');
-    } else if (userAgent.includes('mac') || userAgent.includes('darwin')) {
-      setDetectedPlatform('mac');
     } else if (userAgent.includes('linux')) {
       setDetectedPlatform('linux');
     } else {
@@ -30,17 +44,14 @@ export default function Download() {
   }, []);
 
   const downloadLinks = {
-    windows: "https://pufferblow-desktop.up.railway.app/download/windows",
-    mac: "https://pufferblow-desktop.up.railway.app/download/mac",
-    linux: "https://pufferblow-desktop.up.railway.app/download/linux"
+    windows: "https://github.com/pufferblow/pufferblow-desktop/releases/latest/download/pufferblow-desktop-windows.exe",
+    linux: "https://github.com/pufferblow/pufferblow-desktop/releases/latest/download/pufferblow-desktop-linux.AppImage"
   };
 
   const getDownloadText = (platform: string) => {
     switch (platform) {
       case 'windows':
         return 'Download for Windows';
-      case 'mac':
-        return 'Download for macOS';
       case 'linux':
         return 'Download for Linux';
       default:
@@ -52,25 +63,19 @@ export default function Download() {
     switch (platform) {
       case 'windows':
         return (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2-2v14a2 2 0 002 2z" />
-          </svg>
-        );
-      case 'mac':
-        return (
-          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+          <svg className="w-6 h-6 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         );
       case 'linux':
         return (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H6a2 2 0 01-2-2V7a2 2 0 012-2h1m6 0v4m-5 4h10M7 16.5A2.5 2.5 0 019.5 19h5a2.5 2.5 0 002.5-2.5v-9A2.5 2.5 0 0014.5 5h-5A2.5 2.5 0 007 7.5" />
           </svg>
         );
       default:
         return (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         );
@@ -79,40 +84,55 @@ export default function Download() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)]"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Navigation */}
-      <nav className="bg-[var(--color-surface)] backdrop-blur-md border-b border-[var(--color-border)] sticky top-0 z-50">
+    <div className="min-h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)]">
+      {/* Navigation - Synced with Home Page */}
+      <nav className="bg-gradient-to-r from-[var(--color-surface)]/95 to-[var(--color-background-secondary)]/95 backdrop-blur-xl border-b border-[var(--color-border)] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                <img
-                  src="/pufferblow-art-pixel-32x32.png"
-                  alt="Pufferblow"
-                  className="w-6 h-6"
-                />
-              </div>
-              <span className="text-2xl font-bold text-[var(--color-text)]">Pufferblow</span>
-            </Link>
-            <div className="flex items-center space-x-4">
+          <div className="flex justify-between items-center h-20">
+            <div className="flex items-center">
               <Link
-                to="/signup"
-                className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                to="/"
+                className="flex flex-col cursor-pointer group focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)] rounded-lg p-2 -m-2"
               >
-                Get Started
+                <h1 className="text-4xl font-black text-[var(--color-text)] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-200">
+                  Pufferblow
+                </h1>
+                <span className="text-base text-[var(--color-text-secondary)] font-semibold group-hover:text-[var(--color-text)] transition-colors duration-200">Decentralized Messaging</span>
               </Link>
+            </div>
+
+            <div className="flex items-center space-x-6">
+              {isAuthenticated ? (
+                <Link
+                  to="/dashboard"
+                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl flex items-center gap-3"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <span>Dashboard</span>
+                </Link>
+              ) : (
+                <Link
+                  to="/signup"
+                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl"
+                >
+                  Get Started Free
+                </Link>
+              )}
+
               <a
                 href="https://github.com/pufferblow/pufferblow"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-2 rounded-md transition-colors"
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-3 rounded-xl transition-all duration-200 hover:bg-[var(--color-surface-secondary)]"
                 title="View source code on GitHub"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -124,224 +144,327 @@ export default function Download() {
         </div>
       </nav>
 
-      {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg">
-            <img
-              src="/pufferblow-art-pixel-64x64.png"
-              alt="Pufferblow Desktop"
-              className="w-12 h-12"
-            />
-          </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-[var(--color-text)] mb-6">
-            {detectedPlatform === 'unknown' ? 'Download' : 'Recommended for Your'} Platform
-          </h1>
-          <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-            Get the full Pufferblow experience with our native desktop app.
-            {detectedPlatform !== 'unknown' && ` We've detected you're on ${
-              detectedPlatform === 'mac' ? 'macOS' :
-              detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1)
-            }, so here's the perfect download for you!`}
-          </p>
+      {/* Hero Section - Modern Synced Design */}
+      <section className="relative overflow-hidden py-32 lg:py-40">
+        <div className="absolute inset-0 opacity-5">
+          <div className="w-full h-full bg-gradient-to-br from-[var(--color-primary)] via-transparent to-[var(--color-accent)]"></div>
         </div>
 
-        {/* Platform Detection & Download */}
-        <div className="bg-[var(--color-surface)] rounded-2xl p-8 shadow-xl border border-[var(--color-border)] mb-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="text-center">
-            <div className="flex items-center justify-center mb-4">
-              {getPlatformIcon(detectedPlatform)}
-              <span className="ml-3 text-lg font-medium text-[var(--color-text)]">
-                {detectedPlatform === 'unknown' ? 'unknown platform' :
-                 detectedPlatform === 'mac' ? 'macOS detected' :
-                 `${detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1)} detected`}
-              </span>
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--color-surface)]/50 backdrop-blur-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm font-medium mb-8">
+              <svg className="w-4 h-4 mr-2 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Desktop App Download
             </div>
 
-            <a
-              href={downloadLinks[detectedPlatform as keyof typeof downloadLinks] || "https://pufferblow-desktop.up.railway.app/download"}
-              className="inline-flex items-center bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-            >
-              {getPlatformIcon(detectedPlatform)}
-              <span className="ml-3">{getDownloadText(detectedPlatform)}</span>
-            </a>
+            <h1 className="text-6xl md:text-8xl font-black text-[var(--color-text)] mb-8 leading-none">
+              Desktop Experience
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] animate-pulse">
+                Unleashed
+              </span>
+              <span className="block text-4xl md:text-5xl font-bold text-[var(--color-text-secondary)] font-light">
+                Native Performance
+              </span>
+            </h1>
 
-            <p className="text-sm text-[var(--color-text-secondary)] mt-4">
-              {detectedPlatform === 'unknown'
-                ? 'Couldn\'t detect your platform? You can choose from all available downloads below.'
-                : 'Download should start automatically in your browser.'
-              }
+            <p className="text-2xl md:text-3xl text-[var(--color-text-secondary)] mb-12 max-w-4xl mx-auto leading-relaxed font-light">
+              Experience Pufferblow with blazing-fast performance, offline syncing,
+              and battery-efficient notifications.
+              <span className="text-[var(--color-primary)] font-semibold">Your desktop deserves the best.</span>
             </p>
+
+            {/* Platform Detection & Download - Enhanced */}
+            <div className="bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-3xl p-8 shadow-2xl border border-[var(--color-border)] backdrop-blur-sm mb-16">
+              <div className="text-center">
+                <div className="flex items-center justify-center mb-6">
+                  {getPlatformIcon(detectedPlatform)}
+                  <span className="ml-3 text-xl font-bold text-[var(--color-text)]">
+                    {detectedPlatform === 'unknown' ? '🖥️ AI-Powered Detection' :
+                     detectedPlatform === 'windows' ? '🪟 Windows Detected' :
+                     `🐧 Linux Detected`}
+                  </span>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-[var(--color-text-secondary)] text-lg">
+                    {detectedPlatform === 'unknown'
+                      ? 'Select your platform manually from the options below.'
+                      : `Perfect! Here's your customized download for ${detectedPlatform === 'mac' ? 'macOS' : detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1)}.`}
+                  </p>
+                </div>
+
+                <a
+                  href={downloadLinks[detectedPlatform as keyof typeof downloadLinks] || "https://pufferblow-desktop.up.railway.app/download"}
+                  className="group inline-flex items-center bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] hover:from-[var(--color-primary-hover)] hover:via-[#6e9cf1] hover:to-[var(--color-secondary-hover)] text-white px-12 py-6 rounded-2xl text-2xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.3)]"
+                >
+                  <svg className="w-8 h-8 mr-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>{getDownloadText(detectedPlatform)}</span>
+                  <svg className="w-8 h-8 ml-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </a>
+
+                <p className="text-[var(--color-text-muted)] text-sm mt-4 flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {detectedPlatform === 'unknown'
+                    ? 'Auto-detection failed • Manual selection required'
+                    : 'Download starts instantly • Safe & secure'}
+                </p>
+              </div>
+            </div>
+
+            {/* Trust Indicators */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-8 text-[var(--color-text-secondary)] text-sm">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Up to 10x faster than web
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Background notifications
+              </div>
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Offline message queuing
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* All Download Options */}
-        <div className="bg-[var(--color-surface)] rounded-2xl p-8 shadow-xl border border-[var(--color-border)]">
-          <h3 className="text-2xl font-bold text-[var(--color-text)] text-center mb-8">
-            All Download Options
-          </h3>
+        {/* Background Animations */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
+          <div className="absolute top-20 -left-40 w-[600px] h-[600px] bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-accent)]/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 -right-40 w-[600px] h-[600px] bg-gradient-to-r from-[var(--color-secondary)]/10 to-[var(--color-success)]/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-[var(--color-info)]/5 to-[var(--color-warning)]/5 rounded-full blur-3xl animate-pulse" style={{animationDelay: '4s'}}></div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Windows */}
-            <div className="text-center p-6 bg-[var(--color-background-secondary)] rounded-xl border border-[var(--color-border)]">
-              <div className="flex justify-center items-center w-12 h-12 bg-[#007ACC] rounded-lg mx-auto mb-4">
+        <div className="absolute top-32 left-16 w-3 h-3 bg-[var(--color-primary)] rounded-full opacity-60 animate-bounce" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-48 right-24 w-2 h-2 bg-[var(--color-accent)] rounded-full opacity-60 animate-bounce" style={{animationDelay: '3s'}}></div>
+        <div className="absolute bottom-32 left-1/4 w-4 h-4 bg-[var(--color-secondary)] rounded-full opacity-60 animate-bounce" style={{animationDelay: '5s'}}></div>
+      </section>
+
+      {/* All Platforms Section - Enhanced */}
+      <section className="py-24 bg-[var(--color-background-secondary)] backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-[var(--color-text)] mb-6">
+              Choose Your Platform
+            </h2>
+            <p className="text-xl text-[var(--color-text-secondary)] max-w-2xl mx-auto">
+              Pufferblow desktop apps are available for all major operating systems
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Windows Card */}
+            <div className="group relative bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-3xl p-8 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.15)] border border-[var(--color-border)] backdrop-blur-sm transition-all duration-300 transform hover:-translate-y-2">
+              <div className="absolute top-6 right-6 w-12 h-12 bg-[#0078D4] rounded-2xl flex items-center justify-center shadow-lg">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h4 className="text-lg font-semibold text-[var(--color-text)] mb-2">
-                Windows
-              </h4>
-              <p className="text-[var(--color-text-secondary)] text-sm mb-4">
-                .exe installer for Windows 10/11
-              </p>
-              <a
-                href="https://pufferblow-desktop.up.railway.app/download/windows"
-                className="inline-block bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
-              >
-                Download for Windows
-              </a>
-            </div>
 
-            {/* macOS */}
-            <div className="text-center p-6 bg-[var(--color-background-secondary)] rounded-xl border border-[var(--color-border)]">
-              <div className="flex justify-center items-center w-12 h-12 bg-black rounded-lg mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                </svg>
+              <div className="text-center mb-8 mt-8">
+                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-gray-300 overflow-hidden">
+                  <img src="/os-logos/windows-logo.svg" alt="Windows Logo" className="w-full h-full object-contain p-2" />
+                </div>
+                <h3 className="text-3xl font-bold text-[var(--color-text)] mb-4">
+                  Windows
+                </h3>
+                <p className="text-[var(--color-text-secondary)] text-lg leading-relaxed">
+                  Native .exe installer for Windows 10/11 with auto-updater and system integration.
+                </p>
               </div>
-              <h4 className="text-lg font-semibold text-[var(--color-text)] mb-2">
-                macOS
-              </h4>
-              <p className="text-[var(--color-text-secondary)] text-sm mb-4">
-                .dmg file for Intel and Apple Silicon
-              </p>
+
+              <div className="flex items-center justify-between text-sm text-[var(--color-text)] mb-6">
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>System Tray</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Quick Launch</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Auto-Start</span>
+                </div>
+              </div>
+
               <a
-                href="https://pufferblow-desktop.up.railway.app/download/mac"
-                className="inline-block bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
+                href="https://github.com/pufferblow/pufferblow-desktop/releases/latest/download/pufferblow-desktop-windows.exe"
+                className="w-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
-                Download for macOS
+                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Windows .exe
               </a>
+
+              <div className="mt-4 text-center">
+                <span className="text-xs text-[var(--color-text)]">Version 1.0.0 • 24MB installer</span>
+              </div>
             </div>
 
-            {/* Linux */}
-            <div className="text-center p-6 bg-[var(--color-background-secondary)] rounded-xl border border-[var(--color-border)]">
-              <div className="flex justify-center items-center w-12 h-12 bg-[#FCC624] rounded-lg mx-auto mb-4">
+            {/* Linux Card */}
+            <div className="group relative bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-3xl p-8 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.15)] border border-[var(--color-border)] backdrop-blur-sm transition-all duration-300 transform hover:-translate-y-2">
+              <div className="absolute top-6 right-6 w-12 h-12 bg-[#FCC624] rounded-2xl flex items-center justify-center shadow-lg">
                 <svg className="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H6a2 2 0 01-2-2V7a2 2 0 012-2h1m6 0v4m-5 4h10M7 16.5A2.5 2.5 0 019.5 19h5a2.5 2.5 0 002.5-2.5v-9A2.5 2.5 0 0014.5 5h-5A2.5 2.5 0 007 7.5" />
                 </svg>
               </div>
-              <h4 className="text-lg font-semibold text-[var(--color-text)] mb-2">
-                Linux
-              </h4>
-              <p className="text-[var(--color-text-secondary)] text-sm mb-4">
-                AppImage for all Linux distributions
-              </p>
+
+              <div className="text-center mb-8 mt-8">
+                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-gray-300 overflow-hidden">
+                  <img src="/os-logos/linux-logo.svg" alt="Linux Logo" className="w-full h-full object-contain p-2" />
+                </div>
+                <h3 className="text-3xl font-bold text-[var(--color-text)] mb-4">
+                  Linux
+                </h3>
+                <p className="text-[var(--color-text-secondary)] text-lg leading-relaxed">
+                  Portable AppImage format that works on any Linux distribution without installation.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-sm text-[var(--color-text)] mb-6">
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>No Root</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Portable</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Cross Distro</span>
+                </div>
+              </div>
+
               <a
-                href="https://pufferblow-desktop.up.railway.app/download/linux"
-                className="inline-block bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
+                href="https://github.com/pufferblow/pufferblow-desktop/releases/latest/download/pufferblow-desktop-linux.AppImage"
+                className="w-full flex items-center justify-center bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-black px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
-                Download for Linux
+                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H6a2 2 0 01-2-2V7a2 2 0 012-2h1m6 0v4m-5 4h10M7 16.5A2.5 2.5 0 019.5 19h5a2.5 2.5 0 002.5-2.5v-9A2.5 2.5 0 0014.5 5h-5A2.5 2.5 0 007 7.5" />
+                </svg>
+                Download Linux AppImage
+              </a>
+
+              <div className="mt-4 text-center">
+                <span className="text-xs text-[var(--color-text)]">Version 1.0.0 • 35MB portable app</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section - Modern Call-to-Action */}
+      <section className="py-32 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
+        </div>
+
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 relative">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-black/10 backdrop-blur-sm border border-black/20 text-black text-sm font-medium mb-8">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            Ready to Get Started?
+          </div>
+
+          <h2 className="text-6xl md:text-7xl font-black text-black mb-8 leading-tight">
+            Join the Movement
+          </h2>
+
+          <p className="text-xl md:text-2xl text-black/80 mb-12 max-w-3xl mx-auto leading-relaxed">
+            Thousands of users are already experiencing decentralized messaging.
+            <span className="text-black font-semibold"> Be the next one to join the revolution.</span>
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-6 justify-center">
+            <Link
+              to="/signup"
+              className="bg-white text-[var(--color-primary)] hover:bg-gray-100 px-10 py-5 rounded-2xl text-2xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(0,0,0,0.25)] flex items-center gap-3 group"
+            >
+              <svg className="w-8 h-8 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Start Your Journey Now
+            </Link>
+
+            <Link
+              to="/"
+              className="border-3 border-white text-white hover:bg-white hover:text-[var(--color-primary)] px-10 py-5 rounded-2xl text-2xl font-bold transition-all duration-300 transform hover:scale-105 backdrop-blur-sm bg-white/10 hover:bg-white"
+            >
+              Return to Home
+            </Link>
+          </div>
+        </div>
+
+        {/* Footer Links */}
+        <div className="mt-16 text-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-8 text-white/80 text-sm">
+            <a href="#" className="hover:text-white transition-colors">Installation Guide</a>
+            <a href="#" className="hover:text-white transition-colors">System Requirements</a>
+            <a href="#" className="hover:text-white transition-colors">Release Notes</a>
+            <a href="#" className="hover:text-white transition-colors">Command Line</a>
+          </div>
+
+        </div>
+      </section>
+
+      {/* Footer - Minimal */}
+      <footer className="bg-[var(--color-surface)] text-[var(--color-text)] py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center space-x-3 mb-4 md:mb-0">
+              <span className="text-xl font-black text-[var(--color-text)] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] bg-clip-text text-transparent cursor-pointer">
+                Pufferblow
+              </span>
+            </div>
+            <div className="flex space-x-6">
+              <a href="#" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+                Privacy Policy
+              </a>
+              <a href="#" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+                Terms of Service
+              </a>
+              <a href="#" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">
+                GitHub
               </a>
             </div>
           </div>
-
-          {/* Additional Info */}
-          <div className="mt-12 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-            <div className="flex items-start space-x-3">
-              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <h4 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                  First Time Installing?
-                </h4>
-                <ul className="text-blue-800 dark:text-blue-200 space-y-1 text-sm">
-                  <li>• Make sure you have enough disk space (50MB free recommended)</li>
-                  <li>• The app will require internet access for communication features</li>
-                  <li>• On Windows, you may need to approve the app through Windows Defender</li>
-                  <li>• First launch may take a moment while the app initializes</li>
-                </ul>
-              </div>
-            </div>
+          <div className="mt-8 pt-8 border-t border-[var(--color-border)] text-center text-[var(--color-text-secondary)]">
+            <p>&copy; 2025 Pufferblow. Built for the decentralized future.</p>
           </div>
         </div>
-
-        {/* Features */}
-        <div className="mt-16">
-          <h2 className="text-3xl font-bold text-[var(--color-text)] text-center mb-12">
-            Why Download the Desktop App?
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-[var(--color-text)] mb-4">
-                Lightning Fast
-              </h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                Desktop app runs locally with native performance and instant access to your communities.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-success)] to-[var(--color-primary)] rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-[var(--color-text)] mb-4">
-                Always Available
-              </h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                Decentralized architecture ensures your communities stay accessible even during outages.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-[var(--color-text)] mb-4">
-                Secure & Private
-              </h3>
-              <p className="text-[var(--color-text-secondary)] leading-relaxed">
-                End-to-end encryption and decentralized storage keep your conversations safe and private.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-16 text-center">
-          <p className="text-[var(--color-text-secondary)] mb-4">
-            Having trouble? Check our installation guide or contact support.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/"
-              className="text-[var(--color-primary)] hover:text-[var(--color-accent)] font-medium transition-colors"
-            >
-              ← Back to Homepage
-            </Link>
-            <a
-              href="https://pufferblow.github.io/pufferblow/docs/installation"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[var(--color-primary)] hover:text-[var(--color-accent)] font-medium transition-colors"
-            >
-              📖 Installation Guide
-            </a>
-          </div>
-        </div>
-      </div>
+      </footer>
     </div>
   );
 }

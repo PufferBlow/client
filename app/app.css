@@ -7,34 +7,51 @@
 }
 
 :root {
-  /* Default light theme colors */
-  --color-background: #ffffff;
-  --color-background-secondary: #f8fafc;
-  --color-background-tertiary: #f1f5f9;
-  --color-surface: #ffffff;
-  --color-surface-secondary: #f8fafc;
-  --color-surface-tertiary: #f1f5f9;
-  --color-text: #1e293b;
-  --color-text-secondary: #475569;
-  --color-text-tertiary: #64748b;
-  --color-text-muted: #94a3b8;
-  --color-border: #e2e8f0;
-  --color-border-secondary: #cbd5e1;
-  --color-primary: #f59e0b;
-  --color-primary-hover: #d97706;
-  --color-secondary: #3b82f6;
-  --color-secondary-hover: #2563eb;
-  --color-accent: #8b5cf6;
-  --color-accent-hover: #7c3aed;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #3b82f6;
-  --color-hover: #f1f5f9;
-  --color-active: #e2e8f0;
-  --color-focus: #3b82f6;
-  --color-shadow: rgba(0, 0, 0, 0.1);
-  --color-shadow-lg: rgba(0, 0, 0, 0.15);
+  /* Nord theme colors */
+  --color-background: #2E3440;
+  --color-background-secondary: #3B4252;
+  --color-background-tertiary: #434C5E;
+  --color-surface: #3B4252;
+  --color-surface-secondary: #434C5E;
+  --color-surface-tertiary: #4C566A;
+  --color-text: #ECEFF4;
+  --color-text-secondary: #E5E9F0;
+  --color-text-tertiary: #D8DEE9;
+  --color-text-muted: #81A1C1;
+  --color-border: #4C566A;
+  --color-border-secondary: #434C5E;
+  --color-primary: #5E81AC;
+  --color-primary-hover: #81A1C1;
+  --color-secondary: #8FBCBB;
+  --color-secondary-hover: #88C0D0;
+  --color-accent: #81A1C1;
+  --color-accent-hover: #5E81AC;
+  --color-success: #A3BE8C;
+  --color-warning: #EBCB8B;
+  --color-error: #BF616A;
+  --color-info: #88C0D0;
+  --color-hover: #434C5E;
+  --color-active: #4C566A;
+  --color-focus: #5E81AC;
+  --color-shadow: rgba(0, 0, 0, 0.3);
+  --color-shadow-lg: rgba(0, 0, 0, 0.4);
+
+  /* Glassmorphism effects */
+  --glass-bg: rgba(59, 66, 82, 0.8);
+  --glass-bg-light: rgba(67, 76, 94, 0.7);
+  --glass-bg-dark: rgba(46, 52, 64, 0.9);
+  --glass-border: rgba(76, 86, 106, 0.3);
+  --glass-border-hover: rgba(129, 161, 193, 0.5);
+  --glass-backdrop-blur: blur(20px);
+  --glass-backdrop-blur-sm: blur(12px);
+
+  /* Animations */
+  --animation-duration-fast: 150ms;
+  --animation-duration-normal: 250ms;
+  --animation-duration-slow: 350ms;
+  --animation-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --animation-easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --animation-easing-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 html,
@@ -151,4 +168,243 @@ body {
 
 .emoji-picker-react .emoji-scroll-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgb(107, 114, 128) !important; /* gray-500 */
+}
+
+/* Glassmorphism utility classes */
+.glassmorphism {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop-blur);
+  -webkit-backdrop-filter: var(--glass-backdrop-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  transition: all var(--animation-duration-normal) var(--animation-easing);
+}
+
+.glassmorphism:hover {
+  background: var(--glass-bg-light);
+  border-color: var(--glass-border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.45);
+}
+
+.glassmorphism-light {
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-backdrop-blur-sm);
+  -webkit-backdrop-filter: var(--glass-backdrop-blur-sm);
+  border: 1px solid var(--glass-border);
+  transition: all var(--animation-duration-normal) var(--animation-easing);
+}
+
+.glassmorphism-dark {
+  background: var(--glass-bg-dark);
+  backdrop-filter: var(--glass-backdrop-blur);
+  -webkit-backdrop-filter: var(--glass-backdrop-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  transition: all var(--animation-duration-normal) var(--animation-easing);
+}
+
+/* Animation utilities */
+.animate-fade-in {
+  animation: fadeIn var(--animation-duration-normal) var(--animation-easing) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--animation-duration-normal) var(--animation-easing) forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft var(--animation-duration-normal) var(--animation-easing) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--animation-duration-normal) var(--animation-easing-bounce) forwards;
+}
+
+.animate-bounce-in {
+  animation: bounceIn var(--animation-duration-slow) var(--animation-easing-bounce) forwards;
+}
+
+.animate-elastic {
+  animation: elastic var(--animation-duration-slow) var(--animation-easing-elastic) forwards;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+/* Hover animations */
+.hover-lift {
+  transition: all var(--animation-duration-normal) var(--animation-easing);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.3);
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(94, 129, 172, 0.4), 0 0 40px rgba(94, 129, 172, 0.2);
+}
+
+.hover-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.hover-ripple::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transition: width 0.6s, height 0.6s;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.hover-ripple:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Keyframe animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  80% {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes elastic {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.04);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 10px rgba(94, 129, 172, 0.3);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(94, 129, 172, 0.6);
+  }
+}
+
+/* Smooth transitions for all interactive elements */
+button,
+input,
+textarea,
+select,
+[role="button"] {
+  transition: all var(--animation-duration-fast) var(--animation-easing);
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-secondary);
+}
+
+/* Focus styles */
+.focus-glow:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(94, 129, 172, 0.5);
 }
