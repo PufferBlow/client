@@ -405,6 +405,25 @@ export const getHostPortFromStorage = (): string | null => {
   return null;
 };
 
+// Utility function to convert relative URLs from server to full URLs
+export const createFullUrl = (relativeUrl: string | undefined | null): string | undefined => {
+  if (!relativeUrl) return undefined;
+
+  // If it's already a full URL (starts with http), return as-is
+  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
+    return relativeUrl;
+  }
+
+  // Get server host:port and prepend it to create full URL
+  const hostPort = getHostPortFromStorage();
+  if (!hostPort) return relativeUrl; // Fallback to relative URL if no host:port
+
+  // Ensure we don't double-slash
+  const cleanPath = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+
+  return `http://${hostPort}${cleanPath}`;
+};
+
 export const setHostPortToStorage = (hostPort: string, persistent: boolean = false): void => {
   if (typeof window === 'undefined') return;
   if (persistent) {
@@ -446,8 +465,12 @@ export const useCurrentUserProfile = () => {
       // Generate avatar URL using DiceBear Bottts Neutral style as fallback
       const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
 
+      // Create full URLs for avatar and banner from server-relative paths
+      const fullAvatarUrl = createFullUrl(userData.avatar_url);
+      const fullBannerUrl = createFullUrl(userData.banner_url);
+
       // Use avatar_url if available, otherwise generate one
-      const finalAvatarUrl = userData.avatar_url || avatarUrl;
+      const finalAvatarUrl = fullAvatarUrl || avatarUrl;
 
       // Parse roles from API response
       const userRoles = getUserRoles(userData.roles_ids);
@@ -458,8 +481,8 @@ export const useCurrentUserProfile = () => {
         user_id: userData.user_id,
         username: userData.username,
         about: userData.about,
-        avatar_url: userData.avatar_url,
-        banner_url: userData.banner_url,
+        avatar_url: fullAvatarUrl,
+        banner_url: fullBannerUrl,
         inbox_id: userData.inbox_id,
         origin_server: userData.origin_server,
         status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',

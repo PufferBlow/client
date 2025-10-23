@@ -1,4 +1,6 @@
 import type { Route } from "./+types/message";
+import { useEffect } from "react";
+import { Navigate } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -7,13 +9,14 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ params }: Route.LoaderArgs) {
+export default function MessagePage() {
   // This functionality is disabled since required API endpoints are not available
   // in the provided API reference
-  throw new Response("Message sharing feature is temporarily disabled - API endpoints not available", { status: 501 });
-}
 
-export default function MessagePage() {
-  // This component will never render due to the loader throwing
-  return null;
+  useEffect(() => {
+    alert("Message sharing feature is temporarily disabled - API endpoints not available");
+  }, []);
+
+  // Redirect to dashboard
+  return <Navigate to="/dashboard" replace />;
 }

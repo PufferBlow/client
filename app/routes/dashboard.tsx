@@ -1,5 +1,5 @@
 import type { Route } from "./+types/dashboard";
-import { Link, redirect } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { ServerCreationModal } from "../components/ServerCreationModal";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
@@ -57,33 +57,16 @@ export function meta({ }: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  // Check for authentication token in cookies
-  const cookieHeader = request.headers.get('cookie');
-  if (!cookieHeader) {
-    throw redirect('/login');
-  }
-
-  // Parse cookies manually
-  const cookies: Record<string, string> = {};
-  cookieHeader.split(';').forEach(cookie => {
-    const [key, value] = cookie.trim().split('=');
-    if (key && value) {
-      cookies[key] = decodeURIComponent(value);
-    }
-  });
-
-  const authToken = cookies.auth_token;
-
-  // Redirect to login if not authenticated
-  if (!authToken) {
-    throw redirect('/login');
-  }
-
-  return null;
-}
-
 export default function Dashboard() {
+  const navigate = useNavigate();
+
+  // Client-side authentication check
+  useEffect(() => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) {
+      navigate('/login');
+    }
+  }, [navigate]);
   // Toast hook
   const showToast = useToast();
 
@@ -603,7 +586,7 @@ export default function Dashboard() {
         </div>
 
         {/* Member List - Skeleton */}
-        <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] animate-pulse">
+        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] animate-pulse">
           <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
             <div className="h-4 bg-[var(--color-surface-secondary)] rounded w-20"></div>
           </div>

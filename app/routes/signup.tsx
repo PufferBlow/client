@@ -1,5 +1,6 @@
 import type { Route } from "./+types/signup";
-import { Link, redirect, useActionData } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { useState } from "react";
 import { signup } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
@@ -9,78 +10,97 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const username = formData.get("username") as string;
-  const password = formData.get("password") as string;
-  const confirmPassword = formData.get("confirmPassword") as string;
-  const hostPort = formData.get("hostPort") as string;
-  const rememberMe = formData.get("remember-me") === "on";
-
-  if (!username || !password || !confirmPassword || !hostPort) {
-    return { error: "All fields are required" };
-  }
-
-  if (password !== confirmPassword) {
-    return { error: "Passwords do not match" };
-  }
-
-  if (password.length < 8) {
-    return { error: "Password must be at least 8 characters long" };
-  }
-
-  // Validate host:port format - support both development (host:port) and production (domain) formats
-  const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b)(?::(\d+))?$/;
-  if (!hostPortRegex.test(hostPort)) {
-    return { error: "Invalid server format. For development use '127.0.0.1:7575' or 'localhost:7575'. For production use 'api.example.com'" };
-  }
-
-  // Additional validation: try to create a URL to check if it's a valid format
-  try {
-    const testUrl = new URL(`http://${hostPort}`);
-    if (!testUrl.hostname) {
-      throw new Error('Invalid hostname');
-    }
-  } catch (error) {
-    return { error: "Invalid server format. Please ensure the server address is valid." };
-  }
-
-  const response = await signup(hostPort, { username, password });
-
-  if (!response.success) {
-    console.error('❌ Signup failed:', response.error);
-    return { error: response.error || "Signup failed" };
-  }
-
-  // Handle server response format
-  const data = response.data as any;
-  const token = data?.auth_token;
-  const expireTime = data?.auth_token_expire_time;
-
-  if (token) {
-    // Create redirect response with cookies
-    const response = redirect("/dashboard");
-
-    if (rememberMe) {
-      // Store both host:port and token in cookies for longer persistence
-      const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-      response.headers.append("Set-Cookie", `auth_token=${token}; path=/; max-age=${maxAge}`);
-      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`);
-    } else {
-      // Store both in session cookies (expire when browser closes)
-      response.headers.append("Set-Cookie", `auth_token=${token}; path=/`);
-      response.headers.append("Set-Cookie", `host_port=${encodeURIComponent(hostPort)}; path=/`);
-    }
-
-    console.log('Tokens and host:port saved to cookies via response headers');
-    return response;
-  }
-
-  return { error: "Invalid response from server" };
-}
-
 export default function Signup() {
-  const actionData = useActionData<typeof action>();
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    const formData = new FormData(event.currentTarget);
+    const username = formData.get("username") as string;
+    const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
+    const hostPort = formData.get("hostPort") as string;
+    const rememberMe = formData.get("remember-me") === "on";
+
+    if (!username || !password || !confirmPassword || !hostPort) {
+      setError("All fields are required");
+      setIsLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long");
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate host:port format - support both development (host:port) and production (domain) formats
+    const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b)(?::(\d+))?$/;
+    if (!hostPortRegex.test(hostPort)) {
+      setError("Invalid server format. For development use '127.0.0.1:7575' or 'localhost:7575'. For production use 'api.example.com'");
+      setIsLoading(false);
+      return;
+    }
+
+    // Additional validation: try to create a URL to check if it's a valid format
+    try {
+      const testUrl = new URL(`http://${hostPort}`);
+      if (!testUrl.hostname) {
+        throw new Error('Invalid hostname');
+      }
+    } catch (error) {
+      setError("Invalid server format. Please ensure the server address is valid.");
+      setIsLoading(false);
+      return;
+    }
+
+    const response = await signup(hostPort, { username, password });
+
+    if (!response.success) {
+      console.error('❌ Signup failed:', response.error);
+      setError(response.error || "Signup failed");
+      setIsLoading(false);
+      return;
+    }
+
+    // Handle server response format
+    const data = response.data as any;
+    const token = data?.auth_token;
+    const expireTime = data?.auth_token_expire_time;
+
+    if (token) {
+      // Store in cookies
+      if (rememberMe) {
+        // Store both host:port and token in cookies for longer persistence
+        const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
+        document.cookie = `auth_token=${token}; path=/; max-age=${maxAge}`;
+        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`;
+      } else {
+        // Store both in session cookies (expire when browser closes)
+        document.cookie = `auth_token=${token}; path=/`;
+        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
+      }
+
+      console.log('Tokens and host:port saved to cookies via response headers');
+      navigate("/dashboard");
+    } else {
+      setError("Invalid response from server");
+    }
+
+    setIsLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
@@ -95,14 +115,14 @@ export default function Signup() {
             </p>
           </div>
 
-          {actionData?.error && (
+          {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {actionData.error}
+              {error}
             </div>
           )}
 
       {/* Signup Form */}
-          <form method="post" className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 Username

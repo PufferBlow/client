@@ -13,6 +13,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ToastProvider } from "./components/Toast";
+import { CustomTitleBar } from "./components/CustomTitleBar";
 import {
   QueryClient,
   QueryClientProvider,
@@ -56,7 +57,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <ToastProvider>
-              {children}
+              {/* Custom title bar for Electron desktop app */}
+              <CustomTitleBar />
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {children}
+              </div>
             </ToastProvider>
           </ThemeProvider>
         </QueryClientProvider>
@@ -68,12 +73,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // In Electron, skip the homepage and go directly to login
-  // Only check window.electronAPI on the client side
+  // Check if we're in Electron desktop app environment
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
-  if (isElectron) {
-    return <Navigate to="/login" replace />;
+
+  // In Electron, redirect root to login for first time users,
+  // but allow routing to work normally for all authenticated routes
+  if (isElectron && typeof window !== 'undefined') {
+    // Allow normal routing in Electron - authentication checks happen in individual components
+    return <Outlet />;
   }
+
   return <Outlet />;
 }
 
