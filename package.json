@@ -1,19 +1,19 @@
 {
+  "type": "module",
   "name": "pufferblow",
   "version": "1.0.0",
   "description": "PufferBlow Desktop App",
   "homepage": "./",
-  "main": "main.js",
+  "main": "main.cjs",
   "private": true,
-  "type": "module",
   "scripts": {
     "build": "react-router build",
-    "build:electron": "npm run build && electron-builder",
-    "build:electron:win": "npm run build && electron-builder --win",
-    "build:electron:linux": "npm run build && electron-builder --linux",
-    "build:electron:mac": "npm run build && electron-builder --mac",
+    "build:electron": "react-router build --mode electron && electron-builder",
+    "build:electron:win": "react-router build --mode electron && electron-builder --win",
+    "build:electron:linux": "react-router build --mode electron && electron-builder --linux",
+    "build:electron:mac": "react-router build --mode electron && electron-builder --mac",
     "dev": "react-router dev",
-    "dev:electron": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron . --dev\"",
+    "dev:electron": "concurrently \"react-router dev --mode electron\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "start": "react-router-serve ./build/server/index.js",
     "start:electron": "electron .",
     "preview": "npm run build && npx serve ./build/client",
@@ -23,6 +23,9 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.16",
+    "@livekit/components-react": "^2.7.1",
+    "@popperjs/core": "^2.11.8",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",
     "@tanstack/react-query": "^5.90.2",
@@ -32,10 +35,13 @@
     "dompurify": "^3.2.7",
     "isbot": "^5.1.31",
     "loglevel": "^1.9.2",
+    "lucide-react": "^0.548.0",
     "react": "^19.1.1",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.1",
+    "react-easy-crop": "^5.5.3",
     "react-markdown": "^10.1.0",
+    "react-popper": "^2.3.0",
     "react-router": "^7.9.2",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
@@ -53,6 +59,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/ui": "^3.2.4",
     "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
     "electron": "^38.2.2",
     "electron-builder": "^26.0.12",
     "jsdom": "^27.0.0",
@@ -83,8 +90,7 @@
       "icon": "public/pufferblow-art-pixel-126x126.png"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "public/pufferblow-art-pixel-126x126.png"
+      "target": "AppImage"
     },
     "nsis": {
       "installerIcon": "public/pufferblow-art-pixel-126x126.png",

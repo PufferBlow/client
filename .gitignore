@@ -8,3 +8,5 @@
 
 # Ignore the release build directory
 dist/
+
+.vite-cache

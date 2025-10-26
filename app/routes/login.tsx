@@ -1,7 +1,7 @@
 import type { Route } from "./+types/login";
 import { Link, useNavigate } from "react-router";
-import { useState } from "react";
-import { login } from "../services/user";
+import { useState, useEffect } from "react";
+import { login, handleAuthentication } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,6 +14,13 @@ export default function Login() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  useEffect(() => {
+    if (loginSuccess) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [loginSuccess, navigate]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -71,20 +78,10 @@ export default function Login() {
     const expireTime = data?.auth_token_expire_time;
 
     if (token) {
-      // Store in cookies
-      if (rememberMe) {
-        // Store both host:port and token in cookies for longer persistence
-        const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-        document.cookie = `auth_token=${token}; path=/; max-age=${maxAge}`;
-        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`;
-      } else {
-        // Store both in session cookies (expire when browser closes)
-        document.cookie = `auth_token=${token}; path=/`;
-        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
-      }
-
-      console.log('Tokens and host:port saved to cookies');
-      navigate("/dashboard");
+      // Use centralized authentication handler
+      await handleAuthentication(token, hostPort, rememberMe, expireTime);
+      console.log('Authentication handled successfully');
+      setLoginSuccess(true);
     } else {
       setError("Invalid response from server");
     }

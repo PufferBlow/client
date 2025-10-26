@@ -1,6 +1,19 @@
 /**
  * Message model - represents a message sent in a channel or conversation
  */
+
+/** Represents an attachment to a message */
+export interface MessageAttachment {
+  /** Full URL to the attachment */
+  url: string;
+  /** Original filename of the attachment */
+  filename: string;
+  /** MIME type of the attachment */
+  type: string;
+  /** File size in bytes (may be null) */
+  size: number | null;
+}
+
 export interface Message {
   /** Unique identifier for the message */
   message_id: string;
@@ -35,6 +48,6 @@ export interface Message {
   /** Timestamp when the message was sent */
   sent_at: string;
 
-  /** List of attachment URLs (optional) */
-  attachments?: string[];
+  /** List of detailed attachment objects (optional) */
+  attachments?: MessageAttachment[];
 }

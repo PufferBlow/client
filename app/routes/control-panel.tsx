@@ -1,5 +1,18 @@
 import { Link } from "react-router";
 import { useState, useEffect, useRef } from "react";
+import {
+  BarChart3,
+  Shield,
+  Users,
+  Hash,
+  CheckSquare,
+  Settings,
+  Folder,
+  Lock,
+  CircleX,
+  FileText,
+  Mic
+} from "lucide-react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
 import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../services/user";
 import { listChannels, deleteChannel, createChannel } from "../services/channel";
@@ -451,77 +464,16 @@ export default function ControlPanel() {
   }
 
   const tabs = [
-    {
-      id: 'overview', label: 'Overview', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )
-    },
-    {
-      id: 'moderation', label: 'Moderation', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      )
-    },
-    {
-      id: 'members', label: 'Members', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'channels', label: 'Channels', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 01-9 9H9l-6 3V9a9 9 0 019-9h3a9 9 0 019 9z" />
-        </svg>
-      )
-    },
-    {
-      id: 'tasks', label: 'Tasks', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-        </svg>
-      )
-    },
-    {
-      id: 'settings', label: 'Settings', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'cdn', label: 'CDN', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-        </svg>
-      )
-    },
-    {
-      id: 'security', label: 'Security', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      )
-    },
-    {
-      id: 'blocked-ips', label: 'Blocked IPs', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'logs', label: 'Logs', icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      )
-    },
+    { id: 'overview', label: 'Overview', icon: <BarChart3 className="w-6 h-6" /> },
+    { id: 'moderation', label: 'Moderation', icon: <Shield className="w-6 h-6" /> },
+    { id: 'members', label: 'Members', icon: <Users className="w-6 h-6" /> },
+    { id: 'channels', label: 'Channels', icon: <Hash className="w-6 h-6" /> },
+    { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-6 h-6" /> },
+    { id: 'settings', label: 'Settings', icon: <Settings className="w-6 h-6" /> },
+    { id: 'cdn', label: 'CDN', icon: <Folder className="w-6 h-6" /> },
+    { id: 'security', label: 'Security', icon: <Lock className="w-6 h-6" /> },
+    { id: 'blocked-ips', label: 'Blocked IPs', icon: <CircleX className="w-6 h-6" /> },
+    { id: 'logs', label: 'Logs', icon: <FileText className="w-6 h-6" /> },
   ];
 
   // FileViewerModal Component
@@ -705,7 +657,7 @@ export default function ControlPanel() {
     <>
       <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         {/* Nord-themed Sidebar */}
-        <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
+        <div className="w-64 bg-[var(--color-background-secondary)]/80 backdrop-blur-xl border-r border-[var(--color-border)]/50 flex flex-col shadow-2xl">
           {/* Server Branding Header */}
           <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
             <div className="flex items-center space-x-2">
@@ -840,7 +792,7 @@ export default function ControlPanel() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-[var(--color-background)] overflow-hidden">
+        <div className="flex-1 flex flex-col bg-[var(--color-background)]/80 backdrop-blur-xl overflow-hidden shadow-2xl border-l border-[var(--color-border)]/50">
           {/* Header */}
           <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
             <div className="flex items-center space-x-4">
@@ -3219,9 +3171,17 @@ function ChannelsTab({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   )}
-                  <span className="px-2 py-1 text-xs rounded text-white bg-gray-600">
-                    text
-                  </span>
+                  {channel.channel_type === 'voice' ? (
+                    <>
+                      <Mic className="w-3 h-3 mr-1" />
+                      <span>voice</span>
+                    </>
+                  ) : (
+                    <>
+                      <Hash className="w-3 h-3 mr-1" />
+                      <span>text</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex space-x-2">
                   <button className="text-gray-400 hover:text-white transition-colors">
@@ -5102,44 +5062,33 @@ function ModerationTab({
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => handleResolveReport(
                     mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
                     'delete'
                   )}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <span>Delete Message</span>
+                  Delete Message
                 </button>
-
                 <button
                   onClick={() => handleResolveReport(
                     mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
                     'warn'
                   )}
-                  className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                  <span>Send Warning</span>
+                  Warn User
                 </button>
-
                 <button
                   onClick={() => handleResolveReport(
                     mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
                     'dismiss'
                   )}
-                  className="w-full bg-gray-600 hover:bg-gray-500 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                  className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span>Dismiss Report</span>
+                  Dismiss
                 </button>
               </div>
             </div>

@@ -4,15 +4,18 @@ import { useTheme, themePresets, type AppearanceConfig } from "../components/The
 import { useState, useEffect } from "react";
 import { FileUploadInput } from "../components/FileUploadInput";
 import { UserCard } from "../components/UserCard";
+import { CroppableImage } from "../components/CroppableImage";
+import { ModernSlider, ModernToggle, AudioTestButton, AudioLevelMeter, SpectrumAnalyzer, DeviceCard } from "../components/AudioControls";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../services/user";
 import { useQueryClient } from '@tanstack/react-query';
+import { User, Palette, Volume2, Server, Shield, ArrowLeft } from 'lucide-react';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'audio' | 'server' | 'security'>('profile');
 
   // React Query hooks - must be called before any early returns
   const queryClient = useQueryClient();
-  const { data: currentUser, isLoading: userLoading } = useCurrentUserProfile();
+  const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
   const updateUsernameMutation = useUpdateUsername();
   const updateStatusMutation = useUpdateStatus();
   const updateBioMutation = useUpdateBio();
@@ -59,6 +62,12 @@ export default function Settings() {
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  // Image cropping state
+  const [isCroppingModalOpen, setIsCroppingModalOpen] = useState(false);
+  const [croppingImageType, setCroppingImageType] = useState<'avatar' | 'banner' | null>(null);
+  const [croppingImageSrc, setCroppingImageSrc] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+
   // Audio Settings State
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -78,6 +87,11 @@ export default function Settings() {
   const [webAudioContext, setWebAudioContext] = useState<AudioContext | null>(null);
   const [isListening, setIsListening] = useState<boolean>(false);
   const [frequencyData, setFrequencyData] = useState<Uint8Array>(new Uint8Array(0));
+  const [currentStream, setCurrentStream] = useState<MediaStream | null>(null);
+  const [inputGainNode, setInputGainNode] = useState<GainNode | null>(null);
+  const [outputGainNode, setOutputGainNode] = useState<GainNode | null>(null);
+  const [activeAudioContext, setActiveAudioContext] = useState<AudioContext | null>(null);
+  const [isPTTActive, setIsPTTActive] = useState<boolean>(false);
 
   // Load initial data and set loading to false
   useEffect(() => {
@@ -165,6 +179,121 @@ export default function Settings() {
       return () => clearTimeout(timer);
     }
   }, [message]);
+
+  // Create audio context when needed
+  const createAudioContext = (): AudioContext | null => {
+    if (activeAudioContext && activeAudioContext.state !== 'closed') {
+      return activeAudioContext;
+    }
+
+    try {
+      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+      setActiveAudioContext(context);
+      return context;
+    } catch (error) {
+      console.error('Failed to create audio context:', error);
+      setMessage({ type: 'error', text: 'Failed to initialize audio system' });
+      return null;
+    }
+  };
+
+  // Get audio constraints based on current settings
+  const getAudioConstraints = () => {
+    const constraints: MediaTrackConstraints = {
+      sampleRate: audioQuality === 'good' ? 44100 : audioQuality === 'better' ? 48000 : 96000,
+      sampleSize: audioQuality === 'good' ? 16 : audioQuality === 'better' ? 16 : 24,
+      channelCount: 1, // Mono for communication
+      echoCancellation: echoCancellation,
+      noiseSuppression: noiseSuppression,
+      autoGainControl: autoGainControl
+    };
+
+    if (selectedInputDevice) {
+      constraints.deviceId = selectedInputDevice;
+    }
+
+    return constraints;
+  };
+
+  // Create gain nodes for volume control
+  const createGainNodes = (context: AudioContext) => {
+    const inputGain = context.createGain();
+    const outputGain = context.createGain();
+
+    // Apply volume settings
+    inputGain.gain.setValueAtTime(micVolume / 100, context.currentTime);
+    outputGain.gain.setValueAtTime(speakerVolume / 100, context.currentTime);
+
+    setInputGainNode(inputGain);
+    setOutputGainNode(outputGain);
+
+    return { inputGain, outputGain };
+  };
+
+  // Setup audio routing for monitoring
+  const setupAudioRouting = async (stream: MediaStream) => {
+    const context = createAudioContext();
+    if (!context) return null;
+
+    const { inputGain } = createGainNodes(context);
+
+    // Create nodes
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
+
+    setAudioAnalyser(analyser);
+
+    // Setup routing: source -> input gain -> analyser
+    source.connect(inputGain);
+    inputGain.connect(analyser);
+
+    return { source, analyser };
+  };
+
+  // Push-to-Talk keyboard handlers
+  useEffect(() => {
+    if (voiceActivityMode !== 'ptt' || !pttKey) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === pttKey.toLowerCase() && !isPTTActive) {
+        setIsPTTActive(true);
+        setMessage({ type: 'success', text: 'PTT activated - audio transmission enabled' });
+        event.preventDefault();
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === pttKey.toLowerCase() && isPTTActive) {
+        setIsPTTActive(false);
+        setMessage({ type: 'success', text: 'PTT released - audio transmission disabled' });
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [voiceActivityMode, pttKey, isPTTActive]);
+
+  // Update volume levels when sliders change
+  useEffect(() => {
+    if (inputGainNode) {
+      inputGainNode.gain.setValueAtTime(micVolume / 100, activeAudioContext?.currentTime || 0);
+    }
+  }, [micVolume, inputGainNode, activeAudioContext]);
+
+  useEffect(() => {
+    if (outputGainNode) {
+      outputGainNode.gain.setValueAtTime(speakerVolume / 100, activeAudioContext?.currentTime || 0);
+    }
+  }, [speakerVolume, outputGainNode, activeAudioContext]);
 
   const hostPort = getHostPortFromStorage() || 'localhost:7575';
 
@@ -271,13 +400,13 @@ export default function Settings() {
   };
 
   const handleAvatarFileSubmit = async (file: File) => {
-    if (!file || updateAvatarMutation.isPending) return;
-    try {
-      await updateAvatarMutation.mutateAsync(file);
-      setMessage({ type: 'success', text: 'Avatar updated successfully!' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to update avatar' });
-    }
+    if (!file) return;
+
+    // Store the file and open cropping modal
+    setSelectedImageFile(file);
+    setCroppingImageType('avatar');
+    setCroppingImageSrc(URL.createObjectURL(file));
+    setIsCroppingModalOpen(true);
   };
 
   const handleAvatarUrlSubmit = async (url: string) => {
@@ -291,14 +420,13 @@ export default function Settings() {
   };
 
   const handleBannerFileSubmit = async (file: File) => {
-    if (!file || updateBannerMutation.isPending) return;
+    if (!file) return;
 
-    // Store the file for API upload
-    setBannerFile(file);
-
-    // Create object URL for immediate preview
-    const objectUrl = URL.createObjectURL(file);
-    setBannerPreview(objectUrl);
+    // Store the file and open cropping modal
+    setSelectedImageFile(file);
+    setCroppingImageType('banner');
+    setCroppingImageSrc(URL.createObjectURL(file));
+    setIsCroppingModalOpen(true);
   };
 
   const handleBannerUrlSubmit = async (url: string) => {
@@ -306,6 +434,50 @@ export default function Settings() {
 
     // Set preview immediately for URL inputs
     setBannerPreview(url.trim());
+  };
+
+  // Handle cropped image (converted from blob to file)
+  const handleCroppedImage = async (croppedBlob: Blob) => {
+    if (!croppingImageType) return;
+
+    // Convert blob to File object
+    const file = new File([croppedBlob], `${croppingImageType}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now()
+    });
+
+    if (croppingImageType === 'avatar') {
+      try {
+        await updateAvatarMutation.mutateAsync(file);
+        setMessage({ type: 'success', text: 'Avatar updated successfully!' });
+      } catch (error) {
+        setMessage({ type: 'error', text: 'Failed to update avatar' });
+      }
+    } else if (croppingImageType === 'banner') {
+      try {
+        setBannerFile(file);
+        // Create object URL for immediate preview
+        const objectUrl = URL.createObjectURL(file);
+        setBannerPreview(objectUrl);
+
+        setMessage({ type: 'success', text: 'Banner updated successfully!' });
+      } catch (error) {
+        setMessage({ type: 'error', text: 'Failed to update banner' });
+      }
+    }
+
+    // Close modal and clean up
+    setIsCroppingModalOpen(false);
+    setCroppingImageSrc(null);
+    setSelectedImageFile(null);
+    setCroppingImageType(null);
+  };
+
+  const handleCroppingCancel = () => {
+    setIsCroppingModalOpen(false);
+    setCroppingImageSrc(null);
+    setSelectedImageFile(null);
+    setCroppingImageType(null);
   };
 
   const handleHostPortSubmit = async (e: React.FormEvent) => {
@@ -337,86 +509,195 @@ export default function Settings() {
         setMessage({ type: 'error', text: 'Microphone access is not supported in this browser.' });
         return;
       }
-      if (audioContext) return;
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
-      setAudioContext(context);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 48000,
-          channelCount: 1
-        }
-      });
+
+      // Stop any existing test first
+      if (currentStream) {
+        stopMicrophoneTest();
+      }
+
+      // Get microphone access with current constraints
+      const constraints = getAudioConstraints();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+      setCurrentStream(stream);
       setMicrophoneStream(stream);
-      setMessage({ type: 'success', text: 'Microphone test started. Check your audio levels.' });
+
+      // Setup audio routing
+      await setupAudioRouting(stream);
+
+      // Start real-time analysis
+      startAudioAnalysis();
+
+      setMessage({ type: 'success', text: 'Microphone test started with current audio settings.' });
     } catch (error) {
       setIsTestingMicrophone(false);
-      setMessage({ type: 'error', text: 'Failed to start microphone test.' });
+      setMessage({ type: 'error', text: 'Failed to start microphone test. Check permissions and device availability.' });
+      console.error('Microphone test error:', error);
     }
   };
 
   const stopMicrophoneTest = () => {
+    if (currentStream) {
+      currentStream.getTracks().forEach((track: MediaStreamTrack) => {
+        track.stop();
+      });
+      setCurrentStream(null);
+    }
+
+    // Clean up audio context and routing
+    if (activeAudioContext && activeAudioContext.state !== 'closed') {
+      activeAudioContext.close();
+      setActiveAudioContext(null);
+      setAudioAnalyser(null);
+      setInputGainNode(null);
+      setOutputGainNode(null);
+    }
+
+    // Reset visualization data
+    setFrequencyData(new Uint8Array(32));
+    setInputLevel(0);
+    setMicVolume(80); // Reset to default
+
+    setIsTestingMicrophone(false);
     if (microphoneStream) {
-      microphoneStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setMicrophoneStream(null);
     }
-    if (audioContext && audioContext.state !== 'closed') {
-      audioContext.close();
-      setAudioContext(null);
-    }
-    setIsTestingMicrophone(false);
     setMessage({ type: 'success', text: 'Microphone test stopped.' });
   };
 
   const startSpeakerTest = async () => {
     try {
-      if (audioContext) return;
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
-      setAudioContext(context);
+      const context = createAudioContext();
+      if (!context) {
+        setMessage({ type: 'error', text: 'Failed to initialize audio system.' });
+        return;
+      }
+
+      const { outputGain } = createGainNodes(context);
+
+      // Create oscillator for test tone
       const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(context.destination);
-      oscillator.frequency.setValueAtTime(1000, context.currentTime);
+      oscillator.connect(outputGain);
+
+      // Also connect to audio destination for output
+      outputGain.connect(context.destination);
+
+      oscillator.frequency.setValueAtTime(1000, context.currentTime); // 1kHz test tone
       oscillator.type = 'sine';
-      gainNode.gain.setValueAtTime(speakerVolume / 100 * 0.1, context.currentTime);
-      setGainNode(gainNode);
+
+      // Start the tone
       oscillator.start();
+
+      // Store reference for cleanup
+      setAudioContext(context as any);
+
+      // Stop after 3 seconds
       setTimeout(() => {
-        oscillator.stop();
-        if (context.state !== 'closed') {
-          context.close();
+        try {
+          oscillator.stop();
+          if (context.state !== 'closed') {
+            context.close();
+          }
           setAudioContext(null);
-          setGainNode(null);
+          setOutputGainNode(null);
+        } catch (error) {
+          console.warn('Speaker test cleanup warning:', error);
         }
         setIsTestingSpeakers(false);
         setMessage({ type: 'success', text: 'Speaker test completed.' });
       }, 3000);
+
       setMessage({ type: 'success', text: 'Playing test tone for 3 seconds...' });
     } catch (error) {
       setIsTestingSpeakers(false);
-      setMessage({ type: 'error', text: 'Failed to start speaker test.' });
+      setMessage({ type: 'error', text: 'Failed to start speaker test. Check output device and permissions.' });
+      console.error('Speaker test error:', error);
     }
   };
 
   const stopSpeakerTest = () => {
-    if (gainNode) {
-      gainNode.gain.exponentialRampToValueAtTime(0.01, gainNode.context.currentTime + 0.1);
-      setGainNode(null);
-    }
-    if (audioContext && audioContext.state === 'running') {
-      setTimeout(() => {
-        if (audioContext && audioContext.state !== 'closed') {
+    if (audioContext) {
+      try {
+        if (audioContext.state === 'running') {
+          // Try to stop any oscillators connected to the context
           audioContext.close();
-          setAudioContext(null);
         }
-      }, 100);
+      } catch (error) {
+        console.warn('Speaker test stop warning:', error);
+      }
+      setAudioContext(null);
     }
+
+    if (outputGainNode) {
+      try {
+        outputGainNode.gain.exponentialRampToValueAtTime(0.01, activeAudioContext?.currentTime || 0);
+      } catch (error) {
+        console.warn('Output gain ramp warning:', error);
+      }
+      setOutputGainNode(null);
+    }
+
+    if (activeAudioContext && activeAudioContext !== audioContext) {
+      try {
+        activeAudioContext.close();
+        setActiveAudioContext(null);
+      } catch (error) {
+        console.warn('Active context cleanup warning:', error);
+      }
+    }
+
     setIsTestingSpeakers(false);
     setMessage({ type: 'success', text: 'Speaker test stopped.' });
   };
+
+  // Real-time audio analysis function
+  const startAudioAnalysis = () => {
+    if (!audioAnalyser) {
+      console.warn('Audio analyser not available for analysis');
+      return;
+    }
+
+    const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+    const updateAnalysis = () => {
+      if (!audioAnalyser || !isTestingMicrophone) return;
+
+      try {
+        audioAnalyser.getByteFrequencyData(dataArray);
+
+        // Calculate average input level
+        const avgLevel = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setInputLevel(avgLevel / 255);
+
+        // Update frequency data for visualization
+        setFrequencyData(new Uint8Array([...dataArray]));
+
+        // Continue analysis loop
+        if (isTestingMicrophone) {
+          requestAnimationFrame(updateAnalysis);
+        }
+      } catch (error) {
+        console.warn('Audio analysis error:', error);
+      }
+    };
+
+    updateAnalysis();
+  };
+
+  // Handle loading timeout - prevent infinite loading and redirect to dashboard
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  useEffect(() => {
+    if (userLoading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+        // Redirect to dashboard if settings take too long to load
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard';
+        }
+      }, 5000); // 5 second timeout for settings
+
+      return () => clearTimeout(timer);
+    }
+  }, [userLoading]);
 
   // Show skeleton loading state
   if (userLoading) {
@@ -452,12 +733,76 @@ export default function Settings() {
     );
   }
 
+  // Handle error state - redirect to dashboard if profile fetch fails
+  if (userError) {
+    useEffect(() => {
+      // Redirect to dashboard on profile error
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
+    }, []);
+    return (
+      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
+            <div className="mb-6">
+              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">Failed to Load Settings</h1>
+              <p className="text-lg text-[var(--color-text-secondary)] mb-4">
+                There was an issue loading your profile information. This may be due to a network issue or expired session.
+              </p>
+              <Link
+                to="/dashboard"
+                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                Go to Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading timeout error
+  if (loadingTimeout) {
+    return (
+      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
+            <div className="mb-6">
+              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h1 className="text-3xl font-bold text-[var(--color-text)] mb-2">Loading Timeout</h1>
+              <p className="text-lg text-[var(--color-text-secondary)] mb-4">
+                Settings are taking too long to load. Please try again or go to dashboard.
+              </p>
+              <Link
+                to="/dashboard"
+                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                Go to Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const tabs = [
-    { id: 'profile', label: 'Profile', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> },
-    { id: 'appearance', label: 'Appearance', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" /></svg> },
-    { id: 'audio', label: 'Audio', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19V12a9 9 0 0118 0v7M8.25 15H7.5a1.5 1.5 0 00-1.5 1.5v1.5A1.5 1.5 0 007.5 19h.75m0 0V15m0 0V12a4.5 4.5 0 011 2.25m0 0V15M21 15H16.5a1.5 1.5 0 00-1.5 1.5v1.5a1.5 1.5 0 001.5 1.5H21" /></svg> },
-    { id: 'server', label: 'Server', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg> },
-    { id: 'security', label: 'Security', icon: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> },
+    { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" /> },
+    { id: 'appearance', label: 'Appearance', icon: <Palette className="w-6 h-6" /> },
+    { id: 'audio', label: 'Audio', icon: <Volume2 className="w-6 h-6" /> },
+    { id: 'server', label: 'Server', icon: <Server className="w-6 h-6" /> },
+    { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
 
   return (
@@ -1510,25 +1855,29 @@ export default function Settings() {
                     </div>
 
                     {/* Volume Control */}
-                    <div className="bg-[var(--color-background)] rounded-lg p-4 border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-background)] rounded-xl p-6 border border-[var(--color-border)] shadow-sm">
                       <div className="flex items-center space-x-3 mb-4">
-                        <svg className="w-4 h-4 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                        </svg>
-                        <label className="text-sm font-medium text-[var(--color-text)]">Input Volume</label>
-                        <span className="ml-auto text-lg font-bold text-[var(--color-primary)]">{micVolume}%</span>
+                        <div className="w-10 h-10 bg-[var(--color-primary)]/10 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-[var(--color-text)]">Input Volume</h3>
+                          <p className="text-sm text-[var(--color-text-secondary)]">Adjust microphone sensitivity</p>
+                        </div>
                       </div>
 
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
+                      <ModernSlider
                         value={micVolume}
-                        onChange={(e) => setMicVolume(parseInt(e.target.value))}
-                        className="w-full h-3 bg-[var(--color-surface-secondary)] rounded-lg appearance-none cursor-pointer slider-thumb:w-6 slider-thumb:h-6 slider-thumb:bg-[var(--color-primary)] slider-thumb:rounded-full"
+                        onChange={setMicVolume}
+                        min={0}
+                        max={100}
+                        size="large"
+                        color="from-[var(--color-primary)] to-[var(--color-accent)]"
                       />
 
-                      <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-2">
+                      <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-3">
                         <span>Muted</span>
                         <span>Optimal</span>
                         <span>Max</span>
@@ -1550,15 +1899,11 @@ export default function Settings() {
                             <div className="font-medium text-[var(--color-text)] text-sm">Noise Suppression</div>
                             <div className="text-xs text-[var(--color-text-secondary)]">Filter background noise</div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer ml-4">
-                            <input
-                              type="checkbox"
-                              checked={noiseSuppression}
-                              onChange={(e) => setNoiseSuppression(e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-12 h-7 bg-[var(--color-surface-secondary)] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[var(--color-primary)]/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
-                          </label>
+                          <ModernToggle
+                            checked={noiseSuppression}
+                            onChange={setNoiseSuppression}
+                            size="medium"
+                          />
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
@@ -1566,15 +1911,11 @@ export default function Settings() {
                             <div className="font-medium text-[var(--color-text)] text-sm">Echo Cancellation</div>
                             <div className="text-xs text-[var(--color-text-secondary)]">Remove echo feedback</div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer ml-4">
-                            <input
-                              type="checkbox"
-                              checked={echoCancellation}
-                              onChange={(e) => setEchoCancellation(e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-12 h-7 bg-[var(--color-surface-secondary)] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[var(--color-primary)]/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
-                          </label>
+                          <ModernToggle
+                            checked={echoCancellation}
+                            onChange={setEchoCancellation}
+                            size="medium"
+                          />
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
@@ -1582,15 +1923,11 @@ export default function Settings() {
                             <div className="font-medium text-[var(--color-text)] text-sm">Auto Gain Control</div>
                             <div className="text-xs text-[var(--color-text-secondary)]">Dynamic volume adjustment</div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer ml-4">
-                            <input
-                              type="checkbox"
-                              checked={autoGainControl}
-                              onChange={(e) => setAutoGainControl(e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-12 h-7 bg-[var(--color-surface-secondary)] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[var(--color-primary)]/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
-                          </label>
+                          <ModernToggle
+                            checked={autoGainControl}
+                            onChange={setAutoGainControl}
+                            size="medium"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1762,18 +2099,33 @@ export default function Settings() {
                     </div>
 
                     {/* Output Volume */}
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        Output Volume: {speakerVolume}%
-                      </label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
+                    <div className="bg-[var(--color-background)] rounded-xl p-6 border border-[var(--color-border)] shadow-sm">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-[var(--color-primary)]/10 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-[var(--color-text)]">Output Volume</h3>
+                          <p className="text-sm text-[var(--color-text-secondary)]">Adjust speaker output level</p>
+                        </div>
+                      </div>
+
+                      <ModernSlider
                         value={speakerVolume}
-                        onChange={(e) => setSpeakerVolume(parseInt(e.target.value))}
-                        className="w-full h-2 bg-[var(--color-surface-secondary)] rounded-lg appearance-none cursor-pointer"
+                        onChange={setSpeakerVolume}
+                        min={0}
+                        max={100}
+                        size="large"
+                        color="from-[var(--color-primary)] to-[var(--color-accent)]"
                       />
+
+                      <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-3">
+                        <span>Muted</span>
+                        <span>Moderate</span>
+                        <span>Max</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2140,6 +2492,38 @@ export default function Settings() {
                     This is how your profile will appear to others on Pufferblow
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Image Cropping Modal */}
+        {isCroppingModalOpen && croppingImageSrc && croppingImageType && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-[var(--color-background)] rounded-2xl shadow-2xl w-full max-w-xl mx-auto border border-[var(--color-border)]">
+              <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-[var(--color-text)]">
+                  Crop {croppingImageType === 'avatar' ? 'Avatar' : 'Banner'}
+                </h3>
+                <button
+                  onClick={handleCroppingCancel}
+                  disabled={updateAvatarMutation.isPending || updateBannerMutation.isPending}
+                  className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-6">
+                <CroppableImage
+                  imageSrc={croppingImageSrc}
+                  aspect={croppingImageType === 'avatar' ? 1 : 4} // Square for avatar, wide for banner
+                  shape={croppingImageType === 'avatar' ? 'round' : 'rect'}
+                  onCropComplete={handleCroppedImage}
+                  onCancel={handleCroppingCancel}
+                  className="max-w-full"
+                />
               </div>
             </div>
           </div>

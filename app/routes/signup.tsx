@@ -1,7 +1,7 @@
 import type { Route } from "./+types/signup";
 import { Link, useNavigate } from "react-router";
-import { useState } from "react";
-import { signup } from "../services/user";
+import { useState, useEffect } from "react";
+import { signup, handleAuthentication } from "../services/user";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,6 +14,13 @@ export default function Signup() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+
+  useEffect(() => {
+    if (signupSuccess) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [signupSuccess, navigate]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -80,20 +87,10 @@ export default function Signup() {
     const expireTime = data?.auth_token_expire_time;
 
     if (token) {
-      // Store in cookies
-      if (rememberMe) {
-        // Store both host:port and token in cookies for longer persistence
-        const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-        document.cookie = `auth_token=${token}; path=/; max-age=${maxAge}`;
-        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`;
-      } else {
-        // Store both in session cookies (expire when browser closes)
-        document.cookie = `auth_token=${token}; path=/`;
-        document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
-      }
-
-      console.log('Tokens and host:port saved to cookies via response headers');
-      navigate("/dashboard");
+      // Use centralized authentication handler
+      await handleAuthentication(token, hostPort, rememberMe, expireTime);
+      console.log('Authentication handled successfully');
+      setSignupSuccess(true);
     } else {
       setError("Invalid response from server");
     }

@@ -8,6 +8,9 @@ export interface Channel {
   /** Name of the channel */
   channel_name: string;
 
+  /** Type of channel: 'text', 'voice', or 'mixed' */
+  channel_type?: string;
+
   /** List of message IDs in this channel */
   messages_ids?: string[];
 
@@ -16,6 +19,12 @@ export interface Channel {
 
   /** List of user IDs allowed to access this private channel */
   allowed_users?: string[] | null;
+
+  /** LiveKit room name for voice channels */
+  livekit_room_name?: string | null;
+
+  /** Active voice participants */
+  participant_ids?: string[];
 
   /** Timestamp when the channel was created */
   created_at: string;

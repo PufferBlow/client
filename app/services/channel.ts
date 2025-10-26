@@ -5,8 +5,36 @@ import type { Message } from '../models';
 
 export interface CreateChannelRequest {
   name: string;
-  type: 'text' | 'voice';
+  type: 'text' | 'voice' | 'mixed';
   description?: string;
+}
+
+// Voice channel interfaces - Updated for API proxy architecture
+export interface VoiceChannelJoinResponse {
+  status_code: number;
+  token?: string;
+  room_name?: string;
+  livekit_url?: string;
+  proxy?: boolean;
+  session_id?: string;
+  channel_id?: string;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface VoiceChannelStatusResponse {
+  status_code: number;
+  channel_id: string;
+  room_name?: string;
+  participants: Array<{
+    user_id: string;
+    username: string;
+    avatar_url?: string;
+    status?: string;
+  }>;
+  participant_count: number;
+  error?: string;
 }
 
 // Channel API functions
@@ -25,7 +53,7 @@ export const listChannels = async (authToken: string): Promise<ApiResponse<{ sta
   });
 };
 
-export const createChannel = async (channelData: { channel_name: string; is_private: boolean }, authToken: string): Promise<ApiResponse<Channel>> => {
+export const createChannel = async (channelData: { channel_name: string; is_private: boolean; channel_type?: string }, authToken: string): Promise<ApiResponse<Channel>> => {
   const apiClient = createApiClient();
   return apiClient.post('/api/v1/channels/create/', {
     auth_token: authToken,
@@ -99,5 +127,27 @@ export const sendMessage = async (channelId: string, message: string, authToken:
   return apiClient.post(`/api/v1/channels/${channelId}/send_message`, {
     auth_token: authToken,
     message: message,
+  });
+};
+
+// Voice channel functions
+export const joinVoiceChannel = async (channelId: string, authToken: string): Promise<ApiResponse<VoiceChannelJoinResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.post(`/api/v1/channels/${channelId}/join-audio`, {
+    auth_token: authToken,
+  });
+};
+
+export const leaveVoiceChannel = async (channelId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post(`/api/v1/channels/${channelId}/leave-audio`, {
+    auth_token: authToken,
+  });
+};
+
+export const getVoiceChannelStatus = async (channelId: string, authToken: string): Promise<ApiResponse<VoiceChannelStatusResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v1/channels/${channelId}/audio-status`, {
+    auth_token: authToken,
   });
 };

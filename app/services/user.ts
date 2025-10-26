@@ -3,6 +3,7 @@ import { ApiClient, createApiClient } from './apiClient';
 import type { User } from '../models';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect } from 'react';
+import { secureStorage, migrateToSecureStorage } from './secureStorage';
 
 // Role definitions
 export enum UserRole {
@@ -184,6 +185,31 @@ export interface ListUsersResponse {
     is_admin: boolean;
     is_owner: boolean;
   }>;
+}
+
+// DisplayUser interface for UI display purposes
+export interface DisplayUser {
+  id: string;
+  username: string;
+  avatar?: string;
+  banner?: string;
+  accentColor?: string;
+  bannerColor?: string;
+  customStatus?: string;
+  externalLinks?: { platform: string; url: string }[];
+  status: 'online' | 'idle' | 'offline' | 'dnd';
+  bio?: string;
+  joinedAt: string;
+  originServer?: string;
+  roles: string[];
+  activity?: {
+    type: 'playing' | 'listening' | 'watching' | 'streaming';
+    name: string;
+    details?: string;
+  };
+  mutualServers?: number;
+  mutualFriends?: number;
+  badges?: string[];
 }
 
 export const listUsers = async (authToken: string): Promise<ApiResponse<ListUsersResponse>> => {
@@ -370,39 +396,61 @@ export const extractUserIdFromToken = (authToken: string): string => {
   return authToken.split('.')[0];
 };
 
+// Cache for synchronous access (updated asynchronously)
+let authTokenCache: string | null = null;
+let hostPortCache: string | null = null;
+let cacheInitialized = false;
+
+const initializeStorageCache = async () => {
+  if (cacheInitialized) return;
+
+  try {
+    // Migrate any existing data to secure storage
+    await migrateToSecureStorage();
+
+    // Load cached values
+    [authTokenCache, hostPortCache] = await Promise.all([
+      secureStorage.get('auth_token'),
+      secureStorage.get('host_port')
+    ]);
+
+    cacheInitialized = true;
+
+    // Refresh cache periodically
+    setInterval(async () => {
+      const [token, hostPort] = await Promise.all([
+        secureStorage.get('auth_token'),
+        secureStorage.get('host_port')
+      ]);
+      authTokenCache = token;
+      hostPortCache = hostPort;
+    }, 30000); // Refresh every 30 seconds
+  } catch (error) {
+    console.error('Failed to initialize storage cache:', error);
+  }
+};
+
+// Synchronous functions for backward compatibility
 export const getAuthTokenFromCookies = (): string | null => {
-  if (typeof document === 'undefined') return null;
-  const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-    const [key, value] = cookie.trim().split('=');
-    acc[key.trim()] = value;
-    return acc;
-  }, {} as Record<string, string>);
-  return cookies.auth_token || null;
+  if (!cacheInitialized) {
+    // Initialize cache on first call
+    initializeStorageCache().catch(console.error);
+  }
+  return authTokenCache;
 };
 
 export const getHostPortFromCookies = (): string | null => {
-  if (typeof document === 'undefined') return null;
-  const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-    const [key, value] = cookie.trim().split('=');
-    acc[key.trim()] = value;
-    return acc;
-  }, {} as Record<string, string>);
-  return cookies.host_port || null;
+  if (!cacheInitialized) {
+    // Initialize cache on first call
+    initializeStorageCache().catch(console.error);
+  }
+  return hostPortCache;
 };
 
 export const getHostPortFromStorage = (): string | null => {
-  // First check cookies (both must match persistence)
-  let hostPort = getHostPortFromCookies();
-  if (hostPort) return decodeURIComponent(hostPort);
-  // Then check storage
-  if (typeof window !== 'undefined') {
-    // First check sessionStorage (for non-remember me)
-    hostPort = sessionStorage.getItem('host_port');
-    if (hostPort) return hostPort;
-    // Then localStorage (for remember me)
-    return localStorage.getItem('host_port');
-  }
-  return null;
+  // Use secure storage cache which handles both Electron and web backends
+  const hostPort = hostPortCache;
+  return hostPort ? decodeURIComponent(hostPort) : null;
 };
 
 // Utility function to convert relative URLs from server to full URLs
@@ -424,16 +472,76 @@ export const createFullUrl = (relativeUrl: string | undefined | null): string | 
   return `http://${hostPort}${cleanPath}`;
 };
 
-export const setHostPortToStorage = (hostPort: string, persistent: boolean = false): void => {
+export const setHostPortToStorage = async (hostPort: string, persistent: boolean = false): Promise<void> => {
   if (typeof window === 'undefined') return;
-  if (persistent) {
-    localStorage.setItem('host_port', hostPort);
-    // Clear sessionStorage if setting persistent
-    sessionStorage.removeItem('host_port');
+
+  try {
+    // Update secure storage
+    await secureStorage.set('host_port', hostPort);
+
+    // Update cache immediately
+    hostPortCache = hostPort;
+
+    // Maintain backward compatibility with localStorage/sessionStorage
+    if (persistent) {
+      localStorage.setItem('host_port', hostPort);
+      // Clear sessionStorage if setting persistent
+      sessionStorage.removeItem('host_port');
+    } else {
+      sessionStorage.setItem('host_port', hostPort);
+      // Clear localStorage if setting session
+      localStorage.removeItem('host_port');
+    }
+  } catch (error) {
+    console.error('Failed to set host port:', error);
+    // Fallback to old method
+    if (persistent) {
+      localStorage.setItem('host_port', hostPort);
+      sessionStorage.removeItem('host_port');
+    } else {
+      sessionStorage.setItem('host_port', hostPort);
+      localStorage.removeItem('host_port');
+    }
+  }
+};
+
+// Helper to set auth token securely
+export const setAuthTokenInStorage = async (token: string): Promise<void> => {
+  try {
+    // Update secure storage
+    await secureStorage.set('auth_token', token);
+
+    // Update cache immediately
+    authTokenCache = token;
+  } catch (error) {
+    console.error('Failed to set auth token:', error);
+    // Could add fallback to cookies here if needed
+  }
+};
+
+// Centralized function to handle successful authentication
+export const handleAuthentication = async (token: string, hostPort: string, rememberMe: boolean, expireTime?: string) => {
+  await setAuthTokenInStorage(token);
+  await setHostPortToStorage(hostPort, rememberMe);
+
+  // Also set cookies for web compatibility
+  if (rememberMe) {
+    const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
+    document.cookie = `auth_token=${token}; path=/; max-age=${maxAge}`;
+    document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`;
   } else {
-    sessionStorage.setItem('host_port', hostPort);
-    // Clear localStorage if setting session
-    localStorage.removeItem('host_port');
+    document.cookie = `auth_token=${token}; path=/`;
+    document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
+  }
+};
+
+// Helper to clear auth token from storage
+export const clearAuthTokenFromStorage = async (): Promise<void> => {
+  try {
+    await secureStorage.delete('auth_token');
+    authTokenCache = null;
+  } catch (error) {
+    console.error('Failed to clear auth token:', error);
   }
 };
 

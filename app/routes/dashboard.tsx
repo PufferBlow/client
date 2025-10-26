@@ -1,29 +1,34 @@
 import type { Route } from "./+types/dashboard";
 import { Link, useNavigate } from "react-router";
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { usePopper } from 'react-popper';
+import ReactDOM from 'react-dom';
 import { ServerCreationModal } from "../components/ServerCreationModal";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
 import { UserContextMenu } from "../components/UserContextMenu";
 import { SearchModal } from "../components/SearchModal";
 import { InviteModal } from "../components/InviteModal";
 import { EmojiPicker } from "../components/EmojiPicker";
+import { VoiceChannel } from "../components/VoiceChannel";
 import { UserPanel } from "../components/UserPanel";
+import { DeviceSelectorModal } from "../components/DeviceSelectorModal";
 import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import { MessageReportModal } from "../components/MessageReportModal";
 import { MessageContextMenu } from "../components/MessageContextMenu";
 import { useToast } from "../components/Toast";
 import { UserCard } from "../components/UserCard";
+import { AttachmentGrid } from "../components/AttachmentBubble";
 import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
 import { usePersistedUIState } from "../utils/uiStatePersistence";
-import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById } from "../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFullUrl, getUserRoles } from "../services/user";
 import { listChannels, createChannel, loadMessages, deleteChannel } from "../services/channel";
 import { sendMessage } from "../services/message";
 import { ChannelWebSocket, createChannelWebSocket, getHostPortForWebSocket } from "../services/websocket";
 import { listUsers, type ListUsersResponse } from "../services/user";
 import { type ServerInfo } from "../services/system";
 import type { Channel } from "../models";
-import type { Message } from "../models";
+import type { Message, MessageAttachment } from "../models";
 import type { User } from "../models";
 
 interface DisplayUser {
@@ -87,11 +92,56 @@ export default function Dashboard() {
   // Modal states
   const [serverCreationModalOpen, setServerCreationModalOpen] = useState(false);
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
-  const [userCardTooltip, setUserCardTooltip] = useState<{
-    user: DisplayUser;
-    position: { x: number; y: number };
-    transform?: string;
-  } | null>(null);
+  const [deviceSelectorModalOpen, setDeviceSelectorModalOpen] = useState(false);
+
+  // Popper.js for user card tooltip
+  const [userCardTooltipUser, setUserCardTooltipUser] = useState<DisplayUser | null>(null);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+  const [tooltipSource, setTooltipSource] = useState<'userpanel' | 'members' | 'messages'>('messages');
+
+  // Popper.js refs and setup
+  const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+
+  const { styles, attributes, update } = usePopper(referenceElement, popperElement, {
+    placement: tooltipSource === 'userpanel' ? 'bottom-start' : 'top',
+    modifiers: [
+      {
+        name: 'offset',
+        options: {
+          offset: [0, 10], // Small offset from reference element
+        },
+      },
+      {
+        name: 'flip',
+        options: {
+          fallbackPlacements: tooltipSource === 'userpanel'
+            ? ['top', 'bottom', 'top-start', 'bottom-start']
+            : ['bottom', 'top-start', 'bottom-start'],
+        },
+      },
+      {
+        name: 'preventOverflow',
+        options: {
+          padding: 16,
+        },
+      },
+    ],
+  });
+
+  // Update position on scroll or resize
+  React.useEffect(() => {
+    if (isTooltipOpen && update) {
+      const handleUpdate = () => update();
+      window.addEventListener('scroll', handleUpdate, true);
+      window.addEventListener('resize', handleUpdate);
+
+      return () => {
+        window.removeEventListener('scroll', handleUpdate, true);
+        window.removeEventListener('resize', handleUpdate);
+      };
+    }
+  }, [isTooltipOpen, update]);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [messageContextMenu, setMessageContextMenu] = useState<{
@@ -111,11 +161,21 @@ export default function Dashboard() {
   const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
+  const [serverInfoError, setServerInfoError] = useState<string | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelsError, setChannelsError] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<ListUsersResponse['users']>([]);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [webSocketConnection, setWebSocketConnection] = useState<ChannelWebSocket | null>(null);
+
+  // Voice channel state management
+  const [currentVoiceChannel, setCurrentVoiceChannel] = useState<{
+    channelId: string;
+    channelName: string;
+    participants: number;
+  } | null>(null);
   const [messageInput, setMessageInput] = useState(() => {
     // Initialize with persisted draft if we have a selected channel
     if (persistedChannelId) {
@@ -126,7 +186,6 @@ export default function Dashboard() {
   const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
 
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const [emojiPickerPosition, setEmojiPickerPosition] = useState({ x: 0, y: 0 });
   const [maxMessageLength, setMaxMessageLength] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pufferblow-max-message-length');
@@ -134,8 +193,10 @@ export default function Dashboard() {
     }
     return 4000; // Default value for SSR
   });
+  const dashboardRef = useRef<HTMLDivElement>(null);
   const messageInputBarRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const serverDropdownRef = useRef<HTMLDivElement>(null);
   const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
@@ -216,19 +277,19 @@ export default function Dashboard() {
   // Handle click outside to close user card tooltip
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userCardTooltip) {
-        closeUserCardTooltip();
+      if (isTooltipOpen) {
+        setIsTooltipOpen(false);
       }
     };
 
-    if (userCardTooltip) {
+    if (isTooltipOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [userCardTooltip]);
+  }, [isTooltipOpen]);
 
   // Save maxMessageLength to localStorage
   useEffect(() => {
@@ -314,12 +375,14 @@ export default function Dashboard() {
       const response = await listChannels(authToken);
       if (response.success && response.data && response.data.channels) {
         setChannels(response.data.channels);
+        setChannelsError(null);
         console.log("Channels fetched from API:", response.data.channels);
         logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
       } else {
         console.error("Failed to fetch channels from API:", response.error);
         logger.ui.error("Failed to fetch channels", { error: response.error });
         setChannels([]);
+        setChannelsError(response.error || 'Failed to load channels');
       }
     };
 
@@ -331,12 +394,14 @@ export default function Dashboard() {
       const response = await listUsers(authToken);
       if (response.success && response.data && response.data.users) {
         setUsers(response.data.users);
+        setUsersError(null);
         console.log("Users fetched from API:", response.data.users);
         logger.ui.info("Users fetched successfully", { count: response.data.users.length });
       } else {
         console.error("Failed to fetch users from API:", response.error);
         logger.ui.error("Failed to fetch users", { error: response.error });
         setUsers([]);
+        setUsersError(response.error || 'Failed to load server members');
       }
     };
 
@@ -349,11 +414,14 @@ export default function Dashboard() {
       const response = await getServerInfo();
       if (response.success && response.data && response.data.server_info) {
         setServerInfo(response.data.server_info);
+        setServerInfoError(null);
         console.log("Server info fetched from API:", response.data.server_info);
         logger.ui.info("Server info fetched successfully");
       } else {
         console.error("Failed to fetch server info from API:", response.error);
         logger.ui.error("Failed to fetch server info", { error: response.error });
+        setServerInfo(null);
+        setServerInfoError(response.error || 'Failed to load server information');
       }
     };
 
@@ -372,9 +440,17 @@ export default function Dashboard() {
         const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
         if (persistedChannel) {
           console.log("Restoring previously selected channel:", persistedChannel);
-          // Don't call handleChannelSelect here as it will handle persistence itself
+
+          // Set the selected channel and load messages automatically
           setSelectedChannel(persistedChannel);
-          persistSelectedChannel(persistedChannel.channel_id);
+
+          // Restore message draft for the persisted channel
+          const restoredDraft = getMessageDraft(persistedChannel.channel_id);
+          setMessageInput(restoredDraft);
+
+          // Load messages and setup WebSocket connection for the restored channel
+          loadChannelMessages(persistedChannel);
+          // Note: We don't call persistSelectedChannel here since it was already persisted
         } else {
           console.log("Persisted channel not found, selecting first available channel");
           // Persisted channel no longer exists, select the first available channel
@@ -468,7 +544,6 @@ export default function Dashboard() {
             avatar="/pufferblow-art-pixel-32x32.png"
             status="offline"
             onClick={() => { }}
-            onSettingsClick={() => { }}
             className="m-2 mt-auto opacity-60"
           />
         </div>
@@ -800,30 +875,8 @@ export default function Dashboard() {
     // TODO: Implement direct message functionality
   };
 
-  const handleChannelSelect = async (channel: Channel) => {
-    console.log("Channel clicked:", channel);
-
-    // Save current channel's message draft before switching
-    if (selectedChannel && messageInput) {
-      setMessageDraft(selectedChannel.channel_id, messageInput);
-    }
-
-    // Disconnect from previous WebSocket if exists
-    if (webSocketConnection) {
-      webSocketConnection.disconnect();
-      setWebSocketConnection(null);
-    }
-
-    setSelectedChannel(channel);
-
-    // Persist the selected channel
-    persistSelectedChannel(channel.channel_id);
-
-    // Restore message draft for the new channel
-    const restoredDraft = getMessageDraft(channel.channel_id);
-    setMessageInput(restoredDraft);
-
-    // Load messages for the selected channel
+  // Extracted message loading logic for reuse
+  const loadChannelMessages = async (channel: Channel) => {
     const authToken = getAuthTokenFromCookies() || '';
     const hostPort = getHostPortForWebSocket();
 
@@ -855,6 +908,44 @@ export default function Dashboard() {
                   // Check if message already exists (avoid duplicates)
                   const exists = prevMessages.some(m => m.message_id === msgId);
                   if (!exists) {
+                    // Normalize attachments from WebSocket (may be simple URLs or objects)
+                    let normalizedAttachments: MessageAttachment[] = [];
+                    if (message.attachments && Array.isArray(message.attachments)) {
+                      const tempAttachments: MessageAttachment[] = [];
+                      message.attachments.forEach((att: any) => {
+                        // If it's already an object with proper structure, use it
+                        if (typeof att === 'object' && att.url) {
+                          tempAttachments.push(att);
+                        }
+                        // If it's a string URL, convert to MessageAttachment object
+                        else if (typeof att === 'string') {
+                          const filename = att.split('/').pop() || 'attachment';
+                          const ext = filename.split('.').pop()?.toLowerCase() || '';
+                          let mimeType = 'application/octet-stream';
+
+                          // Guess MIME type from extension (fallback)
+                          if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+                            mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+                          } else if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
+                            mimeType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
+                          } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
+                            mimeType = ext === 'pdf' ? 'application/pdf' :
+                                     ext === 'doc' ? 'application/msword' :
+                                     ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                                     ext === 'txt' ? 'text/plain' : 'application/octet-stream';
+                          }
+
+                          tempAttachments.push({
+                            url: att,
+                            filename: filename,
+                            type: mimeType,
+                            size: null
+                          });
+                        }
+                      });
+                      normalizedAttachments = tempAttachments;
+                    }
+
                     return [...prevMessages, {
                       message_id: msgId,
                       sender_user_id: message.sender_user_id || '',
@@ -866,7 +957,7 @@ export default function Dashboard() {
                       sender_roles: message.sender_roles,
                       sent_at: message.sent_at || new Date().toISOString(),
                       channel_id: channel.channel_id,
-                      attachments: message.attachments || []
+                      attachments: normalizedAttachments
                     }];
                   }
                   return prevMessages;
@@ -897,6 +988,33 @@ export default function Dashboard() {
     } else {
       console.log("Not loading messages - missing authToken, channel_id, or hostPort");
     }
+  };
+
+  const handleChannelSelect = async (channel: Channel) => {
+    console.log("Channel clicked:", channel);
+
+    // Save current channel's message draft before switching
+    if (selectedChannel && messageInput) {
+      setMessageDraft(selectedChannel.channel_id, messageInput);
+    }
+
+    // Disconnect from previous WebSocket if exists
+    if (webSocketConnection) {
+      webSocketConnection.disconnect();
+      setWebSocketConnection(null);
+    }
+
+    setSelectedChannel(channel);
+
+    // Persist the selected channel
+    persistSelectedChannel(channel.channel_id);
+
+    // Restore message draft for the new channel
+    const restoredDraft = getMessageDraft(channel.channel_id);
+    setMessageInput(restoredDraft);
+
+    // Load messages for the selected channel using the extracted function
+    await loadChannelMessages(channel);
   };
 
   const handleMessageContextMenu = (messageId: string, event: React.MouseEvent) => {
@@ -987,8 +1105,13 @@ export default function Dashboard() {
           message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`, // Display text for attachment-only messages
           hashed_message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`,
           sent_at: new Date().toISOString(),
-          channel_id: selectedChannel.channel_id
-          // Note: Attachment URLs will be available when the API responds
+          channel_id: selectedChannel.channel_id,
+          attachments: messageAttachments.length > 0 ? messageAttachments.map(file => ({
+            url: URL.createObjectURL(file),
+            filename: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size
+          })) : [] // Create proper MessageAttachment objects for immediate display
         };
         setMessages(prevMessages => [...prevMessages, tempMessage]);
 
@@ -1096,38 +1219,6 @@ export default function Dashboard() {
   const handleEmojiClick = (event: React.MouseEvent) => {
     event.preventDefault();
 
-    const buttonRect = (event.target as HTMLElement).getBoundingClientRect();
-    const pickerWidth = 320; // w-80
-    const pickerHeight = 400; // Approximate height
-    const gap = 8;
-
-    // Position horizontally: center on the emoji button
-    let x = buttonRect.left + (buttonRect.width / 2) - (pickerWidth / 2);
-
-    // Ensure horizontal bounds
-    if (x < gap) {
-      x = gap;
-    } else if (x + pickerWidth > window.innerWidth - gap) {
-      x = window.innerWidth - pickerWidth - gap;
-    }
-
-    // Position vertically: above the button with some space for the arrow
-    let y = buttonRect.top - pickerHeight - gap - 4; // Extra space for visual arrow
-
-    // If not enough space above, position below
-    if (y < gap) {
-      y = buttonRect.bottom + gap;
-    }
-
-    // Ensure vertical bounds
-    if (y + pickerHeight > window.innerHeight - gap) {
-      y = window.innerHeight - pickerHeight - gap;
-    }
-    if (y < gap) {
-      y = gap;
-    }
-
-    setEmojiPickerPosition({ x, y });
     setIsEmojiPickerOpen(!isEmojiPickerOpen);
     logger.ui.debug("Emoji picker toggled", { isOpen: !isEmojiPickerOpen });
   };
@@ -1145,396 +1236,423 @@ export default function Dashboard() {
     // TODO: Implement GIF sending functionality
   };
 
-  const handleUserClick = async (userId: string, username: string, event: React.MouseEvent) => {
+  const handleUserClick = async (userId: string, username: string, event: React.MouseEvent, tooltipSource?: 'userpanel' | 'members' | 'messages') => {
     event.preventDefault();
 
-    closeUserCardTooltip();
+    // Close tooltip if clicking on the same element
+    if (isTooltipOpen) {
+      setIsTooltipOpen(false);
+      return;
+    }
 
     try {
-      // Try to find user in the current users list first
-      const apiUser = users.find(u => u.user_id === userId);
-      if (apiUser) {
-        // Convert API user data to display format with full customization settings
+      // Fetch user profile from API
+      const hostPort = getHostPortFromStorage();
+      const authToken = getAuthTokenFromCookies();
+      const response = await getUserProfileById(hostPort!, userId, authToken!);
+
+      const displayedUsername = username;
+
+      if (response.success && response.data?.user_data) {
+        const userData = response.data.user_data;
+
         const displayUser: DisplayUser = {
-          id: apiUser.user_id,
-          username: apiUser.username,
-          avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(apiUser.username)}&backgroundColor=5865f2`,
-          banner: undefined, // Could be extended from API later
-          accentColor: apiUser.is_owner ? '#22d3ee' : apiUser.is_admin ? '#ef4444' : '#8b5cf6', // Cyan for owner, red for admin, purple for member
-          bannerColor: apiUser.is_owner ? '#22d3ee' : apiUser.is_admin ? '#ef4444' : '#8b5cf6', // Same colors but for banner background
-          customStatus: apiUser.is_owner ? 'Server Owner' : apiUser.is_admin ? 'Administrator' : 'Active Member',
-          externalLinks: [], // Would be loaded from user preferences/settings in real implementation
-          status: (apiUser.status === 'online' || apiUser.status === 'idle' || apiUser.status === 'dnd' || apiUser.status === 'offline')
-            ? apiUser.status as 'online' | 'idle' | 'dnd' | 'offline'
-            : 'offline',
-          bio: `Member of ${serverInfo?.server_name || 'Pufferblow Server'} since ${new Date(apiUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
-          joinedAt: apiUser.created_at || apiUser.last_seen,
-          originServer: serverInfo?.server_name || 'Pufferblow Server',
-          roles: apiUser.is_owner ? ['Owner', 'Admin'] : apiUser.is_admin ? ['Admin'] : ['Member']
+          id: userData.user_id || userId,
+          username: displayedUsername,
+          avatar: userData.avatar_url ? createFullUrl(userData.avatar_url) || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(displayedUsername)}&backgroundColor=5865f2` : `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(displayedUsername)}&backgroundColor=5865f2`,
+          banner: userData.banner_url ? createFullUrl(userData.banner_url) : undefined,
+          accentColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
+          bannerColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
+                    customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
+                    externalLinks: [], // Would be loaded from user preferences/settings in real implementation
+                    status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'offline') ? userData.status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline',
+                    bio: userData.about || `Active member of the server.`,
+                    joinedAt: userData.created_at || '',
+                    originServer: userData.origin_server || serverInfo?.server_name || 'Pufferblow Server',
+                    roles: getUserRoles(userData.roles_ids).map(role => role.toString()),
+          activity: undefined, // Could be extended later
+          mutualServers: undefined, // Could be calculated later
+          mutualFriends: undefined, // Could be extended later
+          badges: [] // Could be extended later
         };
-        showUserCardTooltip(displayUser, event);
+
+        showUserCardTooltip(displayUser, event, tooltipSource);
       } else {
-        // Fallback to creating a basic user card from the username
-        const fallbackUser: DisplayUser = {
-          id: userId,
-          username: username,
-          avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
-          banner: undefined,
-          accentColor: '#8b5cf6', // Purple default
-          bannerColor: undefined,
-          customStatus: 'Member',
-          externalLinks: [],
-          status: 'offline',
-          bio: 'User information not available',
-          joinedAt: '',
-          originServer: serverInfo?.server_name || 'Pufferblow Server',
-          roles: ['Member']
-        };
-        showUserCardTooltip(fallbackUser, event);
+        throw new Error('Failed to fetch user profile');
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
       showToast('Could not load user profile', 'error');
+
+      // Fallback user display
+      const fallbackUser: DisplayUser = {
+        id: userId,
+        username: username,
+        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
+        banner: undefined,
+        accentColor: '#8b5cf6',
+        bannerColor: undefined,
+        customStatus: 'Member',
+        externalLinks: [],
+        status: 'offline',
+        bio: 'User information not available',
+        joinedAt: '',
+        originServer: serverInfo?.server_name || 'Pufferblow Server',
+        roles: ['Member']
+      };
+      showUserCardTooltip(fallbackUser, event, tooltipSource);
     }
   };
 
-  // Helper functions for user card tooltip
-  const showUserCardTooltip = (user: DisplayUser, event: React.MouseEvent) => {
-    const tooltipWidth = 220; // Smaller tooltip width
-    const tooltipHeight = 180; // Much more compact tooltip height
-    const gap = 8;
-    const clickX = event.clientX;
-    const clickY = event.clientY;
-
-    // First, calculate position above the click point
-    let x = clickX - (tooltipWidth / 2); // Center horizontally on click point
-    let y = clickY - tooltipHeight - gap; // Position above with gap
-    let transform = 'translate(0, 0)';
-
-    // Check if positioning above would go off-screen
-    if (y < gap) {
-      // Position below the click point instead
-      y = clickY + gap;
-      transform = 'translate(0, 0)';
-    } else {
-      // Keep position above but adjust transform to account for full height
-      transform = 'translate(0, 0)';
+  // Helper function for user card tooltip
+  const showUserCardTooltip = (user: DisplayUser, event: React.MouseEvent, source?: 'userpanel' | 'members' | 'messages') => {
+    if (source) {
+      setTooltipSource(source);
     }
-
-    // Ensure horizontal bounds
-    if (x < gap) {
-      x = gap;
-    } else if (x + tooltipWidth > window.innerWidth - gap) {
-      x = window.innerWidth - tooltipWidth - gap;
-    }
-
-    // Ensure vertical bounds
-    if (y + tooltipHeight > window.innerHeight - gap) {
-      y = window.innerHeight - tooltipHeight - gap;
-      if (y < gap) y = gap;
-    }
-
-    // Final bounds checking
-    x = Math.max(gap, Math.min(x, window.innerWidth - tooltipWidth - gap));
-    y = Math.max(gap, Math.min(y, window.innerHeight - tooltipHeight - gap));
-
-    setUserCardTooltip({
-      user,
-      position: { x, y },
-      transform: transform // Store transform for later use
-    });
-  };
-
-  const closeUserCardTooltip = () => {
-    setUserCardTooltip(null);
+    const target = event.currentTarget as HTMLElement;
+    setReferenceElement(target);
+    setUserCardTooltipUser(user);
+    setIsTooltipOpen(true);
   };
 
   return (
     <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
-      {/* Server Sidebar */}
-      <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm">
-        <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+      {/* Left Sidebar Container */}
+      <div className="flex flex-col gap-0 h-full">
+        {/* Server and Channel Sidebars Row */}
+        <div className="flex flex-1 gap-2">
+          {/* Server Sidebar */}
+          <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm rounded-br-none">
+            <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
 
-        {/* Current Server */}
-        {serverInfo && (
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 cursor-pointer group relative">
-            {serverInfo.avatar_url ? (
-              <img
-                src={serverInfo.avatar_url}
-                alt={`${serverInfo.server_name} avatar`}
-                className="w-12 h-12 rounded-2xl object-cover"
-              />
-            ) : (
-              <span className="text-white font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
-                {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
-              </span>
-            )}
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-100"></div>
-          </div>
-        )}
-
-        {/* Add Server Button */}
-        <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
-          <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-        </div>
-      </div>
-
-      {/* Channel Sidebar */}
-      <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm">
-        {/* Modern Server Header */}
-        <div className="relative">
-          {/* Server Banner */}
-          {serverInfo?.banner_url && (
-            <div className="relative h-20 w-full rounded-t-2xl overflow-hidden">
-              <img
-                src={serverInfo.banner_url}
-                alt={`${serverInfo.server_name} banner`}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
-            </div>
-          )}
-
-          {/* Server Info Section */}
-          <div className={`px-4 py-3 ${serverInfo?.banner_url ? 'relative' : 'border-b border-[var(--color-border)]'}`}>
-            <div className="flex items-center justify-between">
-              {/* Server Info */}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-white font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
-                  {serverInfo?.server_name || 'Loading...'}
-                </h1>
-                <p className="text-gray-400 text-xs truncate">{serverInfo?.server_description}</p>
-              </div>
-
-              {/* Server Dropdown */}
-              <div className="relative" ref={serverDropdownRef}>
-                <button
-                  onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-tertiary)] transition-all duration-200 group"
-                  title="Server options"
-                >
-                  <svg
-                    className={`w-4 h-4 text-gray-400 group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {/* Dropdown Menu */}
-                {serverDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-2 bg-[var(--color-surface-secondary)]/95 backdrop-blur-md border border-[var(--color-border)] rounded-lg shadow-xl py-2 min-w-56 z-50">
-                    {/* Server Actions */}
-                    <div className="px-2 py-1">
-                      <button
-                        onClick={() => {
-                          console.log('Server Info clicked');
-                          setServerDropdownOpen(false);
-                        }}
-                        className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
-                        title="View server information"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="text-sm font-medium">Server Info</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
-                          if (hasPermission) {
-                            setInviteModalOpen(true);
-                            setServerDropdownOpen(false);
-                          }
-                        }}
-                        disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
-                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${((currentUser?.roles || [])?.includes?.('Admin') || (currentUser?.roles || [])?.includes?.('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
-                            ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                            : 'text-gray-500 cursor-not-allowed opacity-60'
-                          }`}
-                        title={
-                          ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
-                            ? 'Create invite code'
-                            : 'Only admins, moderators, and owners can create invite codes'
-                        }
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span className="text-sm font-medium">Create Invite</span>
-                      </button>
-
-                      <Link
-                        to="/control-panel"
-                        onClick={(e) => {
-                          const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
-                          if (!hasAccess) {
-                            e.preventDefault();
-                          } else {
-                            setServerDropdownOpen(false);
-                          }
-                        }}
-                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                            ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                            : 'text-gray-500 cursor-not-allowed opacity-60'
-                          }`}
-                        title={
-                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                            ? 'Access server control panel'
-                            : 'Only server admins and owners can access control panel'
-                        }
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span className="text-sm font-medium">Control Panel</span>
-                      </Link>
-
-                      <button
-                        onClick={() => {
-                          const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
-                          if (isOwner) {
-                            const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                            if (confirmed) {
-                              console.log('Delete Server confirmed');
-                            }
-                            setServerDropdownOpen(false);
-                          }
-                        }}
-                        disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
-                        className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                            ? 'text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer'
-                            : 'text-gray-500 cursor-not-allowed opacity-60'
-                          }`}
-                        title={
-                          (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                            ? 'Delete this server'
-                            : 'Only server owner can delete the server'
-                        }
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span className="text-sm font-medium">Delete Server</span>
-                      </button>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="border-t border-[var(--color-border)] my-2"></div>
-
-                    {/* Channel Actions */}
-                    <div className="px-2 py-1">
-
-                    </div>
-                  </div>
+            {/* Current Server */}
+            {serverInfo && (
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 cursor-pointer group relative">
+                {serverInfo.avatar_url ? (
+                  <img
+                    src={serverInfo.avatar_url}
+                    alt={`${serverInfo.server_name} avatar`}
+                    className="w-12 h-12 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <span className="text-white font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
+                    {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
+                  </span>
                 )}
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-100"></div>
               </div>
+            )}
+
+            {/* Add Server Button */}
+            <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
+              <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
             </div>
           </div>
-        </div>
 
-        {/* Channel List */}
-        <div className="flex-1 overflow-y-auto">
-          {channels.length === 0 ? (
-            <div className="px-4 py-12 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <p className="text-lg font-medium mb-2 text-gray-400">No channels available</p>
-              <p className="text-gray-500">Ask a server admin to create some channels to get started.</p>
-            </div>
-          ) : (
-            <>
-              {/* Channels */}
-              <div className="px-2 py-4">
-                <div className="flex items-center px-2 mb-1">
-                  <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
+          {/* Channel Sidebar */}
+          <div className="w-80 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm rounded-bl-none">
+            {/* Modern Server Header */}
+            <div className="relative">
+              {/* Server Banner */}
+              {serverInfo?.banner_url && (
+                <div className="relative h-20 w-full rounded-t-2xl overflow-hidden">
+                  <img
+                    src={serverInfo.banner_url}
+                    alt={`${serverInfo.server_name} banner`}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                 </div>
+              )}
 
-                <div className="space-y-0.5">
-                  {channels.map(channel => {
-                    const hasDraft = getMessageDraft(channel.channel_id).trim().length > 0;
+              {/* Server Info Section */}
+              <div className={`px-4 py-3 ${serverInfo?.banner_url ? 'relative' : 'border-b border-[var(--color-border)]'}`}>
+                <div className="flex items-center justify-between">
+                  {/* Server Info */}
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-white font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
+                      {serverInfo?.server_name || 'Loading...'}
+                    </h1>
+                    <p className="text-gray-400 text-xs truncate">{serverInfo?.server_description}</p>
+                  </div>
 
-                    return (
-                      <div
-                        key={channel.channel_id}
-                        className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${selectedChannel?.channel_id === channel.channel_id ? 'bg-gray-600' : ''
-                          }`}
-                        onClick={() => handleChannelSelect(channel)}
-                        onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                  {/* Server Dropdown */}
+                  <div className="relative" ref={serverDropdownRef}>
+                    <button
+                      onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-tertiary)] transition-all duration-200 group"
+                      title="Server options"
+                    >
+                      <svg
+                        className={`w-4 h-4 text-gray-400 group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <span className="text-gray-400 mr-2">#</span>
-                        <span className="text-gray-400 text-sm break-words overflow-wrap-anywhere flex-1">{channel.channel_name}</span>
-                        <div className="flex items-center ml-auto">
-                          {hasDraft && (
-                            <div className="flex items-center mr-1" title="Has unsent message">
-                              <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </div>
-                          )}
-                          {channel.is_private && (
-                            <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {serverDropdownOpen && (
+                      <div className="absolute right-0 top-full mt-2 bg-[var(--color-surface-secondary)]/95 backdrop-blur-md border border-[var(--color-border)] rounded-lg shadow-xl py-2 min-w-56 z-50">
+                        {/* Server Actions */}
+                        <div className="px-2 py-1">
+                          <button
+                            onClick={() => {
+                              console.log('Server Info clicked');
+                              setServerDropdownOpen(false);
+                            }}
+                            className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
+                            title="View server information"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                          )}
+                            <span className="text-sm font-medium">Server Info</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
+                              if (hasPermission) {
+                                setInviteModalOpen(true);
+                                setServerDropdownOpen(false);
+                              }
+                            }}
+                            disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
+                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Moderator'))))
+                                ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                              }`}
+                            title={
+                              ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
+                                ? 'Create invite code'
+                                : 'Only admins, moderators, and owners can create invite codes'
+                            }
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-sm font-medium">Create Invite</span>
+                          </button>
+
+                          <Link
+                            to="/control-panel"
+                            onClick={(e) => {
+                              const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
+                              if (!hasAccess) {
+                                e.preventDefault();
+                              } else {
+                                setServerDropdownOpen(false);
+                              }
+                            }}
+                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                                ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                              }`}
+                            title={
+                              (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
+                                ? 'Access server control panel'
+                                : 'Only server admins and owners can access control panel'
+                            }
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm font-medium">Control Panel</span>
+                        </Link>
+
+                          <button
+                            onClick={() => {
+                              const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
+                              if (isOwner) {
+                                const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                                if (confirmed) {
+                                  console.log('Delete Server confirmed');
+                                }
+                                setServerDropdownOpen(false);
+                              }
+                            }}
+                            disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
+                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                                ? 'text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer'
+                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                              }`}
+                            title={
+                                (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
+                                  ? 'Delete this server'
+                                  : 'Only server owner can delete the server'
+                              }
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className="text-sm font-medium">Delete Server</span>
+                          </button>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-[var(--color-border)] my-2"></div>
+
+                        {/* Channel Actions */}
+                        <div className="px-2 py-1">
+
                         </div>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
               </div>
-            </>
-          )}
+            </div>
+
+            {/* Channel List */}
+            <div className="flex-1 overflow-y-auto">
+              {channelsError ? (
+                <div className="flex flex-col items-center justify-center min-h-96 px-6 py-12">
+                  <div className="relative">
+                    {/* Background Glow */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-full blur-xl scale-150"></div>
+
+                    {/* Main Icon Container */}
+                    <div className="relative w-20 h-20 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl shadow-2xl flex items-center justify-center mb-6 transform rotate-3 hover:rotate-0 transition-transform duration-300">
+                      <svg className="w-10 h-10 text-white drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+
+                      {/* Decorative Elements */}
+                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
+                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full"></div>
+                    </div>
+                  </div>
+
+                  {/* Error Message */}
+                  <div className="text-center max-w-md mb-8">
+                    <h3 className="text-xl font-bold text-white mb-3 drop-shadow-sm">
+                      Channels Unavailable
+                    </h3>
+                    <p className="text-gray-400 leading-relaxed mb-4">
+                      {channelsError}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-center">
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Retry</span>
+                    </button>
+                  </div>
+                </div>
+              ) : channels.length === 0 ? (
+                <div className="px-4 py-12 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <p className="text-lg font-medium mb-2 text-gray-400">No channels available</p>
+                  <p className="text-gray-500">Ask a server admin to create some channels to get started.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Channels */}
+                  <div className="px-2 py-4">
+                    <div className="flex items-center px-2 mb-1">
+                      <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {channels.map(channel => {
+                        // Render voice channels with VoiceChannel component
+                        if (channel.channel_type === 'voice') {
+                          return (
+                            <VoiceChannel
+                              key={channel.channel_id}
+                              channelId={channel.channel_id}
+                              channelName={channel.channel_name}
+                              isConnected={currentVoiceChannel?.channelId === channel.channel_id}
+                              onToggleConnection={() => {
+                                // This callback handles voice connection state changes within VoiceChannel component
+                              }}
+                            />
+                          );
+                        }
+
+                        // Render text channels normally
+                        const hasDraft = getMessageDraft(channel.channel_id).trim().length > 0;
+                        return (
+                          <div
+                            key={channel.channel_id}
+                            className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${selectedChannel?.channel_id === channel.channel_id ? 'bg-gray-600' : ''
+                              }`}
+                            onClick={() => handleChannelSelect(channel)}
+                            onContextMenu={(e) => handleChannelContextMenu(e, channel)}
+                          >
+                            <span className="text-gray-400 mr-2">#</span>
+                            <span className="text-gray-400 text-sm break-words overflow-wrap-anywhere flex-1">{channel.channel_name}</span>
+                            <div className="flex items-center ml-auto">
+                              {hasDraft && (
+                                <div className="flex items-center mr-1" title="Has unsent message">
+                                  <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </div>
+                              )}
+                              {channel.is_private && (
+                                <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* User Panel - Bottom of Channel Sidebar */}
+        {/* Full-width UserPanel as direct child of left sidebar container */}
         {currentUser && (
-          <UserPanel
-            username={currentUser.username || ''}
-            avatar={currentUser.avatar || ''}
-            status={currentUser.status === 'online' ? 'online' :
-              currentUser.status === 'offline' ? 'offline' :
-                currentUser.status === 'idle' ? 'idle' :
+          <div className="w-full bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded-b-2xl border-t border-[var(--color-border)]">
+            <div className="px-2 pb-2 pt-4">
+              <UserPanel
+                username={currentUser.username || ''}
+                avatar={currentUser.avatar || ''}
+                status={currentUser.status === 'idle' ? 'idle' :
                   currentUser.status === 'dnd' ? 'dnd' :
+                  currentUser.status === 'online' ? 'online' :
                     'offline'}
-            onClick={(e) => {
-              // Show user card tooltip for current user
-              const displayUser: DisplayUser = {
-                id: currentUser.user_id,
-                username: currentUser.username,
-                avatar: currentUser.avatar,
-                banner: undefined, // Could be extended from API later
-                accentColor: currentUser.is_owner ? '#22d3ee' : currentUser.is_admin ? '#ef4444' : '#8b5cf6',
-                bannerColor: currentUser.is_owner ? '#22d3ee' : currentUser.is_admin ? '#ef4444' : '#8b5cf6',
-                customStatus: currentUser.is_owner ? 'Server Owner' : currentUser.is_admin ? 'Administrator' : 'Active Member',
-                externalLinks: [],
-                status: (currentUser.status === 'online' || currentUser.status === 'idle' || currentUser.status === 'dnd' || currentUser.status === 'offline')
-                  ? currentUser.status as 'online' | 'idle' | 'dnd' | 'offline'
-                  : 'offline',
-                bio: `Member of ${serverInfo?.server_name || 'Pufferblow Server'} since ${new Date(currentUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
-                joinedAt: currentUser.created_at || currentUser.last_seen,
-                originServer: (serverInfo?.server_name || 'Pufferblow Server') as string,
-                roles: currentUser.is_owner ? ['Owner', 'Admin'] : currentUser.is_admin ? ['Admin'] : ['Member']
-              } as DisplayUser;
-
-              // Use actual click event for proper positioning
-              showUserCardTooltip(displayUser, e);
-            }}
-            onSettingsClick={() => showToast("User settings clicked", 'success')}
-            className="m-2 mt-auto"
-          />
+                onSettingsClick={() => navigate('/settings')}
+                onDeviceSelectorClick={() => setDeviceSelectorModalOpen(true)}
+                onClick={(e) => handleUserClick(currentUser.user_id, currentUser.username, e, 'userpanel')}
+                className="m-2 mt-auto opacity-60"
+                voiceChannel={currentVoiceChannel ? {
+                  channelName: currentVoiceChannel.channelName,
+                  participants: currentVoiceChannel.participants,
+                  onDisconnect: () => {
+                    // Handle voice channel disconnect
+                    setCurrentVoiceChannel(null);
+                  }
+                } : undefined}
+              />
+            </div>
+          </div>
         )}
       </div>
 
@@ -1620,11 +1738,59 @@ export default function Dashboard() {
                 const messageTimestamp = new Date(firstMessage.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                 const groupMessageIds = group.map(m => m.message_id);
 
-                // Use username from injected message data (server-provided)
-                const displayName = firstMessage.username || 'Unknown User';
+                // Get user profile data from users list and format
+                const foundUser = users.find(user => user.user_id === firstMessage.sender_user_id);
 
-                // Use avatar from injected message data (server-provided)
-                const displayAvatar = firstMessage.sender_avatar_url || '/pufferblow-art-pixel-32x32.png';
+                let messageUser: DisplayUser;
+                if (foundUser) {
+                  // Convert API user format to DisplayUser format
+                  messageUser = {
+                    id: foundUser.user_id,
+                    username: foundUser.username,
+                    avatar: foundUser.username ? `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(foundUser.username)}&backgroundColor=5865f2` : undefined,
+                    banner: undefined, // Could be extended from API later
+                    accentColor: foundUser.is_owner ? '#22d3ee' : foundUser.is_admin ? '#ef4444' : '#8b5cf6',
+                    bannerColor: foundUser.is_owner ? '#22d3ee' : foundUser.is_admin ? '#ef4444' : '#8b5cf6',
+                    customStatus: foundUser.is_owner ? 'Server Owner' : foundUser.is_admin ? 'Administrator' : 'Active Member',
+                    externalLinks: [], // Would be loaded from user preferences/settings in real implementation
+                    status: (foundUser.status === 'online' || foundUser.status === 'idle' || foundUser.status === 'dnd' || foundUser.status === 'offline')
+                      ? foundUser.status as 'online' | 'idle' | 'dnd' | 'offline'
+                      : 'offline',
+                    bio: `Member of ${serverInfo?.server_name || 'Pufferblow Server'} since ${new Date(foundUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
+                    joinedAt: foundUser.created_at,
+                    originServer: serverInfo?.server_name || 'Pufferblow Server',
+                    roles: foundUser.is_owner ? ['Owner', 'Admin'] : foundUser.is_admin ? ['Admin'] : ['Member'],
+                    activity: undefined, // Could be extended later
+                    mutualServers: undefined, // Could be calculated later
+                    mutualFriends: undefined, // Could be extended later
+                    badges: [] // Could be extended later
+                  };
+                } else {
+                  // Fallback for message user data when not in users list
+                  messageUser = {
+                    id: firstMessage.sender_user_id,
+                    username: firstMessage.username || 'Unknown User',
+                    avatar: firstMessage.sender_avatar_url ? createFullUrl(firstMessage.sender_avatar_url) : `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(firstMessage.username || firstMessage.sender_user_id)}&backgroundColor=5865f2`,
+                    banner: undefined,
+                    accentColor: '#8b5cf6',
+                    bannerColor: undefined,
+                    customStatus: 'Member',
+                    externalLinks: [],
+                    status: (firstMessage.sender_status === 'online' || firstMessage.sender_status === 'idle' || firstMessage.sender_status === 'dnd') ? firstMessage.sender_status as 'online' | 'idle' | 'dnd' : 'offline',
+                    bio: 'Active member of the server',
+                    joinedAt: '',
+                    originServer: serverInfo?.server_name || 'Pufferblow Server',
+                    roles: firstMessage.sender_roles ? ['Member'] : [], // Use sender_roles if available
+                    activity: undefined,
+                    mutualServers: undefined,
+                    mutualFriends: undefined,
+                    badges: undefined
+                  };
+                }
+
+                // Use actual user profile data (fallback to message data if user not found)
+                const displayName = messageUser.username || firstMessage.username || 'Unknown User';
+                const displayAvatar = messageUser.avatar || firstMessage.sender_avatar_url || '/pufferblow-art-pixel-32x32.png';
 
                 return (
                   <div
@@ -1643,7 +1809,7 @@ export default function Dashboard() {
                         src={displayAvatar}
                         alt={displayName}
                         className="w-full h-full rounded-full cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e)}
+                        onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
                       />
                     </div>
                     <div className="flex-1">
@@ -1651,7 +1817,7 @@ export default function Dashboard() {
                         {/* Username */}
                         <span
                           className="text-white font-medium select-text cursor-pointer hover:underline"
-                          onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e)}
+                          onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
                         >
                           {displayName}
                         </span>
@@ -1670,25 +1836,9 @@ export default function Dashboard() {
                           <div key={message.message_id}>
                             <MarkdownRenderer content={message.message} className="text-gray-300" />
 
-                            {/* Render attachments if they exist */}
+                            {/* Render attachments with Discord-style bubble layout */}
                             {message.attachments && message.attachments.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {message.attachments.map((attachment, index) => (
-                                  <a
-                                    key={index}
-                                    href={attachment}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-lg border border-gray-600 hover:bg-gray-600 transition-colors text-sm text-gray-300 hover:text-white max-w-xs truncate"
-                                    title="Attachment"
-                                  >
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                    </svg>
-                                    <span className="truncate">Attachment {index + 1}</span>
-                                  </a>
-                                ))}
-                              </div>
+                              <AttachmentGrid attachments={message.attachments} />
                             )}
                           </div>
                         ))}
@@ -1790,29 +1940,33 @@ export default function Dashboard() {
 
           <div
             ref={messageInputBarRef}
-            className={`bg-gray-600 rounded-lg px-4 py-2 transition-opacity ${!selectedChannel ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl transition-all duration-300 hover:bg-white/15 hover:shadow-3xl ${
+              !selectedChannel ? 'opacity-50 pointer-events-none' : ''
+            }`}
           >
             <div className="flex items-end space-x-3">
+              {/* Hidden File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileUpload}
+                disabled={!selectedChannel}
+                className="hidden"
+                accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx"
+              />
+
               {/* File Upload Button */}
-              <label className="flex-shrink-0">
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileUpload}
-                  disabled={!selectedChannel}
-                  className="hidden"
-                  accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx"
-                />
-                <button
-                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!selectedChannel}
-                  title="Upload file"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-                </button>
-              </label>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!selectedChannel}
+                title="Upload file"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
 
               {/* Message Input */}
               <div className="flex-1 min-h-0">
@@ -1870,7 +2024,6 @@ export default function Dashboard() {
           {/* Emoji Picker */}
           <EmojiPicker
             isOpen={isEmojiPickerOpen}
-            position={emojiPickerPosition}
             onClose={() => setIsEmojiPickerOpen(false)}
             onEmojiSelect={handleEmojiSelect}
             onGifSelect={handleGifSelect}
@@ -1897,67 +2050,97 @@ export default function Dashboard() {
 
           {/* Scrollable Members Content */}
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
-            <div className="p-4 space-y-4">
-              {(() => {
-                // Group users by role
-                const owners = users.filter(user => user.is_owner);
-                const admins = users.filter(user => user.is_admin && !user.is_owner);
-                const moderators: typeof users = []; // No moderator role defined in API
-                const members = users.filter(user => !user.is_owner && !user.is_admin);
+            {usersError ? (
+              <div className="p-4">
+                <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <p className="text-center text-lg font-medium mb-2 text-red-400">Failed to load members</p>
+                <p className="text-center text-gray-500 mb-4">{usersError}</p>
+                <div className="text-center">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : users.length === 0 ? (
+              <div className="p-4">
+                <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <p className="text-center text-lg font-medium mb-2 text-gray-400">No members found</p>
+                <p className="text-center text-gray-500">This server appears to be empty.</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                {(() => {
+                  // Group users by role
+                  const owners = users.filter(user => user.is_owner);
+                  const admins = users.filter(user => user.is_admin && !user.is_owner);
+                  const moderators: typeof users = []; // No moderator role defined in API
+                  const members = users.filter(user => !user.is_owner && !user.is_admin);
 
-                const renderUserGroup = (title: string, userList: typeof users, roleColor: string, roleLabel: string) => {
-                  if (userList.length === 0) return null;
+                  const renderUserGroup = (title: string, userList: typeof users, roleColor: string, roleLabel: string) => {
+                    if (userList.length === 0) return null;
+
+                    return (
+                      <div>
+                        <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">
+                          {title} — {userList.length}
+                        </h4>
+                        <div className="space-y-1">
+                          {userList.map(user => (
+                            <div
+                              key={user.user_id}
+                              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                              onClick={(e) => handleUserClick(user.user_id, user.username, e, 'members')}
+                            >
+                              <div className="relative">
+                                <img
+                                  src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
+                                  alt={user.username}
+                                  className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
+                                />
+                                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-green-400' :
+                                    user.status === 'idle' ? 'bg-yellow-400' :
+                                      user.status === 'dnd' ? 'bg-red-400' :
+                                        'bg-gray-400'
+                                  }`}></div>
+                              </div>
+                              <div className="flex items-center space-x-2 flex-1">
+                                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text truncate">{user.username}</span>
+                                {user.is_owner && (
+                                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                                )}
+                                {user.is_admin && !user.is_owner && (
+                                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  };
 
                   return (
-                    <div>
-                      <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-2 bg-[var(--color-surface-tertiary)] px-2 py-1 rounded border border-[var(--color-border)]">
-                        {title} — {userList.length}
-                      </h4>
-                      <div className="space-y-1">
-                        {userList.map(user => (
-                          <div
-                            key={user.user_id}
-                            className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                            onClick={(e) => handleUserClick(user.user_id, user.username, e)}
-                          >
-                            <div className="relative">
-                              <img
-                                src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
-                                alt={user.username}
-                                className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
-                              />
-                              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-green-400' :
-                                  user.status === 'idle' ? 'bg-yellow-400' :
-                                    user.status === 'dnd' ? 'bg-red-400' :
-                                      'bg-gray-400'
-                                }`}></div>
-                            </div>
-                            <div className="flex items-center space-x-2 flex-1">
-                              <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text truncate">{user.username}</span>
-                              {user.is_owner && (
-                                <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
-                              )}
-                              {user.is_admin && !user.is_owner && (
-                                <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <>
+                      {renderUserGroup("Owner", owners, "red-300", "OWNER")}
+                      {renderUserGroup("Admin", admins, "red-300", "ADMIN")}
+                      {renderUserGroup("Moderators", moderators, "purple-300", "MOD")}
+                      {renderUserGroup("Members", members, "green-300", "MEMBER")}
+                    </>
                   );
-                };
-
-                return (
-                  <>
-                    {renderUserGroup("Owner", owners, "red-300", "OWNER")}
-                    {renderUserGroup("Admin", admins, "red-300", "ADMIN")}
-                    {renderUserGroup("Moderators", moderators, "purple-300", "MOD")}
-                    {renderUserGroup("Members", members, "green-300", "MEMBER")}
-                  </>
-                );
-              })()}
-            </div>
+                })()}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2021,7 +2204,6 @@ export default function Dashboard() {
             y = gap;
           }
 
-          setEmojiPickerPosition({ x, y });
           setIsEmojiPickerOpen(true);
           setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } }); // Close context menu
         }}
@@ -2134,45 +2316,50 @@ export default function Dashboard() {
         messageCount={messageReportModal.messages.length}
       />
 
-      {/* User Card Tooltip */}
-      {userCardTooltip && (
+      {/* User Card Tooltip - Using React Portal with Popper.js */}
+      {isTooltipOpen && userCardTooltipUser && ReactDOM.createPortal(
         <div
-          className="fixed rounded-xl shadow-2xl z-50 pointer-events-auto"
-          style={{
-            left: userCardTooltip.position.x,
-            top: userCardTooltip.position.y,
-            transform: userCardTooltip.transform || 'translate(0, 0)',
-          }}
+          ref={setPopperElement}
+          className="rounded-xl shadow-2xl z-50 pointer-events-auto"
+          style={styles.popper}
+          {...attributes.popper}
           onClick={(e) => e.stopPropagation()}
         >
           <UserCard
-            username={userCardTooltip.user.username || 'Unknown User'}
-            bio={userCardTooltip.user.bio || 'No bio available'}
-            roles={userCardTooltip.user.roles as any}
-            originServer={userCardTooltip.user.originServer || serverInfo?.server_name || 'Loading...'}
-            avatarUrl={userCardTooltip.user.avatar}
-            backgroundUrl={userCardTooltip.user.banner}
-            status={userCardTooltip.user.status === 'online' ? 'active' :
-              userCardTooltip.user.status === 'idle' ? 'idle' :
-                userCardTooltip.user.status === 'dnd' ? 'dnd' : 'offline'}
-            activity={userCardTooltip.user.activity || {
+            username={userCardTooltipUser.username || 'Unknown User'}
+            bio={userCardTooltipUser.bio || 'No bio available'}
+            roles={userCardTooltipUser.roles as any}
+            originServer={userCardTooltipUser.originServer || serverInfo?.server_name || 'Loading...'}
+            avatarUrl={userCardTooltipUser.avatar}
+            backgroundUrl={userCardTooltipUser.banner}
+            status={userCardTooltipUser.status === 'online' ? 'active' :
+              userCardTooltipUser.status === 'idle' ? 'idle' :
+                userCardTooltipUser.status === 'dnd' ? 'dnd' : 'offline'}
+            activity={userCardTooltipUser.activity || {
               type: Math.random() > 0.5 ? 'listening' : 'playing',
               name: Math.random() > 0.5 ? 'Spotify' : 'Visual Studio Code',
               details: Math.random() > 0.5 ? 'Symphony No. 9 in D minor, Op. 125' : 'Working on pufferblow-client'
             }}
-            mutualServers={userCardTooltip.user.mutualServers || Math.floor(Math.random() * 15) + 1}
-            mutualFriends={userCardTooltip.user.mutualFriends || Math.floor(Math.random() * 25) + 1}
-            badges={userCardTooltip.user.badges || ['Developer', 'Early Supporter'].slice(0, Math.floor(Math.random() * 3))}
-            customStatus={userCardTooltip.user.customStatus}
-            accentColor={userCardTooltip.user.accentColor || '#5865f2'}
-            bannerColor={userCardTooltip.user.bannerColor}
-            externalLinks={userCardTooltip.user.externalLinks || []}
-            joinDate={userCardTooltip.user.joinedAt ? new Date(userCardTooltip.user.joinedAt).toISOString().split('T')[0] : undefined}
+            mutualServers={userCardTooltipUser.mutualServers || Math.floor(Math.random() * 15) + 1}
+            mutualFriends={userCardTooltipUser.mutualFriends || Math.floor(Math.random() * 25) + 1}
+            badges={userCardTooltipUser.badges || ['Developer', 'Early Supporter'].slice(0, Math.floor(Math.random() * 3))}
+            customStatus={userCardTooltipUser.customStatus}
+            accentColor={userCardTooltipUser.accentColor || '#5865f2'}
+            bannerColor={userCardTooltipUser.bannerColor}
+            externalLinks={userCardTooltipUser.externalLinks || []}
+            joinDate={userCardTooltipUser.joinedAt ? new Date(userCardTooltipUser.joinedAt).toISOString().split('T')[0] : undefined}
             showOnlineIndicator={true}
             isCompact={false}
           />
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* Device Selector Modal */}
+      <DeviceSelectorModal
+        isOpen={deviceSelectorModalOpen}
+        onClose={() => setDeviceSelectorModalOpen(false)}
+      />
     </div>
   );
 }

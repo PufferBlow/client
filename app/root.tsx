@@ -7,6 +7,7 @@ import {
   Scripts,
   ScrollRestoration,
   Navigate,
+  useLocation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -18,6 +19,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
+import { getAuthTokenFromCookies } from "./services/user";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -73,15 +75,64 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const location = useLocation();
+
   // Check if we're in Electron desktop app environment
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
-  // In Electron, redirect root to login for first time users,
-  // but allow routing to work normally for all authenticated routes
-  if (isElectron && typeof window !== 'undefined') {
-    // Allow normal routing in Electron - authentication checks happen in individual components
-    return <Outlet />;
+  // Check authentication status
+  const authToken = getAuthTokenFromCookies();
+  const isAuthenticated = !!authToken;
+
+  // Define route categories
+  const publicRoutes = ['/login', '/signup', '/', '/download'];
+  const homeRoutes = ['/']; // Home/marketing page at root
+  const authRoutes = ['/login', '/signup'];
+
+  // Check if current route requires authentication
+  const currentPath = location.pathname;
+  const isHomeRoute = homeRoutes.includes(currentPath);
+  const isAuthRoute = authRoutes.includes(currentPath);
+  const isPublicRoute = publicRoutes.includes(currentPath);
+  const isProtectedRoute = !isPublicRoute && !isHomeRoute;
+
+  // Universal authentication logic for both web and desktop:
+
+  // 1. If authenticated user tries to access auth pages, redirect to dashboard
+  if (isAuthRoute && isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
   }
+
+  // 2. Desktop: redirect home/marketing page to login for unauthenticated users
+  if (isElectron && isHomeRoute && !isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 3. Web: authenticated users on home page redirect to dashboard (avoid showing marketing)
+  if (isHomeRoute && !isElectron && isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // 4. If accessing protected route without authentication, redirect to login
+  if (isProtectedRoute && !isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 5. Desktop: redirect download page based on authentication
+  if (isElectron && currentPath === '/download') {
+    if (isAuthenticated) {
+      return <Navigate to="/dashboard" replace />;
+    } else {
+      return <Navigate to="/login" replace />;
+    }
+  }
+
+  // 6. Debug authentication state for settings page access
+  if (currentPath === '/settings' && !isAuthenticated) {
+    console.log('Settings page access blocked: Not authenticated');
+  }
+
+  
 
   return <Outlet />;
 }

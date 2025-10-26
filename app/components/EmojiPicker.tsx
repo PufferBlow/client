@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 interface EmojiPickerProps {
   isOpen: boolean;
-  position: { x: number; y: number };
   onClose: () => void;
   onEmojiSelect: (emoji: string) => void;
   onGifSelect?: (gif: { url: string; title: string }) => void;
@@ -20,7 +19,7 @@ interface GifResult {
   };
 }
 
-export function EmojiPicker({ isOpen, position, onClose, onEmojiSelect, onGifSelect }: EmojiPickerProps) {
+export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: EmojiPickerProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'emoji' | 'gif' | 'sticker'>('emoji');
@@ -28,18 +27,41 @@ export function EmojiPicker({ isOpen, position, onClose, onEmojiSelect, onGifSel
   const [isLoadingGifs, setIsLoadingGifs] = useState(false);
   const [gifError, setGifError] = useState<string | null>(null);
 
+  // Drag functionality
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState(() => {
+    // Load saved position from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pufferblow-emoji-picker-position');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          // Fall through to default
+        }
+      }
+    }
+    // Default position (center of screen)
+    return {
+      x: window.innerWidth / 2 - 200, // Half picker width
+      y: window.innerHeight / 2 - 200  // Half picker height
+    };
+  });
+
   // Function to convert emoji to Twemoji code point
   const emojiToCodePoint = (emoji: string): string => {
     return [...emoji].map(char => char.codePointAt(0)?.toString(16).toLowerCase()).join('-');
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
+  // Save position to localStorage
+  const savePosition = useCallback((newPosition: { x: number; y: number }) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pufferblow-emoji-picker-position', JSON.stringify(newPosition));
+    }
+  }, []);
 
+  useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
@@ -47,15 +69,62 @@ export function EmojiPicker({ isOpen, position, onClose, onEmojiSelect, onGifSel
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleEscape);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen, onClose]);
+
+  // Drag event handlers
+  const handleMouseDown = (event: React.MouseEvent) => {
+    if (!pickerRef.current) return;
+
+    setIsDragging(true);
+    const rect = pickerRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    });
+    event.preventDefault();
+  };
+
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (!isDragging) return;
+
+    const newX = Math.max(0, Math.min(window.innerWidth - 400, event.clientX - dragOffset.x));
+    const newY = Math.max(0, Math.min(window.innerHeight - 350, event.clientY - dragOffset.y));
+
+    const newPosition = { x: newX, y: newY };
+    setPosition(newPosition);
+  }, [isDragging, dragOffset]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    savePosition(position);
+  }, [position, savePosition]);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Reset search when opening
   useEffect(() => {
@@ -136,46 +205,6 @@ export function EmojiPicker({ isOpen, position, onClose, onEmojiSelect, onGifSel
 
   if (!isOpen) return null;
 
-  // Calculate adjusted position to stay within viewport bounds
-  const getAdjustedPosition = () => {
-    const pickerWidth = 320; // w-80
-    const pickerHeight = 400; // Approximate height
-    const gap = 8;
-
-    let adjustedX = position.x;
-    let adjustedY = position.y;
-
-    // Check horizontal bounds
-    if (position.x + pickerWidth / 2 > window.innerWidth) {
-      // Picker would extend beyond right edge, position from right
-      adjustedX = window.innerWidth - pickerWidth - gap;
-    } else if (position.x - pickerWidth / 2 < 0) {
-      // Picker would extend beyond left edge, position from left
-      adjustedX = gap;
-    } else {
-      // Center on click point
-      adjustedX = position.x - pickerWidth / 2;
-    }
-
-    // Check vertical bounds - prefer above, fallback below
-    if (position.y - pickerHeight - gap < 0) {
-      // Not enough space above, position below
-      adjustedY = position.y + gap;
-    } else {
-      // Position above
-      adjustedY = position.y - pickerHeight - gap;
-    }
-
-    // Ensure picker doesn't go off bottom
-    if (adjustedY + pickerHeight > window.innerHeight) {
-      adjustedY = window.innerHeight - pickerHeight - gap;
-    }
-
-    return { x: adjustedX, y: adjustedY };
-  };
-
-  const adjustedPosition = getAdjustedPosition();
-
   // Optimized emoji list - most commonly used emojis
   const emojiList = [
     // Faces & Emotions
@@ -228,194 +257,201 @@ export function EmojiPicker({ isOpen, position, onClose, onEmojiSelect, onGifSel
     : emojiList;
 
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
+    <div
+      ref={pickerRef}
+      className={`
+        fixed z-50 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl shadow-2xl
+        ${isDragging ? 'cursor-grabbing' : ''}
+      `}
+      style={{
+        left: position.x,
+        top: position.y,
+        width: '400px',
+        maxHeight: '350px'
+      }}
+    >
+      {/* Draggable Header */}
       <div
-        ref={pickerRef}
-        className="absolute bg-gray-800 rounded-lg w-80 shadow-2xl border border-gray-700 relative"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          left: adjustedPosition.x,
-          top: adjustedPosition.y,
-        }}
+        className="relative h-10 px-4 flex items-center justify-between cursor-grab active:cursor-grabbing select-none"
+        onMouseDown={handleMouseDown}
       >
-        {/* Arrow pointing down */}
-        <div
-          className="absolute w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"
-          style={{
-            left: '50%',
-            transform: 'translateX(-50%)',
-            bottom: '-4px',
-          }}
-        ></div>
-        {/* Header */}
-        <div className="h-12 px-4 flex items-center justify-between border-b border-gray-700 bg-gray-800 rounded-t-lg">
+        {/* Drag handle indicator */}
+        <div className="flex items-center space-x-2 flex-1">
+          <div className="flex space-x-1">
+            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
+            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
+            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
+          </div>
           <h3 className="text-sm font-semibold text-white">
             {activeTab === 'emoji' && 'Emoji'}
             {activeTab === 'gif' && 'GIF'}
             {activeTab === 'sticker' && 'Sticker'}
           </h3>
-          <button
-            onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-600 transition-colors text-gray-400 hover:text-white"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('emoji')}
-            className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
-              activeTab === 'emoji'
-                ? 'text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            😀
-          </button>
-          <button
-            onClick={() => setActiveTab('gif')}
-            className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
-              activeTab === 'gif'
-                ? 'text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            GIF
-          </button>
-          <button
-            onClick={() => setActiveTab('sticker')}
-            className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
-              activeTab === 'sticker'
-                ? 'text-white border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            🏷️
-          </button>
-        </div>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-        {/* Search Input */}
-        <div className="p-4 pb-2">
-          <input
-            type="text"
-            placeholder={
-              activeTab === 'emoji' ? 'Search emojis...' :
-              activeTab === 'gif' ? 'Search GIFs...' :
-              'Search stickers...'
-            }
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+      {/* Border separator */}
+      <div className="border-t border-white/10"></div>
 
-        {/* Content based on active tab */}
-        <div className="max-h-52 overflow-y-auto p-4 pt-0">
-          {activeTab === 'emoji' && (
-            <>
-              <div className="grid grid-cols-8 gap-1">
-                {filteredEmojis.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => onEmojiSelect(emoji)}
-                    className="w-9 h-9 flex items-center justify-center hover:bg-gray-700 rounded-md transition-colors"
-                    title={`Add ${emoji}`}
-                  >
-                    <img
-                      src={`/twemoji/assets/72x72/${emojiToCodePoint(emoji)}.png`}
-                      alt={emoji}
-                      className="w-6 h-6"
-                    />
-                  </button>
-                ))}
-              </div>
-              {filteredEmojis.length === 0 && searchQuery && (
-                <div className="text-center py-8 text-gray-400">
-                  No emojis found for "{searchQuery}"
-                </div>
-              )}
-            </>
-          )}
+      {/* Tab Navigation */}
+      <div className="flex border-b border-white/10">
+        <button
+          onClick={() => setActiveTab('emoji')}
+          className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+            activeTab === 'emoji'
+              ? 'text-white border-b-2 border-blue-400'
+              : 'text-white/60 hover:text-white/80'
+          }`}
+        >
+          😀
+        </button>
+        <button
+          onClick={() => setActiveTab('gif')}
+          className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+            activeTab === 'gif'
+              ? 'text-white border-b-2 border-blue-400'
+              : 'text-white/60 hover:text-white/80'
+          }`}
+        >
+          GIF
+        </button>
+        <button
+          onClick={() => setActiveTab('sticker')}
+          className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+            activeTab === 'sticker'
+              ? 'text-white border-b-2 border-blue-400'
+              : 'text-white/60 hover:text-white/80'
+          }`}
+        >
+          🏷️
+        </button>
+      </div>
 
-          {activeTab === 'gif' && (
-            <>
-              {gifError && (
-                <div className="text-center py-8 text-red-400">
-                  <div className="text-4xl mb-2">⚠️</div>
-                  <div className="text-sm">{gifError}</div>
-                  <div className="text-xs mt-1">Please check your API key configuration</div>
-                </div>
-              )}
+      {/* Search Input */}
+      <div className="p-4 pb-2">
+        <input
+          type="text"
+          placeholder={
+            activeTab === 'emoji' ? 'Search emojis...' :
+            activeTab === 'gif' ? 'Search GIFs...' :
+            'Search stickers...'
+          }
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-white/20"
+        />
+      </div>
 
-              {!gifError && (
-                <div className="grid grid-cols-4 gap-2">
-                  {isLoadingGifs ? (
-                    // Skeleton loading placeholders
-                    Array.from({ length: 20 }).map((_, index) => (
-                      <div
-                        key={`skeleton-${index}`}
-                        className="aspect-square bg-gray-700 rounded-md animate-pulse"
-                      >
-                        <div className="w-full h-full bg-gray-600 rounded-md"></div>
-                      </div>
-                    ))
-                  ) : gifs.length > 0 ? (
-                    // Actual GIFs
-                    gifs.map((gif) => (
-                      <button
-                        key={gif.id}
-                        onClick={() => {
-                          if (onGifSelect) {
-                            onGifSelect({
-                              url: gif.images.fixed_height_small.url,
-                              title: gif.title || 'GIF'
-                            });
-                            onClose();
-                          }
-                        }}
-                        className="aspect-square bg-gray-700 rounded-md overflow-hidden hover:bg-gray-600 transition-colors group"
-                        title={gif.title || 'GIF'}
-                      >
-                        <img
-                          src={gif.images.fixed_height_small.url}
-                          alt={gif.title || 'GIF'}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          loading="lazy"
-                        />
-                      </button>
-                    ))
-                  ) : searchQuery.trim() ? (
-                    // No results for search
-                    <div className="col-span-4 text-center py-8 text-gray-400">
-                      <div className="text-4xl mb-2">🔍</div>
-                      <div className="text-sm">No GIFs found for "{searchQuery}"</div>
-                      <div className="text-xs mt-1">Try a different search term</div>
-                    </div>
-                  ) : (
-                    // Empty state for trending
-                    <div className="col-span-4 text-center py-8 text-gray-400">
-                      <div className="text-4xl mb-2">🎬</div>
-                      <div className="text-sm">Trending GIFs</div>
-                      <div className="text-xs mt-1">Start typing to search for GIFs</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {activeTab === 'sticker' && (
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-4xl mb-2">🏷️</div>
-              <div className="text-sm">Sticker search coming soon</div>
-              <div className="text-xs mt-1">Browse and send animated stickers</div>
+      {/* Content based on active tab */}
+      <div className="max-h-48 overflow-y-auto p-4 pt-0">
+        {activeTab === 'emoji' && (
+          <>
+            <div className="grid grid-cols-8 gap-1">
+              {filteredEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => onEmojiSelect(emoji)}
+                  className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors"
+                  title={`Add ${emoji}`}
+                >
+                  <img
+                    src={`/twemoji/assets/72x72/${emojiToCodePoint(emoji)}.png`}
+                    alt={emoji}
+                    className="w-6 h-6"
+                  />
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+            {filteredEmojis.length === 0 && searchQuery && (
+              <div className="text-center py-8 text-white/60">
+                No emojis found for "{searchQuery}"
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'gif' && (
+          <>
+            {gifError && (
+              <div className="text-center py-8 text-red-300">
+                <div className="text-3xl mb-2">⚠️</div>
+                <div className="text-sm">{gifError}</div>
+                <div className="text-xs mt-1">Please check your API key configuration</div>
+              </div>
+            )}
+
+            {!gifError && (
+              <div className="grid grid-cols-4 gap-2">
+                {isLoadingGifs ? (
+                  // Skeleton loading placeholders
+                  Array.from({ length: 20 }).map((_, index) => (
+                    <div
+                      key={`skeleton-${index}`}
+                      className="aspect-square bg-white/5 rounded-md animate-pulse"
+                    ></div>
+                  ))
+                ) : gifs.length > 0 ? (
+                  // Actual GIFs
+                  gifs.map((gif) => (
+                    <button
+                      key={gif.id}
+                      onClick={() => {
+                        if (onGifSelect) {
+                          onGifSelect({
+                            url: gif.images.fixed_height_small.url,
+                            title: gif.title || 'GIF'
+                          });
+                          onClose();
+                        }
+                      }}
+                      className="aspect-square bg-white/5 rounded-md overflow-hidden hover:bg-white/10 transition-colors group"
+                      title={gif.title || 'GIF'}
+                    >
+                      <img
+                        src={gif.images.fixed_height_small.url}
+                        alt={gif.title || 'GIF'}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))
+                ) : searchQuery.trim() ? (
+                  // No results for search
+                  <div className="col-span-4 text-center py-8 text-white/60">
+                    <div className="text-3xl mb-2">🔍</div>
+                    <div className="text-sm">No GIFs found for "{searchQuery}"</div>
+                    <div className="text-xs mt-1">Try a different search term</div>
+                  </div>
+                ) : (
+                  // Empty state for trending
+                  <div className="col-span-4 text-center py-8 text-white/60">
+                    <div className="text-3xl mb-2">🎬</div>
+                    <div className="text-sm">Trending GIFs</div>
+                    <div className="text-xs mt-1">Start typing to search for GIFs</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'sticker' && (
+          <div className="text-center py-8 text-white/60">
+            <div className="text-3xl mb-2">🏷️</div>
+            <div className="text-sm">Sticker search coming soon</div>
+            <div className="text-xs mt-1">Browse and send animated stickers</div>
+          </div>
+        )}
       </div>
     </div>
   );

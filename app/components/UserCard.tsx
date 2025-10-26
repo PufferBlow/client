@@ -262,7 +262,7 @@ export function UserCard({
 
   return (
     <div
-      className={`glassmorphism rounded-2xl shadow-2xl overflow-hidden hover-lift animate-scale-in duration-500 max-w-lg w-full ${onCardClick ? 'cursor-pointer hover-lift hover:scale-105' : ''}`}
+      className={`glassmorphism rounded-2xl shadow-2xl overflow-hidden hover-lift animate-scale-in duration-500 w-88 ${onCardClick ? 'cursor-pointer hover-lift hover:scale-105' : ''}`}
       onClick={(e) => {
         console.log('UserCard clicked', onCardClick);
         onCardClick?.();
@@ -421,59 +421,7 @@ export function UserCard({
           </div>
         </div>
 
-        {/* Activity Status - Only show in full mode */}
-        {activity && !isCompact && (
-          <div className="mt-2 max-w-md">
-            <div className="flex items-center space-x-2 bg-[#202225] rounded-lg px-3 py-2 text-sm text-[#dcddde]">
-              {activity.type === 'playing' && (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-[#5865f2] rounded flex items-center justify-center text-xs">
-                    🎮
-                  </div>
-                  <span className="text-[#b9bbbe]">Playing</span>
-                  <span className="font-medium">{activity.name}</span>
-                </div>
-              )}
-              {activity.type === 'listening' && (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-[#1db954] rounded flex items-center justify-center text-xs">
-                    🎵
-                  </div>
-                  <span className="text-[#b9bbbe]">Listening to</span>
-                  <span className="font-medium">{activity.name}</span>
-                </div>
-              )}
-              {activity.type === 'watching' && (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-[#5865f2] rounded flex items-center justify-center text-xs">
-                    📺
-                  </div>
-                  <span className="text-[#b9bbbe]">Watching</span>
-                  <span className="font-medium">{activity.name}</span>
-                </div>
-              )}
-              {activity.type === 'streaming' && activity.url && (
-                <a
-                  href={activity.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 hover:bg-[#2f3136] rounded px-2 py-1 -mx-2 -my-1 transition-colors group"
-                >
-                  <div className="w-4 h-4 bg-[#ff4646] rounded flex items-center justify-center text-xs">
-                    🔴
-                  </div>
-                  <span className="text-[#b9bbbe]">Streaming</span>
-                  <span className="font-medium group-hover:text-white transition-colors">{activity.name}</span>
-                </a>
-              )}
-              {activity.details && (
-                <div className="text-xs text-[#72767d] mt-1 ml-6">
-                  {activity.details}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+
 
         {/* Custom Status */}
         {customStatus && (
