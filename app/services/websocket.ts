@@ -3,8 +3,18 @@ import { logger } from '../utils/logger';
 // Use network logger for WebSocket since it's networking related
 const websocketLogger = logger.network;
 
+export interface WebRTCData {
+  offer?: RTCSessionDescriptionInit;
+  answer?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  fromUserId: string;
+  toUserId?: string; // for direct signaling (optional, undefined = broadcast)
+  channelId: string;
+  userId?: string; // target user for signaling (legacy support)
+}
+
 export interface WebSocketMessage {
-  type: 'message' | 'user_joined' | 'user_left' | 'user_status_changed' | 'error' | 'read_confirmation';
+  type: 'message' | 'user_joined' | 'user_left' | 'user_status_changed' | 'error' | 'read_confirmation' | 'webrtc_offer' | 'webrtc_answer' | 'webrtc_ice' | 'webrtc_join' | 'webrtc_leave' | 'webrtc_mute' | 'webrtc_unmute';
   channel_id?: string;  // Now always included in global websocket
   message_id?: string;
   sender_user_id?: string;
@@ -16,6 +26,7 @@ export interface WebSocketMessage {
   hashed_message?: string;
   sent_at?: string;
   attachments?: string[];
+  webrtcData?: WebRTCData; // WebRTC signaling data
   // Legacy fields (kept for backward compatibility)
   user_id?: string;
   avatar?: string;
@@ -147,6 +158,139 @@ export class GlobalWebSocket {
         return true;
       } catch (error) {
         websocketLogger.error('Failed to send read confirmation via global WebSocket', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // WebRTC signaling methods
+  sendWebRTCOffer(channelId: string, offer: RTCSessionDescriptionInit, toUserId?: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: 'webrtc_offer',
+          channel_id: channelId,
+          webrtcData: {
+            offer,
+            fromUserId: '', // Will be set by server from auth
+            toUserId,
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send WebRTC offer', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendWebRTCAnswer(channelId: string, answer: RTCSessionDescriptionInit, toUserId: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: 'webrtc_answer',
+          channel_id: channelId,
+          webrtcData: {
+            answer,
+            fromUserId: '', // Will be set by server from auth
+            toUserId,
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send WebRTC answer', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendWebRTCIceCandidate(channelId: string, candidate: RTCIceCandidateInit, toUserId: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: 'webrtc_ice',
+          channel_id: channelId,
+          webrtcData: {
+            candidate,
+            fromUserId: '', // Will be set by server from auth
+            toUserId,
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send WebRTC ICE candidate', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendVoiceChannelJoin(channelId: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: 'webrtc_join',
+          channel_id: channelId,
+          webrtcData: {
+            fromUserId: '', // Will be set by server from auth
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send voice channel join', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendVoiceChannelLeave(channelId: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: 'webrtc_leave',
+          channel_id: channelId,
+          webrtcData: {
+            fromUserId: '', // Will be set by server from auth
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send voice channel leave', error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendVoiceChannelMute(channelId: string, muted: boolean): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        const message = JSON.stringify({
+          type: muted ? 'webrtc_mute' : 'webrtc_unmute',
+          channel_id: channelId,
+          webrtcData: {
+            fromUserId: '', // Will be set by server from auth
+            channelId
+          }
+        });
+        this.ws.send(message);
+        return true;
+      } catch (error) {
+        websocketLogger.error('Failed to send voice channel mute status', error);
         return false;
       }
     }

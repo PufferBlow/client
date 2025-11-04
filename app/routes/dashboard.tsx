@@ -64,6 +64,8 @@ export function meta({ }: Route.MetaArgs) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const showToast = useToast();
+  const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
 
   // Client-side authentication check
   useEffect(() => {
@@ -72,11 +74,6 @@ export default function Dashboard() {
       navigate('/login');
     }
   }, [navigate]);
-  // Toast hook
-  const showToast = useToast();
-
-  // React Query hooks for user authentication and data
-  const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
 
   // UI persistence hook
   const {
@@ -142,6 +139,7 @@ export default function Dashboard() {
       };
     }
   }, [isTooltipOpen, update]);
+
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [messageContextMenu, setMessageContextMenu] = useState<{
@@ -202,12 +200,48 @@ export default function Dashboard() {
   const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Handle authentication redirects and loading errors
-  if (userError?.message?.includes('No authentication token') || userError?.message?.includes('No server host:port configured')) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+  // Store error state to render after hooks
+  const errorMessage = (userError as any)?.message || '';
+  const isInitialLoad = userLoading && !currentUser;
+  const shouldRedirectToLogin = isInitialLoad && errorMessage?.includes('No authentication token');
+  const showServerConfigError = errorMessage?.includes('No server host:port configured');
+
+  // Handle redirects after all hooks are declared
+  useEffect(() => {
+    if (shouldRedirectToLogin) {
+      logger.ui.error('Authentication failure during initial load, redirecting to login', { error: errorMessage });
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
-    return null;
+  }, [shouldRedirectToLogin, errorMessage]);
+
+  // Show server configuration error screen
+  if (showServerConfigError) {
+    logger.ui.error('Server configuration error', { error: errorMessage });
+    return (
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
+        <div className="text-center text-white">
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold mb-2">Server Configuration Error</h2>
+          <p className="text-gray-400 mb-4">Unable to connect to server. Please check your server settings.</p>
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.location.reload();
+              }
+            }}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Handle loading timeout - prevent infinite loading
@@ -1245,10 +1279,38 @@ export default function Dashboard() {
       return;
     }
 
+    // Show loading tooltip immediately
+    const loadingUser: DisplayUser = {
+      id: userId,
+      username: username,
+      avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
+      banner: undefined,
+      accentColor: '#8b5cf6',
+      bannerColor: undefined,
+      customStatus: 'Loading...',
+      externalLinks: [],
+      status: 'idle', // Show as idle while loading
+      bio: 'Loading user information...',
+      joinedAt: '',
+      originServer: serverInfo?.server_name || 'Pufferblow Server',
+      roles: ['Member'],
+      activity: {
+        type: 'playing' as const,
+        name: 'Loading...',
+        details: 'Please wait'
+      }
+    };
+    showUserCardTooltip(loadingUser, event, tooltipSource);
+
     try {
       // Fetch user profile from API
       const hostPort = getHostPortFromStorage();
       const authToken = getAuthTokenFromCookies();
+
+      if (!hostPort || !authToken) {
+        throw new Error('Missing server configuration or authentication');
+      }
+
       const response = await getUserProfileById(hostPort!, userId, authToken!);
 
       const displayedUsername = username;
@@ -1263,44 +1325,56 @@ export default function Dashboard() {
           banner: userData.banner_url ? createFullUrl(userData.banner_url) : undefined,
           accentColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
           bannerColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
-                    customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
-                    externalLinks: [], // Would be loaded from user preferences/settings in real implementation
-                    status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'offline') ? userData.status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline',
-                    bio: userData.about || `Active member of the server.`,
-                    joinedAt: userData.created_at || '',
-                    originServer: userData.origin_server || serverInfo?.server_name || 'Pufferblow Server',
-                    roles: getUserRoles(userData.roles_ids).map(role => role.toString()),
+          customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
+          externalLinks: [], // Would be loaded from user preferences/settings in real implementation
+          status: (userData.status === 'online' || userData.status === 'idle' || userData.status === 'dnd' || userData.status === 'offline') ? userData.status as 'online' | 'idle' | 'dnd' | 'offline' : 'offline',
+          bio: userData.about || `Active member of the server.`,
+          joinedAt: userData.created_at || '',
+          originServer: userData.origin_server || serverInfo?.server_name || 'Pufferblow Server',
+          roles: getUserRoles(userData.roles_ids).map(role => role.toString()),
           activity: undefined, // Could be extended later
           mutualServers: undefined, // Could be calculated later
           mutualFriends: undefined, // Could be extended later
           badges: [] // Could be extended later
         };
 
-        showUserCardTooltip(displayUser, event, tooltipSource);
+        // Update tooltip with loaded data
+        setUserCardTooltipUser(displayUser);
+        setIsTooltipOpen(true);
       } else {
-        throw new Error('Failed to fetch user profile');
+        throw new Error(response.error || 'Failed to fetch user profile');
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      showToast('Could not load user profile', 'error');
 
-      // Fallback user display
-      const fallbackUser: DisplayUser = {
+      // Show error in tooltip instead of toast (which might trigger more redirects)
+      const errorUser: DisplayUser = {
         id: userId,
         username: username,
         avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
         banner: undefined,
-        accentColor: '#8b5cf6',
+        accentColor: '#ef4444', // Red accent for error
         bannerColor: undefined,
-        customStatus: 'Member',
+        customStatus: 'Error Loading',
         externalLinks: [],
         status: 'offline',
-        bio: 'User information not available',
+        bio: 'Failed to load user information. Please try again later.',
         joinedAt: '',
         originServer: serverInfo?.server_name || 'Pufferblow Server',
-        roles: ['Member']
+        roles: ['Member'],
+        activity: {
+          type: 'playing' as const,
+          name: 'Offline',
+          details: 'User data unavailable'
+        }
       };
-      showUserCardTooltip(fallbackUser, event, tooltipSource);
+
+      // Update tooltip with error state
+      setUserCardTooltipUser(errorUser);
+      setIsTooltipOpen(true);
+
+      // Don't show toast here as it could cause more issues if errors are compounding
+      logger.ui.warn('User profile load failed, showing fallback tooltip', { userId, error });
     }
   };
 

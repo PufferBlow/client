@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
-    "@livekit/components-react": "^2.7.1",
     "@popperjs/core": "^2.11.8",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",

@@ -9,17 +9,14 @@ export interface CreateChannelRequest {
   description?: string;
 }
 
-// Voice channel interfaces - Updated for API proxy architecture
+// Voice channel interfaces - Updated for WebRTC direct implementation
 export interface VoiceChannelJoinResponse {
   status_code: number;
-  token?: string;
-  room_name?: string;
-  livekit_url?: string;
-  proxy?: boolean;
-  session_id?: string;
   channel_id?: string;
-  status?: string;
-  message?: string;
+  user_id?: string;
+  participants?: number;
+  participant_count?: number;
+  webrtc_config?: any;
   error?: string;
 }
 
