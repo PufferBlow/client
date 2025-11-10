@@ -23,12 +23,8 @@ export {
   createChannel,
   updateChannel,
   deleteChannel,
-  loadMessages,
-  sendMessage,
   addUserToChannel,
-  removeUserFromChannel,
-  deleteMessage,
-  markMessageAsRead
+  removeUserFromChannel
 } from './channel';
 export type {
   CreateChannelRequest
@@ -82,6 +78,25 @@ export type {
   ChartData,
   Period
 } from './system';
+
+// Message services
+export {
+  getMessages,
+  sendMessage,
+  updateMessage,
+  deleteMessage,
+  addReaction,
+  removeReaction,
+  searchMessages,
+  loadMessages,
+  markMessageAsRead
+} from './message';
+export type {
+  Attachment,
+  Reaction,
+  SendMessageRequest,
+  SearchResult
+} from './message';
 
 // WebSocket Real-time Messaging
 export {

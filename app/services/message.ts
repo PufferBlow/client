@@ -49,24 +49,33 @@ export const getMessages = async (hostPort: string, channelId: string, authToken
 export const sendMessage = async (hostPort: string, channelId: string, messageData: SendMessageRequest, authToken: string): Promise<ApiResponse<Message>> => {
   const apiClient = createApiClient(hostPort);
 
-  // Create FormData for multipart/form-data requests (needed for file uploads)
-  const formData = new FormData();
-  formData.append('auth_token', authToken);
+  // Check if we have attachments - if so, use FormData for multipart upload
+  const hasAttachments = (messageData.attachments?.length ?? 0) > 0;
 
-  // Add message content if provided
-  if (messageData.content && messageData.content.trim()) {
-    formData.append('message', messageData.content.trim());
-  }
+  if (hasAttachments) {
+    // Create FormData for multipart/form-data requests (needed for file uploads)
+    const formData = new FormData();
+    formData.append('auth_token', authToken);
 
-  // Add attachments if provided
-  if (messageData.attachments && messageData.attachments.length > 0) {
-    messageData.attachments.forEach((file, index) => {
+    // Add message content if provided
+    if (messageData.content && messageData.content.trim()) {
+      formData.append('message', messageData.content.trim());
+    }
+
+    // Add attachments
+    messageData.attachments!.forEach((file, index) => {
       formData.append('attachments', file);
     });
-  }
 
-  // Use correct endpoint with channel_id as path parameter
-  return apiClient.post(`/api/v1/channels/${channelId}/send_message`, formData);
+    // Use correct endpoint with channel_id as path parameter
+    return apiClient.post(`/api/v1/channels/${channelId}/send_message`, formData);
+  } else {
+    // No attachments - send as JSON
+    return apiClient.post(`/api/v1/channels/${channelId}/send_message`, {
+      auth_token: authToken,
+      message: messageData.content || '',
+    });
+  }
 };
 
 export const updateMessage = async (hostPort: string, messageId: string, content: string, authToken: string): Promise<ApiResponse<Message>> => {
@@ -100,5 +109,23 @@ export const searchMessages = async (hostPort: string, query: string, authToken:
   return apiClient.get('/api/v1/search', {
     q: query,
     auth_token: authToken,
+  });
+};
+
+// Additional messaging functions moved from channel service
+export const loadMessages = async (hostPort: string, channelId: string, authToken: string, page?: number, messages_per_page?: number): Promise<ApiResponse<{ status_code: number; messages: Message[] }>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.get(`/api/v1/channels/${channelId}/load_messages`, {
+    auth_token: authToken,
+    page: (page || 1).toString(),
+    messages_per_page: (messages_per_page || 20).toString()
+  });
+};
+
+export const markMessageAsRead = async (hostPort: string, channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.put(`/api/v1/channels/${channelId}/mark_message_as_read`, {
+    auth_token: authToken,
+    message_id: messageId,
   });
 };

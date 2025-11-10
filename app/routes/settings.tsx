@@ -699,6 +699,16 @@ export default function Settings() {
     }
   }, [userLoading]);
 
+  // Handle error state - redirect to dashboard if profile fetch fails
+  useEffect(() => {
+    if (userError) {
+      // Redirect to dashboard on profile error
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
+    }
+  }, [userError]);
+
   // Show skeleton loading state
   if (userLoading) {
     return (
@@ -733,14 +743,8 @@ export default function Settings() {
     );
   }
 
-  // Handle error state - redirect to dashboard if profile fetch fails
+  // Show error state - redirect to dashboard if profile fetch fails
   if (userError) {
-    useEffect(() => {
-      // Redirect to dashboard on profile error
-      if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard';
-      }
-    }, []);
     return (
       <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">

@@ -22,8 +22,8 @@ import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
 import { usePersistedUIState } from "../utils/uiStatePersistence";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFullUrl, getUserRoles } from "../services/user";
-import { listChannels, createChannel, loadMessages, deleteChannel } from "../services/channel";
-import { sendMessage } from "../services/message";
+import { listChannels, createChannel, deleteChannel } from "../services/channel";
+import { loadMessages, sendMessage } from "../services/message";
 import { ChannelWebSocket, createChannelWebSocket, getHostPortForWebSocket } from "../services/websocket";
 import { listUsers, type ListUsersResponse } from "../services/user";
 import { type ServerInfo } from "../services/system";
@@ -127,7 +127,7 @@ export default function Dashboard() {
   });
 
   // Update position on scroll or resize
-  React.useEffect(() => {
+  useEffect(() => {
     if (isTooltipOpen && update) {
       const handleUpdate = () => update();
       window.addEventListener('scroll', handleUpdate, true);
@@ -918,7 +918,7 @@ export default function Dashboard() {
 
     if (authToken && channel.channel_id && hostPort) {
       console.log("Making loadMessages API call...");
-      const response = await loadMessages(channel.channel_id, authToken);
+      const response = await loadMessages(hostPort, channel.channel_id, authToken);
       console.log("loadMessages response:", response);
 
       if (response.success && response.data && response.data.messages) {

@@ -74,14 +74,7 @@ export const deleteChannel = async (channelId: string, authToken: string): Promi
   });
 };
 
-export const loadMessages = async (channelId: string, authToken: string, page?: number, messages_per_page?: number): Promise<ApiResponse<{ status_code: number; messages: Message[] }>> => {
-  const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/channels/${channelId}/load_messages`, {
-    auth_token: authToken,
-    page: (page || 1).toString(),
-    messages_per_page: (messages_per_page || 20).toString()
-  });
-};
+
 
 // Add user to private channel (Admin only)
 export const addUserToChannel = async (channelId: string, userIdToAdd: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
@@ -101,31 +94,7 @@ export const removeUserFromChannel = async (channelId: string, userIdToRemove: s
   });
 };
 
-// Delete message (Owner/Admin)
-export const deleteMessage = async (channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
-  const apiClient = createApiClient();
-  return apiClient.delete(`/api/v1/channels/${channelId}/delete_message`, {
-    auth_token: authToken,
-    message_id: messageId,
-  });
-};
 
-// Mark message as read
-export const markMessageAsRead = async (channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
-  const apiClient = createApiClient();
-  return apiClient.put(`/api/v1/channels/${channelId}/mark_message_as_read`, {
-    auth_token: authToken,
-    message_id: messageId,
-  });
-};
-
-export const sendMessage = async (channelId: string, message: string, authToken: string): Promise<ApiResponse<Message>> => {
-  const apiClient = createApiClient();
-  return apiClient.post(`/api/v1/channels/${channelId}/send_message`, {
-    auth_token: authToken,
-    message: message,
-  });
-};
 
 // Voice channel functions
 export const joinVoiceChannel = async (channelId: string, authToken: string): Promise<ApiResponse<VoiceChannelJoinResponse>> => {

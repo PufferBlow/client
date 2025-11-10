@@ -39,7 +39,7 @@ import {
   type ActivityMetrics,
   type ServerOverview
 } from "../services/system";
-import { convertToFullCdnUrl, listBlockedIPs, blockIP, unblockIP } from "../services/apiClient";
+import { convertToFullCdnUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../services/apiClient";
 import { logger } from "../utils/logger";
 import type { Channel } from "../models";
 import {
@@ -1111,23 +1111,21 @@ function CDNTab({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('directory', selectedDirectory);
+        formData.append('auth_token', authToken);
 
         // Create a unique ID for this file's progress
         const fileId = Date.now() + '_' + Math.random();
 
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
-        const response = await fetch(`/api/v1/cdn/upload?auth_token=${authToken}`, {
-          method: 'POST',
-          body: formData
-        });
+        const apiClient = createApiClient();
+        const response = await apiClient.post('/api/v1/cdn/upload', formData);
 
-        if (response.ok) {
+        if (response.success) {
           setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
           return { success: true, file };
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Upload failed for "${file.name}"`);
+          throw new Error(response.error || `Upload failed for "${file.name}"`);
         }
       });
 
@@ -1192,23 +1190,16 @@ function CDNTab({
         return;
       }
 
-      const response = await fetch('/api/v1/cdn/files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          directory: selectedDirectory
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/files', {
+        auth_token: authToken,
+        directory: selectedDirectory
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setFiles(data.files || []);
+      if (response.success && response.data && (response.data as any).files) {
+        setFiles((response.data as any).files || []);
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to load files');
+        setError(response.error || 'Failed to load files');
         setFiles([]);
       }
     } catch (err) {
@@ -1223,24 +1214,18 @@ function CDNTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await fetch('/api/v1/cdn/delete-file', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          file_url: file.url
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/delete-file', {
+        auth_token: authToken,
+        file_url: file.url
       });
 
-      if (response.ok) {
+      if (response.success) {
         setFiles(prev => prev.filter(f => f !== file));
         showToast(`File "${file.filename}" deleted successfully!`, 'success');
         setDeleteConfirmFile(null);
       } else {
-        const errorData = await response.json();
-        showToast(`Failed to delete file: ${errorData.error}`, 'error');
+        showToast(`Failed to delete file: ${response.error}`, 'error');
       }
     } catch (err) {
       showToast('Network error occurred while deleting file', 'error');
@@ -1253,24 +1238,17 @@ function CDNTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await fetch('/api/v1/cdn/cleanup-orphaned', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          subdirectory: selectedDirectory // Use current selected directory
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/cleanup-orphaned', {
+        auth_token: authToken,
+        subdirectory: selectedDirectory // Use current selected directory
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        showToast(`Cleaned up ${data.deleted_count} orphaned files`, 'success');
+      if (response.success) {
+        showToast(`Cleaned up ${(response.data as any)?.deleted_count || 0} orphaned files`, 'success');
         loadFiles(); // Refresh the list
       } else {
-        const errorData = await response.json();
-        showToast(`Cleanup failed: ${errorData.error}`, 'error');
+        showToast(`Cleanup failed: ${response.error}`, 'error');
       }
     } catch (err) {
       showToast('Network error occurred during cleanup', 'error');
@@ -3353,20 +3331,17 @@ function SettingsTab({
       formData.append('auth_token', authToken);
       formData.append('avatar', file);
 
-      const response = await fetch('/api/v1/system/upload-avatar', {
-        method: 'POST',
-        body: formData
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/system/upload-avatar', formData);
 
-      if (response.ok) {
-        const result = await response.json();
-        const fullAvatarUrl = convertToFullCdnUrl(result.avatar_url);
+      if (response.success) {
+        const fullAvatarUrl = convertToFullCdnUrl(response.data?.avatar_url);
         setServerInfo(prev => ({ ...prev, avatar_url: fullAvatarUrl }));
         setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null); // Update original to avoid "unsaved changes"
-        logger.ui.info('Server avatar updated successfully', result);
+        logger.ui.info('Server avatar updated successfully', response.data);
       } else {
         setError('Failed to upload avatar');
-        logger.ui.error('Failed to upload avatar', response);
+        logger.ui.error('Failed to upload avatar', response.error);
       }
     } catch (err) {
       setError('Failed to upload avatar');
@@ -3387,19 +3362,16 @@ function SettingsTab({
       formData.append('auth_token', authToken);
       formData.append('banner', file);
 
-      const response = await fetch('/api/v1/system/upload-banner', {
-        method: 'POST',
-        body: formData
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/system/upload-banner', formData);
 
-      if (response.ok) {
-        const result = await response.json();
-        setServerInfo(prev => ({ ...prev, banner_url: result.banner_url }));
-        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: result.banner_url } : null); // Update original to avoid "unsaved changes"
-        logger.ui.info('Server banner updated successfully', result);
+      if (response.success) {
+        setServerInfo(prev => ({ ...prev, banner_url: (response.data as any)?.banner_url }));
+        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: (response.data as any)?.banner_url } : null); // Update original to avoid "unsaved changes"
+        logger.ui.info('Server banner updated successfully', response.data);
       } else {
         setError('Failed to upload banner');
-        logger.ui.error('Failed to upload banner', response);
+        logger.ui.error('Failed to upload banner', response.error);
       }
     } catch (err) {
       setError('Failed to upload banner');
@@ -4483,15 +4455,10 @@ function LogsTab({
         return;
       }
 
-      const response = await fetch('/api/v1/system/logs/clear', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/system/logs/clear');
 
-      if (response.ok) {
+      if (response.success) {
         setLogs([]);
         setFilteredLogs([]);
         showToast('Logs cleared successfully!', 'success');
