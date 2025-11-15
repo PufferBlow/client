@@ -30,17 +30,17 @@ export type {
   CreateChannelRequest
 } from './channel';
 
-// CDN services (Server Owner only)
+// Storage services (Server Owner only)
 export {
-  listCDNFiles,
-  deleteCDNFile,
-  getCDNFileInfo,
+  listStorageFiles,
+  deleteStorageFile,
+  getStorageFileInfo,
   cleanupOrphanedFiles
-} from './cdn';
+} from './storage';
 export type {
-  CDNFile,
-  CDNFileInfo
-} from './cdn';
+  StorageFile,
+  StorageFileInfo
+} from './storage';
 
 // Security services (Server Owner only)
 export {

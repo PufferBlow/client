@@ -800,6 +800,73 @@ export const useResetAuthToken = () => {
   });
 };
 
+// Hook to fetch individual user profile by ID
+export const useUserProfile = (userId: string) => {
+  return useQuery({
+    queryKey: USER_QUERY_KEYS.profile(userId),
+    queryFn: async () => {
+      const authToken = getAuthTokenFromCookies();
+      if (!authToken) throw new Error('No authentication token');
+
+      const hostPort = getHostPortFromStorage();
+      if (!hostPort) throw new Error('No server host:port configured');
+
+      const response = await getUserProfileById(hostPort, userId, authToken);
+      if (!response.success || !response.data?.user_data) {
+        throw new Error(response.error || 'Failed to fetch user profile');
+      }
+
+      const userData = response.data.user_data;
+
+      // Create full URLs for avatar and banner from server-relative paths
+      const fullAvatarUrl = createFullUrl(userData.avatar_url);
+      const fullBannerUrl = createFullUrl(userData.banner_url);
+
+      // Parse roles from API response
+      const userRoles = getUserRoles(userData.roles_ids);
+      const primaryRole = getPrimaryRole(userRoles);
+
+      const user: User = {
+        // Core API fields
+        user_id: userData.user_id,
+        username: userData.username,
+        about: userData.about,
+        avatar_url: fullAvatarUrl,
+        banner_url: fullBannerUrl,
+        inbox_id: userData.inbox_id,
+        origin_server: userData.origin_server,
+        status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+        roles_ids: userData.roles_ids,
+        last_seen: userData.last_seen,
+        joined_servers_ids: userData.joined_servers_ids,
+        auth_token: authToken,
+        raw_auth_token: authToken,
+        auth_token_expire_time: userData.auth_token_expire_time,
+        created_at: userData.created_at,
+        updated_at: userData.updated_at,
+
+        // Legacy alias fields for backward compatibility
+        id: userData.user_id,
+        bio: userData.about || 'No bio provided.',
+        avatar: fullAvatarUrl,
+        password: '', // Not returned by API for security
+        conversations: [], // Legacy field
+        contacts: [], // Legacy field
+        is_admin: hasRole(userRoles, UserRole.ADMIN),
+        is_owner: hasRole(userRoles, UserRole.OWNER),
+        roles: userRoles,
+        joinedAt: userData.created_at,
+      };
+
+      return user;
+    },
+    enabled: !!userId && !!getAuthTokenFromCookies(), // Only run if we have a userId and token
+    staleTime: 5 * 60 * 1000, // 5 minutes - consider data fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after unmount
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
+  });
+};
+
 // Hook to logout user
 export const useLogout = () => {
   const queryClient = useQueryClient();

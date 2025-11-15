@@ -110,11 +110,21 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
       let normalizedAttachments: MessageAttachment[] = [];
 
       if (message.attachments && Array.isArray(message.attachments)) {
+        logger.network.debug('Processing attachments', { count: message.attachments.length, userId });
         const tempAttachments: MessageAttachment[] = [];
-        message.attachments.forEach((att: any) => {
+        message.attachments.forEach((att: any, index: number) => {
+          logger.network.debug(`Processing attachment ${index}`, { type: typeof att, hasUrl: att?.url, attType: att?.type, filename: att?.filename });
           // If it's already an object with proper structure, use it
           if (typeof att === 'object' && att.url) {
-            tempAttachments.push(att);
+            // Ensure all required fields are present and properly typed
+            const normalizedAtt: MessageAttachment = {
+              url: att.url,
+              filename: att.filename || att.url.split('/').pop() || 'attachment',
+              type: att.type || 'application/octet-stream',
+              size: att.size || null
+            };
+            tempAttachments.push(normalizedAtt);
+            logger.network.debug(`Added normalized attachment ${index}`, { url: normalizedAtt.url, type: normalizedAtt.type, filename: normalizedAtt.filename });
           }
           // If it's a string URL, convert to MessageAttachment object
           else if (typeof att === 'string') {
@@ -140,9 +150,13 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
               type: mimeType,
               size: null
             });
+            logger.network.debug(`Converted string attachment ${index}`, { url: att, type: mimeType, filename });
+          } else {
+            logger.network.warn(`Invalid attachment format ${index}`, { attachment: att });
           }
         });
         normalizedAttachments = tempAttachments;
+        logger.network.debug('Final normalized attachments', { count: normalizedAttachments.length, attachments: normalizedAttachments });
       }
 
       // Create normalized message object

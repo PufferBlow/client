@@ -20,7 +20,11 @@
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
@@ -43,8 +47,7 @@
     "react-popper": "^2.3.0",
     "react-router": "^7.9.2",
     "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1",
-    "twemoji": "^14.0.2"
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@react-router/dev": "^7.9.2",
@@ -67,7 +70,14 @@
     "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
-    "wait-on": "^7.2.0"
+    "wait-on": "^7.2.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "prettier": "^3.3.3"
   },
   "build": {
     "appId": "space.pufferblow.desktop",

@@ -14,7 +14,7 @@ import {
   Mic
 } from "lucide-react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
-import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../services/user";
+import { getAuthTokenFromCookies, listUsers, type ListUsersResponse, useUserProfile } from "../services/user";
 import { listChannels, deleteChannel, createChannel } from "../services/channel";
 import {
   getUserRegistrationsChart,
@@ -39,7 +39,7 @@ import {
   type ActivityMetrics,
   type ServerOverview
 } from "../services/system";
-import { convertToFullCdnUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../services/apiClient";
+import { convertToFullStorageUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../services/apiClient";
 import { logger } from "../utils/logger";
 import type { Channel } from "../models";
 import {
@@ -76,8 +76,8 @@ export function meta() {
   ];
 }
 
-// CDN File interface
-type CDNFile = {
+// Storage File interface
+type StorageFile = {
   id: string;
   filename: string;
   path: string;
@@ -90,7 +90,7 @@ type CDNFile = {
 };
 
 export default function ControlPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'cdn' | 'security' | 'blocked-ips'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'storage' | 'security' | 'blocked-ips'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -103,7 +103,7 @@ export default function ControlPanel() {
   // FileViewerModal state
   const [fileViewerModal, setFileViewerModal] = useState<{
     isOpen: boolean;
-    file: CDNFile | null;
+    file: StorageFile | null;
   }>({ isOpen: false, file: null });
 
   // Toast notifications - replace browser alerts
@@ -190,7 +190,8 @@ export default function ControlPanel() {
 
       const response = await createChannel({
         channel_name: channelData.name,
-        is_private: channelData.isPrivate || false
+        is_private: channelData.isPrivate || false,
+        channel_type: channelData.type
       }, authToken);
 
       if (response.success && response.data) {
@@ -470,14 +471,14 @@ export default function ControlPanel() {
     { id: 'channels', label: 'Channels', icon: <Hash className="w-6 h-6" /> },
     { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-6 h-6" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-6 h-6" /> },
-    { id: 'cdn', label: 'CDN', icon: <Folder className="w-6 h-6" /> },
+    { id: 'storage', label: 'Storage', icon: <Folder className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Lock className="w-6 h-6" /> },
     { id: 'blocked-ips', label: 'Blocked IPs', icon: <CircleX className="w-6 h-6" /> },
     { id: 'logs', label: 'Logs', icon: <FileText className="w-6 h-6" /> },
   ];
 
   // FileViewerModal Component
-  const FileViewerModal = ({ isOpen, file, onClose }: { isOpen: boolean; file: CDNFile | null; onClose: () => void }) => {
+  const FileViewerModal = ({ isOpen, file, onClose }: { isOpen: boolean; file: StorageFile | null; onClose: () => void }) => {
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -487,7 +488,7 @@ export default function ControlPanel() {
       }
     }, [isOpen, file]);
 
-    const loadFileContent = async (file: CDNFile) => {
+    const loadFileContent = async (file: StorageFile) => {
       setLoading(true);
       setContent(null);
 
@@ -819,7 +820,7 @@ export default function ControlPanel() {
             {activeTab === 'tasks' && <TasksTab showToast={showToast} />}
             {activeTab === 'logs' && <LogsTab showToast={showToast} />}
             {activeTab === 'settings' && <SettingsTab showToast={showToast} />}
-            {activeTab === 'cdn' && <CDNTab
+            {activeTab === 'storage' && <StorageTab
               showToast={showToast}
               fileViewerModal={fileViewerModal}
               setFileViewerModal={setFileViewerModal}
@@ -1056,23 +1057,22 @@ function TasksTab({
   );
 }
 
-// CDN Tab Component
-// CDN Tab Component
-function CDNTab({
+// Storage Tab Component
+function StorageTab({
   showToast,
   fileViewerModal,
   setFileViewerModal
 }: {
   showToast: (message: string, type: 'success' | 'error') => void;
-  fileViewerModal: { isOpen: boolean; file: CDNFile | null };
-  setFileViewerModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; file: CDNFile | null }>>;
+  fileViewerModal: { isOpen: boolean; file: StorageFile | null };
+  setFileViewerModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; file: StorageFile | null }>>;
 }) {
-  const [files, setFiles] = useState<CDNFile[]>([]);
+  const [files, setFiles] = useState<StorageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDirectory, setSelectedDirectory] = useState('uploads');
   const [searchTerm, setSearchTerm] = useState('');
-  const [deleteConfirmFile, setDeleteConfirmFile] = useState<CDNFile | null>(null);
+  const [deleteConfirmFile, setDeleteConfirmFile] = useState<StorageFile | null>(null);
   const [isCleaningOrphaned, setIsCleaningOrphaned] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
@@ -1161,7 +1161,7 @@ function CDNTab({
   };
 
   // CDN File interface
-  type CDNFile = {
+  type StorageFile = {
     id: string;
     filename: string;
     path: string;
@@ -1210,7 +1210,7 @@ function CDNTab({
     }
   };
 
-  const handleDeleteFile = async (file: CDNFile) => {
+  const handleDeleteFile = async (file: StorageFile) => {
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
@@ -2308,7 +2308,7 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
             <div className="flex items-start space-x-4">
               {serverInfo?.avatar_url ? (
                 <img
-                  src={convertToFullCdnUrl(serverInfo.avatar_url)}
+                  src={convertToFullStorageUrl(serverInfo.avatar_url)}
                   alt={serverInfo.server_name}
                   className="w-16 h-16 rounded-xl border-2 border-[var(--color-border)] object-cover shadow-lg"
                 />
@@ -3284,25 +3284,25 @@ function SettingsTab({
       try {
         const response = await getServerInfo();
         if (response.success && response.data) {
-          const info = response.data.server_info;
+          const info = response.data.server_info || {};
           setServerInfo({
-            server_name: info.server_name,
-            server_description: info.server_description,
-            version: info.version,
-            max_users: info.max_users,
-            is_private: info.is_private,
-            creation_date: info.creation_date,
+            server_name: info.server_name || 'Loading...',
+            server_description: info.server_description || 'Loading...',
+            version: info.version || 'Loading...',
+            max_users: info.max_users || null,
+            is_private: info.is_private || false,
+            creation_date: info.creation_date || null,
             max_message_length: info.max_message_length,
             max_image_size: info.max_image_size,
             max_video_size: info.max_video_size,
             max_sticker_size: info.max_sticker_size,
-            avatar_url: info.avatar_url,
-            banner_url: info.banner_url,
+            avatar_url: info.avatar_url || null,
+            banner_url: info.banner_url || null,
           });
           setOriginalServerInfo(JSON.parse(JSON.stringify({
             ...info,
-            avatar_url: info.avatar_url,
-            banner_url: info.banner_url
+            avatar_url: info.avatar_url || null,
+            banner_url: info.banner_url || null
           }))); // Deep copy
         } else {
           setError('Failed to load server information');
@@ -3329,13 +3329,19 @@ function SettingsTab({
     try {
       const formData = new FormData();
       formData.append('auth_token', authToken);
-      formData.append('avatar', file);
+      formData.append('file', file);
+      formData.append('directory', 'avatars');
 
       const apiClient = createApiClient();
-      const response = await apiClient.post('/api/v1/system/upload-avatar', formData);
+      const response = await apiClient.post<{
+        status_code: number;
+        message: string;
+        url: string;
+        is_duplicate: boolean;
+      }>('/api/v1/storage/upload', formData);
 
-      if (response.success) {
-        const fullAvatarUrl = convertToFullCdnUrl(response.data?.avatar_url);
+      if (response.success && response.data) {
+        const fullAvatarUrl = convertToFullStorageUrl(response.data.url);
         setServerInfo(prev => ({ ...prev, avatar_url: fullAvatarUrl }));
         setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null); // Update original to avoid "unsaved changes"
         logger.ui.info('Server avatar updated successfully', response.data);
@@ -3577,7 +3583,7 @@ function SettingsTab({
                   <div className="relative">
                     {serverInfo.avatar_url ? (
                       <img
-                        src={convertToFullCdnUrl(serverInfo.avatar_url)}
+                        src={convertToFullStorageUrl(serverInfo.avatar_url)}
                         alt="Server Avatar"
                         className="w-20 h-20 rounded-xl border-2 border-[var(--color-border)] object-cover"
                       />
@@ -3679,7 +3685,7 @@ function SettingsTab({
                   {serverInfo.banner_url && (
                     <div className="relative group">
                       <img
-                        src={convertToFullCdnUrl(serverInfo.banner_url)}
+                        src={convertToFullStorageUrl(serverInfo.banner_url)}
                         alt="Server Banner"
                         className="w-full h-24 object-cover rounded-lg border border-[var(--color-border)]"
                         style={{ aspectRatio: '16/2' }}

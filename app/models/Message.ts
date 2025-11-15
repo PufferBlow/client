@@ -33,11 +33,23 @@ export interface Message {
   /** Avatar URL of the message sender */
   sender_avatar_url?: string | null;
 
+  /** Banner URL of the message sender */
+  sender_banner_url?: string | null;
+
   /** Current status of the message sender */
   sender_status?: string;
 
   /** Roles/permissions of the message sender */
   sender_roles?: string[];
+
+  /** About/bio information of the message sender */
+  sender_about?: string | null;
+
+  /** Last seen timestamp of the message sender */
+  sender_last_seen?: string | null;
+
+  /** Account creation timestamp of the message sender */
+  sender_created_at?: string | null;
 
   /** ID of the channel this message belongs to (optional) */
   channel_id?: string | null;

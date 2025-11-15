@@ -21,10 +21,10 @@ import { AttachmentGrid } from "../components/AttachmentBubble";
 import { validateMessageInput } from "../utils/markdown";
 import { logger } from "../utils/logger";
 import { usePersistedUIState } from "../utils/uiStatePersistence";
-import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFullUrl, getUserRoles } from "../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFullUrl, getUserRoles, useUserProfile } from "../services/user";
 import { listChannels, createChannel, deleteChannel } from "../services/channel";
 import { loadMessages, sendMessage } from "../services/message";
-import { ChannelWebSocket, createChannelWebSocket, getHostPortForWebSocket } from "../services/websocket";
+import { ChannelWebSocket, createChannelWebSocket } from "../services/websocket";
 import { listUsers, type ListUsersResponse } from "../services/user";
 import { type ServerInfo } from "../services/system";
 import type { Channel } from "../models";
@@ -60,6 +60,57 @@ export function meta({ }: Route.MetaArgs) {
     { title: "Pufferblow - Decentralized Messaging" },
     { name: "description", content: "Discord-like messaging with decentralized servers" },
   ];
+}
+
+// UserListItem component for displaying users with real avatars
+function UserListItem({
+  userId,
+  username,
+  status,
+  isOwner,
+  isAdmin,
+  onClick
+}: {
+  userId: string;
+  username: string;
+  status: string;
+  isOwner: boolean;
+  isAdmin: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const { data: userProfile, isLoading } = useUserProfile(userId);
+
+  // Use real avatar if available, otherwise fallback to DiceBear
+  const avatarUrl = userProfile?.avatar_url || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`;
+
+  return (
+    <div
+      className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+      onClick={onClick}
+    >
+      <div className="relative">
+        <img
+          src={avatarUrl}
+          alt={username}
+          className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
+        />
+        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${status === 'online' ? 'bg-green-400' :
+            status === 'idle' ? 'bg-yellow-400' :
+              status === 'dnd' ? 'bg-red-400' :
+                'bg-gray-400'
+          }`}></div>
+      </div>
+      <div className="flex items-center space-x-2 flex-1">
+        <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text truncate">{username}</span>
+        {isOwner && (
+          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+        )}
+        {isAdmin && !isOwner && (
+          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -155,7 +206,7 @@ export default function Dashboard() {
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [channelContextMenu, setChannelContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number }; channel: Channel | null }>({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
-  const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null }>({ isOpen: false, channel: null });
+  const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null; isDeleting?: boolean }>({ isOpen: false, channel: null, isDeleting: false });
   const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
@@ -730,7 +781,8 @@ export default function Dashboard() {
 
       const response = await createChannel({
         channel_name: channelData.name,
-        is_private: channelData.isPrivate || false
+        is_private: channelData.isPrivate || false,
+        channel_type: channelData.type
       }, authToken);
 
       if (response.success && response.data) {
@@ -912,7 +964,7 @@ export default function Dashboard() {
   // Extracted message loading logic for reuse
   const loadChannelMessages = async (channel: Channel) => {
     const authToken = getAuthTokenFromCookies() || '';
-    const hostPort = getHostPortForWebSocket();
+    const hostPort = getHostPortFromCookies();
 
     console.log("Loading messages - authToken:", authToken ? 'exists' : 'missing', "channel_id:", channel.channel_id);
 
@@ -945,11 +997,21 @@ export default function Dashboard() {
                     // Normalize attachments from WebSocket (may be simple URLs or objects)
                     let normalizedAttachments: MessageAttachment[] = [];
                     if (message.attachments && Array.isArray(message.attachments)) {
+                      console.log('Processing WebSocket attachments:', message.attachments.length);
                       const tempAttachments: MessageAttachment[] = [];
-                      message.attachments.forEach((att: any) => {
+                      message.attachments.forEach((att: any, index: number) => {
+                        console.log(`Processing WebSocket attachment ${index}:`, { type: typeof att, hasUrl: att?.url, attType: att?.type, filename: att?.filename });
                         // If it's already an object with proper structure, use it
                         if (typeof att === 'object' && att.url) {
-                          tempAttachments.push(att);
+                          // Ensure all required fields are present and properly typed
+                          const normalizedAtt: MessageAttachment = {
+                            url: att.url,
+                            filename: att.filename || att.url.split('/').pop() || 'attachment',
+                            type: att.type || 'application/octet-stream',
+                            size: att.size || null
+                          };
+                          tempAttachments.push(normalizedAtt);
+                          console.log(`Added normalized WebSocket attachment ${index}:`, { url: normalizedAtt.url, type: normalizedAtt.type, filename: normalizedAtt.filename });
                         }
                         // If it's a string URL, convert to MessageAttachment object
                         else if (typeof att === 'string') {
@@ -975,9 +1037,13 @@ export default function Dashboard() {
                             type: mimeType,
                             size: null
                           });
+                          console.log(`Converted WebSocket string attachment ${index}:`, { url: att, type: mimeType, filename });
+                        } else {
+                          console.warn(`Invalid WebSocket attachment format ${index}:`, att);
                         }
                       });
                       normalizedAttachments = tempAttachments;
+                      console.log('Final WebSocket normalized attachments:', normalizedAttachments.length);
                     }
 
                     return [...prevMessages, {
@@ -1112,7 +1178,7 @@ export default function Dashboard() {
         attachments: messageAttachments.length > 0 ? messageAttachments : undefined
       };
 
-      const hostPort = getHostPortForWebSocket();
+      const hostPort = getHostPortFromStorage() || 'localhost:7575';
       const { sendMessage: sendMessageWithAttachments } = await import('../services/message');
 
       const response = await sendMessageWithAttachments(hostPort, selectedChannel.channel_id, messageData, authToken);
@@ -1205,7 +1271,7 @@ export default function Dashboard() {
       }
 
       // Check individual file size (limit to 10MB per file)
-      const maxSize = 10 * 1024 * 1024; // 10MB
+      const maxSize = 100 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
         logger.ui.warn("Rejected large file upload", {
           fileName: file.name,
@@ -2171,33 +2237,15 @@ export default function Dashboard() {
                         </h4>
                         <div className="space-y-1">
                           {userList.map(user => (
-                            <div
+                            <UserListItem
                               key={user.user_id}
-                              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:rounded-lg hover:bg-gradient-to-r hover:from-[var(--color-surface-secondary)] hover:to-[var(--color-surface-tertiary)] cursor-pointer shadow-sm hover:shadow-md transform hover:scale-102 transition-all duration-200 border border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                              userId={user.user_id}
+                              username={user.username}
+                              status={user.status}
+                              isOwner={user.is_owner}
+                              isAdmin={user.is_admin}
                               onClick={(e) => handleUserClick(user.user_id, user.username, e, 'members')}
-                            >
-                              <div className="relative">
-                                <img
-                                  src={`https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(user.username)}&backgroundColor=5865f2`}
-                                  alt={user.username}
-                                  className="w-8 h-8 rounded-full shadow-md border-2 border-green-300"
-                                />
-                                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-green-400' :
-                                    user.status === 'idle' ? 'bg-yellow-400' :
-                                      user.status === 'dnd' ? 'bg-red-400' :
-                                        'bg-gray-400'
-                                  }`}></div>
-                              </div>
-                              <div className="flex items-center space-x-2 flex-1">
-                                <span className="text-[var(--color-text)] text-sm font-semibold drop-shadow-sm select-text truncate">{user.username}</span>
-                                {user.is_owner && (
-                                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
-                                )}
-                                {user.is_admin && !user.is_owner && (
-                                  <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
-                                )}
-                              </div>
-                            </div>
+                            />
                           ))}
                         </div>
                       </div>
@@ -2332,19 +2380,25 @@ export default function Dashboard() {
             </div>
             <div className="flex justify-end space-x-3">
               <button
-                onClick={() => setChannelDeleteConfirm({ isOpen: false, channel: null })}
+                onClick={() => setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false })}
                 className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                disabled={channelDeleteConfirm.isDeleting}
               >
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const authToken = getAuthTokenFromCookies() || '';
                   const channel = channelDeleteConfirm.channel;
                   if (!authToken || !channel) return;
 
-                  // Call delete API
-                  deleteChannel(channel.channel_id, authToken).then(async (response) => {
+                  // Set loading state
+                  setChannelDeleteConfirm(prev => ({ ...prev, isDeleting: true }));
+
+                  try {
+                    // Call delete API
+                    const response = await deleteChannel(channel.channel_id, authToken);
+
                     if (response.success) {
                       logger.ui.info("Channel deleted successfully from dashboard", {
                         channelId: channel.channel_id,
@@ -2362,21 +2416,29 @@ export default function Dashboard() {
                         }
                       } catch (error) {
                         console.error("Failed to refresh channels after deletion:", error);
+                        showToast('Channel deleted but failed to refresh channel list. Please refresh the page.', 'error');
                       }
                     } else {
                       console.error("Failed to delete channel:", response.error);
                       showToast(`Failed to delete channel: ${response.error || 'Unknown error'}`, 'error');
                     }
-                  }).catch((error) => {
+                  } catch (error) {
                     console.error("Error deleting channel:", error);
                     showToast('An unexpected error occurred while deleting the channel.', 'error');
-                  });
-
-                  setChannelDeleteConfirm({ isOpen: false, channel: null });
+                  } finally {
+                    // Close modal regardless of outcome
+                    setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false });
+                  }
                 }}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                disabled={channelDeleteConfirm.isDeleting}
               >
-                Delete Channel
+                {channelDeleteConfirm.isDeleting && (
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                <span>{channelDeleteConfirm.isDeleting ? 'Deleting...' : 'Delete Channel'}</span>
               </button>
             </div>
           </div>

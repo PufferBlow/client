@@ -143,22 +143,22 @@ export const createApiClient = (hostPort?: string): ApiClient => {
   return new ApiClient(baseUrl);
 };
 
-// Utility function to convert relative CDN URLs to full API URLs
-export const convertToFullCdnUrl = (cdnUrl: string): string => {
-  if (cdnUrl.startsWith('http://') || cdnUrl.startsWith('https://')) {
+// Utility function to convert relative storage URLs to full API URLs
+export const convertToFullStorageUrl = (storageUrl: string): string => {
+  if (storageUrl.startsWith('http://') || storageUrl.startsWith('https://')) {
     // Already a full URL, return as-is
-    return cdnUrl;
+    return storageUrl;
   }
 
-  // If it's a relative CDN URL starting with /cdn, convert it to full API URL
-  if (cdnUrl.startsWith('/cdn')) {
+  // If it's a relative storage URL starting with /storage, convert it to full API URL
+  if (storageUrl.startsWith('/storage')) {
     const hostPort = getHostPort() || 'localhost:7575';
     const baseUrl = `http://${hostPort}`;
-    return `${baseUrl}${cdnUrl}`;
+    return `${baseUrl}${storageUrl}`;
   }
 
   // Otherwise return as-is (might be unrelated URL)
-  return cdnUrl;
+  return storageUrl;
 };
 
 // Blocked IPs API service functions

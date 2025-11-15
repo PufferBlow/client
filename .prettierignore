@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+
+# Generated files
+*.min.js
+*.min.css
+
+# Config files that should not be formatted
+.eslintrc.json
+.prettierrc.json
+package.json
+package-lock.json
+tsconfig.json
+vite.config.ts
+react-router.config.ts
+vitest.config.ts
+
+# Assets
+public/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico

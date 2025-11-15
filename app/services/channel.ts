@@ -56,6 +56,7 @@ export const createChannel = async (channelData: { channel_name: string; is_priv
     auth_token: authToken,
     channel_name: channelData.channel_name,
     is_private: channelData.is_private,
+    channel_type: channelData.channel_type || 'text',
   });
 };
 

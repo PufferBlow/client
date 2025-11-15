@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -19,20 +20,33 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
       });
     };
 
+    // Extract language from className (e.g., "language-javascript" -> "javascript")
+    const language = className?.replace('language-', '') || 'text';
+
     return (
-      <div className="relative">
+      <div className="relative group my-4">
+        {/* Language label */}
+        <div className="absolute top-2 left-3 bg-[var(--color-background-secondary)] text-[var(--color-text-muted)] text-xs px-2 py-1 rounded font-mono z-10">
+          {language}
+        </div>
+
+        {/* Copy button */}
         <button
           onClick={handleCopy}
-          className="absolute top-2 right-2 bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded"
+          className="absolute top-2 right-2 bg-[var(--color-background-secondary)] hover:bg-[var(--color-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] text-xs px-2 py-1 rounded transition-colors duration-200 z-10"
           title="Copy code"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
-        <pre className="bg-gray-700 rounded px-3 py-2 overflow-x-auto text-sm">
-          <code className={className}>
-            {children}
-          </code>
-        </pre>
+
+        {/* Code block container */}
+        <div className="bg-[var(--color-background-tertiary)] border border-[var(--color-border)] rounded-lg overflow-hidden shadow-lg">
+          <pre className="overflow-x-auto text-sm leading-relaxed">
+            <code className={`${className} block p-4 pt-10`}>
+              {children}
+            </code>
+          </pre>
+        </div>
       </div>
     );
   };
