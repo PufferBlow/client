@@ -49,7 +49,7 @@ export const getMessages = async (hostPort: string, channelId: string, authToken
 export const sendMessage = async (hostPort: string, channelId: string, messageData: SendMessageRequest, authToken: string): Promise<ApiResponse<Message>> => {
   const apiClient = createApiClient(hostPort);
 
-  // Create FormData for multipart/form-data requests (needed for file uploads)
+  // Always use FormData for consistency with backend expectations
   const formData = new FormData();
   formData.append('auth_token', authToken);
 
@@ -58,9 +58,9 @@ export const sendMessage = async (hostPort: string, channelId: string, messageDa
     formData.append('message', messageData.content.trim());
   }
 
-  // Add attachments if provided
+  // Add attachments if present
   if (messageData.attachments && messageData.attachments.length > 0) {
-    messageData.attachments.forEach((file, index) => {
+    messageData.attachments.forEach((file) => {
       formData.append('attachments', file);
     });
   }
@@ -100,5 +100,23 @@ export const searchMessages = async (hostPort: string, query: string, authToken:
   return apiClient.get('/api/v1/search', {
     q: query,
     auth_token: authToken,
+  });
+};
+
+// Additional messaging functions moved from channel service
+export const loadMessages = async (hostPort: string, channelId: string, authToken: string, page?: number, messages_per_page?: number): Promise<ApiResponse<{ status_code: number; messages: Message[] }>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.get(`/api/v1/channels/${channelId}/load_messages`, {
+    auth_token: authToken,
+    page: (page || 1).toString(),
+    messages_per_page: (messages_per_page || 20).toString()
+  });
+};
+
+export const markMessageAsRead = async (hostPort: string, channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.put(`/api/v1/channels/${channelId}/mark_message_as_read`, {
+    auth_token: authToken,
+    message_id: messageId,
   });
 };

@@ -1,0 +1,465 @@
+import React, { useState, useEffect } from 'react';
+
+import { Card } from '../Card';
+import { Button } from '../Button';
+import { Input } from '../Input';
+import { LoadingState } from '../LoadingState';
+import { ErrorState } from '../ErrorState';
+
+import { logger } from '../../utils/logger';
+
+/**
+ * Security setting interface
+ */
+export interface SecuritySetting {
+  /**
+   * Unique identifier for the setting
+   */
+  id: string;
+
+  /**
+   * Display name for the setting
+   */
+  name: string;
+
+  /**
+   * Description of what the setting does
+   */
+  description: string;
+
+  /**
+   * Whether the setting is currently enabled
+   */
+  enabled: boolean;
+
+  /**
+   * Category this setting belongs to
+   */
+  category: 'content' | 'access' | 'monitoring' | 'authentication';
+
+  /**
+   * Risk level of the setting
+   */
+  riskLevel: 'low' | 'medium' | 'high';
+
+  /**
+   * Whether this setting requires server restart
+   */
+  requiresRestart?: boolean;
+}
+
+/**
+ * Props for the SecurityTab component
+ */
+export interface SecurityTabProps {
+  /**
+   * Callback for showing toast notifications
+   */
+  showToast: (message: string, type: 'success' | 'error') => void;
+
+  /**
+   * Additional CSS classes
+   */
+  className?: string;
+}
+
+/**
+ * SecurityTab component - manages server security settings and configurations.
+ *
+ * This component provides an interface for configuring various security features
+ * including content moderation, access controls, monitoring, and authentication.
+ *
+ * @example
+ * ```tsx
+ * <SecurityTab showToast={showToast} />
+ * ```
+ */
+export const SecurityTab: React.FC<SecurityTabProps> = ({
+  showToast,
+  className = '',
+}) => {
+  const [settings, setSettings] = useState<SecuritySetting[]>([
+    {
+      id: 'content_moderation',
+      name: 'Content Moderation',
+      description: 'Automatically filter inappropriate content and messages',
+      enabled: false,
+      category: 'content',
+      riskLevel: 'medium',
+    },
+    {
+      id: 'spam_protection',
+      name: 'Spam Protection',
+      description: 'Prevent spam messages and automated abuse',
+      enabled: true,
+      category: 'content',
+      riskLevel: 'low',
+    },
+    {
+      id: 'ip_logging',
+      name: 'IP Address Logging',
+      description: 'Log IP addresses for security monitoring and abuse prevention',
+      enabled: false,
+      category: 'monitoring',
+      riskLevel: 'high',
+    },
+    {
+      id: 'rate_limiting',
+      name: 'Rate Limiting',
+      description: 'Limit the number of requests per user to prevent abuse',
+      enabled: true,
+      category: 'access',
+      riskLevel: 'low',
+    },
+    {
+      id: 'two_factor_auth',
+      name: 'Two-Factor Authentication',
+      description: 'Require 2FA for all administrator accounts',
+      enabled: false,
+      category: 'authentication',
+      riskLevel: 'medium',
+      requiresRestart: true,
+    },
+    {
+      id: 'session_timeout',
+      name: 'Session Timeout',
+      description: 'Automatically log out inactive users after a period of time',
+      enabled: true,
+      category: 'access',
+      riskLevel: 'low',
+    },
+    {
+      id: 'password_policy',
+      name: 'Strong Password Policy',
+      description: 'Enforce minimum password requirements for all users',
+      enabled: true,
+      category: 'authentication',
+      riskLevel: 'medium',
+    },
+    {
+      id: 'audit_logging',
+      name: 'Audit Logging',
+      description: 'Log all administrative actions for compliance and security',
+      enabled: true,
+      category: 'monitoring',
+      riskLevel: 'low',
+    },
+  ]);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [originalSettings, setOriginalSettings] = useState<SecuritySetting[]>([]);
+
+  // Load settings on component mount
+  useEffect(() => {
+    loadSecuritySettings();
+  }, []);
+
+  // Track changes
+  useEffect(() => {
+    const hasAnyChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+    setHasChanges(hasAnyChanges);
+  }, [settings, originalSettings]);
+
+  const loadSecuritySettings = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // In a real implementation, this would fetch from the API
+      // For now, we'll use the default settings
+      setOriginalSettings(JSON.parse(JSON.stringify(settings)));
+      logger.ui.info('Security settings loaded successfully');
+    } catch (err) {
+      setError('Failed to load security settings');
+      logger.ui.error('Failed to load security settings', { error: err });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSettingToggle = (settingId: string) => {
+    setSettings(prev => prev.map(setting =>
+      setting.id === settingId
+        ? { ...setting, enabled: !setting.enabled }
+        : setting
+    ));
+  };
+
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    setError(null);
+
+    try {
+      // In a real implementation, this would save to the API
+      // For now, we'll simulate a save operation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Check if any settings require restart
+      const requiresRestart = settings.some(setting =>
+        setting.requiresRestart &&
+        setting.enabled !== originalSettings.find(orig => orig.id === setting.id)?.enabled
+      );
+
+      setOriginalSettings(JSON.parse(JSON.stringify(settings)));
+
+      if (requiresRestart) {
+        showToast('Settings saved successfully! Server restart required for some changes.', 'success');
+      } else {
+        showToast('Security settings updated successfully!', 'success');
+      }
+
+      logger.ui.info('Security settings saved successfully', {
+        settingsCount: settings.length,
+        requiresRestart
+      });
+    } catch (err) {
+      setError('Failed to save security settings');
+      showToast('Failed to save security settings', 'error');
+      logger.ui.error('Failed to save security settings', { error: err });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getCategoryIcon = (category: SecuritySetting['category']) => {
+    switch (category) {
+      case 'content':
+        return '🛡️';
+      case 'access':
+        return '🔐';
+      case 'monitoring':
+        return '👁️';
+      case 'authentication':
+        return '🔑';
+      default:
+        return '⚙️';
+    }
+  };
+
+  const getRiskColor = (riskLevel: SecuritySetting['riskLevel']) => {
+    switch (riskLevel) {
+      case 'low':
+        return 'text-green-400 bg-green-900/20 border-green-500/30';
+      case 'medium':
+        return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
+      case 'high':
+        return 'text-red-400 bg-red-900/20 border-red-500/30';
+      default:
+        return 'text-gray-400 bg-gray-900/20 border-gray-500/30';
+    }
+  };
+
+  const groupedSettings = settings.reduce((acc, setting) => {
+    if (!acc[setting.category]) {
+      acc[setting.category] = [];
+    }
+    acc[setting.category].push(setting);
+    return acc;
+  }, {} as Record<SecuritySetting['category'], SecuritySetting[]>);
+
+  if (loading) {
+    return (
+      <div className={`space-y-6 ${className}`}>
+        <LoadingState message="Loading security settings..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`space-y-6 ${className}`}>
+        <ErrorState
+          title="Failed to load security settings"
+          message={error}
+          showRetry
+          onRetry={loadSecuritySettings}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-medium text-white">Security Configuration</h2>
+          <p className="text-gray-400 text-sm mt-1">
+            Configure security settings and policies for your server
+          </p>
+        </div>
+        <div className="flex items-center space-x-4">
+          {hasChanges && (
+            <span className="text-yellow-400 text-sm font-medium">
+              Unsaved changes
+            </span>
+          )}
+          <Button
+            onClick={handleSaveSettings}
+            disabled={!hasChanges || saving}
+            variant="primary"
+            size="sm"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Security Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">Active Protections</div>
+              <div className="text-2xl font-bold text-green-400">
+                {settings.filter(s => s.enabled).length}
+              </div>
+            </div>
+            <div className="text-2xl">🛡️</div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">High Risk Settings</div>
+              <div className="text-2xl font-bold text-red-400">
+                {settings.filter(s => s.riskLevel === 'high' && s.enabled).length}
+              </div>
+            </div>
+            <div className="text-2xl">⚠️</div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">Requires Restart</div>
+              <div className="text-2xl font-bold text-yellow-400">
+                {settings.filter(s => s.requiresRestart).length}
+              </div>
+            </div>
+            <div className="text-2xl">🔄</div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">Security Score</div>
+              <div className="text-2xl font-bold text-blue-400">
+                {Math.round((settings.filter(s => s.enabled).length / settings.length) * 100)}%
+              </div>
+            </div>
+            <div className="text-2xl">📊</div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Settings by Category */}
+      {Object.entries(groupedSettings).map(([category, categorySettings]) => (
+        <Card key={category} className="p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="text-2xl">{getCategoryIcon(category as SecuritySetting['category'])}</div>
+            <div>
+              <h3 className="text-lg font-semibold text-white capitalize">
+                {category.replace('_', ' ')} Security
+              </h3>
+              <p className="text-gray-400 text-sm">
+                {category === 'content' && 'Control what content is allowed on your server'}
+                {category === 'access' && 'Manage who can access your server and how'}
+                {category === 'monitoring' && 'Track and log server activity for security'}
+                {category === 'authentication' && 'Configure user authentication and verification'}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {categorySettings.map((setting) => (
+              <div
+                key={setting.id}
+                className="flex items-center justify-between p-4 bg-gray-700/50 rounded-lg border border-gray-600/50 hover:border-gray-500/50 transition-colors"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <h4 className="text-white font-medium">{setting.name}</h4>
+                    <span className={`px-2 py-1 text-xs font-medium rounded border ${getRiskColor(setting.riskLevel)}`}>
+                      {setting.riskLevel.toUpperCase()}
+                    </span>
+                    {setting.requiresRestart && (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-900/20 text-yellow-400 border border-yellow-500/30">
+                        RESTART REQUIRED
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-400 text-sm">{setting.description}</p>
+                </div>
+
+                <div className="ml-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={setting.enabled}
+                      onChange={() => handleSettingToggle(setting.id)}
+                      className="sr-only"
+                    />
+                    <div className={`
+                      relative inline-block w-10 h-6 rounded-full transition-colors
+                      ${setting.enabled ? 'bg-blue-600' : 'bg-gray-600'}
+                    `}>
+                      <div className={`
+                        absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform
+                        ${setting.enabled ? 'translate-x-4' : 'translate-x-0'}
+                      `}></div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+
+      {/* Security Recommendations */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Security Recommendations</h3>
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+            <div className="text-blue-400 text-xl">💡</div>
+            <div>
+              <h4 className="text-blue-400 font-medium mb-1">Enable Content Moderation</h4>
+              <p className="text-gray-300 text-sm">
+                Consider enabling content moderation to automatically filter inappropriate messages and maintain a safe community.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start space-x-3 p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+            <div className="text-yellow-400 text-xl">⚠️</div>
+            <div>
+              <h4 className="text-yellow-400 font-medium mb-1">IP Logging Privacy</h4>
+              <p className="text-gray-300 text-sm">
+                IP logging can help prevent abuse but may impact user privacy. Consider your local privacy laws before enabling.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start space-x-3 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+            <div className="text-green-400 text-xl">✅</div>
+            <div>
+              <h4 className="text-green-400 font-medium mb-1">Regular Security Audits</h4>
+              <p className="text-gray-300 text-sm">
+                Regularly review your security settings and audit logs to ensure your server remains secure.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+export default SecurityTab;

@@ -23,28 +23,24 @@ export {
   createChannel,
   updateChannel,
   deleteChannel,
-  loadMessages,
-  sendMessage,
   addUserToChannel,
-  removeUserFromChannel,
-  deleteMessage,
-  markMessageAsRead
+  removeUserFromChannel
 } from './channel';
 export type {
   CreateChannelRequest
 } from './channel';
 
-// CDN services (Server Owner only)
+// Storage services (Server Owner only)
 export {
-  listCDNFiles,
-  deleteCDNFile,
-  getCDNFileInfo,
+  listStorageFiles,
+  deleteStorageFile,
+  getStorageFileInfo,
   cleanupOrphanedFiles
-} from './cdn';
+} from './storage';
 export type {
-  CDNFile,
-  CDNFileInfo
-} from './cdn';
+  StorageFile,
+  StorageFileInfo
+} from './storage';
 
 // Security services (Server Owner only)
 export {
@@ -82,6 +78,25 @@ export type {
   ChartData,
   Period
 } from './system';
+
+// Message services
+export {
+  getMessages,
+  sendMessage,
+  updateMessage,
+  deleteMessage,
+  addReaction,
+  removeReaction,
+  searchMessages,
+  loadMessages,
+  markMessageAsRead
+} from './message';
+export type {
+  Attachment,
+  Reaction,
+  SendMessageRequest,
+  SearchResult
+} from './message';
 
 // WebSocket Real-time Messaging
 export {

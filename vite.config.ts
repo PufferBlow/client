@@ -16,14 +16,8 @@ export default defineConfig(({ mode }) => ({
     } : undefined
   },
   server: {
-    // In Electron development, don't proxy to avoid issues
-    proxy: mode !== 'electron' ? {
-      '/api': {
-        target: 'http://localhost:7575',
-        changeOrigin: true,
-        secure: false,
-      },
-    } : undefined,
+    // Don't proxy API requests - let the client make direct requests to the server
+    // using the host:port stored in cookies for decentralized infrastructure
   },
   base: mode === 'electron' ? './' : '/',
   cacheDir: '.vite-cache',

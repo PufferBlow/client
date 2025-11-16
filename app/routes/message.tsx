@@ -13,10 +13,6 @@ export default function MessagePage() {
   // This functionality is disabled since required API endpoints are not available
   // in the provided API reference
 
-  useEffect(() => {
-    alert("Message sharing feature is temporarily disabled - API endpoints not available");
-  }, []);
-
-  // Redirect to dashboard
+  // Redirect to dashboard immediately - no hooks needed since we redirect right away
   return <Navigate to="/dashboard" replace />;
 }

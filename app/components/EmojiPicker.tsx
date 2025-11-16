@@ -27,39 +27,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
   const [isLoadingGifs, setIsLoadingGifs] = useState(false);
   const [gifError, setGifError] = useState<string | null>(null);
 
-  // Drag functionality
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [position, setPosition] = useState(() => {
-    // Load saved position from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pufferblow-emoji-picker-position');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          // Fall through to default
-        }
-      }
-    }
-    // Default position (center of screen)
-    return {
-      x: window.innerWidth / 2 - 200, // Half picker width
-      y: window.innerHeight / 2 - 200  // Half picker height
-    };
-  });
 
-  // Function to convert emoji to Twemoji code point
-  const emojiToCodePoint = (emoji: string): string => {
-    return [...emoji].map(char => char.codePointAt(0)?.toString(16).toLowerCase()).join('-');
-  };
-
-  // Save position to localStorage
-  const savePosition = useCallback((newPosition: { x: number; y: number }) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pufferblow-emoji-picker-position', JSON.stringify(newPosition));
-    }
-  }, []);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -77,54 +45,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
     };
   }, [isOpen, onClose]);
 
-  // Drag event handlers
-  const handleMouseDown = (event: React.MouseEvent) => {
-    if (!pickerRef.current) return;
 
-    setIsDragging(true);
-    const rect = pickerRef.current.getBoundingClientRect();
-    setDragOffset({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top
-    });
-    event.preventDefault();
-  };
-
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!isDragging) return;
-
-    const newX = Math.max(0, Math.min(window.innerWidth - 400, event.clientX - dragOffset.x));
-    const newY = Math.max(0, Math.min(window.innerHeight - 350, event.clientY - dragOffset.y));
-
-    const newPosition = { x: newX, y: newY };
-    setPosition(newPosition);
-  }, [isDragging, dragOffset]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-    savePosition(position);
-  }, [position, savePosition]);
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'grabbing';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Reset search when opening
   useEffect(() => {
@@ -258,36 +179,21 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
 
   return (
     <div
-      ref={pickerRef}
-      className={`
-        fixed z-50 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl shadow-2xl
-        ${isDragging ? 'cursor-grabbing' : ''}
-      `}
+      className="fixed z-50 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl shadow-2xl"
       style={{
-        left: position.x,
-        top: position.y,
+        right: '20px',
+        bottom: '100px',
         width: '400px',
         maxHeight: '350px'
       }}
     >
-      {/* Draggable Header */}
-      <div
-        className="relative h-10 px-4 flex items-center justify-between cursor-grab active:cursor-grabbing select-none"
-        onMouseDown={handleMouseDown}
-      >
-        {/* Drag handle indicator */}
-        <div className="flex items-center space-x-2 flex-1">
-          <div className="flex space-x-1">
-            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
-            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
-            <div className="w-1 h-1 bg-white/30 rounded-full"></div>
-          </div>
-          <h3 className="text-sm font-semibold text-white">
-            {activeTab === 'emoji' && 'Emoji'}
-            {activeTab === 'gif' && 'GIF'}
-            {activeTab === 'sticker' && 'Sticker'}
-          </h3>
-        </div>
+      {/* Header */}
+      <div className="relative h-10 px-4 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">
+          {activeTab === 'emoji' && 'Emoji'}
+          {activeTab === 'gif' && 'GIF'}
+          {activeTab === 'sticker' && 'Sticker'}
+        </h3>
 
         {/* Close button */}
         <button
@@ -361,14 +267,10 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                 <button
                   key={emoji}
                   onClick={() => onEmojiSelect(emoji)}
-                  className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors"
+                  className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors emoji-button"
                   title={`Add ${emoji}`}
                 >
-                  <img
-                    src={`/twemoji/assets/72x72/${emojiToCodePoint(emoji)}.png`}
-                    alt={emoji}
-                    className="w-6 h-6"
-                  />
+                  <span className="text-xl emoji-char">{emoji}</span>
                 </button>
               ))}
             </div>

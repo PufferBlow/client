@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import type { MessageAttachment } from '../models/Message';
+import { VideoPlayer } from './VideoPlayer';
 
 interface AttachmentBubbleProps extends MessageAttachment {
   onClick?: () => void;
   className?: string;
 }
+
 
 export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   url,
@@ -14,17 +16,8 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   onClick,
   className = ''
 }) => {
-  const [isSpoiler, setIsSpoiler] = useState(true);
+  const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const handleImageClick = () => {
-    if (!isSpoiler && onClick) {
-      onClick();
-    } else {
-      setIsSpoiler(false);
-    }
-  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -90,49 +83,33 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     const isImage = type?.startsWith('image/');
     const isVideo = type?.startsWith('video/');
 
-    // If it's a spoiler (image/video) and not revealed yet
-    if (isSpoiler && (isImage || isVideo)) {
-      return (
-        <div
-          className={`relative cursor-pointer bg-gray-800 border border-gray-600 rounded-lg overflow-hidden hover:border-gray-500 transition-colors ${className}`}
-          onClick={handleImageClick}
-        >
-          <div className="flex items-center justify-center p-12 bg-gray-700">
-            <div className="text-center">
-              <svg className="w-12 h-12 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464M9.878 9.878l4.242 4.242M12 2.25c.966 0 1.897.13 2.775.375M12 2.25c-.966 0-1.897.13-2.775.375M12 2.25c-.966 0-2.116.524-2.775 1.475M12 2.25c.966 0 2.116.524 2.775 1.475" />
-              </svg>
-              <p className="text-gray-400 font-medium">
-                {isImage ? 'Image' : 'Video'}
-              </p>
-              <p className="text-gray-500 text-sm mt-1">Click to reveal</p>
-            </div>
-          </div>
-
-          {/* Filename overlay */}
-          {filename && (
-            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 backdrop-blur-sm p-2">
-              <p className="text-white text-xs truncate" title={filename}>
-                {filename}
-              </p>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Revealed image/video
     if (isImage) {
       return (
         <div
-          className={`relative group cursor-pointer bg-gray-800 border border-gray-600 rounded-lg overflow-hidden hover:border-gray-500 transition-colors ${className}`}
+          className={`relative group cursor-pointer bg-gray-800 border border-gray-600 rounded-lg overflow-hidden hover:border-gray-500 transition-all duration-200 ${className}`}
           onClick={onClick}
         >
+          {/* Loading skeleton */}
+          {imageLoading && (
+            <div className="absolute inset-0 bg-gray-700 animate-pulse flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-gray-400 text-sm">Loading image...</p>
+              </div>
+            </div>
+          )}
+
           <img
             src={url}
             alt={filename || 'Attachment'}
-            className="w-full h-auto max-h-96 object-contain"
-            onError={() => setImageError(true)}
+            className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${
+              imageLoading ? 'opacity-0' : 'opacity-100'
+            }`}
+            onLoad={() => setImageLoading(false)}
+            onError={() => {
+              setImageLoading(false);
+              setImageError(true);
+            }}
             loading="lazy"
           />
 
@@ -145,8 +122,8 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
 
           {/* Filename overlay */}
           {filename && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black to-transparent p-2 opacity-70 group-hover:opacity-90">
-              <p className="text-white text-sm truncate" title={filename}>
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <p className="text-white text-sm font-medium truncate drop-shadow-lg" title={filename}>
                 {filename}
               </p>
             </div>
@@ -157,27 +134,12 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
 
     if (isVideo) {
       return (
-        <div
-          className={`relative group cursor-pointer bg-gray-800 border border-gray-600 rounded-lg overflow-hidden hover:border-gray-500 transition-colors ${className}`}
-          onClick={onClick}
-        >
-          <video
-            ref={videoRef}
+        <div className={`relative ${className}`} onClick={onClick}>
+          <VideoPlayer
             src={url}
-            className="w-full h-auto max-h-96 object-contain"
-            controls
-            preload="metadata"
+            filename={filename}
             onError={() => setImageError(true)}
           />
-
-          {/* Filename overlay */}
-          {filename && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black to-transparent p-2 opacity-70 group-hover:opacity-90">
-              <p className="text-white text-sm truncate" title={filename}>
-                {filename}
-              </p>
-            </div>
-          )}
         </div>
       );
     }

@@ -14,7 +14,7 @@ import {
   Mic
 } from "lucide-react";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
-import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../services/user";
+import { getAuthTokenFromCookies, listUsers, type ListUsersResponse, useUserProfile } from "../services/user";
 import { listChannels, deleteChannel, createChannel } from "../services/channel";
 import {
   getUserRegistrationsChart,
@@ -39,7 +39,7 @@ import {
   type ActivityMetrics,
   type ServerOverview
 } from "../services/system";
-import { convertToFullCdnUrl, listBlockedIPs, blockIP, unblockIP } from "../services/apiClient";
+import { convertToFullStorageUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../services/apiClient";
 import { logger } from "../utils/logger";
 import type { Channel } from "../models";
 import {
@@ -76,8 +76,8 @@ export function meta() {
   ];
 }
 
-// CDN File interface
-type CDNFile = {
+// Storage File interface
+type StorageFile = {
   id: string;
   filename: string;
   path: string;
@@ -90,7 +90,7 @@ type CDNFile = {
 };
 
 export default function ControlPanel() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'cdn' | 'security' | 'blocked-ips'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'storage' | 'security' | 'blocked-ips'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -103,7 +103,7 @@ export default function ControlPanel() {
   // FileViewerModal state
   const [fileViewerModal, setFileViewerModal] = useState<{
     isOpen: boolean;
-    file: CDNFile | null;
+    file: StorageFile | null;
   }>({ isOpen: false, file: null });
 
   // Toast notifications - replace browser alerts
@@ -190,7 +190,8 @@ export default function ControlPanel() {
 
       const response = await createChannel({
         channel_name: channelData.name,
-        is_private: channelData.isPrivate || false
+        is_private: channelData.isPrivate || false,
+        channel_type: channelData.type
       }, authToken);
 
       if (response.success && response.data) {
@@ -470,14 +471,14 @@ export default function ControlPanel() {
     { id: 'channels', label: 'Channels', icon: <Hash className="w-6 h-6" /> },
     { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-6 h-6" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-6 h-6" /> },
-    { id: 'cdn', label: 'CDN', icon: <Folder className="w-6 h-6" /> },
+    { id: 'storage', label: 'Storage', icon: <Folder className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Lock className="w-6 h-6" /> },
     { id: 'blocked-ips', label: 'Blocked IPs', icon: <CircleX className="w-6 h-6" /> },
     { id: 'logs', label: 'Logs', icon: <FileText className="w-6 h-6" /> },
   ];
 
   // FileViewerModal Component
-  const FileViewerModal = ({ isOpen, file, onClose }: { isOpen: boolean; file: CDNFile | null; onClose: () => void }) => {
+  const FileViewerModal = ({ isOpen, file, onClose }: { isOpen: boolean; file: StorageFile | null; onClose: () => void }) => {
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -487,7 +488,7 @@ export default function ControlPanel() {
       }
     }, [isOpen, file]);
 
-    const loadFileContent = async (file: CDNFile) => {
+    const loadFileContent = async (file: StorageFile) => {
       setLoading(true);
       setContent(null);
 
@@ -819,7 +820,7 @@ export default function ControlPanel() {
             {activeTab === 'tasks' && <TasksTab showToast={showToast} />}
             {activeTab === 'logs' && <LogsTab showToast={showToast} />}
             {activeTab === 'settings' && <SettingsTab showToast={showToast} />}
-            {activeTab === 'cdn' && <CDNTab
+            {activeTab === 'storage' && <StorageTab
               showToast={showToast}
               fileViewerModal={fileViewerModal}
               setFileViewerModal={setFileViewerModal}
@@ -1056,23 +1057,22 @@ function TasksTab({
   );
 }
 
-// CDN Tab Component
-// CDN Tab Component
-function CDNTab({
+// Storage Tab Component
+function StorageTab({
   showToast,
   fileViewerModal,
   setFileViewerModal
 }: {
   showToast: (message: string, type: 'success' | 'error') => void;
-  fileViewerModal: { isOpen: boolean; file: CDNFile | null };
-  setFileViewerModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; file: CDNFile | null }>>;
+  fileViewerModal: { isOpen: boolean; file: StorageFile | null };
+  setFileViewerModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; file: StorageFile | null }>>;
 }) {
-  const [files, setFiles] = useState<CDNFile[]>([]);
+  const [files, setFiles] = useState<StorageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDirectory, setSelectedDirectory] = useState('uploads');
   const [searchTerm, setSearchTerm] = useState('');
-  const [deleteConfirmFile, setDeleteConfirmFile] = useState<CDNFile | null>(null);
+  const [deleteConfirmFile, setDeleteConfirmFile] = useState<StorageFile | null>(null);
   const [isCleaningOrphaned, setIsCleaningOrphaned] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
@@ -1111,23 +1111,21 @@ function CDNTab({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('directory', selectedDirectory);
+        formData.append('auth_token', authToken);
 
         // Create a unique ID for this file's progress
         const fileId = Date.now() + '_' + Math.random();
 
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
-        const response = await fetch(`/api/v1/cdn/upload?auth_token=${authToken}`, {
-          method: 'POST',
-          body: formData
-        });
+        const apiClient = createApiClient();
+        const response = await apiClient.post('/api/v1/cdn/upload', formData);
 
-        if (response.ok) {
+        if (response.success) {
           setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
           return { success: true, file };
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Upload failed for "${file.name}"`);
+          throw new Error(response.error || `Upload failed for "${file.name}"`);
         }
       });
 
@@ -1163,7 +1161,7 @@ function CDNTab({
   };
 
   // CDN File interface
-  type CDNFile = {
+  type StorageFile = {
     id: string;
     filename: string;
     path: string;
@@ -1192,23 +1190,16 @@ function CDNTab({
         return;
       }
 
-      const response = await fetch('/api/v1/cdn/files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          directory: selectedDirectory
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/files', {
+        auth_token: authToken,
+        directory: selectedDirectory
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setFiles(data.files || []);
+      if (response.success && response.data && (response.data as any).files) {
+        setFiles((response.data as any).files || []);
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to load files');
+        setError(response.error || 'Failed to load files');
         setFiles([]);
       }
     } catch (err) {
@@ -1219,28 +1210,22 @@ function CDNTab({
     }
   };
 
-  const handleDeleteFile = async (file: CDNFile) => {
+  const handleDeleteFile = async (file: StorageFile) => {
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await fetch('/api/v1/cdn/delete-file', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          file_url: file.url
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/delete-file', {
+        auth_token: authToken,
+        file_url: file.url
       });
 
-      if (response.ok) {
+      if (response.success) {
         setFiles(prev => prev.filter(f => f !== file));
         showToast(`File "${file.filename}" deleted successfully!`, 'success');
         setDeleteConfirmFile(null);
       } else {
-        const errorData = await response.json();
-        showToast(`Failed to delete file: ${errorData.error}`, 'error');
+        showToast(`Failed to delete file: ${response.error}`, 'error');
       }
     } catch (err) {
       showToast('Network error occurred while deleting file', 'error');
@@ -1253,24 +1238,17 @@ function CDNTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
 
-      const response = await fetch('/api/v1/cdn/cleanup-orphaned', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          auth_token: authToken,
-          subdirectory: selectedDirectory // Use current selected directory
-        })
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/cdn/cleanup-orphaned', {
+        auth_token: authToken,
+        subdirectory: selectedDirectory // Use current selected directory
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        showToast(`Cleaned up ${data.deleted_count} orphaned files`, 'success');
+      if (response.success) {
+        showToast(`Cleaned up ${(response.data as any)?.deleted_count || 0} orphaned files`, 'success');
         loadFiles(); // Refresh the list
       } else {
-        const errorData = await response.json();
-        showToast(`Cleanup failed: ${errorData.error}`, 'error');
+        showToast(`Cleanup failed: ${response.error}`, 'error');
       }
     } catch (err) {
       showToast('Network error occurred during cleanup', 'error');
@@ -2330,7 +2308,7 @@ function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
             <div className="flex items-start space-x-4">
               {serverInfo?.avatar_url ? (
                 <img
-                  src={convertToFullCdnUrl(serverInfo.avatar_url)}
+                  src={convertToFullStorageUrl(serverInfo.avatar_url)}
                   alt={serverInfo.server_name}
                   className="w-16 h-16 rounded-xl border-2 border-[var(--color-border)] object-cover shadow-lg"
                 />
@@ -3306,25 +3284,25 @@ function SettingsTab({
       try {
         const response = await getServerInfo();
         if (response.success && response.data) {
-          const info = response.data.server_info;
+          const info = response.data.server_info || {};
           setServerInfo({
-            server_name: info.server_name,
-            server_description: info.server_description,
-            version: info.version,
-            max_users: info.max_users,
-            is_private: info.is_private,
-            creation_date: info.creation_date,
+            server_name: info.server_name || 'Loading...',
+            server_description: info.server_description || 'Loading...',
+            version: info.version || 'Loading...',
+            max_users: info.max_users || null,
+            is_private: info.is_private || false,
+            creation_date: info.creation_date || null,
             max_message_length: info.max_message_length,
             max_image_size: info.max_image_size,
             max_video_size: info.max_video_size,
             max_sticker_size: info.max_sticker_size,
-            avatar_url: info.avatar_url,
-            banner_url: info.banner_url,
+            avatar_url: info.avatar_url || null,
+            banner_url: info.banner_url || null,
           });
           setOriginalServerInfo(JSON.parse(JSON.stringify({
             ...info,
-            avatar_url: info.avatar_url,
-            banner_url: info.banner_url
+            avatar_url: info.avatar_url || null,
+            banner_url: info.banner_url || null
           }))); // Deep copy
         } else {
           setError('Failed to load server information');
@@ -3351,22 +3329,25 @@ function SettingsTab({
     try {
       const formData = new FormData();
       formData.append('auth_token', authToken);
-      formData.append('avatar', file);
+      formData.append('file', file);
+      formData.append('directory', 'avatars');
 
-      const response = await fetch('/api/v1/system/upload-avatar', {
-        method: 'POST',
-        body: formData
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post<{
+        status_code: number;
+        message: string;
+        url: string;
+        is_duplicate: boolean;
+      }>('/api/v1/storage/upload', formData);
 
-      if (response.ok) {
-        const result = await response.json();
-        const fullAvatarUrl = convertToFullCdnUrl(result.avatar_url);
+      if (response.success && response.data) {
+        const fullAvatarUrl = convertToFullStorageUrl(response.data.url);
         setServerInfo(prev => ({ ...prev, avatar_url: fullAvatarUrl }));
         setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null); // Update original to avoid "unsaved changes"
-        logger.ui.info('Server avatar updated successfully', result);
+        logger.ui.info('Server avatar updated successfully', response.data);
       } else {
         setError('Failed to upload avatar');
-        logger.ui.error('Failed to upload avatar', response);
+        logger.ui.error('Failed to upload avatar', response.error);
       }
     } catch (err) {
       setError('Failed to upload avatar');
@@ -3387,19 +3368,16 @@ function SettingsTab({
       formData.append('auth_token', authToken);
       formData.append('banner', file);
 
-      const response = await fetch('/api/v1/system/upload-banner', {
-        method: 'POST',
-        body: formData
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/system/upload-banner', formData);
 
-      if (response.ok) {
-        const result = await response.json();
-        setServerInfo(prev => ({ ...prev, banner_url: result.banner_url }));
-        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: result.banner_url } : null); // Update original to avoid "unsaved changes"
-        logger.ui.info('Server banner updated successfully', result);
+      if (response.success) {
+        setServerInfo(prev => ({ ...prev, banner_url: (response.data as any)?.banner_url }));
+        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: (response.data as any)?.banner_url } : null); // Update original to avoid "unsaved changes"
+        logger.ui.info('Server banner updated successfully', response.data);
       } else {
         setError('Failed to upload banner');
-        logger.ui.error('Failed to upload banner', response);
+        logger.ui.error('Failed to upload banner', response.error);
       }
     } catch (err) {
       setError('Failed to upload banner');
@@ -3605,7 +3583,7 @@ function SettingsTab({
                   <div className="relative">
                     {serverInfo.avatar_url ? (
                       <img
-                        src={convertToFullCdnUrl(serverInfo.avatar_url)}
+                        src={convertToFullStorageUrl(serverInfo.avatar_url)}
                         alt="Server Avatar"
                         className="w-20 h-20 rounded-xl border-2 border-[var(--color-border)] object-cover"
                       />
@@ -3707,7 +3685,7 @@ function SettingsTab({
                   {serverInfo.banner_url && (
                     <div className="relative group">
                       <img
-                        src={convertToFullCdnUrl(serverInfo.banner_url)}
+                        src={convertToFullStorageUrl(serverInfo.banner_url)}
                         alt="Server Banner"
                         className="w-full h-24 object-cover rounded-lg border border-[var(--color-border)]"
                         style={{ aspectRatio: '16/2' }}
@@ -4483,15 +4461,10 @@ function LogsTab({
         return;
       }
 
-      const response = await fetch('/api/v1/system/logs/clear', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const apiClient = createApiClient();
+      const response = await apiClient.post('/api/v1/system/logs/clear');
 
-      if (response.ok) {
+      if (response.success) {
         setLogs([]);
         setFilteredLogs([]);
         showToast('Logs cleared successfully!', 'success');
