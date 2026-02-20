@@ -4,6 +4,11 @@ import type { User } from '../models';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect } from 'react';
 import { secureStorage, migrateToSecureStorage } from './secureStorage';
+import {
+  issueDecentralizedChallenge,
+  verifyDecentralizedChallenge,
+  persistNodeSessionToken,
+} from './decentralizedAuth';
 
 // Role definitions
 export enum UserRole {
@@ -291,7 +296,7 @@ export const updatePassword = async (request: UpdatePasswordRequest): Promise<Ap
 
 export const resetAuthToken = async (request: ResetAuthTokenRequest): Promise<ApiResponse<ResetAuthTokenResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.put('/api/v1/users/profile/reset-auth-token', request as unknown as Record<string, string>);
+  return apiClient.post('/api/v1/users/profile/reset-auth-token', request as unknown as Record<string, string>);
 };
 
 export const updateBio = async (request: UpdateBioRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
@@ -400,9 +405,12 @@ export const extractUserIdFromToken = (authToken: string): string => {
 let authTokenCache: string | null = null;
 let hostPortCache: string | null = null;
 let cacheInitialized = false;
+let cacheInitializing = false;
 
 const initializeStorageCache = async () => {
-  if (cacheInitialized) return;
+  if (cacheInitialized || cacheInitializing) return;
+
+  cacheInitializing = true;
 
   try {
     // Migrate any existing data to secure storage
@@ -427,12 +435,14 @@ const initializeStorageCache = async () => {
     }, 30000); // Refresh every 30 seconds
   } catch (error) {
     console.error('Failed to initialize storage cache:', error);
+  } finally {
+    cacheInitializing = false;
   }
 };
 
 // Synchronous functions for backward compatibility
 export const getAuthTokenFromCookies = (): string | null => {
-  if (!cacheInitialized) {
+  if (!cacheInitialized && !cacheInitializing) {
     // Initialize cache on first call
     initializeStorageCache().catch(console.error);
   }
@@ -440,7 +450,7 @@ export const getAuthTokenFromCookies = (): string | null => {
 };
 
 export const getHostPortFromCookies = (): string | null => {
-  if (!cacheInitialized) {
+  if (!cacheInitialized && !cacheInitializing) {
     // Initialize cache on first call
     initializeStorageCache().catch(console.error);
   }
@@ -448,9 +458,24 @@ export const getHostPortFromCookies = (): string | null => {
 };
 
 export const getHostPortFromStorage = (): string | null => {
-  // Use secure storage cache which handles both Electron and web backends
+  // Use secure storage cache for browser/Tauri-compatible storage behavior
   const hostPort = hostPortCache;
   return hostPort ? decodeURIComponent(hostPort) : null;
+};
+
+// Async versions that properly wait for cache initialization
+export const getAuthTokenFromStorageAsync = async (): Promise<string | null> => {
+  if (!cacheInitialized) {
+    await initializeStorageCache();
+  }
+  return authTokenCache;
+};
+
+export const getHostPortFromStorageAsync = async (): Promise<string | null> => {
+  if (!cacheInitialized) {
+    await initializeStorageCache();
+  }
+  return hostPortCache ? decodeURIComponent(hostPortCache) : null;
 };
 
 // Utility function to convert relative URLs from server to full URLs
@@ -533,6 +558,65 @@ export const handleAuthentication = async (token: string, hostPort: string, reme
     document.cookie = `auth_token=${token}; path=/`;
     document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
   }
+
+  await bootstrapDecentralizedNodeSession(token);
+};
+
+const bootstrapDecentralizedNodeSession = async (authToken: string): Promise<void> => {
+  const nodeId =
+    (typeof window !== 'undefined' && localStorage.getItem('pufferblow_node_id')) ||
+    '';
+  const nodePublicKey =
+    (typeof window !== 'undefined' && localStorage.getItem('pufferblow_node_public_key')) ||
+    '';
+  const sharedSecret =
+    (typeof window !== 'undefined' && localStorage.getItem('pufferblow_node_shared_secret')) ||
+    '';
+
+  if (!nodeId || !nodePublicKey || !sharedSecret) {
+    return;
+  }
+
+  try {
+    const challengeResp = await issueDecentralizedChallenge(authToken, nodeId);
+    if (!challengeResp.success || !challengeResp.data) return;
+
+    const challengeSignature = await signChallengeNonce(
+      challengeResp.data.challenge_nonce,
+      sharedSecret
+    );
+    const verifyResp = await verifyDecentralizedChallenge({
+      challenge_id: challengeResp.data.challenge_id,
+      node_public_key: nodePublicKey,
+      challenge_signature: challengeSignature,
+      shared_secret: sharedSecret,
+    });
+    if (!verifyResp.success || !verifyResp.data?.session_token) return;
+
+    await persistNodeSessionToken(verifyResp.data.session_token);
+  } catch {
+    // Ignore optional node session bootstrap errors.
+  }
+};
+
+const signChallengeNonce = async (
+  nonce: string,
+  sharedSecret: string
+): Promise<string> => {
+  const enc = new TextEncoder();
+  const keyData = enc.encode(sharedSecret);
+  const msgData = enc.encode(nonce);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  return Array.from(new Uint8Array(signatureBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 };
 
 // Helper to clear auth token from storage
@@ -558,10 +642,11 @@ export const useCurrentUserProfile = () => {
   return useQuery({
     queryKey: USER_QUERY_KEYS.currentProfile(),
     queryFn: async () => {
-      const authToken = getAuthTokenFromCookies();
+      // Use async versions to ensure cache is initialized
+      const authToken = await getAuthTokenFromStorageAsync();
       if (!authToken) throw new Error('No authentication token');
 
-      const hostPort = getHostPortFromStorage();
+      const hostPort = await getHostPortFromStorageAsync();
       if (!hostPort) throw new Error('No server host:port configured');
 
       const response = await getCurrentUserProfile(hostPort, authToken);
@@ -618,7 +703,22 @@ export const useCurrentUserProfile = () => {
 
       return user;
     },
-    enabled: !!getAuthTokenFromCookies(), // Only run if we have a token
+    enabled: (() => {
+      // Use a separate query to check if we have credentials
+      const checkCredentials = async () => {
+        const [authToken, hostPort] = await Promise.all([
+          getAuthTokenFromStorageAsync(),
+          getHostPortFromStorageAsync()
+        ]);
+        return !!(authToken && hostPort);
+      };
+
+      // For the enabled check, we need to use the synchronous version
+      // but we'll rely on the cache being initialized by previous calls
+      const syncToken = getAuthTokenFromCookies();
+      const syncHostPort = getHostPortFromStorage();
+      return !!(syncToken && syncHostPort);
+    })(),
     staleTime: 5 * 60 * 1000, // 5 minutes - consider data fresh for 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after unmount
     refetchOnWindowFocus: false, // Don't refetch when window regains focus

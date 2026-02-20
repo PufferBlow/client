@@ -14,7 +14,6 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ToastProvider } from "./components/Toast";
-import { CustomTitleBar } from "./components/CustomTitleBar";
 import {
   QueryClient,
   QueryClientProvider,
@@ -59,8 +58,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <ToastProvider>
-              {/* Custom title bar for Electron desktop app */}
-              <CustomTitleBar />
               <div className="flex-1 flex flex-col overflow-hidden">
                 {children}
               </div>
@@ -76,9 +73,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const location = useLocation();
-
-  // Check if we're in Electron desktop app environment
-  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
   // Check authentication status
   const authToken = getAuthTokenFromCookies();
@@ -103,31 +97,17 @@ export default function App() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // 2. Desktop: redirect home/marketing page to login for unauthenticated users
-  if (isElectron && isHomeRoute && !isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // 3. Web: authenticated users on home page redirect to dashboard (avoid showing marketing)
-  if (isHomeRoute && !isElectron && isAuthenticated) {
+  // 2. Authenticated users on home page redirect to dashboard
+  if (isHomeRoute && isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // 4. If accessing protected route without authentication, redirect to login
+  // 3. If accessing protected route without authentication, redirect to login
   if (isProtectedRoute && !isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // 5. Desktop: redirect download page based on authentication
-  if (isElectron && currentPath === '/download') {
-    if (isAuthenticated) {
-      return <Navigate to="/dashboard" replace />;
-    } else {
-      return <Navigate to="/login" replace />;
-    }
-  }
-
-  // 6. Debug authentication state for settings page access
+  // 4. Debug authentication state for settings page access
   if (currentPath === '/settings' && !isAuthenticated) {
     console.log('Settings page access blocked: Not authenticated');
   }

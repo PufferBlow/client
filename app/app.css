@@ -7,41 +7,41 @@
 }
 
 :root {
-  /* Nord theme colors */
-  --color-background: #2E3440;
-  --color-background-secondary: #3B4252;
-  --color-background-tertiary: #434C5E;
-  --color-surface: #3B4252;
-  --color-surface-secondary: #434C5E;
-  --color-surface-tertiary: #4C566A;
-  --color-text: #ECEFF4;
-  --color-text-secondary: #E5E9F0;
-  --color-text-tertiary: #D8DEE9;
-  --color-text-muted: #81A1C1;
-  --color-border: #4C566A;
-  --color-border-secondary: #434C5E;
-  --color-primary: #5E81AC;
-  --color-primary-hover: #81A1C1;
-  --color-secondary: #8FBCBB;
-  --color-secondary-hover: #88C0D0;
-  --color-accent: #81A1C1;
-  --color-accent-hover: #5E81AC;
-  --color-success: #A3BE8C;
-  --color-warning: #EBCB8B;
-  --color-error: #BF616A;
-  --color-info: #88C0D0;
-  --color-hover: #434C5E;
-  --color-active: #4C566A;
-  --color-focus: #5E81AC;
-  --color-shadow: rgba(0, 0, 0, 0.3);
-  --color-shadow-lg: rgba(0, 0, 0, 0.4);
+  /* Monochrome defaults (dark mode fallback) */
+  --color-background: #000000;
+  --color-background-secondary: #0a0a0a;
+  --color-background-tertiary: #121212;
+  --color-surface: #0a0a0a;
+  --color-surface-secondary: #121212;
+  --color-surface-tertiary: #1a1a1a;
+  --color-text: #ffffff;
+  --color-text-secondary: #f0f0f0;
+  --color-text-tertiary: #d9d9d9;
+  --color-text-muted: #b3b3b3;
+  --color-border: #2a2a2a;
+  --color-border-secondary: #1f1f1f;
+  --color-primary: #ffffff;
+  --color-primary-hover: #e6e6e6;
+  --color-secondary: #ffffff;
+  --color-secondary-hover: #e6e6e6;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e6e6e6;
+  --color-success: #ffffff;
+  --color-warning: #ffffff;
+  --color-error: #ffffff;
+  --color-info: #ffffff;
+  --color-hover: #111111;
+  --color-active: #1a1a1a;
+  --color-focus: #ffffff;
+  --color-shadow: rgba(0, 0, 0, 0.6);
+  --color-shadow-lg: rgba(0, 0, 0, 0.8);
 
   /* Glassmorphism effects */
-  --glass-bg: rgba(59, 66, 82, 0.8);
-  --glass-bg-light: rgba(67, 76, 94, 0.7);
-  --glass-bg-dark: rgba(46, 52, 64, 0.9);
-  --glass-border: rgba(76, 86, 106, 0.3);
-  --glass-border-hover: rgba(129, 161, 193, 0.5);
+  --glass-bg: rgba(0, 0, 0, 0.78);
+  --glass-bg-light: rgba(20, 20, 20, 0.72);
+  --glass-bg-dark: rgba(0, 0, 0, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-border-hover: rgba(255, 255, 255, 0.35);
   --glass-backdrop-blur: blur(20px);
   --glass-backdrop-blur-sm: blur(12px);
 

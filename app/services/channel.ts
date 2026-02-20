@@ -37,10 +37,7 @@ export interface VoiceChannelStatusResponse {
 // Channel API functions
 export const getChannels = async (serverId: string, authToken: string): Promise<ApiResponse<Channel[]>> => {
   const apiClient = createApiClient();
-  return apiClient.post('/api/v1/channels', {
-    server_id: serverId,
-    auth_token: authToken,
-  });
+  return apiClient.get('/api/v1/channels');
 };
 
 export const listChannels = async (authToken: string): Promise<ApiResponse<{ status_code: number; channels: Channel[] }>> => {

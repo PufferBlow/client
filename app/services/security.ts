@@ -17,8 +17,8 @@ export interface BlockIPRequest {
 // IP Security Management functions (Server Owner only)
 export const listBlockedIPs = async (authToken: string): Promise<ApiResponse<{ status_code: number; blocked_ips: BlockedIP[] }>> => {
   const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/blocked-ips/list`, {
-    auth_token: authToken,
+  return apiClient.post(`/api/v1/blocked-ips/list`, {
+    auth_token: authToken
   });
 };
 
@@ -29,5 +29,8 @@ export const blockIP = async (request: BlockIPRequest): Promise<ApiResponse<{ st
 
 export const unblockIP = async (ip: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
   const apiClient = createApiClient();
-  return apiClient.delete(`/api/v1/blocked-ips/unblock/${ip}?auth_token=${authToken}`);
+  return apiClient.post(`/api/v1/blocked-ips/unblock`, {
+    auth_token: authToken,
+    ip,
+  });
 };

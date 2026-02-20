@@ -1,7 +1,6 @@
 import type { Route } from "./+types/dashboard";
 import { Link, useNavigate } from "react-router";
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { usePopper } from 'react-popper';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactDOM from 'react-dom';
 import { ServerCreationModal } from "../components/ServerCreationModal";
 import { ChannelCreationModal } from "../components/ChannelCreationModal";
@@ -142,54 +141,65 @@ export default function Dashboard() {
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [deviceSelectorModalOpen, setDeviceSelectorModalOpen] = useState(false);
 
-  // Popper.js for user card tooltip
+  // User card tooltip state
   const [userCardTooltipUser, setUserCardTooltipUser] = useState<DisplayUser | null>(null);
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
   const [tooltipSource, setTooltipSource] = useState<'userpanel' | 'members' | 'messages'>('messages');
 
-  // Popper.js refs and setup
+  // Tooltip anchoring and position state
   const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
-  const { styles, attributes, update } = usePopper(referenceElement, popperElement, {
-    placement: tooltipSource === 'userpanel' ? 'bottom-start' : 'top',
-    modifiers: [
-      {
-        name: 'offset',
-        options: {
-          offset: [0, 10], // Small offset from reference element
-        },
-      },
-      {
-        name: 'flip',
-        options: {
-          fallbackPlacements: tooltipSource === 'userpanel'
-            ? ['top', 'bottom', 'top-start', 'bottom-start']
-            : ['bottom', 'top-start', 'bottom-start'],
-        },
-      },
-      {
-        name: 'preventOverflow',
-        options: {
-          padding: 16,
-        },
-      },
-    ],
-  });
+  const calculateTooltipPosition = useCallback((
+    anchor: HTMLElement,
+    source: 'userpanel' | 'members' | 'messages'
+  ) => {
+    const rect = anchor.getBoundingClientRect();
+    const spacing = 10;
+    const viewportPadding = 16;
+    const tooltipWidth = popperElement?.offsetWidth ?? 352;
+    const tooltipHeight = popperElement?.offsetHeight ?? 420;
+    const maxLeft = window.innerWidth - tooltipWidth - viewportPadding;
+    const maxTop = window.innerHeight - tooltipHeight - viewportPadding;
 
-  // Update position on scroll or resize
-  useEffect(() => {
-    if (isTooltipOpen && update) {
-      const handleUpdate = () => update();
-      window.addEventListener('scroll', handleUpdate, true);
-      window.addEventListener('resize', handleUpdate);
-
-      return () => {
-        window.removeEventListener('scroll', handleUpdate, true);
-        window.removeEventListener('resize', handleUpdate);
-      };
+    if (source === 'userpanel') {
+      const left = Math.min(maxLeft, Math.max(viewportPadding, rect.left));
+      const preferBottomTop = rect.bottom + spacing;
+      const top = preferBottomTop + tooltipHeight <= window.innerHeight - viewportPadding
+        ? preferBottomTop
+        : Math.max(viewportPadding, rect.top - tooltipHeight - spacing);
+      return { top, left };
     }
-  }, [isTooltipOpen, update]);
+
+    const centeredLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    const left = Math.min(maxLeft, Math.max(viewportPadding, centeredLeft));
+    const preferTop = rect.top - tooltipHeight - spacing;
+    const top = preferTop >= viewportPadding
+      ? preferTop
+      : Math.min(maxTop, rect.bottom + spacing);
+    return { top, left };
+  }, [popperElement]);
+
+  // Keep tooltip aligned on scroll/resize and after content/size changes.
+  useEffect(() => {
+    if (!isTooltipOpen || !referenceElement) {
+      return;
+    }
+
+    const updatePosition = () => {
+      setTooltipPosition(calculateTooltipPosition(referenceElement, tooltipSource));
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isTooltipOpen, referenceElement, tooltipSource, userCardTooltipUser, calculateTooltipPosition]);
 
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -251,6 +261,26 @@ export default function Dashboard() {
   const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Handle loading timeout - prevent infinite loading
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  useEffect(() => {
+    if (userLoading) {
+      console.log('Dashboard: Starting loading timeout...');
+      const timer = setTimeout(() => {
+        console.error('Dashboard: Loading timeout reached - redirecting to login');
+        setLoadingTimeout(true);
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+      }, 10000); // 10 second timeout
+
+      return () => {
+        console.log('Dashboard: Clearing loading timeout');
+        clearTimeout(timer);
+      };
+    }
+  }, [userLoading]);
+
   // Store error state to render after hooks
   const errorMessage = (userError as any)?.message || '';
   const isInitialLoad = userLoading && !currentUser;
@@ -266,6 +296,236 @@ export default function Dashboard() {
       }
     }
   }, [shouldRedirectToLogin, errorMessage]);
+
+  // Handle click outside to close server dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (serverDropdownRef.current && !serverDropdownRef.current.contains(event.target as Node)) {
+        setServerDropdownOpen(false);
+      }
+    };
+
+    if (serverDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [serverDropdownOpen]);
+
+  // Handle click outside to close user card tooltip
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isTooltipOpen) {
+        setIsTooltipOpen(false);
+      }
+    };
+
+    if (isTooltipOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTooltipOpen]);
+
+  // Save maxMessageLength to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pufferblow-max-message-length', maxMessageLength.toString());
+    }
+  }, [maxMessageLength]);
+
+  // Optimized auto-resize message input textarea with debouncing
+  useEffect(() => {
+    // Clear any pending resize timeout
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+
+    // Debounce the resize operation to avoid excessive calculations during typing
+    resizeTimeoutRef.current = setTimeout(() => {
+      if (messageInputRef.current) {
+        const textarea = messageInputRef.current;
+        const minHeight = 24; // 1.5rem = 24px
+        const maxHeight = 200; // Maximum height before scrolling
+
+        // Use requestAnimationFrame for smooth DOM updates
+        requestAnimationFrame(() => {
+          if (!textarea) return;
+
+          // Reset height to auto to get the correct scrollHeight
+          textarea.style.height = 'auto';
+
+          // Calculate new height
+          const scrollHeight = textarea.scrollHeight;
+          let newHeight = scrollHeight;
+
+          // Apply minimum height
+          newHeight = Math.max(newHeight, minHeight);
+
+          // Avoid unnecessary DOM updates if height hasn't changed significantly
+          if (Math.abs(newHeight - cachedTextareaHeight) > 2) {
+            setCachedTextareaHeight(newHeight);
+
+            // If content exceeds max height, make it scrollable, otherwise expand
+            if (scrollHeight > maxHeight) {
+              newHeight = maxHeight;
+              textarea.style.overflowY = 'auto';
+            } else {
+              textarea.style.overflowY = 'hidden';
+            }
+
+            textarea.style.height = `${newHeight}px`;
+          }
+        });
+      }
+    }, 50); // 50ms debounce delay
+
+    // Cleanup timeout on unmount or next effect
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [messageInput]);
+
+  // Auto-scroll messages to bottom when new messages arrive or are first loaded
+  useEffect(() => {
+    if (messagesContainerRef.current && messages.length > 0) {
+      // Use setTimeout to ensure DOM has updated with new messages
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          const container = messagesContainerRef.current;
+          container.scrollTop = container.scrollHeight;
+        }
+      }, 50); // Small delay to ensure DOM update
+    }
+  }, [messages]);
+
+  // Fetch channels, users, and server info on mount
+  useEffect(() => {
+    const fetchChannels = async () => {
+      try {
+        const authToken = getAuthTokenFromCookies() || '';
+
+        if (!authToken) return;
+
+        const response = await listChannels(authToken);
+        if (response.success && response.data && response.data.channels) {
+          setChannels(response.data.channels);
+          setChannelsError(null);
+          console.log("Channels fetched from API:", response.data.channels);
+          logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
+        } else {
+          console.error("Failed to fetch channels from API:", response.error);
+          logger.ui.error("Failed to fetch channels", { error: response.error });
+          setChannels([]);
+          setChannelsError(response.error || 'Failed to load channels');
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching channels:", error);
+        logger.ui.error("Unexpected error fetching channels", { error: error instanceof Error ? error.message : String(error) });
+        setChannels([]);
+        setChannelsError('Failed to load channels due to configuration error');
+      }
+    };
+
+    const fetchUsers = async () => {
+      try {
+        const authToken = getAuthTokenFromCookies() || '';
+
+        if (!authToken) return;
+
+        const response = await listUsers(authToken);
+        if (response.success && response.data && response.data.users) {
+          setUsers(response.data.users);
+          setUsersError(null);
+          console.log("Users fetched from API:", response.data.users);
+          logger.ui.info("Users fetched successfully", { count: response.data.users.length });
+        } else {
+          console.error("Failed to fetch users from API:", response.error);
+          logger.ui.error("Failed to fetch users", { error: response.error });
+          setUsers([]);
+          setUsersError(response.error || 'Failed to load server members');
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching users:", error);
+        logger.ui.error("Unexpected error fetching users", { error: error instanceof Error ? error.message : String(error) });
+        setUsers([]);
+        setUsersError('Failed to load server members due to configuration error');
+      }
+    };
+
+    const fetchServerInfo = async () => {
+      try {
+        const authToken = getAuthTokenFromCookies() || '';
+
+        if (!authToken) return;
+
+        const { getServerInfo } = await import('../services/system');
+        const response = await getServerInfo();
+        if (response.success && response.data && response.data.server_info) {
+          setServerInfo(response.data.server_info);
+          setServerInfoError(null);
+          console.log("Server info fetched from API:", response.data.server_info);
+          logger.ui.info("Server info fetched successfully");
+        } else {
+          console.error("Failed to fetch server info from API:", response.error);
+          logger.ui.error("Failed to fetch server info", { error: response.error });
+          setServerInfo(null);
+          setServerInfoError(response.error || 'Failed to load server information');
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching server info:", error);
+        logger.ui.error("Unexpected error fetching server info", { error: error instanceof Error ? error.message : String(error) });
+        setServerInfo(null);
+        setServerInfoError('Failed to load server information due to configuration error');
+      }
+    };
+
+    if (currentUser) {
+      fetchChannels();
+      fetchUsers();
+      fetchServerInfo();
+    }
+  }, [currentUser]);
+
+  // Initialize from persisted state after channels are loaded
+  useEffect(() => {
+    if (channels.length > 0 && !selectedChannel) {
+      // Try to restore previously selected channel
+      if (persistedChannelId) {
+        const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
+        if (persistedChannel) {
+          console.log("Restoring previously selected channel:", persistedChannel);
+
+          // Set the selected channel and load messages automatically
+          setSelectedChannel(persistedChannel);
+
+          // Restore message draft for the persisted channel
+          const restoredDraft = getMessageDraft(persistedChannel.channel_id);
+          setMessageInput(restoredDraft);
+
+          // Load messages and setup WebSocket connection for the restored channel
+          loadChannelMessages(persistedChannel);
+          // Note: We don't call persistSelectedChannel here since it was already persisted
+        } else {
+          console.log("Persisted channel not found, selecting first available channel");
+          // Persisted channel no longer exists, select the first available channel
+          const firstChannel = channels[0];
+          handleChannelSelect(firstChannel);
+        }
+      } else {
+        // No persisted channel, select the first available channel
+        console.log("No persisted channel, selecting first available");
+        const firstChannel = channels[0];
+        handleChannelSelect(firstChannel);
+      }
+    }
+  }, [channels, persistedChannelId, selectedChannel]);
 
   // Show server configuration error screen
   if (showServerConfigError) {
@@ -295,26 +555,6 @@ export default function Dashboard() {
     );
   }
 
-  // Handle loading timeout - prevent infinite loading
-  const [loadingTimeout, setLoadingTimeout] = useState(false);
-  useEffect(() => {
-    if (userLoading) {
-      console.log('Dashboard: Starting loading timeout...');
-      const timer = setTimeout(() => {
-        console.error('Dashboard: Loading timeout reached - redirecting to login');
-        setLoadingTimeout(true);
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-      }, 10000); // 10 second timeout
-
-      return () => {
-        console.log('Dashboard: Clearing loading timeout');
-        clearTimeout(timer);
-      };
-    }
-  }, [userLoading]);
-
   // Show timeout error if it took too long to load
   if (loadingTimeout) {
     return (
@@ -337,6 +577,217 @@ export default function Dashboard() {
           >
             Try Again
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show skeleton loading state for dashboard
+  if (!currentUser) {
+    return (
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
+        {/* Server Sidebar */}
+        <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm animate-pulse">
+          <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+
+          {/* Server Icons */}
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
+              <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
+            </div>
+          ))}
+
+          {/* Add Server Button */}
+          <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
+            <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Channel Sidebar */}
+        <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm animate-pulse">
+          {/* Server Header */}
+          <div className="relative">
+            <div className={`px-4 py-3 ${false ? '' : 'border-b border-[var(--color-border)]'}`}>
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
+                  <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
+                </div>
+                <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Channel List */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-2 py-4">
+              {/* Channels Header */}
+              <div className="flex items-center px-2 mb-1">
+                <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
+              </div>
+
+              {/* Channel Items */}
+              <div className="space-y-0.5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-gray-600 cursor-pointer group transition-colors">
+                    <div className="w-2 h-2 bg-[var(--color-surface-secondary)] rounded-full mr-2 flex-shrink-0"></div>
+                    <div className="flex-1">
+                      <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
+                    </div>
+                    {i % 5 === 0 && (
+                      <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* User Panel */}
+          <UserPanel
+            username="Loading..."
+            avatar="/pufferblow-art-pixel-32x32.png"
+            status="offline"
+            onClick={() => { }}
+            className="m-2 mt-auto opacity-60"
+          />
+        </div>
+
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] resize-x min-w-96 backdrop-blur-sm animate-pulse">
+          {/* Channel Header */}
+          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
+            <div className="flex items-center">
+              <span className="text-[var(--color-text-secondary)] mr-2">#</span>
+              <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-24"></div>
+              <div className="ml-2 text-[var(--color-text-muted)] text-sm">
+                <div className="h-4 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <svg className="w-5 h-5 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <svg className="w-5 h-5 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <button className="w-5 h-5 text-[var(--color-text-secondary)] rounded-md">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+              <svg className="w-5 h-5 text-[var(--color-text-secondary)] rounded-md p-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Messages Area */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${i % 4 === 0 ? 'bg-blue-900/10 border-l-4 border-blue-500' : ''
+                  }`}
+              >
+                {/* Avatar */}
+                <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
+
+                {/* Message Content */}
+                <div className="flex-1">
+                  {/* Message Header */}
+                  <div className="flex items-center space-x-2 mb-3">
+                    {/* Username */}
+                    <div className={`h-4 bg-gradient-to-r from-white to-gray-200 rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
+
+                    {/* Role badge */}
+                    {i % 5 === 0 && (
+                      <div className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
+                        ADMIN
+                      </div>
+                    )}
+
+                    {/* Timestamp */}
+                    <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-16 opacity-60"></div>
+                  </div>
+
+                  {/* Message Lines */}
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-full"></div>
+                    {i % 3 === 0 && (
+                      <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-4/5"></div>
+                    )}
+                    {i % 4 === 0 && (
+                      <>
+                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-3/4"></div>
+                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-1/2"></div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Attachment Preview */}
+                  {i % 6 === 2 && (
+                    <div className="mt-3 p-3 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg border border-gray-500 animate-pulse">
+                      <div className="flex items-center space-x-2">
+                        <svg className="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                        <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-24"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Hover Menu Button */}
+                {(i + 1) % 2 === 0 && (
+                  <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
+                    <button className="w-8 h-8 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors">
+                      ⋯
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Message Input */}
+          <div className="p-4">
+            <div className="bg-gray-600 rounded-lg px-4 py-3 animate-pulse">
+              <div className="flex items-end space-x-3">
+                <div className="w-8 h-8 bg-gray-500 rounded flex-shrink-0"></div>
+                <div className="flex-1 min-h-0">
+                  <div className="w-full bg-gray-700 rounded px-2 py-1 opacity-60"></div>
+                </div>
+                <div className="w-8 h-8 bg-gray-500 rounded"></div>
+                <div className="w-8 h-8 bg-gray-500 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Member List - Skeleton */}
+        <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] animate-pulse">
+          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
+            <div className="h-4 bg-[var(--color-surface-secondary)] rounded w-20"></div>
+          </div>
+          <div className="flex-1 p-4 space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center space-x-3 px-3 py-2 rounded-xl">
+                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full opacity-60"></div>
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-20"></div>
+                  <div className="h-2 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-12"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -559,78 +1010,114 @@ export default function Dashboard() {
   if (!currentUser) {
     return (
       <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
-        {/* Server Sidebar */}
-        <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm animate-pulse">
-          <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+        {/* Left Sidebar Container */}
+        <div className="flex flex-col gap-0 h-full">
+          {/* Server and Channel Sidebars Row */}
+          <div className="flex flex-1 gap-2">
+            {/* Server Sidebar */}
+            <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm rounded-br-none animate-pulse">
+              <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
 
-          {/* Server Icons */}
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
-              <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
-            </div>
-          ))}
-
-          {/* Add Server Button */}
-          <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
-            <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-        </div>
-
-        {/* Channel Sidebar */}
-        <div className="w-60 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm animate-pulse">
-          {/* Server Header */}
-          <div className="relative">
-            <div className={`px-4 py-3 ${false ? '' : 'border-b border-[var(--color-border)]'}`}>
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
-                  <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
+              {/* Server Icons */}
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
+                  <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
                 </div>
-                <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
-              </div>
-            </div>
-          </div>
+              ))}
 
-          {/* Channel List */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-2 py-4">
-              {/* Channels Header */}
-              <div className="flex items-center px-2 mb-1">
-                <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              {/* Add Server Button */}
+              <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
+                <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
+              </div>
+            </div>
+
+            {/* Channel Sidebar */}
+            <div className="w-80 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm rounded-bl-none animate-pulse">
+              {/* Modern Server Header */}
+              <div className="relative">
+                {/* Server Banner */}
+                <div className="relative h-20 w-full rounded-t-2xl overflow-hidden bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                </div>
+
+                {/* Server Info Section */}
+                <div className="px-4 py-3 relative">
+                  <div className="flex items-center justify-between">
+                    {/* Server Info */}
+                    <div className="min-w-0 flex-1">
+                      <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
+                      <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
+                    </div>
+
+                    {/* Server Dropdown */}
+                    <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
+                  </div>
+                </div>
               </div>
 
-              {/* Channel Items */}
-              <div className="space-y-0.5">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-gray-600 cursor-pointer group transition-colors">
-                    <div className="w-2 h-2 bg-[var(--color-surface-secondary)] rounded-full mr-2 flex-shrink-0"></div>
-                    <div className="flex-1">
-                      <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
-                    </div>
-                    {i % 5 === 0 && (
-                      <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    )}
+              {/* Channel List */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-2 py-4">
+                  {/* Channels Header */}
+                  <div className="flex items-center px-2 mb-1">
+                    <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
                   </div>
-                ))}
+
+                  {/* Channel Items */}
+                  <div className="space-y-2">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${i % 4 === 0 ? 'bg-gray-600' : ''}`}
+                      >
+                        <span className="text-gray-400 mr-2">#</span>
+                        <span className="text-gray-400 text-sm break-words overflow-wrap-anywhere flex-1">
+                          <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
+                        </span>
+                        <div className="flex items-center ml-auto">
+                          {i % 5 === 0 && (
+                            <div className="flex items-center mr-1">
+                              <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </div>
+                          )}
+                          {i % 7 === 0 && (
+                            <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* User Panel */}
-          <UserPanel
-            username="Loading..."
-            avatar="/pufferblow-art-pixel-32x32.png"
-            status="offline"
-            onClick={() => { }}
-            className="m-2 mt-auto opacity-60"
-          />
+          {/* Full-width UserPanel as direct child of left sidebar container */}
+          <div className="w-full bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded-b-2xl border-t border-[var(--color-border)] animate-pulse">
+            <div className="px-2 pb-2 pt-4">
+              <div className="flex items-center space-x-3 p-2 rounded-xl bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
+                <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full animate-pulse shadow-md border-2 border-green-300"></div>
+                <div className="flex-1">
+                  <div className="h-4 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-20 mb-1"></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-16"></div>
+                  </div>
+                </div>
+                <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
+                <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Main Chat Area */}
@@ -645,45 +1132,31 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <svg className="w-5 h-5 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <svg className="w-5 h-5 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <button className="w-5 h-5 text-[var(--color-text-secondary)] rounded-md">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </button>
-              <svg className="w-5 h-5 text-[var(--color-text-secondary)] rounded-md p-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
+              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
+              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
+              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
+              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded p-1"></div>
             </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${i % 4 === 0 ? 'bg-blue-900/10 border-l-4 border-blue-500' : ''
-                  }`}
+                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${i % 4 === 0 ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''}`}
               >
                 {/* Avatar */}
                 <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
-
-                {/* Message Content */}
                 <div className="flex-1">
-                  {/* Message Header */}
-                  <div className="flex items-center space-x-2 mb-3">
+                  <div className="flex items-center space-x-2 mb-2">
                     {/* Username */}
                     <div className={`h-4 bg-gradient-to-r from-white to-gray-200 rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
 
                     {/* Role badge */}
                     {i % 5 === 0 && (
-                      <div className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
-                        ADMIN
+                      <div className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
+                        <div className="h-3 bg-gradient-to-r from-white to-gray-200 rounded w-8"></div>
                       </div>
                     )}
 
@@ -709,9 +1182,7 @@ export default function Dashboard() {
                   {i % 6 === 2 && (
                     <div className="mt-3 p-3 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg border border-gray-500 animate-pulse">
                       <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
+                        <div className="w-4 h-4 bg-gray-400 rounded flex-shrink-0"></div>
                         <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-24"></div>
                       </div>
                     </div>
@@ -721,9 +1192,9 @@ export default function Dashboard() {
                 {/* Hover Menu Button */}
                 {(i + 1) % 2 === 0 && (
                   <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
-                    <button className="w-8 h-8 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors">
+                    <div className="w-8 h-8 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors">
                       ⋯
-                    </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -732,14 +1203,21 @@ export default function Dashboard() {
 
           {/* Message Input */}
           <div className="p-4">
-            <div className="bg-gray-600 rounded-lg px-4 py-3 animate-pulse">
+            <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl animate-pulse">
               <div className="flex items-end space-x-3">
-                <div className="w-8 h-8 bg-gray-500 rounded flex-shrink-0"></div>
+                {/* File Upload Button */}
+                <div className="flex-shrink-0 w-8 h-8 bg-gray-500 rounded"></div>
+
+                {/* Message Input */}
                 <div className="flex-1 min-h-0">
-                  <div className="w-full bg-gray-700 rounded px-2 py-1 opacity-60"></div>
+                  <div className="w-full bg-gray-700 rounded px-2 py-1 opacity-60 h-6"></div>
                 </div>
+
+                {/* Emoji Button */}
                 <div className="w-8 h-8 bg-gray-500 rounded"></div>
-                <div className="w-8 h-8 bg-gray-500 rounded"></div>
+
+                {/* Send Button */}
+                <div className="w-8 h-8 bg-blue-600 rounded"></div>
               </div>
             </div>
           </div>
@@ -747,10 +1225,14 @@ export default function Dashboard() {
 
         {/* Member List - Skeleton */}
         <div className="w-60 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] animate-pulse">
+          {/* Header */}
           <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
             <div className="h-4 bg-[var(--color-surface-secondary)] rounded w-20"></div>
+            <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
           </div>
-          <div className="flex-1 p-4 space-y-3">
+
+          {/* Members */}
+          <div className="flex-1 p-4 space-y-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center space-x-3 px-3 py-2 rounded-xl">
                 <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full opacity-60"></div>
@@ -1446,11 +1928,13 @@ export default function Dashboard() {
 
   // Helper function for user card tooltip
   const showUserCardTooltip = (user: DisplayUser, event: React.MouseEvent, source?: 'userpanel' | 'members' | 'messages') => {
+    const activeSource = source ?? tooltipSource;
     if (source) {
       setTooltipSource(source);
     }
     const target = event.currentTarget as HTMLElement;
     setReferenceElement(target);
+    setTooltipPosition(calculateTooltipPosition(target, activeSource));
     setUserCardTooltipUser(user);
     setIsTooltipOpen(true);
   };
@@ -2452,13 +2936,17 @@ export default function Dashboard() {
         messageCount={messageReportModal.messages.length}
       />
 
-      {/* User Card Tooltip - Using React Portal with Popper.js */}
+      {/* User Card Tooltip */}
       {isTooltipOpen && userCardTooltipUser && ReactDOM.createPortal(
         <div
           ref={setPopperElement}
           className="rounded-xl shadow-2xl z-50 pointer-events-auto"
-          style={styles.popper}
-          {...attributes.popper}
+          style={{
+            position: 'fixed',
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <UserCard

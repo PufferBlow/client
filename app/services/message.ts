@@ -34,16 +34,31 @@ export interface SearchResult {
 export const getMessages = async (hostPort: string, channelId: string, authToken: string, limit = 50, before?: string): Promise<ApiResponse<Message[]>> => {
   const apiClient = createApiClient(hostPort);
   const params: Record<string, string> = {
-    channel_id: channelId,
     auth_token: authToken,
-    limit: limit.toString(),
+    page: '1',
+    messages_per_page: Math.min(limit, 50).toString(),
   };
 
   if (before) {
     params.before = before;
   }
 
-  return apiClient.get('/api/v1/messages', params);
+  const response = await apiClient.get<{ status_code: number; messages: Message[] }>(
+    `/api/v1/channels/${channelId}/load_messages`,
+    params
+  );
+
+  if (!response.success) {
+    return {
+      success: false,
+      error: response.error,
+    };
+  }
+
+  return {
+    success: true,
+    data: response.data?.messages || [],
+  };
 };
 
 export const sendMessage = async (hostPort: string, channelId: string, messageData: SendMessageRequest, authToken: string): Promise<ApiResponse<Message>> => {
@@ -77,9 +92,23 @@ export const updateMessage = async (hostPort: string, messageId: string, content
   });
 };
 
-export const deleteMessage = async (hostPort: string, messageId: string, authToken: string): Promise<ApiResponse<void>> => {
+export const deleteMessage = async (
+  hostPort: string,
+  messageId: string,
+  authToken: string,
+  channelId?: string
+): Promise<ApiResponse<void>> => {
+  if (!channelId) {
+    return {
+      success: false,
+      error: 'channelId is required to delete messages with the current API',
+    };
+  }
   const apiClient = createApiClient(hostPort);
-  return apiClient.delete(`/api/v1/messages/${messageId}?auth_token=${authToken}`);
+  return apiClient.delete(`/api/v1/channels/${channelId}/delete_message`, {
+    auth_token: authToken,
+    message_id: messageId,
+  });
 };
 
 export const addReaction = async (hostPort: string, messageId: string, emoji: string, authToken: string): Promise<ApiResponse<void>> => {

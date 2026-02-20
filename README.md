@@ -51,11 +51,29 @@ npm run dev
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
+- `npm run dev:tauri` - Run desktop app in Tauri dev mode
+- `npm run build:tauri` - Build desktop app with Tauri
 - `npm run preview` - Preview production build locally
 - `npm run test` - Run tests in watch mode
 - `npm run test:run` - Run tests once
 - `npm run test:ui` - Run tests with UI
 - `npm run typecheck` - Run TypeScript type checking
+
+### Tauri Desktop Setup
+
+1. Install Rust toolchain (`rustup`) and platform prerequisites from the Tauri docs.
+2. Install frontend dependencies:
+```bash
+npm install
+```
+3. Start Tauri desktop dev:
+```bash
+npm run dev:tauri
+```
+4. Build desktop binaries:
+```bash
+npm run build:tauri
+```
 
 ## Project Structure
 

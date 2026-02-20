@@ -29,6 +29,7 @@ export class ApiClient {
         headers: {
           // Don't set Content-Type for FormData - let the browser set it with boundary
           ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
+          ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
           ...options.headers,
         },
       });
@@ -87,6 +88,14 @@ export class ApiClient {
     }
   }
 
+  private getNodeSessionToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return (
+      sessionStorage.getItem('node_session_token') ||
+      localStorage.getItem('node_session_token')
+    );
+  }
+
   async get<T>(endpoint: string, params?: Record<string, string>, headers?: Record<string, string>, method?: string): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
     if (params) {
@@ -132,7 +141,12 @@ export class ApiClient {
 }
 
 export const createApiClient = (hostPort?: string): ApiClient => {
-  let selectedHostPort = hostPort || getHostPort() || 'localhost:7575';
+  let selectedHostPort = hostPort || getHostPort();
+
+  // If no host/port is configured, throw an error instead of defaulting
+  if (!selectedHostPort) {
+    throw new Error('No server host:port configured. Please configure your server connection first.');
+  }
 
   // If no port is specified, default to 7575
   if (selectedHostPort && !selectedHostPort.includes(':')) {

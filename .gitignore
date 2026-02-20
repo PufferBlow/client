@@ -8,5 +8,7 @@
 
 # Ignore the release build directory
 dist/
+src-tauri/target/
+src-tauri/gen/
 
 .vite-cache

@@ -4,18 +4,13 @@
   "version": "1.0.0",
   "description": "PufferBlow Desktop App",
   "homepage": "./",
-  "main": "main.cjs",
   "private": true,
   "scripts": {
     "build": "react-router build",
-    "build:electron": "react-router build --mode electron && electron-builder",
-    "build:electron:win": "react-router build --mode electron && electron-builder --win",
-    "build:electron:linux": "react-router build --mode electron && electron-builder --linux",
-    "build:electron:mac": "react-router build --mode electron && electron-builder --mac",
     "dev": "react-router dev",
-    "dev:electron": "concurrently \"react-router dev --mode electron\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:tauri": "tauri dev",
     "start": "react-router-serve ./build/server/index.js",
-    "start:electron": "electron .",
+    "build:tauri": "tauri build",
     "preview": "npm run build && npx serve ./build/client",
     "typecheck": "react-router typegen && tsc",
     "test": "vitest",
@@ -28,10 +23,10 @@
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
-    "@popperjs/core": "^2.11.8",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",
     "@tanstack/react-query": "^5.90.2",
+    "@tauri-apps/api": "^2.0.0",
     "@types/dompurify": "^3.0.5",
     "chart.js": "^4.5.1",
     "consola": "^3.4.2",
@@ -44,7 +39,6 @@
     "react-dom": "^19.1.1",
     "react-easy-crop": "^5.5.3",
     "react-markdown": "^10.1.0",
-    "react-popper": "^2.3.0",
     "react-router": "^7.9.2",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1"
@@ -52,61 +46,28 @@
   "devDependencies": {
     "@react-router/dev": "^7.9.2",
     "@tailwindcss/vite": "^4.1.13",
+    "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/ui": "^3.2.4",
-    "concurrently": "^8.2.2",
-    "cross-env": "^10.1.0",
-    "electron": "^38.2.2",
-    "electron-builder": "^26.0.12",
+    "baseline-browser-mapping": "^2.9.3",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
     "jsdom": "^27.0.0",
+    "prettier": "^3.3.3",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4",
-    "wait-on": "^7.2.0",
-    "eslint": "^9.15.0",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.14",
-    "@typescript-eslint/eslint-plugin": "^8.15.0",
-    "@typescript-eslint/parser": "^8.15.0",
-    "prettier": "^3.3.3"
-  },
-  "build": {
-    "appId": "space.pufferblow.desktop",
-    "productName": "PufferBlow",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "build/**/*",
-      "main.js",
-      "node_modules/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "category": "public.app-category.social-networking"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "public/pufferblow-art-pixel-126x126.png"
-    },
-    "linux": {
-      "target": "AppImage"
-    },
-    "nsis": {
-      "installerIcon": "public/pufferblow-art-pixel-126x126.png",
-      "uninstallerIcon": "public/pufferblow-art-pixel-126x126.png",
-      "installerHeaderIcon": "public/pufferblow-art-pixel-126x126.png",
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+    "vitest": "^3.2.4"
   }
 }

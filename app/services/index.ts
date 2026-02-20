@@ -109,3 +109,18 @@ export type {
   WebSocketMessage,
   WebSocketCallbacks
 } from './websocket';
+
+// Decentralized auth services
+export {
+  issueDecentralizedChallenge,
+  verifyDecentralizedChallenge,
+  introspectDecentralizedSession,
+  revokeDecentralizedSession,
+  persistNodeSessionToken,
+  clearNodeSessionToken
+} from './decentralizedAuth';
+export type {
+  DecentralizedChallengeResponse,
+  DecentralizedVerifyResponse,
+  DecentralizedSessionIntrospectResponse
+} from './decentralizedAuth';
