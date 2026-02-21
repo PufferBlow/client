@@ -16,12 +16,15 @@ import {
   getActivityMetrics,
   getServerOverview,
   getServerLogs,
+  getServerConfig,
+  updateServerConfig,
   type Period,
   type ChartData,
   type RawStats,
   type ServerUsage,
   type ActivityMetrics,
-  type ServerOverview
+  type ServerOverview,
+  type RuntimeConfig,
 } from "../../services/system";
 import { convertToFullStorageUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../../services/apiClient";
 import { logger } from "../../utils/logger";
@@ -2530,11 +2533,13 @@ export function SettingsTab({
     banner_url: null,
   });
   const [originalServerInfo, setOriginalServerInfo] = useState<typeof serverInfo | null>(null);
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>({});
+  const [originalRuntimeConfig, setOriginalRuntimeConfig] = useState<RuntimeConfig>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load server info on component mount
+  // Load server info and runtime config on component mount
   useEffect(() => {
     const loadServerInfo = async () => {
       setLoading(true);
@@ -2565,6 +2570,17 @@ export function SettingsTab({
           }))); // Deep copy
         } else {
           setError('Failed to load server information');
+        }
+
+        // Load runtime configuration
+        const authToken = getAuthTokenFromCookies() || '';
+        if (authToken) {
+          const configResponse = await getServerConfig(authToken, false);
+          if (configResponse.success && configResponse.data) {
+            const config = configResponse.data.runtime_config || {};
+            setRuntimeConfig(config);
+            setOriginalRuntimeConfig(JSON.parse(JSON.stringify(config))); // Deep copy
+          }
         }
       } catch (err) {
         setError('Failed to load server information');
@@ -2655,14 +2671,6 @@ export function SettingsTab({
       return;
     }
 
-    // Only validate message length if it's been explicitly set and is within valid range
-    const messageLengthToCheck = serverInfo.max_message_length !== undefined ? serverInfo.max_message_length : null;
-    // if (messageLengthToCheck !== null && messageLengthToCheck !== undefined &&
-    //     (messageLengthToCheck < 100 || messageLengthToCheck > 10000)) {
-    //   setError('Maximum message length must be between 100 and 10000 characters');
-    //   return;
-    // }
-
     const authToken = getAuthTokenFromCookies() || '';
     if (!authToken) {
       setError('Authentication token not found');
@@ -2673,6 +2681,7 @@ export function SettingsTab({
     setError(null);
 
     try {
+      // Save server info changes
       const changes: any = {};
       if (serverInfo.server_name !== originalServerInfo?.server_name) {
         changes.server_name = serverInfo.server_name.trim();
@@ -2683,45 +2692,69 @@ export function SettingsTab({
       if (serverInfo.is_private !== originalServerInfo?.is_private) {
         changes.is_private = serverInfo.is_private;
       }
-      // Only include max_message_length in changes if it has been explicitly set
       if (serverInfo.max_message_length !== undefined && serverInfo.max_message_length !== originalServerInfo?.max_message_length) {
         changes.max_message_length = serverInfo.max_message_length;
       }
 
-      if (Object.keys(changes).length === 0) {
+      // Save runtime config changes
+      const runtimeConfigChanges: Record<string, unknown> = {};
+      for (const key in runtimeConfig) {
+        if (runtimeConfig[key] !== originalRuntimeConfig[key]) {
+          runtimeConfigChanges[key] = runtimeConfig[key];
+        }
+      }
+
+      if (Object.keys(changes).length === 0 && Object.keys(runtimeConfigChanges).length === 0) {
         setError('No changes to save');
         setSaving(false);
         return;
       }
 
-      const response = await updateServerInfo({
-        auth_token: authToken,
-        ...changes
-      });
+      // Update server info if there are changes
+      if (Object.keys(changes).length > 0) {
+        const response = await updateServerInfo({
+          auth_token: authToken,
+          ...changes
+        });
 
-      if (response.success && response.data) {
-        setOriginalServerInfo(JSON.parse(JSON.stringify(serverInfo))); // Update original after save
-        showToast({
-          message: `Server settings updated successfully: ${response.data.updated_fields.join(', ')}`,
-          tone: 'success',
-          category: 'system',
-          dedupeKey: 'settings-tab:server-settings-updated',
-        });
-        logger.ui.info('Server settings updated successfully', { updated_fields: response.data.updated_fields, changes });
-      } else {
-        setError(response.error || 'Failed to update server settings');
-        logger.ui.error('Failed to update server settings', response);
-        showToast({
-          message: 'Failed to update server settings.',
-          tone: 'error',
-          category: 'system',
-        });
+        if (!response.success) {
+          setError(response.error || 'Failed to update server settings');
+          return;
+        }
+        setOriginalServerInfo(JSON.parse(JSON.stringify(serverInfo)));
       }
-    } catch (err) {
-      setError('Failed to save server settings');
-      logger.api.error('Failed to save server settings', err);
+
+      // Update runtime config if there are changes
+      if (Object.keys(runtimeConfigChanges).length > 0) {
+        const response = await updateServerConfig(authToken, runtimeConfigChanges);
+
+        if (!response.success) {
+          setError(response.error || 'Failed to update runtime configuration');
+          return;
+        }
+        setOriginalRuntimeConfig(JSON.parse(JSON.stringify(runtimeConfig)));
+        
+        if (response.data?.restart_required) {
+          showToast({
+            message: 'Server restart required for some settings to take effect.',
+            tone: 'warning',
+            category: 'system',
+          });
+        }
+      }
+
       showToast({
-        message: 'Failed to save server settings.',
+        message: 'Settings updated successfully.',
+        tone: 'success',
+        category: 'system',
+        dedupeKey: 'settings-tab:settings-updated',
+      });
+      logger.ui.info('Settings updated successfully');
+    } catch (err) {
+      setError('Failed to save settings');
+      logger.api.error('Failed to save settings', err);
+      showToast({
+        message: 'Failed to save settings.',
         tone: 'error',
         category: 'system',
       });
@@ -2744,12 +2777,13 @@ export function SettingsTab({
   };
 
   // Avatar and banner are uploaded immediately when selected, so they shouldn't count as "unsaved changes"
-  const hasChanges = originalServerInfo &&
+  const hasChanges = (originalServerInfo &&
     (serverInfo.server_name !== originalServerInfo.server_name ||
       serverInfo.server_description !== originalServerInfo.server_description ||
       serverInfo.is_private !== originalServerInfo.is_private ||
       serverInfo.max_users !== originalServerInfo.max_users ||
-      serverInfo.max_message_length !== originalServerInfo.max_message_length);
+      serverInfo.max_message_length !== originalServerInfo.max_message_length)) ||
+    JSON.stringify(runtimeConfig) !== JSON.stringify(originalRuntimeConfig);
 
   if (loading) {
     return (
@@ -3054,7 +3088,64 @@ export function SettingsTab({
             </div>
           </div>
 
+          {/* Runtime Configuration */}
+          {Object.keys(runtimeConfig).length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-md font-medium text-white">Runtime Configuration</h3>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Advanced server configuration. Changes to some settings may require a server restart to take effect.
+              </p>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(runtimeConfig)
+                  .filter(([key]) => !key.includes('SECRET') && !key.includes('PASSWORD'))
+                  .map(([key, value]) => (
+                    <div key={key}>
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
+                        {key.replace(/_/g, ' ')}
+                      </label>
+                      {typeof value === 'boolean' ? (
+                        <input
+                          type="checkbox"
+                          checked={value as boolean}
+                          onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [key]: e.target.checked })}
+                          className="w-4 h-4"
+                          disabled={saving}
+                        />
+                      ) : typeof value === 'number' ? (
+                        <input
+                          type="number"
+                          value={value as number}
+                          onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [key]: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+                          disabled={saving}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={String(value || '')}
+                          onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [key]: e.target.value })}
+                          className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+                          disabled={saving}
+                        />
+                      )}
+                    </div>
+                  ))}
+              </div>
+
+              <div className="bg-[var(--color-surface-secondary)]/50 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <svg className="w-5 h-5 text-[var(--color-primary)] mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-sm text-[var(--color-text)]">
+                    <strong>Note:</strong> Sensitive configuration keys (containing 'SECRET' or 'PASSWORD') are not displayed here for security reasons.
+                    Modify these through environment variables or config files on the server.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-[var(--color-border)]">
             <button

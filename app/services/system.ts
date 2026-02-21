@@ -173,6 +173,39 @@ export const updateServerInfo = async (request: UpdateServerInfoRequest): Promis
   return apiClient.put('/api/v1/system/server-info', request);
 };
 
+// Runtime configuration interfaces
+export interface RuntimeConfig {
+  [key: string]: unknown;
+}
+
+export interface RuntimeConfigResponse {
+  status_code: number;
+  runtime_config: RuntimeConfig;
+  include_secrets: boolean;
+}
+
+export interface RuntimeConfigUpdateRequest {
+  auth_token: string;
+  settings: Record<string, unknown>;
+}
+
+// Runtime configuration functions
+export const getServerConfig = async (authToken: string, includeSecurity: boolean = false): Promise<ApiResponse<RuntimeConfigResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/runtime-config', {
+    auth_token: authToken,
+    include_secrets: includeSecurity,
+  });
+};
+
+export const updateServerConfig = async (authToken: string, settings: Record<string, unknown>): Promise<ApiResponse<{ status_code: number; message: string; restart_required: boolean; affected_keys: string[] }>> => {
+  const apiClient = createApiClient();
+  return apiClient.put('/api/v1/system/runtime-config', {
+    auth_token: authToken,
+    settings,
+  });
+};
+
 // File Upload functions for server avatar and banner
 export const uploadServerAvatar = async (authToken: string, file: File): Promise<ApiResponse<{ status_code: number; avatar_url: string; message: string }>> => {
   const formData = new FormData();
