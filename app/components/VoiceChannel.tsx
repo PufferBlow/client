@@ -1,120 +1,90 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Mic, MicOff, VolumeX, Volume2, PhoneOff } from 'lucide-react';
-import { createWebRTCManager, WebRTCManager } from '../services/webrtc';
-import type { VoiceChannelStatus, VoiceChannelParticipant } from '../services/webrtc';
-import { joinVoiceChannel, leaveVoiceChannel } from '../services/channel';
+
+import {
+  applyVoiceSessionAction,
+  getVoiceChannelStatus,
+  joinVoiceChannel,
+  leaveVoiceChannel,
+} from '../services/channel';
+import {
+  createVoiceTransport,
+  type VoiceParticipant,
+  type VoiceTransport,
+  type VoiceTransportState,
+} from '../services/voiceTransport';
 import { getAuthTokenFromCookies } from '../services/user';
-import { createGlobalWebSocket } from '../services/websocket';
-import { getHostPortForWebSocket } from '../services/websocket';
 import { logger } from '../utils/logger';
 
-// WebRTC specific logger
-const webrtcLogger = logger.network;
+const voiceLogger = logger.network;
 
 interface VoiceChannelProps {
   channelId: string;
   channelName: string;
   isConnected: boolean;
   onToggleConnection: () => void;
+  onConnectionStateChange?: (payload: {
+    connected: boolean;
+    channelId: string;
+    channelName: string;
+    participants: number;
+  }) => void;
 }
 
 export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   channelId,
   channelName,
-  isConnected,
-  onToggleConnection
+  onToggleConnection,
+  onConnectionStateChange,
 }) => {
-  const [webrtcManager, setWebrtcManager] = useState<WebRTCManager | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false);
-  const [participants, setParticipants] = useState<VoiceChannelParticipant[]>([]);
+  const transportRef = useRef<VoiceTransport | null>(null);
+
+  const [connectionState, setConnectionState] = useState<VoiceTransportState>('idle');
+  const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [channelStatus, setChannelStatus] = useState<VoiceChannelStatus | null>(null);
-  const [showChannelSwitchDialog, setShowChannelSwitchDialog] = useState(false);
-  const [pendingChannelToJoin, setPendingChannelToJoin] = useState<string | null>(null);
-  const [currentChannelInfo, setCurrentChannelInfo] = useState<{name: string, id: string} | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
 
-  // Prevent default click behavior to avoid triggering channel selection
-  const handleChannelClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
+  const isConnected = useMemo(
+    () => connectionState === 'connected' || connectionState === 'reconnecting',
+    [connectionState]
+  );
 
-  // Initialize WebRTC manager when component mounts
   useEffect(() => {
-    webrtcLogger.info(`Initializing WebRTC for VoiceChannel component: ${channelName} (${channelId})`);
-
-    const authToken = getAuthTokenFromCookies();
-    const hostPort = getHostPortForWebSocket();
-
-    if (authToken) {
-      webrtcLogger.debug('Creating global websocket for WebRTC signaling');
-
-      const websocket = createGlobalWebSocket(authToken, hostPort, {
-        onConnected: () => {
-          webrtcLogger.info('WebRTC signaling websocket connected');
-        },
-        onDisconnected: (reason) => {
-          webrtcLogger.warn(`WebRTC signaling websocket disconnected: ${reason}`);
-        },
-        onError: (error) => {
-          webrtcLogger.error('WebRTC signaling websocket error:', error);
-        },
-        onMessage: (message) => {
-          // Log WebRTC signaling messages
-          if (message.type && message.type.startsWith('webrtc_')) {
-            webrtcLogger.debug('WebRTC signaling message received:', {
-              type: message.type,
-              channelId: message.channel_id,
-              fromUserId: message.webrtcData?.fromUserId
-            });
-          }
-        }
-      });
-      websocket.connect();
-
-      // Extract user ID from auth token (simple extract - you might need to decode this properly)
-      const userId = authToken.split('.')[0]; // Assuming format: userId.token
-
-      webrtcLogger.debug(`Creating WebRTC manager for user: ${userId}`);
-      const manager = createWebRTCManager(websocket, userId);
-      manager.setOnStatusChange((status) => {
-        webrtcLogger.debug(`Channel status update for ${channelId}:`, {
-          participantCount: status.participantCount,
-          isJoined: status.isJoined
+    const transport = createVoiceTransport({
+      onStateChange: setConnectionState,
+      onParticipantsChange: (nextParticipants) => {
+        setParticipants(nextParticipants);
+        onConnectionStateChange?.({
+          connected: nextParticipants.length > 0,
+          channelId,
+          channelName,
+          participants: nextParticipants.length,
         });
-        setChannelStatus(status);
-      });
-      manager.setOnError((errorMsg) => {
-        webrtcLogger.error('WebRTC error:', errorMsg);
-        setError(errorMsg);
-      });
+      },
+      onError: (message) => setError(message),
+    });
 
-      setWebrtcManager(manager);
+    transportRef.current = transport;
 
-      // Cleanup on unmount
-      return () => {
-        webrtcLogger.info(`Cleaning up WebRTC for VoiceChannel: ${channelId}`);
-        manager.cleanup();
-        websocket.disconnect();
-      };
-    } else {
-      webrtcLogger.warn('No auth token available for WebRTC initialization');
-    }
-  }, [channelId, channelName]);
-
-  // Update participants when channel status changes
-  useEffect(() => {
-    if (channelStatus && channelStatus.channelId === channelId) {
-      setParticipants(channelStatus.participants);
-      setIsMuted(channelStatus.participants.find(p => p.userId === webrtcManager?.getCurrentChannelId())?.isMuted || false);
-      onToggleConnection(); // Update parent component
-    }
-  }, [channelStatus, channelId, webrtcManager, onToggleConnection]);
+    return () => {
+      void transport.disconnect();
+      transportRef.current = null;
+    };
+  }, [channelId, channelName, onConnectionStateChange]);
 
   const handleJoinVoiceChannel = async () => {
-    if (!webrtcManager) {
-      setError('WebRTC manager not initialized');
+    const transport = transportRef.current;
+    if (!transport) {
+      setError('Voice transport is not initialized');
+      return;
+    }
+
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) {
+      setError('Authentication token not found');
       return;
     }
 
@@ -123,111 +93,159 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
       return;
     }
 
-    setIsJoining(true);
     setError(null);
+    setIsJoining(true);
 
     try {
-      const authToken = getAuthTokenFromCookies();
-      if (!authToken) {
-        throw new Error('Not authenticated');
+      const response = await joinVoiceChannel(channelId, authToken, 'balanced');
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to initialize voice session');
       }
 
-      // Initialize WebRTC manager (request microphone access)
-      await webrtcManager.initialize();
+      const bootstrap = response.data;
+      setSessionId(bootstrap.session_id);
 
-      // Join voice channel through API
-      const response = await joinVoiceChannel(channelId, authToken);
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to join voice channel');
+      await transport.connect({
+        session_id: bootstrap.session_id,
+        channel_id: bootstrap.channel_id,
+        join_token: bootstrap.join_token,
+        signaling_url: bootstrap.signaling_url,
+        ice_servers: bootstrap.ice_servers,
+      });
+
+      const statusResponse = await getVoiceChannelStatus(
+        channelId,
+        authToken,
+        bootstrap.session_id
+      );
+      if (statusResponse.success && statusResponse.data?.participants) {
+        setParticipants(statusResponse.data.participants);
       }
 
-      // Join WebRTC channel (this handles the signaling setup)
-      const status = await webrtcManager.joinVoiceChannel(channelId);
+      onConnectionStateChange?.({
+        connected: true,
+        channelId,
+        channelName,
+        participants: statusResponse.data?.participant_count ?? bootstrap.participant_count,
+      });
+      onToggleConnection();
 
-      console.log('Joined voice channel:', status);
-
-    } catch (err) {
-      console.error('Failed to join voice channel:', err);
-      setError(err instanceof Error ? err.message : 'Failed to join voice channel');
+      voiceLogger.info(`Voice session connected for channel ${channelId}`);
+    } catch (joinError) {
+      const message =
+        joinError instanceof Error ? joinError.message : 'Failed to join voice channel';
+      setError(message);
+      voiceLogger.error(`Voice join failed for channel ${channelId}: ${message}`);
     } finally {
       setIsJoining(false);
     }
   };
 
   const handleLeaveVoiceChannel = async () => {
-    if (!webrtcManager) return;
+    const transport = transportRef.current;
+    if (!transport) return;
+
+    const authToken = getAuthTokenFromCookies();
 
     try {
-      await webrtcManager.leaveVoiceChannel();
-      console.log('Left voice channel');
-    } catch (err) {
-      console.error('Failed to leave voice channel:', err);
+      if (authToken) {
+        await leaveVoiceChannel(channelId, authToken, sessionId || undefined);
+      }
+      await transport.disconnect();
+    } catch (leaveError) {
+      const message =
+        leaveError instanceof Error ? leaveError.message : 'Failed to leave voice channel';
+      setError(message);
+    } finally {
+      setSessionId(null);
+      setParticipants([]);
+      setIsMuted(false);
+      setIsDeafened(false);
+      onConnectionStateChange?.({
+        connected: false,
+        channelId,
+        channelName,
+        participants: 0,
+      });
+      onToggleConnection();
     }
   };
 
-  const toggleMute = useCallback(() => {
-    if (!webrtcManager) return;
+  const toggleMute = async () => {
+    const transport = transportRef.current;
+    if (!transport) return;
 
-    const newMutedState = webrtcManager.toggleMute();
-    setIsMuted(newMutedState);
-  }, [webrtcManager]);
+    const nextMuted = !isMuted;
+    setIsMuted(transport.setMuted(nextMuted));
 
-  const toggleDeafen = useCallback(() => {
-    if (!webrtcManager) return;
+    const authToken = getAuthTokenFromCookies();
+    if (authToken && sessionId) {
+      await applyVoiceSessionAction(sessionId, authToken, 'mute_self', {
+        value: nextMuted,
+      });
+    }
+  };
 
-    const newDeafenedState = webrtcManager.toggleDeafen();
-    setIsDeafened(newDeafenedState);
-  }, [webrtcManager]);
+  const toggleDeafen = async () => {
+    const transport = transportRef.current;
+    if (!transport) return;
 
-  // Get current connection status from WebRTC manager
-  const currentIsConnected = webrtcManager?.getCurrentChannelId() === channelId;
+    const nextDeafened = !isDeafened;
+    setIsDeafened(transport.setDeafened(nextDeafened));
+
+    const authToken = getAuthTokenFromCookies();
+    if (authToken && sessionId) {
+      await applyVoiceSessionAction(sessionId, authToken, 'deafen_self', {
+        value: nextDeafened,
+      });
+    }
+  };
 
   return (
     <div
       className={`rounded-lg border border-border p-3 space-y-3 transition-all duration-200 ${
-        currentIsConnected ? 'bg-red-500/10 border-red-400/30' : 'bg-surface-secondary'
+        isConnected ? 'bg-[var(--color-surface-secondary)]' : 'bg-[var(--color-surface-tertiary)]'
       }`}
-      onClick={handleChannelClick}
+      onClick={(event) => event.stopPropagation()}
     >
-      {/* Channel Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${currentIsConnected ? 'bg-red-500' : 'bg-gray-400'}`}></div>
-          <span className="text-sm font-medium text-white">{channelName}</span>
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isConnected ? 'bg-[var(--color-success)]' : 'bg-[var(--color-text-muted)]'
+            }`}
+          />
+          <span className="text-sm font-medium text-[var(--color-text)]">{channelName}</span>
         </div>
-        <div className="flex items-center space-x-1">
-          {currentIsConnected && (
-            <span className="text-xs text-gray-400">
-              {participants.length} participant{participants.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+        {isConnected && (
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {participants.length} participant{participants.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div className="text-xs text-red-400 bg-red-500/10 p-2 rounded">
+        <div className="text-xs text-[var(--color-error)] border border-[var(--color-error)]/40 bg-[var(--color-surface)] p-2 rounded">
           {error}
         </div>
       )}
 
-      {/* Join/Leave Button */}
       <div className="flex justify-center">
         <button
           onClick={handleJoinVoiceChannel}
-          disabled={isJoining || !webrtcManager}
-          className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-all ${
-            currentIsConnected
-              ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-green-600 hover:bg-green-700 text-white'
-          } ${isJoining || !webrtcManager ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={isJoining}
+          className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-all border border-[var(--color-border)] ${
+            isConnected
+              ? 'bg-[var(--color-error)]/85 hover:bg-[var(--color-error)] text-white'
+              : 'bg-[var(--color-success)]/85 hover:bg-[var(--color-success)] text-white'
+          } ${isJoining ? 'opacity-60 cursor-not-allowed' : ''}`}
         >
           {isJoining ? (
             <>
-              <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin" />
               <span>Joining...</span>
             </>
-          ) : currentIsConnected ? (
+          ) : isConnected ? (
             <>
               <PhoneOff className="w-4 h-4" />
               <span>Leave</span>
@@ -241,71 +259,62 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         </button>
       </div>
 
-      {/* Voice Controls */}
-      {currentIsConnected && (
+      {isConnected && (
         <div className="flex justify-center space-x-2">
           <button
             onClick={toggleMute}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors border border-[var(--color-border)] ${
               isMuted
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-gray-600 hover:bg-gray-700'
+                ? 'bg-[var(--color-error)] text-white'
+                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]'
             }`}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? (
-              <MicOff className="w-4 h-4 text-white" />
-            ) : (
-              <Mic className="w-4 h-4 text-white" />
-            )}
+            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
           <button
             onClick={toggleDeafen}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors border border-[var(--color-border)] ${
               isDeafened
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-gray-600 hover:bg-gray-700'
+                ? 'bg-[var(--color-error)] text-white'
+                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]'
             }`}
             title={isDeafened ? 'Undeafen' : 'Deafen'}
           >
-            <VolumeX className="w-4 h-4 text-white" />
+            <VolumeX className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Participants List */}
-      {currentIsConnected && participants.length > 0 && (
+      {isConnected && participants.length > 0 && (
         <div className="space-y-1">
-          <div className="text-xs text-gray-400 uppercase tracking-wide">Participants</div>
+          <div className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">
+            Participants
+          </div>
           <div className="max-h-32 overflow-y-auto space-y-1">
             {participants.map((participant) => (
-              <div key={participant.userId} className="flex items-center space-x-2 text-sm">
-                <div className={`w-2 h-2 rounded-full ${
-                  participant.isSpeaking ? 'bg-green-400 animate-pulse' :
-                  !participant.isMuted ? 'bg-gray-400' : 'bg-red-400'
-                }`}></div>
-                <span className="text-white truncate flex-1">
-                  {participant.username || `User ${participant.userId.slice(-4)}`}
-                  {participant.userId === webrtcManager?.['localUserId'] && ' (You)'}
+              <div key={participant.user_id} className="flex items-center space-x-2 text-sm">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    participant.is_speaking
+                      ? 'bg-[var(--color-success)] animate-pulse'
+                      : participant.is_muted
+                        ? 'bg-[var(--color-error)]'
+                        : 'bg-[var(--color-text-muted)]'
+                  }`}
+                />
+                <span className="text-[var(--color-text)] truncate flex-1">
+                  {participant.username || `User ${participant.user_id.slice(-4)}`}
                 </span>
-                <div className="flex space-x-1">
-                  {!participant.isMuted ? (
-                    <Mic className="w-3 h-3 text-gray-400" />
-                  ) : (
-                    <MicOff className="w-3 h-3 text-red-400" />
-                  )}
-                </div>
+                {participant.is_muted ? (
+                  <MicOff className="w-3 h-3 text-[var(--color-error)]" />
+                ) : (
+                  <Mic className="w-3 h-3 text-[var(--color-text-muted)]" />
+                )}
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Connection Info */}
-      {!webrtcManager && (
-        <div className="text-xs text-yellow-400 bg-yellow-500/10 p-2 rounded">
-          WebRTC not initialized. Please refresh the page.
         </div>
       )}
     </div>

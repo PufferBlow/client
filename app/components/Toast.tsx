@@ -11,9 +11,9 @@ export interface ToastEvent {
   ttlMs?: number;
 }
 
-type LegacyToastTone = "success" | "error";
+export type LegacyToastTone = "success" | "error";
 
-interface ShowToast {
+export interface ShowToast {
   (event: ToastEvent): void;
   (message: string, legacyTone?: LegacyToastTone): void;
 }
@@ -37,6 +37,18 @@ const NOISY_PATTERNS = [
   /audio devices updated/i,
   /microphone muted/i,
   /microphone unmuted/i,
+  /speakers\/headphones/i,
+];
+
+const HIGH_IMPACT_SUCCESS_PATTERNS = [
+  /deleted/i,
+  /blocked/i,
+  /unblocked/i,
+  /banned/i,
+  /warned/i,
+  /reset/i,
+  /created/i,
+  /report submitted/i,
 ];
 
 function normalizeToastInput(input: ToastEvent | string, legacyTone?: LegacyToastTone): ToastEvent {
@@ -60,7 +72,11 @@ function shouldSuppressToast(event: ToastEvent): boolean {
     return false;
   }
 
-  return NOISY_PATTERNS.some((pattern) => pattern.test(event.message));
+  if (NOISY_PATTERNS.some((pattern) => pattern.test(event.message))) {
+    return true;
+  }
+
+  return !HIGH_IMPACT_SUCCESS_PATTERNS.some((pattern) => pattern.test(event.message));
 }
 
 export function ToastProvider({ children }: ToastProviderProps) {

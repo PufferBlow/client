@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
+import { AddServerButton } from './AddServerButton';
 
 /**
  * Server information structure
@@ -75,8 +76,44 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
   currentUser,
   className = '',
 }) => {
-  const hasServerAccess = currentUser?.is_owner || currentUser?.is_admin ||
-    (currentUser?.roles && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner')));
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const currentUserRoles = currentUser?.roles || [];
+  const canCreateInvite =
+    currentUser?.is_admin ||
+    currentUser?.is_owner ||
+    currentUserRoles.includes("Admin") ||
+    currentUserRoles.includes("Moderator");
+  const canAccessControlPanel =
+    currentUser?.is_owner ||
+    currentUser?.is_admin ||
+    currentUserRoles.includes("Owner") ||
+    currentUserRoles.includes("Admin");
+  const canDeleteServer = currentUser?.is_owner || currentUserRoles.includes("Owner");
+
+  useEffect(() => {
+    if (!serverDropdownOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        onToggleServerDropdown();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onToggleServerDropdown();
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [serverDropdownOpen, onToggleServerDropdown]);
 
   return (
     <div className={`w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm ${className}`}>
@@ -101,27 +138,21 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
       </div>
 
       {/* Server Actions Dropdown */}
-      <div className="relative" ref={(el) => {
-        // Handle click outside to close dropdown
-        if (el && serverDropdownOpen) {
-          const handleClickOutside = (event: MouseEvent) => {
-            if (!el.contains(event.target as Node)) {
-              onToggleServerDropdown();
-            }
-          };
-          document.addEventListener('mousedown', handleClickOutside);
-          return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
-      }}>
+      <div className="relative" ref={dropdownRef}>
         <button
           onClick={onToggleServerDropdown}
-          className="pb-icon-btn w-12 h-12 rounded-2xl hover:rounded-xl hover:bg-[var(--color-primary)] group"
+          className={`pb-focus-ring inline-flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors ${
+            serverDropdownOpen
+              ? "border-[var(--color-border)] bg-[var(--color-active)] text-[var(--color-text)]"
+              : "border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+          }`}
           title="Server options"
           aria-label="Server options"
           aria-expanded={serverDropdownOpen}
+          aria-haspopup="menu"
         >
           <svg
-            className={`w-4 h-4 text-gray-400 group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 transition-transform ${serverDropdownOpen ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -132,15 +163,21 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
 
         {/* Dropdown Menu */}
         {serverDropdownOpen && (
-          <div className="absolute left-full top-0 mt-2 ml-2 bg-[var(--color-surface-secondary)]/95 backdrop-blur-md border border-[var(--color-border)] rounded-lg shadow-xl py-2 min-w-56 z-50">
-            {/* Server Actions */}
-            <div className="px-2 py-1">
+          <div className="pb-menu absolute left-full top-0 z-50 ml-2 mt-2 w-64 rounded-lg p-2">
+            <div className="mb-2 rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2">
+              <p className="truncate text-sm font-semibold text-[var(--color-text)]">
+                {serverInfo?.server_name || "Server"}
+              </p>
+              <p className="text-xs text-[var(--color-text-secondary)]">Server actions</p>
+            </div>
+
+            <div>
               <button
                 onClick={() => {
                   onServerDropdownAction('server-info');
                   onToggleServerDropdown();
                 }}
-                className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
                 title="View server information"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,71 +186,93 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                 <span className="text-sm font-medium">Server Info</span>
               </button>
 
-              {hasServerAccess && (
-                <>
-                  <button
-                    onClick={() => {
-                      onServerDropdownAction('invite');
-                      onToggleServerDropdown();
-                    }}
-                    className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
-                    title="Create invite code"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="text-sm font-medium">Create Invite</span>
-                  </button>
+              <button
+                onClick={() => {
+                  if (!canCreateInvite) {
+                    return;
+                  }
+                  onServerDropdownAction('invite');
+                  onToggleServerDropdown();
+                }}
+                disabled={!canCreateInvite}
+                className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  canCreateInvite
+                    ? 'text-[var(--color-text)] hover:bg-[var(--color-hover)]'
+                    : 'cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
+                }`}
+                title={
+                  canCreateInvite
+                    ? 'Create invite code'
+                    : 'Only admins, moderators, and owners can create invite codes'
+                }
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm font-medium">Create Invite</span>
+              </button>
 
-                  <Link
-                    to="/control-panel"
-                    onClick={() => onToggleServerDropdown()}
-                    className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
-                    title="Access server control panel"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="text-sm font-medium">Control Panel</span>
-                  </Link>
-                </>
-              )}
+              <Link
+                to="/control-panel"
+                onClick={(event) => {
+                  if (!canAccessControlPanel) {
+                    event.preventDefault();
+                    return;
+                  }
+                  onToggleServerDropdown();
+                }}
+                aria-disabled={!canAccessControlPanel}
+                className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  canAccessControlPanel
+                    ? 'text-[var(--color-text)] hover:bg-[var(--color-hover)]'
+                    : 'pointer-events-none cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
+                }`}
+                title={
+                  canAccessControlPanel
+                    ? 'Access server control panel'
+                    : 'Only server admins and owners can access control panel'
+                }
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm font-medium">Control Panel</span>
+              </Link>
 
-              {currentUser?.is_owner && (
-                <button
-                  onClick={() => {
-                    const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                    if (confirmed) {
-                      onServerDropdownAction('delete-server');
-                    }
-                    onToggleServerDropdown();
-                  }}
-                  className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer rounded-md"
-                  title="Delete this server"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <span className="text-sm font-medium">Delete Server</span>
-                </button>
-              )}
+              <div className="my-2 border-t border-[var(--color-border-secondary)]" />
+
+              <button
+                onClick={() => {
+                  if (!canDeleteServer) {
+                    return;
+                  }
+                  const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                  if (confirmed) {
+                    onServerDropdownAction('delete-server');
+                  }
+                  onToggleServerDropdown();
+                }}
+                disabled={!canDeleteServer}
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  canDeleteServer
+                    ? 'text-[var(--color-error)] hover:bg-[var(--color-error)]/12'
+                    : 'cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
+                }`}
+                title={canDeleteServer ? 'Delete this server' : 'Only server owner can delete the server'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span className="text-sm font-medium">Delete Server</span>
+              </button>
             </div>
           </div>
         )}
       </div>
 
       {/* Add Server Button */}
-      <button
-        onClick={() => onServerDropdownAction('add-server')}
-        className="pb-icon-btn w-12 h-12 bg-[#313338] rounded-2xl hover:rounded-xl hover:bg-[#23a559] cursor-pointer group mt-auto"
-        title="Add a server"
-        aria-label="Add a server"
-      >
-        <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-      </button>
+      <AddServerButton onClick={() => onServerDropdownAction('add-server')} />
     </div>
   );
 };

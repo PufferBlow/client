@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactDOM from 'react-dom';
 import { ServerCreationModal } from "../../components/ServerCreationModal";
@@ -17,6 +17,9 @@ import { useToast } from "../../components/Toast";
 import { UserCard } from "../../components/UserCard";
 import { AttachmentGrid } from "../../components/AttachmentBubble";
 import { UserListItem } from "../../components/dashboard/UserListItem";
+import { AddServerButton } from "../../components/dashboard/AddServerButton";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { validateMessageInput } from "../../utils/markdown";
 import { logger } from "../../utils/logger";
 import { usePersistedUIState } from "../../utils/uiStatePersistence";
@@ -242,6 +245,18 @@ export default function Dashboard() {
   const serverDropdownRef = useRef<HTMLDivElement>(null);
   const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentUserRoles = currentUser?.roles || [];
+  const canCreateInvite =
+    currentUser?.is_admin ||
+    currentUser?.is_owner ||
+    currentUserRoles.includes("Admin") ||
+    currentUserRoles.includes("Moderator");
+  const canAccessControlPanel =
+    currentUser?.is_owner ||
+    currentUser?.is_admin ||
+    currentUserRoles.includes("Owner") ||
+    currentUserRoles.includes("Admin");
+  const canDeleteServer = currentUser?.is_owner || currentUserRoles.includes("Owner");
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -514,7 +529,7 @@ export default function Dashboard() {
     logger.ui.error('Server configuration error', { error: errorMessage });
     return (
       <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
-        <div className="text-center text-white">
+        <div className="text-center text-[var(--color-text)]">
           <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -528,7 +543,7 @@ export default function Dashboard() {
                 window.location.reload();
               }
             }}
-            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium"
+            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] rounded-lg font-medium"
           >
             Try Again
           </button>
@@ -541,7 +556,7 @@ export default function Dashboard() {
   if (loadingTimeout) {
     return (
       <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
-        <div className="text-center text-white">
+        <div className="text-center text-[var(--color-text)]">
           <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -555,7 +570,7 @@ export default function Dashboard() {
                 window.location.reload();
               }
             }}
-            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium"
+            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] rounded-lg font-medium"
           >
             Try Again
           </button>
@@ -580,11 +595,7 @@ export default function Dashboard() {
           ))}
 
           {/* Add Server Button */}
-          <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
-            <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
+          <AddServerButton disabled />
         </div>
 
         {/* Channel Sidebar */}
@@ -638,7 +649,7 @@ export default function Dashboard() {
             avatar="/pufferblow-art-pixel-32x32.png"
             status="offline"
             onClick={() => { }}
-            className="m-2 mt-auto opacity-60"
+            className="opacity-60"
           />
         </div>
 
@@ -1010,11 +1021,7 @@ export default function Dashboard() {
               ))}
 
               {/* Add Server Button */}
-              <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
-                <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </div>
+              <AddServerButton disabled />
             </div>
 
             {/* Channel Sidebar */}
@@ -1259,8 +1266,11 @@ export default function Dashboard() {
           isPrivate: channelData.isPrivate
         });
 
-        // Show success toast
-        showToast(`Channel #${channelData.name} created successfully!`, 'success');
+        showToast({
+          message: `Channel #${channelData.name} created successfully.`,
+          tone: "success",
+          category: "destructive",
+        });
 
         // Refresh channels list
         const channelsResponse = await listChannels(authToken);
@@ -1273,16 +1283,32 @@ export default function Dashboard() {
       } else {
         // Handle specific error codes
         if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
-          showToast('Channel name already exists, please choose a different name.', 'error');
+          showToast({
+            message: "Channel name already exists, please choose a different name.",
+            tone: "error",
+            category: "validation",
+          });
         } else if (response.error?.includes('403') || response.error?.includes('Access forbidden')) {
-          showToast('Access forbidden. Only admins can create channels and manage them.', 'error');
+          showToast({
+            message: "Access forbidden. Only admins can create channels and manage channels.",
+            tone: "error",
+            category: "system",
+          });
         } else {
-          showToast(`Failed to create channel: ${response.error || 'Unknown error'}`, 'error');
+          showToast({
+            message: `Failed to create channel: ${response.error || "Unknown error"}`,
+            tone: "error",
+            category: "system",
+          });
         }
         logger.ui.error("Failed to create channel", { error: response.error, channelData });
       }
     } catch (error) {
-      showToast('An unexpected error occurred while creating the channel.', 'error');
+      showToast({
+        message: "An unexpected error occurred while creating the channel.",
+        tone: "error",
+        category: "system",
+      });
       logger.ui.error("Unexpected error creating channel", { error, channelData });
     }
   };
@@ -1348,8 +1374,11 @@ export default function Dashboard() {
       description
     });
 
-    // Show success toast
-    showToast(`Report submitted successfully. Thank you for helping keep our community safe!`, 'success');
+    showToast({
+      message: "Report submitted successfully. Thank you for helping keep the community safe.",
+      tone: "success",
+      category: "system",
+    });
 
     // Close modal
     setMessageReportModal({ isOpen: false, messages: [] });
@@ -1370,10 +1399,13 @@ export default function Dashboard() {
       try {
         await navigator.clipboard.writeText(messageIds.join(','));
         logger.ui.info("Message group IDs copied to clipboard", { count: messageIds.length });
-        showToast(`${messageIds.length} message IDs copied to clipboard!`, 'success');
       } catch (error) {
         logger.ui.error("Failed to copy message group IDs to clipboard", { error });
-        showToast("Failed to copy message IDs to clipboard. Please try again.", 'error');
+        showToast({
+          message: "Failed to copy message IDs to clipboard. Please try again.",
+          tone: "error",
+          category: "validation",
+        });
       }
     };
 
@@ -1394,17 +1426,24 @@ export default function Dashboard() {
 
   const handleMessageCopy = async (messageId: string | null) => {
     if (!messageId) {
-      showToast("Message ID not available to copy", 'error');
+      showToast({
+        message: "Message ID not available to copy.",
+        tone: "error",
+        category: "validation",
+      });
       return;
     }
 
     try {
       await navigator.clipboard.writeText(messageId);
       logger.ui.info("Message ID copied to clipboard", { messageId: "[REDACTED]" });
-      showToast("Message ID copied to clipboard!", 'success');
     } catch (error) {
       logger.ui.error("Failed to copy message ID to clipboard", { error });
-      showToast("Failed to copy message ID to clipboard. Please try again.", 'error');
+      showToast({
+        message: "Failed to copy message ID to clipboard. Please try again.",
+        tone: "error",
+        category: "validation",
+      });
     }
   };
 
@@ -1417,10 +1456,13 @@ export default function Dashboard() {
     try {
       await navigator.clipboard.writeText(userId);
       logger.ui.info("User ID copied to clipboard", { userId: "[REDACTED]" });
-      showToast("User ID copied to clipboard!", 'success');
     } catch (error) {
       logger.ui.error("Failed to copy user ID to clipboard", { error });
-      showToast("Failed to copy user ID to clipboard. Please try again.", 'error');
+      showToast({
+        message: "Failed to copy user ID to clipboard. Please try again.",
+        tone: "error",
+        category: "validation",
+      });
     }
   };
 
@@ -1493,10 +1535,17 @@ export default function Dashboard() {
                           let mimeType = 'application/octet-stream';
 
                           // Guess MIME type from extension (fallback)
-                          if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+                          if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {
                             mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
                           } else if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
                             mimeType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
+                          } else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) {
+                            mimeType =
+                              ext === 'mp3'
+                                ? 'audio/mpeg'
+                                : ext === 'm4a'
+                                  ? 'audio/mp4'
+                                  : `audio/${ext}`;
                           } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
                             mimeType = ext === 'pdf' ? 'application/pdf' :
                                      ext === 'doc' ? 'application/msword' :
@@ -1539,15 +1588,17 @@ export default function Dashboard() {
             },
             onConnected: () => {
               console.log("WebSocket connected for channel:", channel.channel_id);
-              showToast(`Connected to #${channel.channel_name}`, 'success');
             },
             onDisconnected: (reason) => {
               console.log("WebSocket disconnected:", reason);
-              showToast(`Disconnected from #${channel.channel_name}`, 'error');
             },
             onError: (error) => {
               console.error("WebSocket error:", error);
-              showToast("Connection error - messages may not update in real-time", 'error');
+              showToast({
+                message: "Connection error. Messages may not update in real-time.",
+                tone: "error",
+                category: "system",
+              });
             }
           });
           wsConnection.connect();
@@ -1625,7 +1676,12 @@ export default function Dashboard() {
     if (trimmedMessage) {
       const validationResult = validateMessageInput(trimmedMessage, maxMessageLength);
       if (!validationResult.isValid) {
-        showToast(validationResult.error || 'Invalid message content', 'error');
+        showToast({
+          message: validationResult.error || "Invalid message content.",
+          tone: "error",
+          category: "validation",
+          dedupeKey: "dashboard:invalid-message-content",
+        });
         return;
       }
     }
@@ -1688,22 +1744,43 @@ export default function Dashboard() {
         };
         setMessages(prevMessages => [...prevMessages, tempMessage]);
 
-        showToast('Message sent successfully!', 'success');
       } else {
         logger.ui.error("Failed to send message", { error: response.error });
-        showToast(`Failed to send message: ${response.error || 'Unknown error'}`, 'error');
+        showToast({
+          message: `Failed to send message: ${response.error || "Unknown error"}`,
+          tone: "error",
+          category: "system",
+        });
       }
     } catch (error) {
       logger.ui.error("Unexpected error sending message", { error });
-      showToast('An unexpected error occurred while sending the message.', 'error');
+      showToast({
+        message: "An unexpected error occurred while sending the message.",
+        tone: "error",
+        category: "system",
+      });
     }
   };
 
-  const handleKeyPress = async (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      await handleSendMessage();
+  const handleKeyPress = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') {
+      return;
     }
+
+    // Keep IME composition flow intact (e.g., JP/CN/KR keyboards).
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
+    // Send only on plain Enter. Any modifier keeps normal newline behavior.
+    const isPlainEnter =
+      !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+    if (!isPlainEnter) {
+      return;
+    }
+
+    event.preventDefault();
+    await handleSendMessage();
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1738,7 +1815,11 @@ export default function Dashboard() {
           extension,
           reason: "potentially exploitable file type"
         });
-        showToast(`File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`, 'error');
+        showToast({
+          message: `File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`,
+          tone: "error",
+          category: "validation",
+        });
         event.target.value = ''; // Clear the input
         return;
       }
@@ -1751,7 +1832,11 @@ export default function Dashboard() {
           fileSize: file.size,
           maxSize
         });
-        showToast(`File "${file.name}" is too large. Maximum file size is 10MB per file.`, 'error');
+        showToast({
+          message: `File "${file.name}" is too large. Maximum file size is 10MB per file.`,
+          tone: "error",
+          category: "validation",
+        });
         event.target.value = '';
         return;
       }
@@ -1767,7 +1852,11 @@ export default function Dashboard() {
         totalSize,
         maxTotalSize
       });
-      showToast(`Total attachment size is too large. Maximum total size is 50MB.`, 'error');
+      showToast({
+        message: "Total attachment size is too large. Maximum total size is 50MB.",
+        tone: "error",
+        category: "validation",
+      });
       event.target.value = '';
       return;
     }
@@ -1956,7 +2045,7 @@ export default function Dashboard() {
                     className="w-12 h-12 rounded-2xl object-cover"
                   />
                 ) : (
-                  <span className="text-white font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
+                  <span className="text-[var(--color-on-primary)] font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
                     {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -1965,11 +2054,7 @@ export default function Dashboard() {
             )}
 
             {/* Add Server Button */}
-            <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
-              <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-            </div>
+            <AddServerButton disabled />
           </div>
 
           {/* Channel Sidebar */}
@@ -1993,7 +2078,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   {/* Server Info */}
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-white font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
+                    <h1 className="text-[var(--color-text)] font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
                       {serverInfo?.server_name || 'Loading...'}
                     </h1>
                     <p className="text-[var(--color-text-secondary)] text-xs truncate">{serverInfo?.server_description}</p>
@@ -2003,12 +2088,18 @@ export default function Dashboard() {
                   <div className="relative" ref={serverDropdownRef}>
                     <button
                       onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
-                      className="pb-icon-btn group"
+                      className={`pb-focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                        serverDropdownOpen
+                          ? "border-[var(--color-border)] bg-[var(--color-active)] text-[var(--color-text)]"
+                          : "border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                      }`}
                       title="Server options"
                       aria-label="Server options"
+                      aria-expanded={serverDropdownOpen}
+                      aria-haspopup="menu"
                     >
                       <svg
-                        className={`pb-icon text-[var(--color-text-secondary)] group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
+                        className={`pb-icon transition-transform ${serverDropdownOpen ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2019,111 +2110,108 @@ export default function Dashboard() {
 
                     {/* Dropdown Menu */}
                     {serverDropdownOpen && (
-                      <div className="absolute right-0 top-full mt-2 bg-[var(--color-surface-secondary)]/95 backdrop-blur-md border border-[var(--color-border)] rounded-lg shadow-xl py-2 min-w-56 z-50">
-                        {/* Server Actions */}
-                        <div className="px-2 py-1">
-                          <button
-                            onClick={() => {
-                              console.log('Server Info clicked');
-                              setServerDropdownOpen(false);
-                            }}
-                            className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
-                            title="View server information"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span className="text-sm font-medium">Server Info</span>
-                          </button>
+                      <div className="pb-menu absolute right-0 top-full z-50 mt-2 w-64 rounded-lg p-2">
+                        <div className="mb-2 rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2">
+                          <p className="truncate text-sm font-semibold text-[var(--color-text)]">
+                            {serverInfo?.server_name || "Server"}
+                          </p>
+                          <p className="text-xs text-[var(--color-text-secondary)]">Server actions</p>
+                        </div>
 
-                          <button
-                            onClick={() => {
-                              const hasPermission = currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles?.includes('Admin')) || (currentUser?.roles?.includes('Moderator'));
-                              if (hasPermission) {
-                                setInviteModalOpen(true);
-                                setServerDropdownOpen(false);
-                              }
-                            }}
-                            disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
-                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Moderator'))))
-                                ? 'text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
-                              }`}
-                            title={
-                              ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
-                                ? 'Create invite code'
-                                : 'Only admins, moderators, and owners can create invite codes'
-                            }
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span className="text-sm font-medium">Create Invite</span>
-                          </button>
+                        <button
+                          onClick={() => {
+                            console.log("Server Info clicked");
+                            setServerDropdownOpen(false);
+                          }}
+                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                          title="View server information"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="font-medium">Server Info</span>
+                        </button>
 
-                          <Link
-                            to="/control-panel"
-                            onClick={(e) => {
-                              const hasAccess = currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin');
-                              if (!hasAccess) {
-                                e.preventDefault();
-                              } else {
-                                setServerDropdownOpen(false);
-                              }
-                            }}
-                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                                ? 'text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
-                              }`}
-                            title={
-                              (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                                ? 'Access server control panel'
-                                : 'Only server admins and owners can access control panel'
+                        <button
+                          onClick={() => {
+                            if (!canCreateInvite) {
+                              return;
                             }
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            setInviteModalOpen(true);
+                            setServerDropdownOpen(false);
+                          }}
+                          disabled={!canCreateInvite}
+                          className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                            canCreateInvite
+                              ? "text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+                              : "cursor-not-allowed text-[var(--color-text-muted)] opacity-60"
+                          }`}
+                          title={
+                            canCreateInvite
+                              ? "Create invite code"
+                              : "Only admins, moderators, and owners can create invite codes"
+                          }
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="font-medium">Create Invite</span>
+                        </button>
+
+                        <Link
+                          to="/control-panel"
+                          onClick={(e) => {
+                            if (!canAccessControlPanel) {
+                              e.preventDefault();
+                              return;
+                            }
+                            setServerDropdownOpen(false);
+                          }}
+                          aria-disabled={!canAccessControlPanel}
+                          className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                            canAccessControlPanel
+                              ? "text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+                              : "pointer-events-none cursor-not-allowed text-[var(--color-text-muted)] opacity-60"
+                          }`}
+                          title={
+                            canAccessControlPanel
+                              ? "Access server control panel"
+                              : "Only server admins and owners can access control panel"
+                          }
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          <span className="text-sm font-medium">Control Panel</span>
+                          <span className="font-medium">Control Panel</span>
                         </Link>
 
-                          <button
-                            onClick={() => {
-                              const isOwner = currentUser?.is_owner || currentUser?.roles?.includes('Owner');
-                              if (isOwner) {
-                                const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                                if (confirmed) {
-                                  console.log('Delete Server confirmed');
-                                }
-                                setServerDropdownOpen(false);
-                              }
-                            }}
-                            disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
-                            className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                                ? 'text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer'
-                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
-                              }`}
-                            title={
-                                (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
-                                  ? 'Delete this server'
-                                  : 'Only server owner can delete the server'
-                              }
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            <span className="text-sm font-medium">Delete Server</span>
-                          </button>
-                        </div>
+                        <div className="my-2 border-t border-[var(--color-border-secondary)]" />
 
-                        {/* Divider */}
-                        <div className="border-t border-[var(--color-border)] my-2"></div>
-
-                        {/* Channel Actions */}
-                        <div className="px-2 py-1">
-
-                        </div>
+                        <button
+                          onClick={() => {
+                            if (!canDeleteServer) {
+                              return;
+                            }
+                            const confirmed = window.confirm("Are you sure you want to delete this server? This action cannot be undone.");
+                            if (confirmed) {
+                              console.log("Delete Server confirmed");
+                            }
+                            setServerDropdownOpen(false);
+                          }}
+                          disabled={!canDeleteServer}
+                          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                            canDeleteServer
+                              ? "text-[var(--color-error)] hover:bg-[var(--color-error)]/12"
+                              : "cursor-not-allowed text-[var(--color-text-muted)] opacity-60"
+                          }`}
+                          title={canDeleteServer ? "Delete this server" : "Only server owner can delete the server"}
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span className="font-medium">Delete Server</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -2141,7 +2229,7 @@ export default function Dashboard() {
 
                     {/* Main Icon Container */}
                     <div className="relative w-20 h-20 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl shadow-2xl flex items-center justify-center mb-6 transform rotate-3 hover:rotate-0 transition-transform duration-300">
-                      <svg className="w-10 h-10 text-white drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-10 h-10 text-[var(--color-on-error)] drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
 
@@ -2153,7 +2241,7 @@ export default function Dashboard() {
 
                   {/* Error Message */}
                   <div className="text-center max-w-md mb-8">
-                    <h3 className="text-xl font-bold text-white mb-3 drop-shadow-sm">
+                    <h3 className="text-xl font-bold text-[var(--color-text)] mb-3 drop-shadow-sm">
                       Channels Unavailable
                     </h3>
                     <p className="text-[var(--color-text-secondary)] leading-relaxed mb-4">
@@ -2165,7 +2253,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-center">
                     <button
                       onClick={() => window.location.reload()}
-                      className="px-6 py-3 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] hover:from-[var(--color-primary)] hover:to-[var(--color-primary-hover)] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
+                      className="px-6 py-3 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] hover:from-[var(--color-primary)] hover:to-[var(--color-primary-hover)] text-[var(--color-on-primary)] font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -2206,7 +2294,21 @@ export default function Dashboard() {
                               channelName={channel.channel_name}
                               isConnected={currentVoiceChannel?.channelId === channel.channel_id}
                               onToggleConnection={() => {
-                                // This callback handles voice connection state changes within VoiceChannel component
+                                // Intentionally lightweight; source of truth comes from onConnectionStateChange.
+                              }}
+                              onConnectionStateChange={({ connected, channelId, channelName, participants }) => {
+                                if (connected) {
+                                  setCurrentVoiceChannel({
+                                    channelId,
+                                    channelName,
+                                    participants,
+                                  });
+                                  return;
+                                }
+
+                                setCurrentVoiceChannel((prev) =>
+                                  prev?.channelId === channelId ? null : prev
+                                );
                               }}
                             />
                           );
@@ -2251,30 +2353,28 @@ export default function Dashboard() {
 
         {/* Full-width UserPanel as direct child of left sidebar container */}
         {currentUser && (
-          <div className="w-full bg-[var(--color-surface-secondary)] rounded-b-xl border-t border-[var(--color-border)]">
-            <div className="px-2 pb-2 pt-4">
-              <UserPanel
-                username={currentUser.username || ''}
-                avatar={currentUser.avatar || ''}
-                status={currentUser.status === 'idle' ? 'idle' :
-                  currentUser.status === 'afk' ? 'idle' :
-                  currentUser.status === 'dnd' ? 'dnd' :
-                  currentUser.status === 'online' ? 'online' :
-                    'offline'}
-                onSettingsClick={() => navigate('/settings')}
-                onDeviceSelectorClick={() => setDeviceSelectorModalOpen(true)}
-                onClick={(e) => handleUserClick(currentUser.user_id, currentUser.username, e, 'userpanel')}
-                className="m-2 mt-auto opacity-60"
-                voiceChannel={currentVoiceChannel ? {
-                  channelName: currentVoiceChannel.channelName,
-                  participants: currentVoiceChannel.participants,
-                  onDisconnect: () => {
-                    // Handle voice channel disconnect
-                    setCurrentVoiceChannel(null);
-                  }
-                } : undefined}
-              />
-            </div>
+          <div className="w-full rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
+            <UserPanel
+              username={currentUser.username || ''}
+              avatar={currentUser.avatar || ''}
+              status={currentUser.status === 'idle' ? 'idle' :
+                currentUser.status === 'afk' ? 'idle' :
+                currentUser.status === 'dnd' ? 'dnd' :
+                currentUser.status === 'online' ? 'online' :
+                  'offline'}
+              onSettingsClick={() => navigate('/settings')}
+              onDeviceSelectorClick={() => setDeviceSelectorModalOpen(true)}
+              onClick={(e) => handleUserClick(currentUser.user_id, currentUser.username, e, 'userpanel')}
+              className="w-full"
+              voiceChannel={currentVoiceChannel ? {
+                channelName: currentVoiceChannel.channelName,
+                participants: currentVoiceChannel.participants,
+                onDisconnect: () => {
+                  // Handle voice channel disconnect
+                  setCurrentVoiceChannel(null);
+                }
+              } : undefined}
+            />
           </div>
         )}
       </div>
@@ -2426,18 +2526,18 @@ export default function Dashboard() {
                       <div className="flex items-center space-x-2 mb-2">
                         {/* Username */}
                         <span
-                          className="text-white font-medium select-text cursor-pointer hover:underline"
+                          className="text-[var(--color-text)] font-medium select-text cursor-pointer hover:underline"
                           onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
                         >
                           {displayName}
                         </span>
                         {/* Role badges using injected data */}
                         {firstMessage.sender_roles?.includes("owner") || firstMessage.sender_roles?.includes("Owner") ? (
-                          <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                          <span className="pb-status-success border text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
                         ) : firstMessage.sender_roles?.includes("admin") || firstMessage.sender_roles?.includes("Admin") ? (
-                          <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                          <span className="pb-status-danger border text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
                         ) : firstMessage.sender_roles?.includes("moderator") || firstMessage.sender_roles?.includes("Moderator") ? (
-                          <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
+                          <span className="pb-status-info border text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
                         ) : null}
                         <span className="text-[var(--color-text-secondary)] text-xs select-text">{messageTimestamp}</span>
                       </div>
@@ -2466,7 +2566,7 @@ export default function Dashboard() {
                               onReport: () => handleMessageReport(firstMessage.message_id)
                             });
                           }}
-                          className="pb-icon-btn mr-2 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-[var(--color-text)] hover:text-white"
+                          className="pb-icon-btn mr-2 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-[var(--color-text)] hover:text-[var(--color-text)]"
                           title="More options"
                           aria-label="Message options"
                         >
@@ -2501,7 +2601,7 @@ export default function Dashboard() {
                         className="max-w-24 max-h-24 object-cover rounded"
                       />
                       <div className="text-center">
-                        <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
+                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={file.name}>
                           {file.name}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)]">
@@ -2515,7 +2615,7 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
-                        <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
+                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={file.name}>
                           {file.name}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)]">
@@ -2528,7 +2628,7 @@ export default function Dashboard() {
                   {/* Remove button */}
                   <button
                     onClick={() => removeAttachment(index)}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[var(--color-error)]/90"
                     title="Remove attachment"
                   >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2542,7 +2642,7 @@ export default function Dashboard() {
               {messageAttachments.length > 1 && (
                 <button
                   onClick={() => setMessageAttachments([])}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+                  className="px-3 py-2 bg-[var(--color-error)] hover:bg-[var(--color-error)]/90 text-[var(--color-on-error)] text-sm rounded-lg transition-colors"
                 >
                   Clear All
                 </button>
@@ -2552,7 +2652,7 @@ export default function Dashboard() {
 
           <div
             ref={messageInputBarRef}
-            className={`relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl transition-all duration-300 hover:bg-white/15 hover:shadow-3xl ${
+            className={`relative bg-[var(--color-surface-secondary)]/90 backdrop-blur-md border border-[var(--color-border)] rounded-2xl px-6 py-4 shadow-xl transition-all duration-300 hover:bg-[var(--color-surface-secondary)] ${
               !selectedChannel ? 'opacity-50 pointer-events-none' : ''
             }`}
           >
@@ -2571,7 +2671,7 @@ export default function Dashboard() {
               {/* File Upload Button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-hover)]"
+                className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
                 disabled={!selectedChannel}
                 title="Upload file"
                 aria-label="Upload file"
@@ -2597,7 +2697,7 @@ export default function Dashboard() {
                   onKeyDown={handleKeyPress}
                   placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
                   disabled={!selectedChannel}
-                  className="w-full bg-transparent text-white placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
                   rows={1}
                 />
               </div>
@@ -2607,8 +2707,8 @@ export default function Dashboard() {
                 onClick={handleEmojiClick}
                 disabled={!selectedChannel}
                 className={`pb-icon-btn ${isEmojiPickerOpen
-                    ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]'
-                    : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-hover)]'
+                    ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
                   }`}
                 title="Add emoji"
                 aria-label="Add emoji"
@@ -2622,7 +2722,7 @@ export default function Dashboard() {
               {messageInput.trim() && selectedChannel && (
                 <button
                   onClick={handleSendMessage}
-                  className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
+                  className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
                   title="Send message"
                   aria-label="Send message"
                 >
@@ -2678,7 +2778,7 @@ export default function Dashboard() {
                 <div className="text-center">
                   <button
                     onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded transition-colors"
+                    className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] rounded transition-colors"
                   >
                     Retry
                   </button>
@@ -2815,111 +2915,93 @@ export default function Dashboard() {
         onClose={() => setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
       />
 
-      {/* Channel Context Menu for Deletion */}
-      {channelContextMenu.isOpen && channelContextMenu.channel && (
-        <div
-          className="fixed z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 w-48"
-          style={{
-            left: Math.min(channelContextMenu.position.x, window.innerWidth - 200),
-            top: Math.min(channelContextMenu.position.y, window.innerHeight - 100),
-          }}
-        >
-          <button
-            onClick={() => {
+      <ContextMenu
+        isOpen={channelContextMenu.isOpen && !!channelContextMenu.channel}
+        position={channelContextMenu.position}
+        onClose={() => setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null })}
+        items={[
+          {
+            id: "delete-channel",
+            label: "Delete Channel",
+            tone: "danger",
+            icon: (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"
+                />
+              </svg>
+            ),
+            onSelect: () => {
               setChannelDeleteConfirm({ isOpen: true, channel: channelContextMenu.channel });
               setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
-            }}
-            className="w-full px-3 py-2 text-left text-sm flex items-center text-red-400 hover:bg-red-900 hover:bg-opacity-20 transition-colors"
-          >
-            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            <span>Delete Channel</span>
-          </button>
-        </div>
-      )}
+            },
+          },
+        ]}
+      />
 
-      {/* Channel Deletion Confirmation Modal */}
-      {channelDeleteConfirm.isOpen && channelDeleteConfirm.channel && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-white">Delete Channel</h3>
-            </div>
-            <div className="mb-6">
-              <p className="text-[var(--color-text)] mb-2">
-                Are you sure you want to delete <span className="font-semibold text-white">#{channelDeleteConfirm.channel.channel_name}</span>?
-              </p>
-              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
-                âš ï¸ This action cannot be undone. All messages in this channel will be permanently deleted.
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false })}
-                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
-                disabled={channelDeleteConfirm.isDeleting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  const authToken = getAuthTokenFromCookies() || '';
-                  const channel = channelDeleteConfirm.channel;
-                  if (!authToken || !channel) return;
+      <ConfirmDialog
+        isOpen={channelDeleteConfirm.isOpen && !!channelDeleteConfirm.channel}
+        title="Delete Channel"
+        description={`Delete #${channelDeleteConfirm.channel?.channel_name || ""}? This action cannot be undone.`}
+        confirmLabel={channelDeleteConfirm.isDeleting ? "Deleting..." : "Delete Channel"}
+        tone="danger"
+        isLoading={channelDeleteConfirm.isDeleting}
+        onCancel={() => setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false })}
+        onConfirm={async () => {
+          const authToken = getAuthTokenFromCookies() || "";
+          const channel = channelDeleteConfirm.channel;
+          if (!authToken || !channel) return;
 
-                  // Set loading state
-                  setChannelDeleteConfirm(prev => ({ ...prev, isDeleting: true }));
+          setChannelDeleteConfirm((prev) => ({ ...prev, isDeleting: true }));
 
-                  try {
-                    // Call delete API
-                    const response = await deleteChannel(channel.channel_id, authToken);
+          try {
+            const response = await deleteChannel(channel.channel_id, authToken);
 
-                    if (response.success) {
-                      logger.ui.info("Channel deleted successfully from dashboard", {
-                        channelId: channel.channel_id,
-                        channelName: channel.channel_name
-                      });
+            if (response.success) {
+              logger.ui.info("Channel deleted successfully from dashboard", {
+                channelId: channel.channel_id,
+                channelName: channel.channel_name,
+              });
 
-                      // Show success toast
-                      showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
+              showToast({
+                message: `Channel #${channel.channel_name} deleted successfully.`,
+                tone: "success",
+                category: "destructive",
+              });
 
-                      // Refresh channels list
-                      try {
-                        const listResponse = await listChannels(authToken);
-                        if (listResponse.success && listResponse.data?.channels) {
-                          setChannels(listResponse.data.channels);
-                        }
-                      } catch (error) {
-                        console.error("Failed to refresh channels after deletion:", error);
-                        showToast('Channel deleted but failed to refresh channel list. Please refresh the page.', 'error');
-                      }
-                    } else {
-                      console.error("Failed to delete channel:", response.error);
-                      showToast(`Failed to delete channel: ${response.error || 'Unknown error'}`, 'error');
-                    }
-                  } catch (error) {
-                    console.error("Error deleting channel:", error);
-                    showToast('An unexpected error occurred while deleting the channel.', 'error');
-                  } finally {
-                    // Close modal regardless of outcome
-                    setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false });
-                  }
-                }}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                disabled={channelDeleteConfirm.isDeleting}
-              >
-                {channelDeleteConfirm.isDeleting && (
-                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                )}
-                <span>{channelDeleteConfirm.isDeleting ? 'Deleting...' : 'Delete Channel'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              try {
+                const listResponse = await listChannels(authToken);
+                if (listResponse.success && listResponse.data?.channels) {
+                  setChannels(listResponse.data.channels);
+                }
+              } catch {
+                showToast({
+                  message: "Channel deleted but failed to refresh channel list. Please refresh the page.",
+                  tone: "error",
+                  category: "system",
+                });
+              }
+            } else {
+              showToast({
+                message: `Failed to delete channel: ${response.error || "Unknown error"}`,
+                tone: "error",
+                category: "system",
+              });
+            }
+          } catch {
+            showToast({
+              message: "An unexpected error occurred while deleting the channel.",
+              tone: "error",
+              category: "system",
+            });
+          } finally {
+            setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false });
+          }
+        }}
+      />
 
       <MessageReportModal
         isOpen={messageReportModal.isOpen}
@@ -2979,5 +3061,8 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
 
 

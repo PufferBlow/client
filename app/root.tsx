@@ -9,6 +9,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router";
+import { useEffect } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -19,6 +20,7 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query';
 import { getAuthTokenFromCookies } from "./services/user";
+import { startBackgroundAuthRefresh } from "./services/authSession";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -65,6 +67,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const location = useLocation();
+
+  useEffect(() => {
+    return startBackgroundAuthRefresh(() => {
+      queryClient.clear();
+      if (typeof window === 'undefined') return;
+
+      const currentPath = window.location.pathname;
+      const publicPaths = new Set(['/login', '/signup', '/', '/download']);
+      if (!publicPaths.has(currentPath)) {
+        window.location.href = '/login';
+      }
+    });
+  }, []);
 
   // Check authentication status
   const authToken = getAuthTokenFromCookies();

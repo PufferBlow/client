@@ -75,11 +75,22 @@ export default function Login() {
     // Handle server response format
     const data = response.data as any;
     const token = data?.auth_token;
+    const refreshToken = data?.refresh_token;
+    const tokenType = data?.token_type;
     const expireTime = data?.auth_token_expire_time;
+    const refreshTokenExpireTime = data?.refresh_token_expire_time;
 
     if (token) {
       // Use centralized authentication handler
-      await handleAuthentication(token, hostPort, rememberMe, expireTime);
+      await handleAuthentication(
+        token,
+        hostPort,
+        rememberMe,
+        expireTime,
+        refreshToken,
+        refreshTokenExpireTime,
+        tokenType
+      );
       console.log('Authentication handled successfully');
       setLoginSuccess(true);
     } else {

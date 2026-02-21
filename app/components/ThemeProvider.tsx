@@ -73,30 +73,30 @@ const monochromeDark: AppearanceConfig = {
   name: "Monochrome Dark",
   colors: {
     background: "#000000",
-    "background-secondary": "#080808",
-    "background-tertiary": "#111111",
-    surface: "#0a0a0a",
-    "surface-secondary": "#121212",
-    "surface-tertiary": "#171717",
-    text: "#ffffff",
-    "text-secondary": "#f0f0f0",
-    "text-tertiary": "#dddddd",
-    "text-muted": "#b3b3b3",
-    border: "rgba(255, 255, 255, 0.72)",
-    "border-secondary": "rgba(255, 255, 255, 0.36)",
-    hover: "#161616",
-    active: "#1c1c1c",
-    focus: "#ffffff",
-    primary: "#ffffff",
-    "primary-hover": "#e8e8e8",
-    secondary: "#f5f5f5",
-    "secondary-hover": "#e5e5e5",
-    accent: "#ffffff",
-    "accent-hover": "#e8e8e8",
-    success: "#16a34a",
-    warning: "#d97706",
-    error: "#dc2626",
-    info: "#2563eb",
+    "background-secondary": "#0E0D0D",
+    "background-tertiary": "#1C1919",
+    surface: "#1C1919",
+    "surface-secondary": "#2A2626",
+    "surface-tertiary": "#383232",
+    text: "#F5F5DC",
+    "text-secondary": "#F1EDD1",
+    "text-tertiary": "#ECE4C6",
+    "text-muted": "#E3D3AF",
+    border: "rgba(245, 245, 220, 0.72)",
+    "border-secondary": "rgba(245, 245, 220, 0.36)",
+    hover: "#2A2626",
+    active: "#383232",
+    focus: "#F5F5DC",
+    primary: "#F5F5DC",
+    "primary-hover": "#F1EDD1",
+    secondary: "#ECE4C6",
+    "secondary-hover": "#E8DCBB",
+    accent: "#F1EDD1",
+    "accent-hover": "#ECE4C6",
+    success: "#F1EDD1",
+    warning: "#ECE4C6",
+    error: "#E8DCBB",
+    info: "#E3D3AF",
     shadow: "rgba(0, 0, 0, 0.55)",
     "shadow-lg": "rgba(0, 0, 0, 0.72)",
   },
@@ -107,31 +107,31 @@ const monochromeDark: AppearanceConfig = {
 const monochromeLight: AppearanceConfig = {
   name: "Monochrome Light",
   colors: {
-    background: "#ffffff",
-    "background-secondary": "#fafafa",
-    "background-tertiary": "#f2f2f2",
-    surface: "#ffffff",
-    "surface-secondary": "#f7f7f7",
-    "surface-tertiary": "#eeeeee",
-    text: "#000000",
-    "text-secondary": "#1a1a1a",
-    "text-tertiary": "#2f2f2f",
-    "text-muted": "#5a5a5a",
-    border: "rgba(0, 0, 0, 0.72)",
-    "border-secondary": "rgba(0, 0, 0, 0.35)",
-    hover: "#f1f1f1",
-    active: "#e7e7e7",
-    focus: "#000000",
-    primary: "#000000",
-    "primary-hover": "#1f1f1f",
-    secondary: "#151515",
-    "secondary-hover": "#2a2a2a",
-    accent: "#000000",
-    "accent-hover": "#202020",
-    success: "#16a34a",
-    warning: "#d97706",
-    error: "#dc2626",
-    info: "#2563eb",
+    background: "#F5F5DC",
+    "background-secondary": "#F1EDD1",
+    "background-tertiary": "#ECE4C6",
+    surface: "#F1EDD1",
+    "surface-secondary": "#ECE4C6",
+    "surface-tertiary": "#E8DCBB",
+    text: "#0E0D0D",
+    "text-secondary": "#1C1919",
+    "text-tertiary": "#2A2626",
+    "text-muted": "#383232",
+    border: "rgba(14, 13, 13, 0.72)",
+    "border-secondary": "rgba(14, 13, 13, 0.35)",
+    hover: "#E8DCBB",
+    active: "#E3D3AF",
+    focus: "#0E0D0D",
+    primary: "#0E0D0D",
+    "primary-hover": "#1C1919",
+    secondary: "#2A2626",
+    "secondary-hover": "#383232",
+    accent: "#1C1919",
+    "accent-hover": "#2A2626",
+    success: "#383232",
+    warning: "#2A2626",
+    error: "#1C1919",
+    info: "#0E0D0D",
     shadow: "rgba(0, 0, 0, 0.08)",
     "shadow-lg": "rgba(0, 0, 0, 0.14)",
   },
@@ -226,6 +226,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
 
       const parsed = JSON.parse(savedCustom) as AppearanceConfig;
+      const presetMatch = parsed?.name ? themePresets[parsed.name] : undefined;
+      if (presetMatch) {
+        return normalizeConfig({
+          ...presetMatch,
+          fonts: { ...presetMatch.fonts, ...(parsed.fonts || {}) },
+          layout: { ...presetMatch.layout, ...(parsed.layout || {}) },
+        });
+      }
+
       if (!parsed?.colors || !parsed?.fonts) {
         return monochromeDark;
       }
@@ -297,7 +306,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         return null;
       }
 
-      return normalizeConfig(JSON.parse(saved) as AppearanceConfig);
+      const parsed = JSON.parse(saved) as AppearanceConfig;
+      const presetMatch = parsed?.name ? themePresets[parsed.name] : undefined;
+      if (presetMatch) {
+        return normalizeConfig({
+          ...presetMatch,
+          fonts: { ...presetMatch.fonts, ...(parsed.fonts || {}) },
+          layout: { ...presetMatch.layout, ...(parsed.layout || {}) },
+        });
+      }
+
+      return normalizeConfig(parsed);
     } catch {
       return null;
     }
@@ -357,4 +376,3 @@ export function useTheme() {
   }
   return context;
 }
-

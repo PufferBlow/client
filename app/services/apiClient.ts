@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { getAuthTokenForRequests, refreshAuthSession } from './authSession';
 import { getHostPortFromStorage as getHostPort } from './user';
 
 export interface ApiResponse<T = any> {
@@ -14,25 +15,122 @@ export class ApiClient {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
   }
 
+  private withAuthTokenInEndpoint(endpoint: string, authToken: string | null): string {
+    if (!authToken) return endpoint;
+    try {
+      const url = new URL(`http://dummy${endpoint}`);
+      if (!url.searchParams.has('auth_token')) {
+        return endpoint;
+      }
+      url.searchParams.set('auth_token', authToken);
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return endpoint;
+    }
+  }
+
+  private withAuthTokenInBody(
+    body: BodyInit | null | undefined,
+    authToken: string | null,
+    isFormData: boolean
+  ): BodyInit | null | undefined {
+    if (!body || !authToken) return body;
+
+    if (isFormData && body instanceof FormData) {
+      const clonedFormData = new FormData();
+      body.forEach((value, key) => {
+        clonedFormData.append(key, value);
+      });
+      if (clonedFormData.has('auth_token')) {
+        clonedFormData.set('auth_token', authToken);
+      }
+      return clonedFormData;
+    }
+
+    if (typeof body === 'string') {
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed === 'object' && 'auth_token' in parsed) {
+          return JSON.stringify({
+            ...parsed,
+            auth_token: authToken,
+          });
+        }
+      } catch {
+        return body;
+      }
+    }
+
+    if (body instanceof URLSearchParams) {
+      const clonedParams = new URLSearchParams(body);
+      if (clonedParams.has('auth_token')) {
+        clonedParams.set('auth_token', authToken);
+      }
+      return clonedParams;
+    }
+
+    return body;
+  }
+
+  private withUpdatedAuthToken(
+    options: RequestInit,
+    authToken: string | null,
+    isFormData: boolean
+  ): RequestInit {
+    return {
+      ...options,
+      body: this.withAuthTokenInBody(options.body, authToken, isFormData),
+    };
+  }
+
+  private async performFetch(
+    endpoint: string,
+    options: RequestInit,
+    isFormData: boolean
+  ): Promise<Response> {
+    const url = `${this.baseUrl}${endpoint}`;
+    logger.api.debug(`Making request to ${url}`, options);
+
+    return fetch(url, {
+      ...options,
+      headers: {
+        // Don't set Content-Type for FormData - let the browser set it with boundary
+        ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
+        ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
+        ...options.headers,
+      },
+    });
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
     isFormData: boolean = false
   ): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint}`;
-
     try {
-      logger.api.debug(`Making request to ${url}`, options);
+      const initialAuthToken = getAuthTokenForRequests();
+      let requestEndpoint = this.withAuthTokenInEndpoint(endpoint, initialAuthToken);
+      let requestOptions = this.withUpdatedAuthToken(options, initialAuthToken, isFormData);
+      let response = await this.performFetch(requestEndpoint, requestOptions, isFormData);
 
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          // Don't set Content-Type for FormData - let the browser set it with boundary
-          ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
-          ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
-          ...options.headers,
-        },
-      });
+      if (
+        response.status === 401 &&
+        !requestEndpoint.includes('/api/v1/auth/refresh') &&
+        !requestEndpoint.includes('/api/v1/users/signin') &&
+        !requestEndpoint.includes('/api/v1/users/signup')
+      ) {
+        const refreshResult = await refreshAuthSession('api_401_retry');
+        if (refreshResult.success) {
+          const refreshedAuthToken = refreshResult.authToken || getAuthTokenForRequests();
+          requestEndpoint = this.withAuthTokenInEndpoint(endpoint, refreshedAuthToken);
+          requestOptions = this.withUpdatedAuthToken(
+            options,
+            refreshedAuthToken,
+            isFormData
+          );
+          response = await this.performFetch(requestEndpoint, requestOptions, isFormData);
+        }
+      }
 
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;

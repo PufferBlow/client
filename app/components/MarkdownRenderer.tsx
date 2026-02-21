@@ -9,50 +9,79 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
+function extractTextContent(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(extractTextContent).join('');
+  }
+
+  if (React.isValidElement(node)) {
+    const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+    return extractTextContent(element.props.children);
+  }
+
+  return '';
+}
+
 export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
-  const CodeBlock = ({ className, children, text }: any) => {
+  const CodeBlock = ({
+    className,
+    children,
+    text,
+    language,
+  }: {
+    className?: string;
+    children: React.ReactNode;
+    text: string;
+    language: string;
+  }) => {
     const [copied, setCopied] = useState(false);
 
-    const handleCopy = () => {
-      navigator.clipboard.writeText(text).then(() => {
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(text);
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
+        setTimeout(() => setCopied(false), 1800);
+      } catch {
+        setCopied(false);
+      }
     };
 
-    // Extract language from className (e.g., "language-javascript" -> "javascript")
-    const language = className?.replace('language-', '') || 'text';
+    const normalizedCodeClassName = `hljs ${className || ''}`.trim();
 
     return (
-      <div className="relative group my-4">
+      <div className="relative my-4 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-background-tertiary)]">
         {/* Language label */}
-        <div className="absolute top-2 left-3 bg-[var(--color-background-secondary)] text-[var(--color-text-muted)] text-xs px-2 py-1 rounded font-mono z-10">
+        <div className="absolute left-3 top-2 z-10 rounded border border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2 py-1 font-mono text-xs text-[var(--color-text-muted)]">
           {language}
         </div>
 
         {/* Copy button */}
         <button
           onClick={handleCopy}
-          className="absolute top-2 right-2 bg-[var(--color-background-secondary)] hover:bg-[var(--color-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] text-xs px-2 py-1 rounded transition-colors duration-200 z-10"
+          className="absolute right-2 top-2 z-10 rounded border border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2 py-1 text-xs text-[var(--color-text-secondary)] transition-colors duration-200 hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
           title="Copy code"
+          type="button"
+          aria-label="Copy code block"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
 
         {/* Code block container */}
-        <div className="bg-[var(--color-background-tertiary)] border border-[var(--color-border)] rounded-lg overflow-hidden shadow-lg">
-          <pre className="overflow-x-auto text-sm leading-relaxed">
-            <code className={`${className} block p-4 pt-10`}>
-              {children}
-            </code>
-          </pre>
-        </div>
+        <pre className="overflow-x-auto px-4 pb-4 pt-10 text-sm leading-relaxed">
+          <code className={`${normalizedCodeClassName} block`}>
+            {children}
+          </code>
+        </pre>
       </div>
     );
   };
 
   return (
-    <div className={`break-words overflow-wrap-anywhere ${className}`}>
+    <div className={`pb-markdown break-words overflow-wrap-anywhere ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
@@ -65,7 +94,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
                 href={href}
                 target={isInternal ? '_self' : '_blank'}
                 rel={isInternal ? undefined : 'noopener noreferrer'}
-                className="text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-[var(--color-info)] hover:text-[var(--color-text)] hover:underline"
               >
                 {children}
               </a>
@@ -73,46 +102,56 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
           },
           // Custom code blocks
           code: ({ className, children, ...props }) => {
-            const isInline = !className?.startsWith('language-');
-            const text = React.Children.toArray(children).join('');
-            return !isInline ? (
-              <CodeBlock className={className} text={text}>
+            const normalizedClass = className || '';
+            const languageMatch = /language-([\w-]+)/.exec(normalizedClass);
+            const codeText = extractTextContent(children).replace(/\n$/, '');
+            const isBlock =
+              Boolean(languageMatch) ||
+              normalizedClass.includes('hljs') ||
+              codeText.includes('\n');
+
+            return isBlock ? (
+              <CodeBlock
+                className={normalizedClass}
+                text={codeText}
+                language={languageMatch?.[1] || 'text'}
+              >
                 {children}
               </CodeBlock>
             ) : (
-              <code className="bg-gray-700 text-red-300 px-1 py-0.5 rounded text-sm" {...props}>
+              <code className="rounded border border-[var(--color-border-secondary)] bg-[var(--color-surface-tertiary)] px-1 py-0.5 text-sm text-[var(--color-text-secondary)]" {...props}>
                 {children}
               </code>
             );
           },
           // Custom headings
-          h1: ({ children }) => <h1 className="text-xl font-bold mb-2 mt-4 text-gray-200">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-3 text-gray-200">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-base font-bold mb-1 mt-2 text-gray-300">{children}</h3>,
+          h1: ({ children }) => <h1 className="mb-2 mt-4 text-xl font-bold text-[var(--color-text)]">{children}</h1>,
+          h2: ({ children }) => <h2 className="mb-2 mt-3 text-lg font-bold text-[var(--color-text)]">{children}</h2>,
+          h3: ({ children }) => <h3 className="mb-1 mt-2 text-base font-bold text-[var(--color-text-secondary)]">{children}</h3>,
           // Emphasized text
-          strong: ({ children }) => <strong className="font-bold text-gray-100">{children}</strong>,
-          em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
+          strong: ({ children }) => <strong className="font-bold text-[var(--color-text)]">{children}</strong>,
+          em: ({ children }) => <em className="italic text-[var(--color-text-secondary)]">{children}</em>,
           // Lists
           ul: ({ children }) => <ul className="list-disc list-inside ml-4 space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal list-inside ml-4 space-y-1">{children}</ol>,
-          li: ({ children }) => <li className="text-gray-300">{children}</li>,
+          li: ({ children }) => <li className="text-[var(--color-text-secondary)]">{children}</li>,
           // Blockquotes
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-gray-500 pl-4 italic text-gray-400">
+            <blockquote className="border-l-4 border-[var(--color-border-secondary)] pl-4 italic text-[var(--color-text-secondary)]">
               {children}
             </blockquote>
           ),
           // Tables
           table: ({ children }) => (
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-600">{children}</table>
+              <table className="min-w-full border border-[var(--color-border-secondary)]">{children}</table>
             </div>
           ),
-          thead: ({ children }) => <thead className="bg-gray-700">{children}</thead>,
+          thead: ({ children }) => <thead className="bg-[var(--color-surface-tertiary)]">{children}</thead>,
           tbody: ({ children }) => <tbody>{children}</tbody>,
-          tr: ({ children }) => <tr className="border-b border-gray-600">{children}</tr>,
-          th: ({ children }) => <th className="px-4 py-2 text-left text-gray-200 font-semibold">{children}</th>,
-          td: ({ children }) => <td className="px-4 py-2 text-gray-300">{children}</td>,
+          tr: ({ children }) => <tr className="border-b border-[var(--color-border-secondary)]">{children}</tr>,
+          th: ({ children }) => <th className="px-4 py-2 text-left font-semibold text-[var(--color-text)]">{children}</th>,
+          td: ({ children }) => <td className="px-4 py-2 text-[var(--color-text-secondary)]">{children}</td>,
         }}
       >
         {content}

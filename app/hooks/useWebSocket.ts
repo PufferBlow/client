@@ -133,10 +133,17 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
             let mimeType = 'application/octet-stream';
 
             // Guess MIME type from extension (fallback)
-            if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {
               mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
             } else if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
               mimeType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
+            } else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) {
+              mimeType =
+                ext === 'mp3'
+                  ? 'audio/mpeg'
+                  : ext === 'm4a'
+                    ? 'audio/mp4'
+                    : `audio/${ext}`;
             } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
               mimeType = ext === 'pdf' ? 'application/pdf' :
                        ext === 'doc' ? 'application/msword' :

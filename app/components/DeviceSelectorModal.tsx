@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from './Toast';
+import { Button } from './Button';
 
 interface Device {
   deviceId: string;
@@ -67,12 +68,15 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 animate-fade-in">
-      {/* Enhanced backdrop with gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/40 to-black/60 backdrop-blur-xl"></div>
-      <div className="relative glassmorphism animate-scale-in rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)] border border-white/20 max-w-lg w-full mx-4 transition-all duration-300 transform scale-100 opacity-100 hover:shadow-[0_35px_60px_-12px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.15)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      <button
+        aria-label="Close audio settings backdrop"
+        className="absolute inset-0 bg-black/70"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-lg rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[--color-border]">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] p-6">
           <h3 className="text-[--color-text] font-semibold text-lg flex items-center space-x-3">
             <svg className="w-6 h-6 text-[--color-primary]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
@@ -81,9 +85,9 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
           </h3>
           <button
             onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[--color-hover] transition-all duration-300 hover:rotate-90 hover:shadow-lg hover:shadow-[--color-primary]/20"
+            className="h-9 w-9 rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
           >
-            <svg className="w-5 h-5 text-[--color-text-secondary] hover:text-[--color-text] transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -104,21 +108,13 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
                 {mics.map((device, index) => (
                   <label
                     key={device.deviceId}
-                    className={`group relative flex items-center space-x-3 p-4 rounded-2xl cursor-pointer transition-all duration-300 hover-lift hover:shadow-[0_8px_25px_-8px_rgba(94,129,172,0.3)] overflow-hidden ${
+                    className={`flex cursor-pointer items-center space-x-3 rounded-lg border p-4 transition-colors ${
                       selectedMic === device.deviceId
-                        ? 'glassmorphism-light border-[--color-primary]/40 bg-gradient-to-r from-[--color-primary]/5 to-[--color-primary]/15 shadow-[0_0_15px_rgba(94,129,172,0.2)]'
-                        : 'glassmorphism-light border-white/10 hover:border-[--color-primary]/30 hover:bg-gradient-to-r hover:from-[--color-primary]/3 hover:to-transparent'
+                        ? 'border-[var(--color-primary)] bg-[var(--color-surface-secondary)]'
+                        : 'border-[var(--color-border-secondary)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]'
                     }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    {/* Subtle inner glow for selected state */}
-                    {selectedMic === device.deviceId && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[--color-primary]/5 to-transparent animate-pulse"></div>
-                    )}
-
-                    {/* Gradient overlay for hover effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[--color-primary]/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"></div>
-
                     <input
                       type="radio"
                       name="mic"
@@ -127,22 +123,22 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
                       onChange={() => setSelectedMic(device.deviceId)}
                       className="sr-only"
                     />
-                    <div className="relative flex items-center space-x-3 w-full">
-                      <div className={`w-5 h-5 rounded-full border-2 transition-all duration-300 shadow-inner ${
+                    <div className="flex w-full items-center space-x-3">
+                      <div className={`h-5 w-5 rounded-full border-2 transition-all ${
                         selectedMic === device.deviceId
-                          ? 'bg-[--color-primary] border-[--color-primary] shadow-[--color-primary]/50'
-                          : 'border-white/40 group-hover:border-[--color-primary]/70 group-hover:shadow-[--color-primary]/30'
+                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]'
+                          : 'border-[var(--color-border-secondary)]'
                       }`}>
                         {selectedMic === device.deviceId && (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse shadow-sm"></div>
+                          <div className="flex h-full w-full items-center justify-center">
+                            <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-on-primary)]"></div>
                           </div>
                         )}
                       </div>
-                      <span className={`text-sm flex-1 font-medium relative z-10 ${
+                      <span className={`flex-1 text-sm font-medium ${
                         selectedMic === device.deviceId
-                          ? 'text-[--color-primary] drop-shadow-sm'
-                          : 'text-[--color-text] group-hover:text-[--color-text] transition-colors duration-200'
+                          ? 'text-[var(--color-primary)]'
+                          : 'text-[var(--color-text)]'
                       }`}>
                         {device.label || `Microphone ${device.deviceId.slice(-4)}`}
                       </span>
@@ -166,21 +162,13 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
                 {headphones.map((device, index) => (
                   <label
                     key={device.deviceId}
-                    className={`group relative flex items-center space-x-3 p-4 rounded-2xl cursor-pointer transition-all duration-300 hover-lift hover:shadow-[0_8px_25px_-8px_rgba(140,161,203,0.3)] overflow-hidden ${
+                    className={`flex cursor-pointer items-center space-x-3 rounded-lg border p-4 transition-colors ${
                       selectedHeadphones === device.deviceId
-                        ? 'glassmorphism-light border-[--color-accent]/40 bg-gradient-to-r from-[--color-accent]/5 to-[--color-accent]/15 shadow-[0_0_15px_rgba(140,161,203,0.2)]'
-                        : 'glassmorphism-light border-white/10 hover:border-[--color-accent]/30 hover:bg-gradient-to-r hover:from-[--color-accent]/3 hover:to-transparent'
+                        ? 'border-[var(--color-accent)] bg-[var(--color-surface-secondary)]'
+                        : 'border-[var(--color-border-secondary)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]'
                     }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    {/* Subtle inner glow for selected state */}
-                    {selectedHeadphones === device.deviceId && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[--color-accent]/5 to-transparent animate-pulse"></div>
-                    )}
-
-                    {/* Gradient overlay for hover effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[--color-accent]/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"></div>
-
                     <input
                       type="radio"
                       name="headphones"
@@ -189,22 +177,22 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
                       onChange={() => setSelectedHeadphones(device.deviceId)}
                       className="sr-only"
                     />
-                    <div className="relative flex items-center space-x-3 w-full">
-                      <div className={`w-5 h-5 rounded-full border-2 transition-all duration-300 shadow-inner ${
+                    <div className="flex w-full items-center space-x-3">
+                      <div className={`h-5 w-5 rounded-full border-2 transition-all ${
                         selectedHeadphones === device.deviceId
-                          ? 'bg-[--color-accent] border-[--color-accent] shadow-[--color-accent]/50'
-                          : 'border-white/40 group-hover:border-[--color-accent]/70 group-hover:shadow-[--color-accent]/30'
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent)]'
+                          : 'border-[var(--color-border-secondary)]'
                       }`}>
                         {selectedHeadphones === device.deviceId && (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse shadow-sm"></div>
+                          <div className="flex h-full w-full items-center justify-center">
+                            <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-on-accent)]"></div>
                           </div>
                         )}
                       </div>
-                      <span className={`text-sm flex-1 font-medium relative z-10 ${
+                      <span className={`flex-1 text-sm font-medium ${
                         selectedHeadphones === device.deviceId
-                          ? 'text-[--color-accent] drop-shadow-sm'
-                          : 'text-[--color-text] group-hover:text-[--color-text] transition-colors duration-200'
+                          ? 'text-[var(--color-accent)]'
+                          : 'text-[var(--color-text)]'
                       }`}>
                         {device.label || `Audio Output ${device.deviceId.slice(-4)}`}
                       </span>
@@ -224,7 +212,7 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
               <p className="text-[--color-text-secondary] text-sm mb-4">No audio devices found</p>
               <button
                 onClick={handleGetDevices}
-                className="px-4 py-2 bg-[--color-primary] hover:bg-[--color-primary-hover] text-[--color-surface] rounded-xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[--color-primary]/30"
+                className="rounded-lg bg-[var(--color-primary)] px-4 py-2 font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
               >
                 Refresh Devices
               </button>
@@ -232,20 +220,14 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
           )}
         </div>
 
-        {/* Glassy Actions */}
+        {/* Actions */}
         <div className="flex justify-end space-x-3 px-6 pb-6 pt-4">
-          <button
-            onClick={onClose}
-            className="glassmorphism-light px-5 py-2.5 text-[--color-text-secondary] hover:text-[--color-text] border border-white/10 hover:border-white/30 rounded-xl transition-all duration-300 font-medium hover-lift hover:shadow-lg hover:shadow-white/10"
-          >
+          <Button type="button" onClick={onClose} variant="secondary">
             Cancel
-          </button>
-          <button
-            onClick={handleApply}
-            className="glassmorphism px-5 py-2.5 bg-[--color-primary] hover:bg-[--color-primary]/90 text-[--color-surface] border border-white/20 hover:border-white/40 rounded-xl transition-all duration-300 font-medium hover-lift hover:shadow-xl hover:shadow-[--color-primary]/40"
-          >
+          </Button>
+          <Button type="button" onClick={handleApply} variant="primary">
             Apply Settings
-          </button>
+          </Button>
         </div>
       </div>
     </div>

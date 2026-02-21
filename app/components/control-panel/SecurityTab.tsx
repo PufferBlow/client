@@ -5,6 +5,7 @@ import { Button } from '../Button';
 import { Input } from '../Input';
 import { LoadingState } from '../LoadingState';
 import { ErrorState } from '../ErrorState';
+import type { ShowToast } from '../Toast';
 
 import { logger } from '../../utils/logger';
 
@@ -55,7 +56,7 @@ export interface SecurityTabProps {
   /**
    * Callback for showing toast notifications
    */
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 
   /**
    * Additional CSS classes
@@ -206,9 +207,19 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       setOriginalSettings(JSON.parse(JSON.stringify(settings)));
 
       if (requiresRestart) {
-        showToast('Settings saved successfully! Server restart required for some changes.', 'success');
+        showToast({
+          message: 'Settings saved successfully. Server restart required for some changes.',
+          tone: 'warning',
+          category: 'system',
+          dedupeKey: 'security:settings:restart-required',
+        });
       } else {
-        showToast('Security settings updated successfully!', 'success');
+        showToast({
+          message: 'Security settings saved successfully.',
+          tone: 'success',
+          category: 'system',
+          dedupeKey: 'security:settings:saved',
+        });
       }
 
       logger.ui.info('Security settings saved successfully', {
@@ -217,7 +228,12 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       });
     } catch (err) {
       setError('Failed to save security settings');
-      showToast('Failed to save security settings', 'error');
+      showToast({
+        message: 'Failed to save security settings.',
+        tone: 'error',
+        category: 'system',
+        dedupeKey: 'security:settings:save-failed',
+      });
       logger.ui.error('Failed to save security settings', { error: err });
     } finally {
       setSaving(false);

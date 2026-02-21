@@ -1,10 +1,13 @@
-﻿import { Link } from "react-router";
+import { Link } from "react-router";
 import { useTheme, themePresets, type AppearanceConfig } from "../../components/ThemeProvider";
 import { useState, useEffect } from "react";
 import { FileUploadInput } from "../../components/FileUploadInput";
 import { UserCard } from "../../components/UserCard";
 import { CroppableImage } from "../../components/CroppableImage";
 import { ModernSlider, ModernToggle, AudioTestButton, AudioLevelMeter, SpectrumAnalyzer, DeviceCard } from "../../components/AudioControls";
+import { Notice } from "../../components/ui/Notice";
+import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/Button";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../../services/user";
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Palette, Volume2, Server, Shield, ArrowLeft } from 'lucide-react';
@@ -96,10 +99,11 @@ export default function Settings() {
   useEffect(() => {
     const loadData = async () => {
       if (currentUser) {
-        if (currentUser.about) {
-          setUserBio(currentUser.about);
-          setBioInputValue(currentUser.about);
+        if (currentUser.status) {
+          setUserStatus(currentUser.status as 'online' | 'offline' | 'idle' | 'afk' | 'dnd');
         }
+        setUserBio(currentUser.about || '');
+        setBioInputValue(currentUser.about || '');
       }
       if (typeof window !== 'undefined') {
         const savedDefaultStatus = localStorage.getItem('pufferblow-default-status') as 'online' | 'offline' | 'idle' | 'afk' | 'dnd' || 'online';
@@ -398,8 +402,26 @@ export default function Settings() {
     setShowResetModal(false);
   };
 
+  const isGifFile = (file: File): boolean => {
+    if (file.type.toLowerCase() === 'image/gif') {
+      return true;
+    }
+    return /\.gif$/i.test(file.name);
+  };
+
   const handleAvatarFileSubmit = async (file: File) => {
     if (!file) return;
+
+    // Preserve GIF animation by uploading original file without canvas cropping.
+    if (isGifFile(file)) {
+      try {
+        await updateAvatarMutation.mutateAsync(file);
+        setMessage({ type: 'success', text: 'Animated GIF avatar updated successfully!' });
+      } catch (error) {
+        setMessage({ type: 'error', text: 'Failed to update avatar' });
+      }
+      return;
+    }
 
     // Store the file and open cropping modal
     setSelectedImageFile(file);
@@ -420,6 +442,17 @@ export default function Settings() {
 
   const handleBannerFileSubmit = async (file: File) => {
     if (!file) return;
+
+    // Preserve GIF animation by keeping original file and skipping JPEG crop conversion.
+    if (isGifFile(file)) {
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+      setMessage({
+        type: 'success',
+        text: 'Animated GIF banner selected. Click Save Changes to apply it.',
+      });
+      return;
+    }
 
     // Store the file and open cropping modal
     setSelectedImageFile(file);
@@ -722,7 +755,7 @@ export default function Settings() {
               </svg>
             </div>
             <span className="text-[var(--color-text)] font-semibold text-sm ml-2">User Settings</span>
-            <span className="bg-[var(--color-error)] text-white text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto">USER</span>
+            <span className="bg-[var(--color-error)] text-[var(--color-on-error)] text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto">USER</span>
           </div>
         </div>
         <div className="flex-1 p-6 animate-pulse">
@@ -750,7 +783,7 @@ export default function Settings() {
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
               <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
@@ -760,7 +793,7 @@ export default function Settings() {
               </p>
               <Link
                 to="/dashboard"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
               >
                 Go to Dashboard
               </Link>
@@ -779,7 +812,7 @@ export default function Settings() {
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
               <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -789,7 +822,7 @@ export default function Settings() {
               </p>
               <Link
                 to="/dashboard"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
               >
                 Go to Dashboard
               </Link>
@@ -807,6 +840,12 @@ export default function Settings() {
     { id: 'server', label: 'Server', icon: <Server className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
+
+  const resolvedCurrentStatus: 'online' | 'offline' | 'idle' | 'afk' | 'dnd' =
+    (currentUser?.status as 'online' | 'offline' | 'idle' | 'afk' | 'dnd') || 'online';
+  const hasUsernameChanged = Boolean(newUsername.trim()) && newUsername.trim() !== (currentUser?.username || '');
+  const hasBannerChanged = Boolean(bannerFile || bannerPreview) && bannerPreview !== currentUser?.banner_url;
+  const hasProfileChanges = hasUsernameChanged || hasBannerChanged || hasBioChanged || userStatus !== resolvedCurrentStatus;
 
   return (
     <>
@@ -883,21 +922,14 @@ export default function Settings() {
                 {tabs.find(tab => tab.id === activeTab)?.label}
               </h1>
 
-              {/* Error/Success Messages */}
+              {/* Inline Notice */}
               {message && (
-                <div className={`ml-auto px-4 py-2 rounded-lg border text-sm ${message.type === 'success' ? 'bg-green-900/20 text-green-400 border-green-500/30' : 'bg-red-900/20 text-red-400 border-red-500/30'}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">{message.text}</div>
-                    <button
-                      onClick={() => setMessage(null)}
-                      className={`ml-4 p-1 rounded-full hover:bg-black hover:bg-opacity-10 transition-colors ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}
-                      aria-label="Close message"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                <div className="ml-auto">
+                  <Notice
+                    tone={message.type === "success" ? "success" : "error"}
+                    message={message.text}
+                    onClose={() => setMessage(null)}
+                  />
                 </div>
               )}
             </div>
@@ -906,189 +938,266 @@ export default function Settings() {
           {/* Content Area */}
           <div className="flex-1 p-6 overflow-y-auto bg-[var(--color-background)]">
             {activeTab === 'profile' && (
-              <div className="max-w-7xl mx-auto">
-                {/* Profile Update Section - Discord Style */}
-                <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] overflow-hidden">
-                  <div className="p-6 border-b border-[var(--color-border)]">
-                    <h2 className="text-xl font-semibold text-[var(--color-text)]">Update Profile</h2>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                      Edit your profile information and see a preview of how it will appear to others.
+              <div className="mx-auto max-w-6xl">
+                <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+                  <div className="border-b border-[var(--color-border)] px-6 py-5">
+                    <h2 className="text-xl font-semibold text-[var(--color-text)]">User Profile</h2>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                      Customize your profile to match how your account appears in servers and DMs.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-3 min-h-[600px]">
-                    {/* Profile Preview - Left Side */}
-                    <div className="lg:col-span-1 border-r border-[var(--color-border)] bg-[var(--color-background-secondary)] flex items-center justify-center p-8">
-                      <div className="w-full max-w-sm">
-                        <h3 className="text-sm font-medium text-[var(--color-text-secondary)] mb-4 text-center">
-                          Profile Preview
-                        </h3>
-                        <UserCard
-                          username={newUsername || currentUser?.username || 'Username'}
-                          bio={bioInputValue || 'No bio set'}
-                          roles={currentUser?.roles as any}
-                          avatarUrl={currentUser?.avatar_url || undefined}
-                          backgroundUrl={bannerPreview || currentUser?.banner_url || undefined}
-                          status={
-                            userStatus === 'online'
-                              ? 'active'
-                              : userStatus === 'offline'
-                                ? 'offline'
-                                : userStatus === 'afk'
-                                  ? 'idle'
-                                  : userStatus as 'idle' | 'dnd'
-                          }
-                          originServer={currentUser?.origin_server}
-                          showOnlineIndicator={true}
-                          isCompact={false}
-                        />
+                  <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                    <div className="space-y-5">
+                      <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
+                        <div className="relative h-40 overflow-hidden border-b border-[var(--color-border)]">
+                          {bannerPreview || currentUser?.banner_url ? (
+                            <img
+                              src={bannerPreview || currentUser?.banner_url || ''}
+                              alt="Profile banner preview"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full bg-[var(--color-surface-tertiary)]" />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-surface)]/85 via-[var(--color-surface)]/35 to-transparent" />
+
+                          <div className="absolute right-3 top-3">
+                            <Button type="button" size="sm" variant="secondary" onClick={() => setIsProfileModalOpen(true)}>
+                              Open Preview
+                            </Button>
+                          </div>
+
+                          <div className="absolute bottom-3 left-4 flex items-end gap-3">
+                            <div className="h-[72px] w-[72px] overflow-hidden rounded-full border-4 border-[var(--color-surface)] bg-[var(--color-surface-tertiary)]">
+                              {currentUser?.avatar_url ? (
+                                <img
+                                  src={currentUser.avatar_url}
+                                  alt="Profile avatar"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-[var(--color-primary)] text-xl font-bold text-[var(--color-on-primary)]">
+                                  {(newUsername || currentUser?.username || 'U').charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="pb-1">
+                              <div className="text-base font-semibold text-[var(--color-text)]">
+                                {newUsername || currentUser?.username || 'Username'}
+                              </div>
+                              <div className="inline-flex items-center rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)]/90 px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">
+                                {userStatus === 'dnd'
+                                  ? 'Do Not Disturb'
+                                  : userStatus === 'afk'
+                                    ? 'AFK'
+                                    : userStatus.charAt(0).toUpperCase() + userStatus.slice(1)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 p-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                              Display Name
+                            </label>
+                            <input
+                              type="text"
+                              value={newUsername}
+                              onChange={(e) => setNewUsername(e.target.value)}
+                              placeholder={currentUser?.username || 'Enter username'}
+                              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                            />
+                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                              This is how your name appears in chats and member lists.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                              About Me
+                            </label>
+                            <textarea
+                              rows={4}
+                              value={bioInputValue}
+                              onChange={(e) => {
+                                const newValue = e.target.value;
+                                setBioInputValue(newValue);
+                                setHasBioChanged(newValue !== userBio);
+                              }}
+                              placeholder="Tell people what you are up to."
+                              className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                              maxLength={500}
+                            />
+                            <div className="mt-1 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+                              <span>Markdown and mentions are supported.</span>
+                              <span>{bioInputValue.length}/500</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                              Status
+                            </label>
+                            <select
+                              value={userStatus}
+                              onChange={(e) => setUserStatus(e.target.value as 'online' | 'offline' | 'idle' | 'afk' | 'dnd')}
+                              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                            >
+                              <option value="online">Online</option>
+                              <option value="afk">AFK</option>
+                              <option value="idle">Idle</option>
+                              <option value="dnd">Do Not Disturb</option>
+                              <option value="offline">Invisible</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4">
+                          <div className="mb-3">
+                            <h3 className="text-sm font-semibold text-[var(--color-text)]">Avatar</h3>
+                            <p className="text-xs text-[var(--color-text-muted)]">Upload or link a square profile picture (PNG/JPG/GIF).</p>
+                          </div>
+                          <FileUploadInput
+                            label="Profile Avatar"
+                            accept="image/*"
+                            maxSize={5 * 1024 * 1024}
+                            onFileSelected={(file) => { if (file) handleAvatarFileSubmit(file); }}
+                            onUrlChange={(url) => handleAvatarUrlSubmit(url)}
+                            currentFile={currentUser?.avatar_url || undefined}
+                            placeholder="https://example.com/avatar.png"
+                          />
+                        </div>
+
+                        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4">
+                          <div className="mb-3">
+                            <h3 className="text-sm font-semibold text-[var(--color-text)]">Banner</h3>
+                            <p className="text-xs text-[var(--color-text-muted)]">Upload or link a wide banner image (GIF supported).</p>
+                          </div>
+                          <FileUploadInput
+                            label="Profile Banner"
+                            accept="image/*"
+                            maxSize={10 * 1024 * 1024}
+                            onFileSelected={(file) => { if (file) handleBannerFileSubmit(file); }}
+                            onUrlChange={(url) => handleBannerUrlSubmit(url)}
+                            currentFile={(currentUser as any)?.banner_url}
+                            placeholder="https://example.com/banner.png"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Edit Controls - Right Side */}
-                    <div className="lg:col-span-2 p-6 space-y-6">
-                      {/* Username */}
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          Username
-                        </label>
-                        <input
-                          type="text"
-                          value={newUsername}
-                          onChange={(e) => setNewUsername(e.target.value)}
-                          placeholder="Enter username"
-                          className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all duration-200"
-                        />
-                      </div>
+                    <aside className="self-start lg:sticky lg:top-5">
+                      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Live Preview</h3>
+                          <button
+                            onClick={() => setIsProfileModalOpen(true)}
+                            className="text-xs text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
+                            type="button"
+                          >
+                            Popout
+                          </button>
+                        </div>
 
-                      {/* About/Bio */}
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          About
-                        </label>
-                        <textarea
-                          rows={4}
-                          value={bioInputValue}
-                          onChange={(e) => {
-                            const newValue = e.target.value;
-                            setBioInputValue(newValue);
-                            setHasBioChanged(newValue !== userBio);
-                          }}
-                          placeholder="Tell others about yourself..."
-                          className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] resize-none transition-all duration-200"
-                          maxLength={500}
-                        />
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                          You can @mention other users and use markdown. {bioInputValue.length}/500
-                        </p>
-                      </div>
-
-                      {/* Avatar */}
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          Avatar
-                        </label>
-                        <FileUploadInput
-                          label="Upload Avatar"
-                          accept="image/*"
-                          maxSize={5 * 1024 * 1024}
-                          onFileSelected={(file) => { if (file) handleAvatarFileSubmit(file); }}
-                          onUrlChange={(url) => handleAvatarUrlSubmit(url)}
-                          currentFile={currentUser?.avatar_url || undefined}
-                          placeholder="Enter image URL or upload file"
-                        />
-                      </div>
-
-                      {/* Banner */}
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          Banner
-                        </label>
-                        <FileUploadInput
-                          label="Upload Banner"
-                          accept="image/*"
-                          maxSize={10 * 1024 * 1024}
-                          onFileSelected={(file) => { if (file) handleBannerFileSubmit(file); }}
-                          onUrlChange={(url) => handleBannerUrlSubmit(url)}
-                          currentFile={(currentUser as any)?.banner_url}
-                          placeholder="Enter image URL or upload file"
-                        />
-                      </div>
-
-                      {/* Account Status */}
-                      <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          Account Status
-                        </label>
-                          <select
-                            value={userStatus}
-                            onChange={(e) => setUserStatus(e.target.value as 'online' | 'offline' | 'idle' | 'afk' | 'dnd')}
-                            className="w-full px-4 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all duration-200"
-                        >
-                          <option value="online">Online</option>
-                          <option value="afk">AFK</option>
-                          <option value="idle">Idle</option>
-                          <option value="dnd">Do Not Disturb</option>
-                          <option value="offline">Invisible</option>
-                        </select>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex justify-end space-x-3 pt-4 border-t border-[var(--color-border)]">
-                        <button
-                          onClick={() => {
-                            setNewUsername('');
-                            setBioInputValue(userBio);
-                            setUserStatus('online');
-                            setHasBioChanged(false);
-                            setBannerFile(null);
-                            setBannerPreview(null);
-                          }}
-                          className="px-4 py-2 border border-[var(--color-border)] shadow-sm text-sm font-medium rounded-md text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
-                        >
-                          Reset Changes
-                        </button>
-                        <button
-                          onClick={async () => {
-                            // Handle username update
-                            if (newUsername.trim() && !updateUsernameMutation.isPending) {
-                              await handleUsernameSubmit({ preventDefault: () => {} } as React.FormEvent);
+                        <div className="flex justify-center">
+                          <UserCard
+                            username={newUsername || currentUser?.username || 'Username'}
+                            bio={bioInputValue || 'No bio set'}
+                            roles={currentUser?.roles as any}
+                            avatarUrl={currentUser?.avatar_url || undefined}
+                            backgroundUrl={bannerPreview || currentUser?.banner_url || undefined}
+                            status={
+                              userStatus === 'online'
+                                ? 'active'
+                                : userStatus === 'offline'
+                                  ? 'offline'
+                                  : userStatus === 'afk'
+                                    ? 'idle'
+                                    : userStatus as 'idle' | 'dnd'
                             }
+                            originServer={currentUser?.origin_server}
+                            showOnlineIndicator={true}
+                            isCompact={false}
+                          />
+                        </div>
+                      </div>
+                    </aside>
+                  </div>
 
-                            // Handle banner update if there are changes
-                            if ((bannerFile || bannerPreview) && bannerPreview !== currentUser?.banner_url) {
-                              try {
-                                if (bannerFile) {
-                                  // For file uploads, use the File object
-                                  await updateBannerMutation.mutateAsync(bannerFile);
-                                } else if (bannerPreview && !bannerPreview.startsWith('blob:')) {
-                                  // For URL inputs, use the URL string
-                                  await updateBannerMutation.mutateAsync(bannerPreview);
-                                }
-                                setMessage({ type: 'success', text: 'Banner updated successfully!' });
-                                setBannerPreview(null); // Clear preview since it's now saved
-                                setBannerFile(null); // Clear the stored file
-                              } catch (error) {
-                                setMessage({ type: 'error', text: 'Failed to update banner' });
-                              }
-                            }
+                  <div className="flex items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]/60 px-5 py-4">
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                      {hasProfileChanges ? 'You have unsaved profile changes.' : 'No pending profile changes.'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setNewUsername('');
+                          setBioInputValue(currentUser?.about || '');
+                          setUserBio(currentUser?.about || '');
+                          setUserStatus(resolvedCurrentStatus);
+                          setHasBioChanged(false);
+                          setBannerFile(null);
+                          setBannerPreview(null);
+                        }}
+                        disabled={!hasProfileChanges}
+                      >
+                        Reset
+                      </Button>
 
-                            // Handle bio change
-                            if (hasBioChanged && !updateBioMutation.isPending) {
-                              await handleBioChange();
-                            }
-                          }}
-                          disabled={
-                            updateUsernameMutation.isPending ||
-                            updateBannerMutation.isPending ||
-                            updateBioMutation.isPending ||
-                            (!newUsername.trim() && !bannerPreview && !hasBioChanged)
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={async () => {
+                          if (hasUsernameChanged && !updateUsernameMutation.isPending) {
+                            await handleUsernameSubmit({ preventDefault: () => {} } as React.FormEvent);
                           }
-                          className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
-                        >
-                          {(updateUsernameMutation.isPending || updateBannerMutation.isPending || updateBioMutation.isPending) ? 'Updating...' : 'Update Profile'}
-                        </button>
-                      </div>
+
+                          if (hasBannerChanged) {
+                            try {
+                              if (bannerFile) {
+                                await updateBannerMutation.mutateAsync(bannerFile);
+                              } else if (bannerPreview && !bannerPreview.startsWith('blob:')) {
+                                await updateBannerMutation.mutateAsync(bannerPreview);
+                              }
+                              setMessage({ type: 'success', text: 'Banner updated successfully!' });
+                              setBannerPreview(null);
+                              setBannerFile(null);
+                            } catch (error) {
+                              setMessage({ type: 'error', text: 'Failed to update banner' });
+                            }
+                          }
+
+                          if (hasBioChanged && !updateBioMutation.isPending) {
+                            await handleBioChange();
+                          }
+
+                          if (userStatus !== resolvedCurrentStatus && !updateStatusMutation.isPending) {
+                            await handleStatusSubmit();
+                          }
+                        }}
+                        disabled={
+                          updateUsernameMutation.isPending ||
+                          updateBannerMutation.isPending ||
+                          updateBioMutation.isPending ||
+                          updateStatusMutation.isPending ||
+                          !hasProfileChanges
+                        }
+                        loading={
+                          updateUsernameMutation.isPending ||
+                          updateBannerMutation.isPending ||
+                          updateBioMutation.isPending ||
+                          updateStatusMutation.isPending
+                        }
+                      >
+                        Save Changes
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1118,13 +1227,13 @@ export default function Settings() {
                         >
                           <div className="flex items-center space-x-3">
                             <div
-                              className="w-8 h-8 rounded-full border-2 border-white/20 flex-shrink-0"
+                              className="w-8 h-8 rounded-full border border-[var(--color-border-secondary)] flex-shrink-0"
                               style={{ backgroundColor: presetConfig.colors.primary }}
                             ></div>
                             <div className="text-left">
                               <div className="font-medium text-[var(--color-text)]">{presetName}</div>
                               <div className="text-xs text-[var(--color-text-secondary)] mt-1">
-                                Nord-inspired {presetName.toLowerCase().includes('dark') ? 'dark' : 'light'} theme
+                                Monochrome {presetName.toLowerCase().includes('dark') ? "dark" : "light"} preset
                               </div>
                             </div>
                           </div>
@@ -1150,7 +1259,7 @@ export default function Settings() {
                                 setMessage({ type: 'error', text: 'Failed to copy to clipboard. Try exporting manually.' });
                               });
                             }}
-                            className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm rounded-lg transition-colors"
+                            className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] text-sm rounded-lg transition-colors"
                           >
                             Export Theme
                           </button>
@@ -1700,7 +1809,10 @@ export default function Settings() {
                         className="w-full px-3 py-2 border border-[var(--color-border)] rounded bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] text-sm font-mono h-32"
                       />
                       <div className="mt-3 flex space-x-2">
-                        <button
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="success"
                           onClick={() => {
                             const textarea = document.getElementById('importThemeJson') as HTMLTextAreaElement;
                             const jsonString = textarea.value.trim();
@@ -1713,10 +1825,9 @@ export default function Settings() {
                               }
                             }
                           }}
-                          className="px-4 py-2 bg-[var(--color-success)] hover:bg-green-600 text-white text-sm rounded transition-colors"
                         >
                           Import & Apply
-                        </button>
+                        </Button>
                         <button
                           onClick={() => {
                             const textarea = document.getElementById('importThemeJson') as HTMLTextAreaElement;
@@ -1740,8 +1851,8 @@ export default function Settings() {
                 {/* Actions */}
                 <div className="flex justify-end space-x-3">
                   <button
-                    onClick={() => resetToPreset('Nord Dark')}
-                    className="px-4 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] text-sm rounded transition-colors"
+                    onClick={() => resetToPreset('Monochrome Dark')}
+                    className="px-4 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-secondary)] text-sm rounded transition-colors"
                   >
                     Reset to Default
                   </button>
@@ -1756,7 +1867,7 @@ export default function Settings() {
                         setMessage({ type: 'success', text: `Theme named "${configName.trim()}" and saved!` });
                       }
                     }}
-                    className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm rounded transition-colors"
+                    className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] text-sm rounded transition-colors"
                   >
                     Save Custom Theme
                   </button>
@@ -1770,7 +1881,7 @@ export default function Settings() {
                 <div className="bg-gradient-to-r from-[var(--color-primary)]/10 to-[var(--color-primary)]/5 rounded-xl border border-[var(--color-border)] p-6">
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 bg-[var(--color-primary)] rounded-full flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-6 h-6 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                       </svg>
                     </div>
@@ -1835,10 +1946,10 @@ export default function Settings() {
                             onChange={(e) => setSelectedInputDevice(e.target.value)}
                             className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all duration-200 text-sm"
                           >
-                            <option value="">ðŸŽ™ï¸ Default Device</option>
+                            <option value="">🎙️ Default Device</option>
                             {inputDevices.map((device, index) => (
                               <option key={device.deviceId} value={device.deviceId}>
-                                ðŸŽ™ï¸ {device.label || `Microphone ${index + 1}`}
+                                🎙️ {device.label || `Microphone ${index + 1}`}
                               </option>
                             ))}
                           </select>
@@ -1855,7 +1966,7 @@ export default function Settings() {
                                 setMessage({ type: 'error', text: 'Failed to enumerate audio devices' });
                               }
                             }}
-                            className="w-full px-4 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium transition-colors text-sm flex items-center justify-center space-x-2"
+                            className="w-full px-4 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] rounded-lg font-medium transition-colors text-sm flex items-center justify-center space-x-2"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -2251,8 +2362,8 @@ export default function Settings() {
                         }}
                         className={`py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
                           isListening
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                            ? 'bg-[var(--color-error)] hover:bg-[var(--color-error)]/90 text-[var(--color-on-error)]'
+                            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)]'
                         }`}
                       >
                         {isListening ? 'Stop Monitoring' : 'Start Monitoring'}
@@ -2270,8 +2381,8 @@ export default function Settings() {
                         }}
                         className={`py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
                           isTestingMicrophone
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                            ? 'bg-[var(--color-error)] hover:bg-[var(--color-error)]/90 text-[var(--color-on-error)]'
+                            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)]'
                         }`}
                       >
                         {isTestingMicrophone ? 'Stop Mic Test' : 'Test Microphone'}
@@ -2289,8 +2400,8 @@ export default function Settings() {
                         }}
                         className={`py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
                           isTestingSpeakers
-                            ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-green-500 hover:bg-green-600 text-white'
+                            ? 'bg-[var(--color-error)] hover:bg-[var(--color-error)]/90 text-[var(--color-on-error)]'
+                            : 'bg-[var(--color-success)] hover:bg-[var(--color-success)]/90 text-[var(--color-on-success)]'
                         }`}
                       >
                         {isTestingSpeakers ? 'Stop Speaker Test' : 'Test Speakers'}
@@ -2353,7 +2464,7 @@ export default function Settings() {
 
                   <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
                     <p className="text-xs text-[var(--color-text-muted)]">
-                      ðŸ’¡ <strong>Tip:</strong> Adjust sensitivity for your environment. Test your setup regularly to ensure optimal voice quality.
+                      💡 <strong>Tip:</strong> Adjust sensitivity for your environment. Test your setup regularly to ensure optimal voice quality.
                     </p>
                   </div>
                 </div>
@@ -2376,9 +2487,14 @@ export default function Settings() {
                         <label htmlFor="newHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">New Server Host:Port</label>
                         <input type="text" name="newHostPort" id="newHostPort" placeholder="127.0.0.1:7575" value={newHostPort} onChange={e => setNewHostPort(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
                       </div>
-                      <button type="button" onClick={handleHostPortSubmit} disabled={!newHostPort.trim()} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed">
+                      <Button
+                        type="button"
+                        onClick={handleHostPortSubmit}
+                        disabled={!newHostPort.trim()}
+                        variant="primary"
+                      >
                         Update Server
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2405,9 +2521,15 @@ export default function Settings() {
                           <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">Confirm password</label>
                           <input type="password" name="confirmPassword" id="confirmPassword" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
                         </div>
-                        <button type="button" onClick={handlePasswordSubmit} disabled={updatePasswordMutation.isPending} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50">
+                        <Button
+                          type="button"
+                          onClick={handlePasswordSubmit}
+                          disabled={updatePasswordMutation.isPending}
+                          loading={updatePasswordMutation.isPending}
+                          variant="primary"
+                        >
                           {updatePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
@@ -2415,9 +2537,9 @@ export default function Settings() {
                       <h4 className="text-sm font-medium text-[var(--color-text)]">Authentication Token</h4>
                       <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Resetting your authentication token will log you out</p>
                       <div className="mt-3">
-                        <button type="button" onClick={() => setShowResetModal(true)} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)]">
+                        <Button type="button" onClick={() => setShowResetModal(true)} variant="danger">
                           Reset Auth Token
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
@@ -2425,12 +2547,16 @@ export default function Settings() {
                       <h4 className="text-sm font-medium text-[var(--color-text)]">Sign Out</h4>
                       <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Sign out of your account</p>
                       <div className="mt-3">
-                        <button type="button" onClick={() => {
-                          logout();
-                          setTimeout(() => window.location.href = '/login', 100);
-                        }} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)]">
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            logout();
+                            setTimeout(() => window.location.href = '/login', 100);
+                          }}
+                          variant="danger"
+                        >
                           Sign Out
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -2440,116 +2566,115 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Reset Auth Token Modal */}
-        {showResetModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-md w-full mx-4 border border-[var(--color-border)]">
-              <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">Reset Authentication Token</h3>
-              <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-                Resetting your authentication token will log you out of all devices. You will need to log in again.
-                This action cannot be undone.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="resetPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">Enter your current password</label>
-                  <input type="password" name="resetPassword" id="resetPassword" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <button type="button" onClick={() => {
-                    setShowResetModal(false);
-                    setResetPassword('');
-                  }} className="inline-flex justify-center py-2 px-4 border border-[var(--color-border)] shadow-sm text-sm font-medium rounded-md text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]">
-                    Cancel
-                  </button>
-                  <button type="button" onClick={handleResetAuthToken} disabled={!resetPassword.trim() || resetAuthTokenMutation.isPending} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)] disabled:opacity-50">
-                    {resetAuthTokenMutation.isPending ? 'Resetting...' : 'Reset Token'}
-                  </button>
-                </div>
-              </div>
+        <Modal
+          isOpen={showResetModal}
+          onClose={() => {
+            if (resetAuthTokenMutation.isPending) return;
+            setShowResetModal(false);
+            setResetPassword('');
+          }}
+          title="Reset Authentication Token"
+          description="Resetting your token signs you out of all devices and requires logging in again."
+          widthClassName="max-w-md"
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetPassword('');
+                }}
+                disabled={resetAuthTokenMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleResetAuthToken}
+                disabled={!resetPassword.trim() || resetAuthTokenMutation.isPending}
+                loading={resetAuthTokenMutation.isPending}
+              >
+                {resetAuthTokenMutation.isPending ? 'Resetting...' : 'Reset Token'}
+              </Button>
             </div>
+          )}
+        >
+          <div>
+            <label htmlFor="resetPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">
+              Enter your current password
+            </label>
+            <input
+              type="password"
+              name="resetPassword"
+              id="resetPassword"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] shadow-sm transition-all duration-200 placeholder-[var(--color-text-secondary)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 sm:text-sm"
+            />
           </div>
-        )}
+        </Modal>
 
-        {/* Profile Preview Modal */}
-        {isProfileModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-[var(--color-background)] rounded-2xl shadow-2xl w-full max-w-lg mx-auto border border-[var(--color-border)]">
-              <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-[var(--color-text)]">Profile Preview</h3>
-                <button
-                  onClick={() => setIsProfileModalOpen(false)}
-                  className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-2 rounded-lg transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-6">
-                <div className="flex justify-center">
-                  <UserCard
-                    username={newUsername || currentUser?.username || 'Username'}
-                    bio={bioInputValue || 'No bio set'}
-                    roles={currentUser?.roles as any}
-                    avatarUrl={currentUser?.avatar_url || undefined}
-                    backgroundUrl={bannerPreview || currentUser?.banner_url || undefined}
-                    status={
-                      userStatus === 'online'
-                        ? 'active'
-                        : userStatus === 'offline'
-                          ? 'offline'
-                          : userStatus === 'afk'
-                            ? 'idle'
-                            : userStatus as 'idle' | 'dnd'
-                    }
-                    originServer={currentUser?.origin_server}
-                    showOnlineIndicator={true}
-                    isCompact={false}
-                  />
-                </div>
-                <div className="mt-6 text-center">
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    This is how your profile will appear to others on Pufferblow
-                  </p>
-                </div>
-              </div>
-            </div>
+        <Modal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          title="Profile Preview"
+          widthClassName="max-w-lg"
+        >
+          <div className="flex justify-center">
+            <UserCard
+              username={newUsername || currentUser?.username || 'Username'}
+              bio={bioInputValue || 'No bio set'}
+              roles={currentUser?.roles as any}
+              avatarUrl={currentUser?.avatar_url || undefined}
+              backgroundUrl={bannerPreview || currentUser?.banner_url || undefined}
+              status={
+                userStatus === 'online'
+                  ? 'active'
+                  : userStatus === 'offline'
+                    ? 'offline'
+                    : userStatus === 'afk'
+                      ? 'idle'
+                      : userStatus as 'idle' | 'dnd'
+              }
+              originServer={currentUser?.origin_server}
+              showOnlineIndicator={true}
+              isCompact={false}
+            />
           </div>
-        )}
+          <p className="mt-6 text-center text-sm text-[var(--color-text-secondary)]">
+            This is how your profile appears to other users.
+          </p>
+        </Modal>
 
-        {/* Image Cropping Modal */}
-        {isCroppingModalOpen && croppingImageSrc && croppingImageType && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-[var(--color-background)] rounded-2xl shadow-2xl w-full max-w-xl mx-auto border border-[var(--color-border)]">
-              <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-[var(--color-text)]">
-                  Crop {croppingImageType === 'avatar' ? 'Avatar' : 'Banner'}
-                </h3>
-                <button
-                  onClick={handleCroppingCancel}
-                  disabled={updateAvatarMutation.isPending || updateBannerMutation.isPending}
-                  className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] p-2 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-6">
-                <CroppableImage
-                  imageSrc={croppingImageSrc}
-                  aspect={croppingImageType === 'avatar' ? 1 : 4} // Square for avatar, wide for banner
-                  shape={croppingImageType === 'avatar' ? 'round' : 'rect'}
-                  onCropComplete={handleCroppedImage}
-                  onCancel={handleCroppingCancel}
-                  className="max-w-full"
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        <Modal
+          isOpen={Boolean(isCroppingModalOpen && croppingImageSrc && croppingImageType)}
+          onClose={() => {
+            if (updateAvatarMutation.isPending || updateBannerMutation.isPending) {
+              return;
+            }
+            handleCroppingCancel();
+          }}
+          title={`Crop ${croppingImageType === 'avatar' ? 'Avatar' : 'Banner'}`}
+          widthClassName="max-w-xl"
+        >
+          {croppingImageSrc && croppingImageType ? (
+            <CroppableImage
+              imageSrc={croppingImageSrc}
+              aspect={croppingImageType === 'avatar' ? 1 : 4}
+              shape={croppingImageType === 'avatar' ? 'round' : 'rect'}
+              onCropComplete={handleCroppedImage}
+              onCancel={handleCroppingCancel}
+              className="max-w-full"
+            />
+          ) : null}
+        </Modal>
       </div>
     </>
   );
 }
+
+
+
 

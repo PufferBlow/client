@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+﻿import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
 
 import { Button } from '../Button';
 import { LoadingState } from '../LoadingState';
@@ -221,11 +221,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   // Handle keyboard shortcuts
-  const handleKeyPress = async (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      await handleSendMessage();
+  const handleKeyPress = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') {
+      return;
     }
+
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
+    const isPlainEnter =
+      !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+    if (!isPlainEnter) {
+      return;
+    }
+
+    event.preventDefault();
+    await handleSendMessage();
   };
 
   // Handle file uploads
@@ -237,21 +249,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const maxSizeMB = 10;
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'audio/mpeg', 'audio/mp3',
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
+      'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/opus',
       'application/pdf', 'text/plain', 'application/zip'
     ];
+    const allowedAudioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'];
+    const allowedVideoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+    const allowedImageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+    const allowedDocumentExtensions = ['pdf', 'txt', 'zip'];
 
     const validFiles: File[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
 
       if (file.size > maxSizeMB * 1024 * 1024) {
         logger.ui.warn('File too large', { fileName: file.name, size: file.size });
         continue;
       }
 
-      if (!allowedTypes.includes(file.type)) {
+      const extensionAllowed =
+        allowedAudioExtensions.includes(extension) ||
+        allowedVideoExtensions.includes(extension) ||
+        allowedImageExtensions.includes(extension) ||
+        allowedDocumentExtensions.includes(extension);
+
+      if (!allowedTypes.includes(file.type) && !extensionAllowed) {
         logger.ui.warn('File type not allowed', { fileName: file.name, type: file.type });
         continue;
       }
@@ -447,9 +472,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <LoadingState variant="skeleton" message="Loading messages..." />
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center text-gray-400">
-                <div className="text-gray-500 text-sm">No messages yet</div>
-                <div className="text-gray-600 text-xs mt-1">
+              <div className="text-center text-[var(--color-text-secondary)]">
+                <div className="text-sm text-[var(--color-text)]">No messages yet</div>
+                <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                   {selectedChannel ? `This is the beginning of #${selectedChannel.channel_name}` : 'Select a channel to view messages'}
                 </div>
               </div>
@@ -471,9 +496,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               return (
                 <div
                   key={firstMessage.message_id}
-                  className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${
+                  className={`group relative flex items-start space-x-3 rounded px-2 py-1 transition-colors hover:bg-[var(--color-surface-secondary)]/30 ${
                     firstMessage.sender_user_id === currentUser?.user_id
-                      ? 'bg-blue-900/20 border-l-4 border-blue-500 hover:bg-blue-900/30'
+                      ? 'border-l-4 border-[var(--color-primary)] bg-[var(--color-primary)]/20 hover:bg-[var(--color-primary-hover)]/30'
                       : ''
                   }`}
                   onMouseEnter={() => setHoveredMessageId(firstMessage.message_id)}
@@ -493,7 +518,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     <div className="flex items-center space-x-2 mb-2">
                       {/* Username */}
                       <span
-                        className="text-white font-medium select-text cursor-pointer hover:underline"
+                        className="cursor-pointer select-text font-medium text-[var(--color-text)] hover:underline"
                         onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e)}
                       >
                         {displayName}
@@ -501,19 +526,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                       {/* Role badges */}
                       {firstMessage.sender_roles?.includes("owner") && (
-                        <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                        <span className="pb-status-success rounded border px-1.5 py-0.5 text-xs font-medium">OWNER</span>
                       )}
                       {firstMessage.sender_roles?.includes("admin") && (
-                        <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
+                        <span className="pb-status-danger rounded border px-1.5 py-0.5 text-xs font-medium">ADMIN</span>
                       )}
 
-                      <span className="text-gray-400 text-xs select-text">{messageTimestamp}</span>
+                      <span className="select-text text-xs text-[var(--color-text-secondary)]">{messageTimestamp}</span>
                     </div>
 
                     <div className="space-y-1">
                       {group.map((message) => (
                         <div key={message.message_id}>
-                          <MarkdownRenderer content={message.message} className="text-gray-300" />
+                          <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
                           {message.attachments && message.attachments.length > 0 && (
                             <AttachmentGrid attachments={message.attachments} />
                           )}
@@ -530,11 +555,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           e.stopPropagation();
                           handleMessageContextMenu(firstMessage.message_id, e);
                         }}
-                        className="w-8 h-8 mr-2 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                        className="pb-icon-btn mr-2 bg-[var(--color-surface-tertiary)] text-[var(--color-text)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
                         title="More options"
                         aria-label="Message options"
                       >
-                        ⋯
+                        <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -552,20 +579,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {messageAttachments.map((file, index) => (
                 <div
                   key={index}
-                  className="relative bg-gray-700 rounded-lg p-3 border border-gray-600 group hover:border-gray-500 transition-colors"
+                  className="group relative rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-3 transition-colors hover:border-[var(--color-border-secondary)]"
                 >
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
+                    <span className="max-w-24 truncate text-xs font-medium text-[var(--color-text)]" title={file.name}>
                       {file.name}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[var(--color-text-secondary)]">
                       ({(file.size / (1024 * 1024)).toFixed(1)}MB)
                     </span>
                   </div>
 
                   <button
                     onClick={() => setMessageAttachments(prev => prev.filter((_, i) => i !== index))}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/90 group-hover:opacity-100"
                     title="Remove attachment"
                     aria-label="Remove attachment"
                   >
@@ -578,7 +605,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           )}
 
-          <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl transition-all duration-300 hover:bg-white/15 hover:shadow-3xl">
+          <div className="relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)]/90 px-6 py-4 shadow-xl backdrop-blur-md transition-all duration-300 hover:bg-[var(--color-surface-secondary)]">
             <div className="flex items-end space-x-3">
               {/* Hidden File Input */}
               <input
@@ -593,7 +620,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {/* File Upload Button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded hover:bg-gray-500 transition-colors text-gray-400 hover:text-white"
+                className="pb-icon-btn flex-shrink-0"
                 title="Upload file"
                 aria-label="Upload file"
               >
@@ -611,7 +638,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   onKeyDown={handleKeyPress}
                   placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
                   disabled={!selectedChannel}
-                  className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-6 w-full resize-none break-words bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none overflow-wrap-anywhere disabled:cursor-not-allowed disabled:opacity-50"
                   rows={1}
                 />
               </div>
@@ -620,10 +647,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <button
                 onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
                 disabled={!selectedChannel}
-                className={`w-8 h-8 flex items-center justify-center rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`pb-icon-btn disabled:cursor-not-allowed disabled:opacity-50 ${
                   isEmojiPickerOpen
-                    ? 'bg-blue-600 text-white'
-                    : 'hover:bg-gray-500 text-gray-400 hover:text-white'
+                    ? 'border-[var(--color-border)] bg-[var(--color-primary)] text-[var(--color-on-primary)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
                 }`}
                 title="Add emoji"
                 aria-label="Add emoji"
@@ -651,7 +678,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
 
           {/* Emoji Picker */}
-          <Suspense fallback={<div className="text-xs text-gray-400">Loading emoji picker...</div>}>
+          <Suspense fallback={<div className="text-xs text-[var(--color-text-secondary)]">Loading emoji picker...</div>}>
             <EmojiPicker
               isOpen={isEmojiPickerOpen}
               onClose={() => setIsEmojiPickerOpen(false)}
@@ -723,3 +750,4 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 };
 
 export default ChatArea;
+

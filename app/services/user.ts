@@ -5,6 +5,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect } from 'react';
 import { secureStorage, migrateToSecureStorage } from './secureStorage';
 import {
+  clearSessionTokens,
+  logoutCurrentSession,
+  persistSessionTokens,
+  getAuthTokenForRequests,
+} from './authSession';
+import {
   issueDecentralizedChallenge,
   verifyDecentralizedChallenge,
   persistNodeSessionToken,
@@ -66,7 +72,10 @@ export interface SignupCredentials {
 
 export interface AuthToken {
   auth_token: string;
+  refresh_token?: string;
+  token_type?: string;
   auth_token_expire_time?: string;
+  refresh_token_expire_time?: string;
 }
 
 export interface UserProfile {
@@ -266,7 +275,10 @@ export interface UpdateProfileResponse {
 
 export interface ResetAuthTokenResponse extends UpdateProfileResponse {
   auth_token: string;
+  refresh_token?: string;
+  token_type?: string;
   auth_token_expire_time: string;
+  refresh_token_expire_time?: string;
 }
 
 export const updateUsername = async (request: UpdateUsernameRequest): Promise<ApiResponse<UpdateProfileResponse>> => {
@@ -446,6 +458,10 @@ export const getAuthTokenFromCookies = (): string | null => {
     // Initialize cache on first call
     initializeStorageCache().catch(console.error);
   }
+  const liveToken = getAuthTokenForRequests();
+  if (liveToken !== authTokenCache) {
+    authTokenCache = liveToken;
+  }
   return authTokenCache;
 };
 
@@ -467,6 +483,10 @@ export const getHostPortFromStorage = (): string | null => {
 export const getAuthTokenFromStorageAsync = async (): Promise<string | null> => {
   if (!cacheInitialized) {
     await initializeStorageCache();
+  }
+  const liveToken = getAuthTokenForRequests();
+  if (liveToken !== authTokenCache) {
+    authTokenCache = liveToken;
   }
   return authTokenCache;
 };
@@ -545,19 +565,27 @@ export const setAuthTokenInStorage = async (token: string): Promise<void> => {
 };
 
 // Centralized function to handle successful authentication
-export const handleAuthentication = async (token: string, hostPort: string, rememberMe: boolean, expireTime?: string) => {
+export const handleAuthentication = async (
+  token: string,
+  hostPort: string,
+  rememberMe: boolean,
+  expireTime?: string,
+  refreshToken?: string,
+  refreshTokenExpireTime?: string,
+  tokenType?: string
+) => {
   await setAuthTokenInStorage(token);
   await setHostPortToStorage(hostPort, rememberMe);
 
-  // Also set cookies for web compatibility
-  if (rememberMe) {
-    const maxAge = expireTime ? Math.floor((new Date(expireTime).getTime() - Date.now()) / 1000) : 86400 * 30;
-    document.cookie = `auth_token=${token}; path=/; max-age=${maxAge}`;
-    document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/; max-age=${maxAge}`;
-  } else {
-    document.cookie = `auth_token=${token}; path=/`;
-    document.cookie = `host_port=${encodeURIComponent(hostPort)}; path=/`;
-  }
+  persistSessionTokens({
+    authToken: token,
+    refreshToken,
+    authTokenExpireTime: expireTime,
+    refreshTokenExpireTime: refreshTokenExpireTime,
+    tokenType,
+    hostPort,
+    rememberMe,
+  });
 
   await bootstrapDecentralizedNodeSession(token);
 };
@@ -624,6 +652,7 @@ export const clearAuthTokenFromStorage = async (): Promise<void> => {
   try {
     await secureStorage.delete('auth_token');
     authTokenCache = null;
+    clearSessionTokens();
   } catch (error) {
     console.error('Failed to clear auth token:', error);
   }
@@ -892,7 +921,25 @@ export const useResetAuthToken = () => {
       }
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      if (data?.auth_token) {
+        const hostPort = await getHostPortFromStorageAsync();
+        const rememberMe =
+          typeof window !== 'undefined'
+            ? (sessionStorage.getItem('remember_me') || localStorage.getItem('remember_me')) === '1'
+            : true;
+        if (hostPort) {
+          await handleAuthentication(
+            data.auth_token,
+            hostPort,
+            rememberMe,
+            data.auth_token_expire_time,
+            data.refresh_token,
+            data.refresh_token_expire_time,
+            data.token_type
+          );
+        }
+      }
       // Clear query cache after token reset
       queryClient.clear();
     },
@@ -973,7 +1020,8 @@ export const useLogout = () => {
   return {
     logout: () => {
       queryClient.clear();
-      // Additional cleanup can be added here
+      authTokenCache = null;
+      void logoutCurrentSession();
     }
   };
 };

@@ -185,7 +185,7 @@ export function UserCard({
 
   if (isCompact) {
     return (
-      <div className="flex items-center space-x-3 p-4 glassmorphism hover-lift rounded-xl border border-white/20 transition-all duration-300 shadow-2xl hover:scale-105">
+      <div className="flex items-center space-x-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-all duration-300 shadow-2xl hover:scale-105">
         {/* Avatar with status */}
         <div className="relative flex-shrink-0">
           <div className="w-12 h-12 rounded-full border-2 border-[#4C566A] overflow-hidden bg-gradient-to-br from-[#81A1C1] to-[#88C0D0] p-0.5">
@@ -262,7 +262,7 @@ export function UserCard({
 
   return (
     <div
-      className={`glassmorphism rounded-2xl shadow-2xl overflow-hidden hover-lift animate-scale-in duration-500 w-88 ${onCardClick ? 'cursor-pointer hover-lift hover:scale-105' : ''}`}
+      className={`w-88 animate-scale-in overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl duration-500 ${onCardClick ? 'cursor-pointer hover:scale-105' : ''}`}
       onClick={(e) => {
         console.log('UserCard clicked', onCardClick);
         onCardClick?.();
@@ -294,11 +294,11 @@ export function UserCard({
         {/* Status Indicator - Discord style */}
         <div className="absolute top-6 right-6">
           <div
-            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm ${
-              status === 'active' ? 'bg-[#A3BE8C]/80 text-white' :
-              status === 'idle' ? 'bg-yellow-500/90 text-white' :
-              status === 'dnd' ? 'bg-red-500/90 text-white' :
-              'bg-gray-500/90 text-gray-200'
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg ${
+              status === 'active' ? 'border-[var(--color-success)] bg-[var(--color-success)] text-[var(--color-on-success)]' :
+              status === 'idle' ? 'border-[var(--color-warning)] bg-[var(--color-warning)] text-[var(--color-on-warning)]' :
+              status === 'dnd' ? 'border-[var(--color-error)] bg-[var(--color-error)] text-[var(--color-on-error)]' :
+              'border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'
             }`}
             style={{
               border: status === 'active' ? `2px solid ${accentColor}40` : 'none'
@@ -426,7 +426,7 @@ export function UserCard({
         {/* Custom Status */}
         {customStatus && (
           <div className="mt-2 max-w-md">
-            <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1 w-fit text-xs text-[#dcddde]">
+            <div className="flex w-fit items-center space-x-2 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-1 text-xs text-[var(--color-text)]">
               {status === 'active' && <div className="w-2 h-2 bg-green-500 rounded-full"></div>}
               {status === 'idle' && <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>}
               {status === 'dnd' && <div className="w-2 h-2 bg-red-500 rounded-full"></div>}

@@ -188,7 +188,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative bg-black rounded-lg overflow-hidden group ${className}`}
+      className={`group relative overflow-hidden rounded-lg bg-[var(--color-surface)] ${className}`}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
@@ -203,15 +203,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {/* Loading Spinner */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-surface-secondary)]">
+          <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-[var(--color-primary)]"></div>
         </div>
       )}
 
       {/* Buffering Indicator */}
       {isBuffering && !isLoading && (
         <div className="absolute top-4 right-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+          <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-[var(--color-text)]"></div>
         </div>
       )}
 
@@ -220,9 +220,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         <div className="absolute inset-0 flex items-center justify-center">
           <button
             onClick={togglePlay}
-            className="bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full p-4 transition-all duration-200 group/play"
+            className="group/play rounded-full bg-[var(--color-surface)]/70 p-4 transition-all duration-200 hover:bg-[var(--color-surface)]/85"
           >
-            <svg className="w-12 h-12 text-white group-hover/play:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="h-12 w-12 text-[var(--color-text)] transition-transform group-hover/play:scale-110" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z"/>
             </svg>
           </button>
@@ -231,32 +231,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {/* Controls Overlay */}
       <div
-        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/50 to-transparent p-4 transition-opacity duration-300 ${
+        className={`absolute bottom-0 left-0 right-0 bg-[var(--color-surface)]/90 p-4 backdrop-blur-sm transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0'
         }`}
       >
         {/* Progress Bar */}
         <div
           ref={progressRef}
-          className="w-full h-1 bg-gray-600 rounded-full cursor-pointer mb-3 hover:h-2 transition-all"
+          className="mb-3 h-1 w-full cursor-pointer rounded-full bg-[var(--color-border-secondary)] transition-all hover:h-2"
           onClick={handleProgressClick}
         >
           <div
-            className="h-full bg-blue-500 rounded-full relative"
+            className="relative h-full rounded-full bg-[var(--color-primary)]"
             style={{ width: `${progressPercentage}%` }}
           >
-            <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100"></div>
           </div>
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center justify-between text-white">
+        <div className="flex items-center justify-between text-[var(--color-text)]">
           {/* Left Controls */}
           <div className="flex items-center space-x-3">
             {/* Play/Pause Button */}
             <button
               onClick={togglePlay}
-              className="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+              className="rounded-full p-2 transition-colors hover:bg-[var(--color-hover)]"
             >
               {isPlaying ? (
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -281,7 +281,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleMute}
-                className="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                className="rounded-full p-2 transition-colors hover:bg-[var(--color-hover)]"
               >
                 {isMuted || volume === 0 ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -295,11 +295,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </button>
               <div
                 ref={volumeRef}
-                className="w-16 h-1 bg-gray-600 rounded-full cursor-pointer hover:h-2 transition-all"
+                className="h-1 w-16 cursor-pointer rounded-full bg-[var(--color-border-secondary)] transition-all hover:h-2"
                 onClick={handleVolumeChange}
               >
                 <div
-                  className="h-full bg-white rounded-full"
+                  className="h-full rounded-full bg-[var(--color-text)]"
                   style={{ width: `${volume * 100}%` }}
                 ></div>
               </div>
@@ -308,7 +308,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             {/* Fullscreen Button */}
             <button
               onClick={toggleFullscreen}
-              className="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+              className="rounded-full p-2 transition-colors hover:bg-[var(--color-hover)]"
             >
               {isFullscreen ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,8 +326,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {/* Filename Overlay */}
       {filename && (
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black via-black/50 to-transparent p-3">
-          <p className="text-white text-sm font-medium truncate" title={filename}>
+        <div className="absolute left-0 right-0 top-0 bg-[var(--color-surface)]/85 p-3">
+          <p className="truncate text-sm font-medium text-[var(--color-text)]" title={filename}>
             {filename}
           </p>
         </div>

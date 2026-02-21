@@ -1,5 +1,5 @@
-﻿import { Link } from "react-router";
-import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router";
+import { useState, useEffect } from "react";
 import {
   BarChart3,
   Shield,
@@ -19,6 +19,9 @@ import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../.
 import { listChannels, createChannel } from "../../services/channel";
 import { logger } from "../../utils/logger";
 import type { Channel } from "../../models";
+import { useToast } from "../../components/Toast";
+import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/Button";
 
 // Storage File interface
 type StorageFile = {
@@ -34,6 +37,7 @@ type StorageFile = {
 };
 
 export default function ControlPanel() {
+  const showToast = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'storage' | 'security' | 'blocked-ips'>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,18 +53,6 @@ export default function ControlPanel() {
     isOpen: boolean;
     file: StorageFile | null;
   }>({ isOpen: false, file: null });
-
-  // Toast notifications - replace browser alerts
-  const [toast, setToast] = useState<{
-    isOpen: boolean;
-    message: string;
-    type: 'success' | 'error';
-  }>({ isOpen: false, message: '', type: 'success' });
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ isOpen: true, message, type });
-    setTimeout(() => setToast({ isOpen: false, message: '', type: 'success' }), 3000);
-  };
 
   // Fetch channels and users for control panel
   useEffect(() => {
@@ -120,15 +112,19 @@ export default function ControlPanel() {
   }, []);
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
-    console.log("ðŸ” handleCreateChannel called with:", channelData);
+    console.log("🔍 handleCreateChannel called with:", channelData);
 
     try {
       const authToken = getAuthTokenFromCookies() || '';
-      console.log("ðŸ” Auth token present:", !!authToken);
+      console.log("🔍 Auth token present:", !!authToken);
 
       if (!authToken) {
-        console.error("âŒ No auth token available for channel creation");
-        showToast('Authentication error: Please log in again.', 'error');
+        console.error("❌ No auth token available for channel creation");
+        showToast({
+          message: "Authentication error: Please log in again.",
+          tone: "error",
+          category: "system",
+        });
         return;
       }
 
@@ -144,8 +140,11 @@ export default function ControlPanel() {
           isPrivate: channelData.isPrivate
         });
 
-        // Show success toast
-        showToast(`Channel #${channelData.name} created successfully!`, 'success');
+        showToast({
+          message: `Channel #${channelData.name} created successfully.`,
+          tone: "success",
+          category: "destructive",
+        });
 
         // Refresh channels list
         const channelsResponse = await listChannels(authToken);
@@ -158,16 +157,32 @@ export default function ControlPanel() {
       } else {
         // Handle specific error codes
         if (response.error?.includes('409') || response.error?.includes('Channel name already exists')) {
-          showToast('Channel name already exists, please choose a different name.', 'error');
+          showToast({
+            message: "Channel name already exists, please choose a different name.",
+            tone: "error",
+            category: "validation",
+          });
         } else if (response.error?.includes('403') || response.error?.includes('Access denied')) {
-          showToast('Access denied. Only admins and moderators can create channels.', 'error');
+          showToast({
+            message: "Access denied. Only admins and moderators can create channels.",
+            tone: "error",
+            category: "system",
+          });
         } else {
-          showToast(`Failed to create channel: ${response.error || 'Unknown error'}`, 'error');
+          showToast({
+            message: `Failed to create channel: ${response.error || "Unknown error"}`,
+            tone: "error",
+            category: "system",
+          });
         }
         logger.ui.error("Failed to create channel from control panel", { error: response.error, channelData });
       }
     } catch (error) {
-      showToast('An unexpected error occurred while creating the channel.', 'error');
+      showToast({
+        message: "An unexpected error occurred while creating the channel.",
+        tone: "error",
+        category: "system",
+      });
       logger.ui.error("Unexpected error creating channel from control panel", { error, channelData });
     }
   };
@@ -535,7 +550,7 @@ export default function ControlPanel() {
               href={file.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg transition-colors flex items-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -550,51 +565,25 @@ export default function ControlPanel() {
     if (!isOpen || !file) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-[var(--color-surface)] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-[var(--color-border)]">
-          <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
-            <div>
-              <h3 className="text-lg font-semibold text-white truncate max-w-md">{file.filename}</h3>
-              <p className="text-[var(--color-text-secondary)] text-sm mt-1">
-                {formatFileSize(file.size)} â€¢ {file.type} â€¢
-                Uploaded {new Date(file.uploaded_at).toLocaleDateString()} by {file.uploader}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-[var(--color-text-secondary)] hover:text-white transition-colors p-2"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="p-6 overflow-y-auto max-h-full">
-            {renderFileContent()}
-          </div>
-
-          <div className="flex justify-end space-x-3 p-6 border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
-            >
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={file.filename}
+        description={`${formatFileSize(file.size)} � ${file.type} � Uploaded ${new Date(file.uploaded_at).toLocaleDateString()} by ${file.uploader}`}
+        widthClassName="max-w-4xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose}>
               Close
-            </button>
-            <a
-              href={file.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded transition-colors flex items-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span>Download</span>
+            </Button>
+            <a href={file.url} target="_blank" rel="noopener noreferrer">
+              <Button>Download</Button>
             </a>
           </div>
-        </div>
-      </div>
+        }
+      >
+        <div className="max-h-[65vh] overflow-y-auto">{renderFileContent()}</div>
+      </Modal>
     );
   };
 
@@ -612,7 +601,7 @@ export default function ControlPanel() {
               <span className="text-[var(--color-text)] font-semibold text-sm">Server Control Panel</span>
             </div>
             <div className="ml-auto">
-              <span className="bg-[var(--color-error)] text-white text-xs px-1.5 py-0.5 rounded-full font-bold">HOST</span>
+              <span className="bg-[var(--color-error)] text-[var(--color-on-error)] text-xs px-1.5 py-0.5 rounded-full font-bold">HOST</span>
             </div>
           </div>
 
@@ -787,4 +776,7 @@ export default function ControlPanel() {
     </>
   );
 }
+
+
+
 

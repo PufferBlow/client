@@ -47,15 +47,6 @@ export function UserPanel({
     showToast(newDeafened ? 'Speakers/headphones muted' : 'Speakers/headphones unmuted', 'success');
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'idle': return 'bg-yellow-500';
-      case 'dnd': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
   const getStatusText = (status: string) => {
     switch (status) {
       case 'online': return 'Online';
@@ -70,134 +61,104 @@ export function UserPanel({
     onClick?.(event);
   };
 
+  const statusDotClass =
+    status === 'online'
+      ? 'bg-[var(--color-success)]'
+      : status === 'idle'
+        ? 'bg-[var(--color-warning)]'
+        : status === 'dnd'
+          ? 'bg-[var(--color-error)]'
+          : 'bg-[var(--color-text-muted)]';
+
   return (
-    <div className={`relative rounded-2xl shadow-lg shadow-black/50 bg-gradient-to-r from-slate-900/90 to-slate-800/90 backdrop-blur-sm border border-white/20 hover:border-white/30 transition-all duration-300 hover:shadow-xl hover:shadow-black/60 ${className}`}>
-      {/* Voice Channel Indicator */}
+    <div ref={panelRef} className={`w-full ${className}`}>
       {voiceChannel && (
-        <div className="px-4 pt-4">
-          <div className="bg-gradient-to-r from-red-500/20 to-red-600/20 border border-red-500/30 rounded-lg p-3 relative">
-            {/* Voice Indicator */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                  <Volume2 className="w-4 h-4 text-red-400" />
-                </div>
-                <div>
-                  <div className="text-white text-sm font-medium">{voiceChannel.channelName}</div>
-                  <div className="text-red-400 text-xs">
-                    {voiceChannel.participants} participant{voiceChannel.participants !== 1 ? 's' : ''}
-                  </div>
+        <div className="px-2 pt-2">
+          <div className="flex items-center justify-between rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-2">
+            <div className="min-w-0 flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]">
+                <Volume2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-[var(--color-text)]">{voiceChannel.channelName}</div>
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  {voiceChannel.participants} participant{voiceChannel.participants !== 1 ? 's' : ''}
                 </div>
               </div>
-
-              {/* Disconnect Button */}
-              <button
-                onClick={voiceChannel.onDisconnect}
-                className="w-8 h-8 flex items-center justify-center rounded-md bg-red-600 hover:bg-red-700 transition-colors duration-200 group"
-                title="Leave Voice Channel"
-              >
-                <X className="w-5 h-5 text-white group-hover:text-red-100 transition-colors duration-200" />
-              </button>
             </div>
+            <button
+              onClick={voiceChannel.onDisconnect}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-error)]/40 bg-[var(--color-error)]/20 text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/30"
+              title="Leave Voice Channel"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
 
-      <div className="flex items-center px-4 py-3">
-        {/* Clickable User Info Area */}
-        <div
-          className="flex items-center space-x-4 flex-1 min-w-0 cursor-pointer hover:bg-[--color-hover] rounded-xl p-3 -m-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-          onClick={handleUserInfoClick}
-          title="Open User Profile"
-        >
-          <div className="relative flex-shrink-0 group">
-            {avatar ? (
-              <div className="relative">
+      <div className={`px-2 ${voiceChannel ? 'pb-2 pt-1' : 'py-2'}`}>
+        <div className="flex h-14 w-full items-center gap-2 rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2">
+          <button
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-[var(--color-hover)]"
+            onClick={handleUserInfoClick}
+            title="Open User Profile"
+          >
+            <div className="relative flex-shrink-0">
+              {avatar ? (
                 <img
                   src={avatar}
                   alt={username}
-                  className="w-10 h-10 rounded-full ring-2 ring-[--color-border] group-hover:ring-[--color-primary] transition-all duration-300 shadow-lg shadow-[--color-shadow]"
+                  className="h-8 w-8 rounded-full object-cover"
                 />
-                <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[--color-surface] ${getStatusColor(status)} ring-1 ring-[--color-surface] shadow-sm animate-pulse`}></div>
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-[--color-primary] to-[--color-accent] rounded-full flex items-center justify-center ring-2 ring-[--color-border] group-hover:ring-[--color-primary] transition-all duration-300 shadow-lg shadow-[--color-shadow]">
-                  <span className="text-white text-sm font-bold capitalize">{username.charAt(0)}</span>
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-bold text-[var(--color-on-primary)] capitalize">
+                  {username.charAt(0)}
                 </div>
-                <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[--color-surface] ${getStatusColor(status)} ring-1 ring-[--color-surface] shadow-sm animate-pulse`}></div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="text-white text-sm font-bold truncate group-hover:text-blue-300 transition-colors duration-200 drop-shadow-sm">{username}</div>
-            <div className="text-white/90 text-xs capitalize truncate group-hover:text-white transition-colors duration-200">{status.replace('_', ' ')}</div>
-          </div>
-        </div>
-
-        {/* Control Buttons */}
-        <div className="flex items-center space-x-4 flex-shrink-0 ml-6">
-          {/* Microphone Button */}
-          <button
-            onClick={toggleMute}
-            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 group ${
-              isMuted
-                ? 'hover:bg-red-500/20 ring-1 ring-red-500/30'
-                : 'hover:bg-[--color-hover] hover:shadow-lg hover:shadow-[--color-primary]/20'
-            }`}
-            title={`Microphone: ${isMuted ? 'Muted' : 'Unmuted'}`}
-          >
-            {isMuted ? (
-              <MicOff className="w-5 h-5 text-red-500 group-hover:text-red-400 transition-colors duration-200" />
-            ) : (
-              <Mic className="w-5 h-5 text-[--color-info] group-hover:text-[--color-info]-hover transition-colors duration-200" />
-            )}
-          </button>
-
-          {/* Deafen Button */}
-          <button
-            onClick={toggleDeafen}
-            className={`relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 group ${
-              isDeafened
-                ? 'hover:bg-red-500/20 ring-1 ring-red-500/30'
-                : 'hover:bg-[--color-hover] hover:shadow-lg hover:shadow-[--color-primary]/20'
-            }`}
-            title={`Speakers: ${isDeafened ? 'Muted' : 'Unmuted'}`}
-          >
-            {isDeafened && (
-              <div className="absolute -inset-1 rounded-full ring-2 ring-red-500/50 animate-pulse"></div>
-            )}
-            <div className="relative">
-              <Headphones className={`w-5 h-5 transition-colors duration-200 ${
-                isDeafened
-                  ? 'text-red-500 group-hover:text-red-400'
-                  : 'text-[--color-text-secondary] group-hover:text-[--color-text]'
-              }`} />
+              )}
+              <div className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-[var(--color-surface)] ${statusDotClass}`} />
             </div>
-            {isDeafened && (
-              <X className="absolute top-0 right-0 w-3 h-3 text-red-500 group-hover:text-red-400" />
-            )}
+
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-[var(--color-text)]">{username}</div>
+              <div className="truncate text-xs text-[var(--color-text-muted)]">{getStatusText(status)}</div>
+            </div>
           </button>
 
-          {/* Audio Settings Button */}
-          <button
-            onClick={() => onDeviceSelectorClick?.()}
-            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[--color-hover] hover:shadow-lg hover:shadow-[--color-primary]/20 transition-all duration-300 hover:scale-110 active:scale-95 group"
-            title="Select Audio Devices"
-          >
-            <Settings className="w-5 h-5 text-[--color-text-secondary] group-hover:text-[--color-text] transition-colors duration-200" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleMute}
+              className={`pb-icon-btn h-8 w-8 rounded-md ${isMuted ? 'border border-[var(--color-error)]/40 bg-[var(--color-error)]/20 text-[var(--color-error)]' : 'text-[var(--color-text-secondary)]'}`}
+              title={`Microphone: ${isMuted ? 'Muted' : 'Unmuted'}`}
+            >
+              {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
 
-            {/* Settings Button */}
+            <button
+              onClick={toggleDeafen}
+              className={`relative pb-icon-btn h-8 w-8 rounded-md ${isDeafened ? 'border border-[var(--color-error)]/40 bg-[var(--color-error)]/20 text-[var(--color-error)]' : 'text-[var(--color-text-secondary)]'}`}
+              title={`Speakers: ${isDeafened ? 'Muted' : 'Unmuted'}`}
+            >
+              <Headphones className="h-4 w-4" />
+              {isDeafened && <X className="absolute -right-0.5 -top-0.5 h-3 w-3" />}
+            </button>
+
+            <button
+              onClick={() => onDeviceSelectorClick?.()}
+              className="pb-icon-btn h-8 w-8 rounded-md text-[var(--color-text-secondary)]"
+              title="Select Audio Devices"
+            >
+              <Volume2 className="h-4 w-4" />
+            </button>
+
             <button
               onClick={() => onSettingsClick?.()}
-              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[--color-hover] hover:shadow-lg hover:shadow-[--color-primary]/20 transition-all duration-300 hover:scale-110 active:scale-95 group"
+              className="pb-icon-btn h-8 w-8 rounded-md text-[var(--color-text-secondary)]"
               title="Settings"
             >
-              <Settings className="w-5 h-5 text-[--color-text-secondary] group-hover:text-[--color-text] transition-colors duration-200" />
+              <Settings className="h-4 w-4" />
             </button>
+          </div>
         </div>
       </div>
     </div>

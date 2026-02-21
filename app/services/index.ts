@@ -125,6 +125,18 @@ export type {
   DecentralizedSessionIntrospectResponse
 } from './decentralizedAuth';
 
+// Session auth lifecycle services
+export {
+  startBackgroundAuthRefresh,
+  stopBackgroundAuthRefresh,
+  refreshAuthSession,
+  logoutCurrentSession
+} from './authSession';
+export type {
+  PersistedSessionTokens,
+  RefreshSessionResult
+} from './authSession';
+
 // ActivityPub and federated DM services
 export {
   getWebFinger,

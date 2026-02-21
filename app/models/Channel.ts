@@ -20,8 +20,8 @@ export interface Channel {
   /** List of user IDs allowed to access this private channel */
   allowed_users?: string[] | null;
 
-  /** LiveKit room name for voice channels */
-  livekit_room_name?: string | null;
+  /** Voice session id for active voice channels (SFU backend) */
+  voice_session_id?: string | null;
 
   /** Active voice participants */
   participant_ids?: string[];

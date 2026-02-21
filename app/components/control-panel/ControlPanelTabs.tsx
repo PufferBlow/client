@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { getAuthTokenFromCookies, listUsers, type ListUsersResponse, useUserProfile } from "../../services/user";
 import { listChannels, deleteChannel, createChannel } from "../../services/channel";
 import {
@@ -40,6 +40,9 @@ import {
 } from "chart.js";
 import { Line, Bar, Pie } from "react-chartjs-2";
 import { Hash, Mic } from "lucide-react";
+import type { ShowToast } from "../Toast";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { renderFileTypeIcon } from "../../utils/fileTypeMeta";
 
 ChartJS.register(
   CategoryScale,
@@ -55,7 +58,7 @@ ChartJS.register(
 export function TasksTab({
   showToast
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [tasks, setTasks] = useState([
     {
@@ -110,7 +113,6 @@ export function TasksTab({
         ? { ...task, isEnabled: !task.isEnabled, status: task.isEnabled ? 'disabled' : 'idle' }
         : task
     ));
-    showToast('Task status updated successfully!', 'success');
   };
 
   const handleRunTask = (taskId: string) => {
@@ -128,7 +130,6 @@ export function TasksTab({
           ? { ...t, status: 'completed', lastRun: new Date().toISOString() }
           : t
       ));
-      showToast(`Task "${task.name}" completed successfully!`, 'success');
     }, 3000);
   };
 
@@ -173,7 +174,7 @@ export function TasksTab({
       <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium text-white">Automated Tasks</h2>
-          <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
+          <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors">
             Add New Task
           </button>
         </div>
@@ -190,7 +191,7 @@ export function TasksTab({
                       <span>{task.status}</span>
                     </span>
                     {task.isManual ? (
-                      <span className="px-2 py-1 rounded text-xs bg-[var(--color-primary)] text-white">Manual</span>
+                      <span className="px-2 py-1 rounded text-xs bg-[var(--color-primary)] text-[var(--color-on-primary)]">Manual</span>
                     ) : (
                       <span className="px-2 py-1 rounded text-xs bg-green-600 text-white">Scheduled</span>
                     )}
@@ -283,7 +284,7 @@ export function StorageTab({
   fileViewerModal,
   setFileViewerModal
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
   fileViewerModal: { isOpen: boolean; file: StorageFile | null };
   setFileViewerModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; file: StorageFile | null }>>;
 }) {
@@ -305,7 +306,11 @@ export function StorageTab({
     const authToken = getAuthTokenFromCookies() || '';
 
     if (!authToken) {
-      showToast('Authentication token not found', 'error');
+      showToast({
+        message: 'Authentication token not found.',
+        tone: 'error',
+        category: 'system',
+      });
       setIsUploading(false);
       return;
     }
@@ -316,15 +321,24 @@ export function StorageTab({
         const maxSizeMB = 10; // 10MB limit
         const allowedTypes = [
           'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-          'video/mp4', 'video/webm', 'audio/mpeg', 'audio/mp3',
+          'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
+          'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
+          'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/opus',
           'application/pdf', 'text/plain', 'application/zip'
+        ];
+        const allowedExtensions = [
+          'png', 'jpg', 'jpeg', 'gif', 'webp',
+          'mp4', 'webm', 'mov', 'avi', 'mkv',
+          'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus',
+          'pdf', 'txt', 'zip'
         ];
 
         if (file.size > maxSizeMB * 1024 * 1024) {
           throw new Error(`File "${file.name}" is too large. Maximum size: ${maxSizeMB}MB`);
         }
 
-        if (!allowedTypes.includes(file.type)) {
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(extension)) {
           throw new Error(`File type "${file.type}" is not allowed`);
         }
 
@@ -354,9 +368,12 @@ export function StorageTab({
       const failed = results.filter(r => r.status === 'rejected').length;
 
       if (failed > 0) {
-        showToast(`Uploaded ${successful} files, ${failed} failed`, successful > 0 ? 'error' : 'error');
-      } else {
-        showToast(`Successfully uploaded ${successful} file${successful > 1 ? 's' : ''}!`, 'success');
+        showToast({
+          message: `Uploaded ${successful} file${successful === 1 ? '' : 's'}, ${failed} failed.`,
+          tone: successful > 0 ? 'warning' : 'error',
+          category: 'system',
+          dedupeKey: 'storage:upload:partial-failure',
+        });
       }
 
       // Refresh the file list after upload
@@ -366,7 +383,11 @@ export function StorageTab({
       setTimeout(() => setUploadProgress({}), 2000);
 
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Upload failed', 'error');
+      showToast({
+        message: error instanceof Error ? error.message : 'Upload failed.',
+        tone: 'error',
+        category: 'system',
+      });
     } finally {
       setIsUploading(false);
     }
@@ -428,13 +449,25 @@ export function StorageTab({
 
       if (response.success) {
         setFiles(prev => prev.filter(f => f !== file));
-        showToast(`File "${file.filename}" deleted successfully!`, 'success');
+        showToast({
+          message: `File "${file.filename}" deleted successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
         setDeleteConfirmFile(null);
       } else {
-        showToast(`Failed to delete file: ${response.error}`, 'error');
+        showToast({
+          message: `Failed to delete file: ${response.error || 'Unknown error'}`,
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (err) {
-      showToast('Network error occurred while deleting file', 'error');
+      showToast({
+        message: 'Network error occurred while deleting file.',
+        tone: 'error',
+        category: 'system',
+      });
     }
   };
 
@@ -451,13 +484,25 @@ export function StorageTab({
       });
 
       if (response.success) {
-        showToast(`Cleaned up ${(response.data as any)?.deleted_count || 0} orphaned files`, 'success');
+        showToast({
+          message: `Cleaned up ${(response.data as any)?.deleted_count || 0} orphaned files.`,
+          tone: 'success',
+          category: 'destructive',
+        });
         loadFiles(); // Refresh the list
       } else {
-        showToast(`Cleanup failed: ${response.error}`, 'error');
+        showToast({
+          message: `Cleanup failed: ${response.error || 'Unknown error'}`,
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (err) {
-      showToast('Network error occurred during cleanup', 'error');
+      showToast({
+        message: 'Network error occurred during cleanup.',
+        tone: 'error',
+        category: 'system',
+      });
     } finally {
       setIsCleaningOrphaned(false);
     }
@@ -486,13 +531,12 @@ export function StorageTab({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getFileTypeIcon = (type: string) => {
-    if (type.startsWith('image/')) return 'ðŸ–¼ï¸';
-    if (type.startsWith('video/')) return 'ðŸŽ¥';
-    if (type.startsWith('audio/')) return 'ðŸ”Š';
-    if (type === 'application/pdf') return 'ðŸ“„';
-    if (type.includes('zip') || type.includes('rar')) return 'ðŸ“¦';
-    return 'ðŸ“„';
+  const getFileTypeIcon = (filename: string, type: string) => {
+    return renderFileTypeIcon({
+      filename,
+      mimeType: type,
+      size: "md",
+    });
   };
 
   if (loading) {
@@ -521,11 +565,11 @@ export function StorageTab({
             <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h3 className="text-lg font-semibold mb-2">Error Loading CDN Files</h3>
+            <h3 className="text-lg font-semibold mb-2">Error Loading Storage Files</h3>
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadFiles}
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -537,11 +581,11 @@ export function StorageTab({
 
   return (
     <div className="space-y-6">
-      {/* CDN Statistics Header */}
+      {/* Storage Statistics Header */}
       <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg font-medium text-white">CDN File Manager</h2>
+            <h2 className="text-lg font-medium text-white">Storage File Manager</h2>
             <p className="text-[var(--color-text-secondary)] text-sm mt-1">Manage uploaded files and attachments</p>
           </div>
           <div className="flex items-center space-x-4">
@@ -626,7 +670,7 @@ export function StorageTab({
                 <svg className="w-12 h-12 text-[var(--color-text-secondary)] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
-                <h3 className="text-lg font-medium text-white mb-2">Upload Files to CDN</h3>
+                <h3 className="text-lg font-medium text-white mb-2">Upload Files to Storage</h3>
                 <p className="text-[var(--color-text-secondary)] mb-4">Drop files here or click to browse</p>
 
                 {/* Directory selection for upload */}
@@ -649,11 +693,11 @@ export function StorageTab({
                   onChange={handleFileInputChange}
                   accept="image/*,video/*,audio/*,application/pdf,text/plain,application/zip"
                   className="hidden"
-                  id="cdn-file-upload"
+                  id="storage-file-upload"
                 />
                 <label
-                  htmlFor="cdn-file-upload"
-                  className="cursor-pointer bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-3 rounded-lg transition-colors inline-flex items-center space-x-2 disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed"
+                  htmlFor="storage-file-upload"
+                  className="cursor-pointer bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg transition-colors inline-flex items-center space-x-2 disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed"
                   style={{ pointerEvents: isUploading ? 'none' : 'auto' }}
                 >
                   {isUploading ? (
@@ -699,12 +743,12 @@ export function StorageTab({
             <div className="mt-4 p-4 bg-[var(--color-surface-secondary)]/50 rounded-lg">
               <h4 className="text-sm font-medium text-white mb-2">Supported File Types:</h4>
               <div className="grid grid-cols-2 gap-2 text-xs text-[var(--color-text-secondary)]">
-                <div>â€¢ Images (PNG, JPG, GIF, WebP)</div>
-                <div>â€¢ Videos (MP4, WebM)</div>
-                <div>â€¢ Audio (MP3, MP4)</div>
-                <div>â€¢ Documents (PDF, TXT)</div>
-                <div>â€¢ Archives (ZIP)</div>
-                <div>â€¢ Max size: 10MB per file</div>
+                <div>• Images (PNG, JPG, GIF, WebP)</div>
+                <div>• Videos (MP4, WebM)</div>
+                <div>• Audio (MP3, MP4)</div>
+                <div>• Documents (PDF, TXT)</div>
+                <div>• Archives (ZIP)</div>
+                <div>• Max size: 10MB per file</div>
               </div>
             </div>
           </div>
@@ -714,9 +758,9 @@ export function StorageTab({
             <h3 className="text-sm font-medium text-white mb-3">Quick Upload:</h3>
 
             <button
-              onClick={() => document.getElementById('cdn-file-upload')?.click()}
+              onClick={() => document.getElementById('storage-file-upload')?.click()}
               disabled={isUploading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-start space-x-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-[var(--color-on-primary)] px-4 py-3 rounded-lg transition-colors flex items-center justify-start space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -795,7 +839,7 @@ export function StorageTab({
                 <div className="flex items-center space-x-4 flex-1">
                   {/* File Icon */}
                   <div className="w-10 h-10 flex items-center justify-center text-lg">
-                    {getFileTypeIcon(file.type || 'unknown')}
+                    {getFileTypeIcon(file.filename, file.type || 'unknown')}
                   </div>
 
                   {/* File Details */}
@@ -810,11 +854,11 @@ export function StorageTab({
                     </div>
                     <div className="flex items-center space-x-4 text-sm text-[var(--color-text-secondary)]">
                       <span>{formatFileSize(file.size)}</span>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <span>{file.type}</span>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <span>Uploaded {new Date(file.uploaded_at).toLocaleDateString()}</span>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <span>by {file.uploader}</span>
                     </div>
                   </div>
@@ -874,12 +918,12 @@ export function StorageTab({
               <div className="bg-[var(--color-background-secondary)] rounded-lg p-4 mb-6 border border-[var(--color-border)]">
                 <div className="flex items-center space-x-3 mb-3">
                   <div className="w-10 h-10 flex items-center justify-center text-lg bg-[var(--color-surface-tertiary)] rounded-lg">
-                    {getFileTypeIcon(deleteConfirmFile.type || 'unknown')}
+                    {getFileTypeIcon(deleteConfirmFile.filename, deleteConfirmFile.type || 'unknown')}
                   </div>
                   <div className="flex-1">
                     <h4 className="text-[var(--color-text)] font-medium truncate">{deleteConfirmFile.filename}</h4>
                     <div className="text-sm text-[var(--color-text-secondary)]">
-                      {formatFileSize(deleteConfirmFile.size)} â€¢ {deleteConfirmFile.type}
+                      {formatFileSize(deleteConfirmFile.size)} • {deleteConfirmFile.type}
                     </div>
                   </div>
                 </div>
@@ -897,7 +941,7 @@ export function StorageTab({
                   <div className="text-sm">
                     <h4 className="text-red-400 font-medium mb-1">Permanently Delete File</h4>
                     <p className="text-[var(--color-text)]">
-                      This action cannot be undone. The file will be permanently removed from the CDN and cannot be recovered.
+                      This action cannot be undone. The file will be permanently removed from storage and cannot be recovered.
                     </p>
                   </div>
                 </div>
@@ -1106,19 +1150,19 @@ export function RecentActivity() {
             const getActivityStyle = (type: string) => {
               switch (type) {
                 case 'user_joined':
-                  return { color: 'var(--color-success)', icon: 'ðŸ‘¤' };
+                  return { color: 'var(--color-success)', icon: '👤' };
                 case 'channel_created':
-                  return { color: 'var(--color-primary)', icon: 'ðŸ“' };
+                  return { color: 'var(--color-primary)', icon: '📝' };
                 case 'moderation':
-                  return { color: 'var(--color-warning)', icon: 'âš ï¸' };
+                  return { color: 'var(--color-warning)', icon: '⚠️' };
                 case 'message_sent':
-                  return { color: 'var(--color-text-secondary)', icon: 'ðŸ’¬' };
+                  return { color: 'var(--color-text-secondary)', icon: '💬' };
                 case 'setting_changed':
-                  return { color: 'var(--color-error)', icon: 'âš™ï¸' };
+                  return { color: 'var(--color-error)', icon: '⚙️' };
                 case 'file_upload':
-                  return { color: 'var(--color-success)', icon: 'ðŸ“' };
+                  return { color: 'var(--color-success)', icon: '📁' };
                 default:
-                  return { color: 'var(--color-text-secondary)', icon: 'ðŸ“Œ' };
+                  return { color: 'var(--color-text-secondary)', icon: '📌' };
               }
             };
 
@@ -1455,7 +1499,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
           key={period}
           onClick={() => setSelectedPeriod({ period })}
           className={`px-3 py-1 rounded text-sm transition-colors ${selectedPeriod.period === period
-              ? 'bg-[var(--color-primary)] text-white'
+              ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
               : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-surface-tertiary)]'
             }`}
         >
@@ -1530,7 +1574,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <p className="text-[var(--color-text-secondary)] mb-3">{serverInfo.server_description}</p>
                 <div className="flex items-center space-x-4 text-sm text-[var(--color-text-muted)]">
                   <span>Version {serverInfo.version}</span>
-                  <span>â€¢</span>
+                  <span>•</span>
                   <span>Created {serverInfo.creation_date ? new Date(serverInfo.creation_date).toLocaleDateString() : 'Unknown'}</span>
                 </div>
               </div>
@@ -1575,7 +1619,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-text-secondary)]">Online Now</div>
                     <div className="text-3xl font-bold text-white">
-                      {activityMetrics?.current_online?.toLocaleString() ?? rawStats.onlineUsers?.currently_online?.toLocaleString() ?? 'â€”'}
+                      {activityMetrics?.current_online?.toLocaleString() ?? rawStats.onlineUsers?.currently_online?.toLocaleString() ?? '—'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1588,7 +1632,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-success)]">New This Week</div>
                     <div className="text-3xl font-bold text-white">
-                      +{rawStats.userRegistrations?.new_this_week?.toLocaleString() ?? 'â€”'}
+                      +{rawStats.userRegistrations?.new_this_week?.toLocaleString() ?? '—'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1601,7 +1645,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-info)]">Messages Today</div>
                     <div className="text-3xl font-bold text-white">
-                      {serverOverview?.messages_this_period?.toLocaleString() ?? rawStats.messageActivity?.messages_today?.toLocaleString() ?? 'â€”'}
+                      {serverOverview?.messages_this_period?.toLocaleString() ?? rawStats.messageActivity?.messages_today?.toLocaleString() ?? '—'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1614,7 +1658,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-warning)]">Total Channels</div>
                     <div className="text-3xl font-bold text-white">
-                      {activityMetrics?.total_channels?.toLocaleString() ?? rawStats.channelCreation?.total_channels?.toLocaleString() ?? 'â€”'}
+                      {activityMetrics?.total_channels?.toLocaleString() ?? rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1637,13 +1681,13 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">
-                      {rawStats.userRegistrations?.total_users?.toLocaleString() ?? 'â€”'}
+                      {rawStats.userRegistrations?.total_users?.toLocaleString() ?? '—'}
                     </div>
                     <div className="text-xs text-[var(--color-text-secondary)]">Total Members</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">
-                      {rawStats.channelCreation?.total_channels?.toLocaleString() ?? 'â€”'}
+                      {rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
                     </div>
                     <div className="text-xs text-[var(--color-text-secondary)]">Active Channels</div>
                   </div>
@@ -2068,7 +2112,7 @@ export function MembersTab({
   showToast
 }: {
   users: ListUsersResponse['users'];
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   // Show loading state when no users are loaded yet
   if (!users || users.length === 0) {
@@ -2139,13 +2183,28 @@ export function MembersTab({
 
     switch (action) {
       case 'editRoles':
-        showToast(`Edit roles for ${selectedUserMenu.username}`, 'success');
+        showToast({
+          message: `Role editor for ${selectedUserMenu.username} is not implemented yet.`,
+          tone: 'warning',
+          category: 'system',
+          dedupeKey: 'members:roles:not-implemented',
+        });
         break;
       case 'mute':
-        showToast(`${selectedUserMenu.username} has been muted`, 'success');
+        showToast({
+          message: `Mute action for ${selectedUserMenu.username} is not implemented yet.`,
+          tone: 'warning',
+          category: 'system',
+          dedupeKey: 'members:mute:not-implemented',
+        });
         break;
       case 'ban':
-        showToast(`${selectedUserMenu.username} has been banned`, 'success');
+        showToast({
+          message: `Ban action for ${selectedUserMenu.username} is not implemented yet.`,
+          tone: 'warning',
+          category: 'system',
+          dedupeKey: 'members:ban:not-implemented',
+        });
         break;
     }
 
@@ -2179,7 +2238,7 @@ export function MembersTab({
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             />
-            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
+            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors">
               Invite Member
             </button>
           </div>
@@ -2292,7 +2351,7 @@ export function ChannelsTab({
   onOpenChannelModal: () => void;
   channels: Channel[];
   setChannels: (channels: Channel[]) => void;
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [deleteConfirmChannel, setDeleteConfirmChannel] = useState<Channel | null>(null);
 
@@ -2309,8 +2368,11 @@ export function ChannelsTab({
       if (response.success) {
         logger.ui.info("Channel deleted successfully", { channelId: channel.channel_id, channelName: channel.channel_name });
 
-        // Show success toast
-        showToast(`Channel #${channel.channel_name} deleted successfully!`, 'success');
+        showToast({
+          message: `Channel #${channel.channel_name} deleted successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
 
         // Refresh the channel list
         const listResponse = await listChannels(authToken);
@@ -2321,12 +2383,20 @@ export function ChannelsTab({
       } else {
         console.error("Failed to delete channel:", response.error);
         logger.ui.error("Failed to delete channel", { channelId: channel.channel_id, error: response.error });
-        showToast(`Failed to delete channel: ${response.error || 'Unknown error'}`, 'error');
+        showToast({
+          message: `Failed to delete channel: ${response.error || 'Unknown error'}`,
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (error) {
       console.error("Error deleting channel:", error);
       logger.ui.error("Error deleting channel", { channelId: channel.channel_id, error });
-      showToast('An unexpected error occurred while deleting the channel.', 'error');
+      showToast({
+        message: 'An unexpected error occurred while deleting the channel.',
+        tone: 'error',
+        category: 'system',
+      });
     }
   };
 
@@ -2337,7 +2407,7 @@ export function ChannelsTab({
           <h2 className="text-lg font-medium text-white">Manage Channels</h2>
           <button
             onClick={onOpenChannelModal}
-            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors"
           >
             Create Channel
           </button>
@@ -2398,39 +2468,22 @@ export function ChannelsTab({
           </div>
         )}
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmChannel && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-white">Delete Channel</h3>
-            </div>
-            <div className="mb-6">
-              <p className="text-[var(--color-text)] mb-2">
-                Are you sure you want to delete <span className="font-semibold text-white">#{deleteConfirmChannel.channel_name}</span>?
-              </p>
-              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
-                âš ï¸ This action cannot be undone. All messages in this channel will be permanently deleted.
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirmChannel(null)}
-                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteChannel(deleteConfirmChannel)}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
-              >
-                Delete Channel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmChannel)}
+        title="Delete Channel"
+        description={deleteConfirmChannel
+          ? `Delete #${deleteConfirmChannel.channel_name}? All messages in this channel will be permanently removed.`
+          : ""}
+        confirmLabel="Delete Channel"
+        cancelLabel="Cancel"
+        tone="danger"
+        onCancel={() => setDeleteConfirmChannel(null)}
+        onConfirm={() => {
+          if (deleteConfirmChannel) {
+            void handleDeleteChannel(deleteConfirmChannel);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -2439,7 +2492,7 @@ export function ChannelsTab({
 export function SettingsTab({
   showToast
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [serverInfo, setServerInfo] = useState<{
     server_name: string;
@@ -2648,17 +2701,30 @@ export function SettingsTab({
 
       if (response.success && response.data) {
         setOriginalServerInfo(JSON.parse(JSON.stringify(serverInfo))); // Update original after save
-        showToast(`Server settings updated successfully! Updated: ${response.data.updated_fields.join(', ')}`, 'success');
+        showToast({
+          message: `Server settings updated successfully: ${response.data.updated_fields.join(', ')}`,
+          tone: 'success',
+          category: 'system',
+          dedupeKey: 'settings-tab:server-settings-updated',
+        });
         logger.ui.info('Server settings updated successfully', { updated_fields: response.data.updated_fields, changes });
       } else {
         setError(response.error || 'Failed to update server settings');
         logger.ui.error('Failed to update server settings', response);
-        showToast('Failed to update server settings', 'error');
+        showToast({
+          message: 'Failed to update server settings.',
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (err) {
       setError('Failed to save server settings');
       logger.api.error('Failed to save server settings', err);
-      showToast('Failed to save server settings', 'error');
+      showToast({
+        message: 'Failed to save server settings.',
+        tone: 'error',
+        category: 'system',
+      });
     } finally {
       setSaving(false);
     }
@@ -2804,7 +2870,7 @@ export function SettingsTab({
                       className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs font-bold"
                       disabled={saving}
                     >
-                      Ã—
+                      ×
                     </button>
                   </div>
                   <div className="flex-1">
@@ -2900,7 +2966,7 @@ export function SettingsTab({
                         className="absolute top-2 right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs font-bold opacity-75 group-hover:opacity-100 transition-opacity"
                         disabled={saving}
                       >
-                        Ã—
+                        ×
                       </button>
                     </div>
                   )}
@@ -2939,7 +3005,7 @@ export function SettingsTab({
                   value={serverInfo.allowed_image_types || 'PNG, JPG, JPEG, GIF, WebP'}
                   onChange={(e) => setServerInfo({ ...serverInfo, allowed_image_types: e.target.value })}
                   placeholder="PNG, JPG, JPEG, GIF, WebP"
-                  className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+                  className="w-full bg-[var(--color-surface-secondary)] text-[var(--color-text)] px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                   disabled={saving}
                 />
               </div>
@@ -2994,7 +3060,7 @@ export function SettingsTab({
             <button
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg transition-colors flex items-center space-x-2"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-[var(--color-on-primary)] px-6 py-2 rounded-lg transition-colors flex items-center space-x-2"
             >
               {saving && (
                 <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3058,7 +3124,7 @@ export function SecurityTab() {
               <div className="text-white font-medium">Two-Factor Authentication</div>
               <div className="text-[var(--color-text-secondary)] text-sm">Require 2FA for all administrators</div>
             </div>
-            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
+            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors">
               Configure
             </button>
           </div>
@@ -3072,7 +3138,7 @@ export function SecurityTab() {
 export function BlockedIPsTab({
   showToast
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [blockedIPs, setBlockedIPs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3117,14 +3183,22 @@ export function BlockedIPsTab({
 
   const handleBlockIP = async () => {
     if (!newIP.trim() || !newReason.trim()) {
-      showToast('Please provide both IP address and reason', 'error');
+      showToast({
+        message: 'Please provide both IP address and reason.',
+        tone: 'error',
+        category: 'validation',
+      });
       return;
     }
 
     // Basic IP validation
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
     if (!ipRegex.test(newIP.trim())) {
-      showToast('Please provide a valid IP address', 'error');
+      showToast({
+        message: 'Please provide a valid IP address.',
+        tone: 'error',
+        category: 'validation',
+      });
       return;
     }
 
@@ -3133,21 +3207,37 @@ export function BlockedIPsTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
       if (!authToken) {
-        showToast('Authentication token not found', 'error');
+        showToast({
+          message: 'Authentication token not found.',
+          tone: 'error',
+          category: 'system',
+        });
         return;
       }
 
       const response = await blockIP(authToken, newIP.trim(), newReason.trim());
       if (response.success) {
-        showToast(`IP ${newIP} has been blocked successfully!`, 'success');
+        showToast({
+          message: `IP ${newIP} has been blocked successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
         setNewIP('');
         setNewReason('');
         await loadBlockedIPs(); // Refresh the list
       } else {
-        showToast(response.error || 'Failed to block IP', 'error');
+        showToast({
+          message: response.error || 'Failed to block IP.',
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (err) {
-      showToast('Failed to block IP', 'error');
+      showToast({
+        message: 'Failed to block IP.',
+        tone: 'error',
+        category: 'system',
+      });
     } finally {
       setIsAddingIP(false);
     }
@@ -3157,20 +3247,36 @@ export function BlockedIPsTab({
     try {
       const authToken = getAuthTokenFromCookies() || '';
       if (!authToken) {
-        showToast('Authentication token not found', 'error');
+        showToast({
+          message: 'Authentication token not found.',
+          tone: 'error',
+          category: 'system',
+        });
         return;
       }
 
       const response = await unblockIP(authToken, ip);
       if (response.success) {
-        showToast(`IP ${ip} has been unblocked successfully!`, 'success');
+        showToast({
+          message: `IP ${ip} has been unblocked successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
         await loadBlockedIPs(); // Refresh the list
         setDeleteConfirmIP(null);
       } else {
-        showToast(response.error || 'Failed to unblock IP', 'error');
+        showToast({
+          message: response.error || 'Failed to unblock IP.',
+          tone: 'error',
+          category: 'system',
+        });
       }
     } catch (err) {
-      showToast('Failed to unblock IP', 'error');
+      showToast({
+        message: 'Failed to unblock IP.',
+        tone: 'error',
+        category: 'system',
+      });
     }
   };
 
@@ -3210,7 +3316,7 @@ export function BlockedIPsTab({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadBlockedIPs}
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -3304,7 +3410,7 @@ export function BlockedIPsTab({
           </div>
           <button
             onClick={loadBlockedIPs}
-            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3354,7 +3460,7 @@ export function BlockedIPsTab({
                     </div>
                     <div className="flex items-center space-x-4 text-sm text-[var(--color-text-secondary)]">
                       <span>Reason: {blockedIP.reason}</span>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <span>Blocked: {new Date(blockedIP.blocked_at).toLocaleDateString()}</span>
                     </div>
                   </div>
@@ -3389,38 +3495,22 @@ export function BlockedIPsTab({
       </div>
 
       {/* Unblock Confirmation Modal */}
-      {deleteConfirmIP && (
-        <div className="fixed inset-0 backdrop-blur-lg bg-white bg-opacity-5 flex items-center justify-center z-50">
-          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-white">Unblock IP Address</h3>
-            </div>
-            <div className="mb-6">
-              <p className="text-[var(--color-text)] mb-2">
-                Are you sure you want to unblock <span className="font-semibold text-white">{deleteConfirmIP.ip}</span>?
-              </p>
-              <div className="text-sm text-green-400 bg-green-900/20 p-3 rounded">
-                <strong>Note:</strong> This IP address will be able to access the server again.
-                Make sure this IP is no longer a threat before unblocking.
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirmIP(null)}
-                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleUnblockIP(deleteConfirmIP.ip)}
-                className="px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
-              >
-                Unblock IP
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmIP)}
+        title="Unblock IP Address"
+        description={deleteConfirmIP
+          ? `Unblock ${deleteConfirmIP.ip}? This address will be able to access the server again.`
+          : ""}
+        confirmLabel="Unblock IP"
+        cancelLabel="Cancel"
+        tone="warning"
+        onCancel={() => setDeleteConfirmIP(null)}
+        onConfirm={() => {
+          if (deleteConfirmIP?.ip) {
+            void handleUnblockIP(deleteConfirmIP.ip);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -3491,7 +3581,7 @@ export function UserProfileModal({
 export function LogsTab({
   showToast
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [logs, setLogs] = useState<string[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<string[]>([]);
@@ -3655,13 +3745,11 @@ export function LogsTab({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Logs downloaded successfully!', 'success');
   };
 
   const clearLogs = async () => {
     setLogs([]);
     setFilteredLogs([]);
-    showToast('Log viewer cleared. Server log files remain unchanged.', 'success');
   };
 
   return (
@@ -3773,7 +3861,7 @@ export function LogsTab({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadLogs}
-              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -3839,7 +3927,7 @@ export function LogsTab({
 export function ModerationTab({
   showToast
 }: {
-  showToast: (message: string, type: 'success' | 'error') => void;
+  showToast: ShowToast;
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'reports' | 'users' | 'messages'>('reports');
   const [searchTerm, setSearchTerm] = useState('');
@@ -3942,15 +4030,23 @@ export function ModerationTab({
 
   const handleResolveReport = (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
     clearMessageSelection();
-    showToast(`Report ${action === 'delete' ? 'deleted message' :
-      action === 'warn' ? 'sent warning' :
-        action === 'ban' ? 'banned user' : 'dismissed'} successfully!`, 'success');
+    showToast({
+      message: `Report ${action === 'delete' ? 'deleted message' :
+        action === 'warn' ? 'sent warning' :
+          action === 'ban' ? 'banned user' : 'dismissed'} successfully.`,
+      tone: 'success',
+      category: 'destructive',
+    });
   };
 
   const handleUserAction = (userId: string, action: 'warn' | 'ban' | 'timeout' | 'clear') => {
-    showToast(`User ${action === 'warn' ? 'warned' :
-      action === 'ban' ? 'banned' :
-        action === 'timeout' ? 'timed out' : 'cleared reports'} successfully!`, 'success');
+    showToast({
+      message: `User ${action === 'warn' ? 'warned' :
+        action === 'ban' ? 'banned' :
+          action === 'timeout' ? 'timed out' : 'cleared reports'} successfully.`,
+      tone: 'success',
+      category: 'destructive',
+    });
   };
 
   const handleOpenUserProfile = (report: any, userType: 'sender' | 'reporter', event: React.MouseEvent) => {
@@ -3998,7 +4094,7 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('reports')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'reports'
-                ? 'bg-[var(--color-primary)] text-white'
+                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
@@ -4007,7 +4103,7 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('users')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'users'
-                ? 'bg-[var(--color-primary)] text-white'
+                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
@@ -4016,7 +4112,7 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('messages')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'messages'
-                ? 'bg-[var(--color-primary)] text-white'
+                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
@@ -4059,7 +4155,7 @@ export function ModerationTab({
                             >
                               {report.senderUser}
                             </span>
-                            <span className="text-[var(--color-text-secondary)]">â€¢</span>
+                            <span className="text-[var(--color-text-secondary)]">•</span>
                             <span className="text-[var(--color-text-secondary)] text-sm">Reported by</span>
                             <span
                               onClick={(e) => handleOpenUserProfile(report, 'reporter', e)}
@@ -4084,7 +4180,7 @@ export function ModerationTab({
                           <p className="text-white text-sm">{report.messageContent}</p>
                         </div>
                         <div className="text-xs text-[var(--color-text-secondary)]">
-                          {report.category} â€¢ {new Date(report.reportedAt).toLocaleString()}
+                          {report.category} • {new Date(report.reportedAt).toLocaleString()}
                         </div>
                         {report.description && (
                           <div className="text-xs text-[var(--color-text-muted)] mt-1">
@@ -4270,5 +4366,9 @@ export function ModerationTab({
     </div>
   );
 }
+
+
+
+
 
 
