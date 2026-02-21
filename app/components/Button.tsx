@@ -1,155 +1,82 @@
-import React from 'react';
+import React from "react";
 
-/**
- * Button variants for different use cases and visual styles
- */
 export type ButtonVariant =
-  | 'primary'
-  | 'secondary'
-  | 'success'
-  | 'danger'
-  | 'warning'
-  | 'info'
-  | 'light'
-  | 'dark';
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "success"
+  | "danger"
+  | "warning";
 
-/**
- * Button sizes for different contexts
- */
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonSize = "sm" | "md" | "lg";
 
-/**
- * Props for the Button component
- */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  /**
-   * The visual style variant of the button
-   * @default 'primary'
-   */
   variant?: ButtonVariant;
-
-  /**
-   * The size of the button
-   * @default 'md'
-   */
   size?: ButtonSize;
-
-  /**
-   * Whether the button should take full width of its container
-   * @default false
-   */
   fullWidth?: boolean;
-
-  /**
-   * Whether the button is in a loading state
-   * @default false
-   */
   loading?: boolean;
-
-  /**
-   * Icon to display before the button text
-   */
   startIcon?: React.ReactNode;
-
-  /**
-   * Icon to display after the button text
-   */
   endIcon?: React.ReactNode;
-
-  /**
-   * The content of the button
-   */
   children: React.ReactNode;
 }
 
+const variantClasses: Record<ButtonVariant, string> = {
+  primary:
+    "border pb-border bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]",
+  secondary:
+    "border pb-border bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
+  ghost:
+    "border border-transparent bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+  danger:
+    "border border-[var(--color-error)]/50 bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[var(--color-error)]/90",
+  warning:
+    "border border-[var(--color-warning)]/50 bg-[var(--color-warning)] text-[var(--color-on-warning)] hover:bg-[var(--color-warning)]/90",
+  success:
+    "border border-[var(--color-success)]/50 bg-[var(--color-success)] text-[var(--color-on-success)] hover:bg-[var(--color-success)]/90",
+};
+
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "h-8 px-3 text-sm",
+  md: "h-10 px-4 text-sm",
+  lg: "h-11 px-5 text-base",
+};
+
 /**
- * A reusable Button component with multiple variants, sizes, and states.
- *
- * This component provides consistent styling and behavior across the application
- * and supports accessibility features like keyboard navigation and screen reader support.
- *
- * @example
- * ```tsx
- * // Primary button
- * <Button variant="primary" onClick={handleClick}>
- *   Save Changes
- * </Button>
- *
- * // Button with loading state
- * <Button variant="primary" loading={isLoading}>
- *   Processing...
- * </Button>
- *
- * // Button with icons
- * <Button variant="success" startIcon={<CheckIcon />}>
- *   Confirm
- * </Button>
- * ```
+ * Shared tokenized button component for monochrome + semantic actions.
  */
 export const Button: React.FC<ButtonProps> = ({
-  variant = 'primary',
-  size = 'md',
+  variant = "primary",
+  size = "md",
   fullWidth = false,
   loading = false,
   startIcon,
   endIcon,
   children,
-  className = '',
+  className = "",
   disabled,
   ...props
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
-
-  const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-lg hover:shadow-xl',
-    secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500 shadow-lg hover:shadow-xl',
-    success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 shadow-lg hover:shadow-xl',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-lg hover:shadow-xl',
-    warning: 'bg-yellow-600 hover:bg-yellow-700 text-white focus:ring-yellow-500 shadow-lg hover:shadow-xl',
-    info: 'bg-cyan-600 hover:bg-cyan-700 text-white focus:ring-cyan-500 shadow-lg hover:shadow-xl',
-    light: 'bg-gray-200 hover:bg-gray-300 text-gray-900 focus:ring-gray-500 shadow-lg hover:shadow-xl',
-    dark: 'bg-gray-800 hover:bg-gray-900 text-white focus:ring-gray-500 shadow-lg hover:shadow-xl',
-  };
-
-  const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  };
-
-  const widthClass = fullWidth ? 'w-full' : '';
-
   const classes = [
-    baseClasses,
+    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] disabled:opacity-50 disabled:cursor-not-allowed",
     variantClasses[variant],
     sizeClasses[size],
-    widthClass,
+    fullWidth ? "w-full" : "",
     className,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <button
-      className={classes}
-      disabled={disabled || loading}
-      aria-disabled={disabled || loading}
-      {...props}
-    >
+    <button className={classes} disabled={disabled || loading} aria-disabled={disabled || loading} {...props}>
       {loading && (
         <svg
-          className="animate-spin -ml-1 mr-2 h-4 w-4"
+          className="h-4 w-4 animate-spin"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path
             className="opacity-75"
             fill="currentColor"
@@ -158,21 +85,12 @@ export const Button: React.FC<ButtonProps> = ({
         </svg>
       )}
 
-      {!loading && startIcon && (
-        <span className="mr-2" aria-hidden="true">
-          {startIcon}
-        </span>
-      )}
-
+      {!loading && startIcon ? <span aria-hidden="true">{startIcon}</span> : null}
       <span>{children}</span>
-
-      {!loading && endIcon && (
-        <span className="ml-2" aria-hidden="true">
-          {endIcon}
-        </span>
-      )}
+      {!loading && endIcon ? <span aria-hidden="true">{endIcon}</span> : null}
     </button>
   );
 };
 
 export default Button;
+

@@ -3,301 +3,125 @@
 @theme {
   --font-sans: "Inter", "Poppins", "Nunito", ui-sans-serif, system-ui, sans-serif,
     "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Monaco, Inconsolata, "Roboto Mono", "Source Code Pro", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Monaco,
+    Inconsolata, "Roboto Mono", "Source Code Pro", monospace;
 }
 
 :root {
-  /* Monochrome defaults (dark mode fallback) */
   --color-background: #000000;
-  --color-background-secondary: #0a0a0a;
-  --color-background-tertiary: #121212;
+  --color-background-secondary: #080808;
+  --color-background-tertiary: #111111;
   --color-surface: #0a0a0a;
   --color-surface-secondary: #121212;
-  --color-surface-tertiary: #1a1a1a;
+  --color-surface-tertiary: #171717;
   --color-text: #ffffff;
   --color-text-secondary: #f0f0f0;
-  --color-text-tertiary: #d9d9d9;
+  --color-text-tertiary: #dddddd;
   --color-text-muted: #b3b3b3;
-  --color-border: #2a2a2a;
-  --color-border-secondary: #1f1f1f;
+  --color-border: rgba(255, 255, 255, 0.72);
+  --color-border-secondary: rgba(255, 255, 255, 0.36);
   --color-primary: #ffffff;
-  --color-primary-hover: #e6e6e6;
-  --color-secondary: #ffffff;
-  --color-secondary-hover: #e6e6e6;
+  --color-primary-hover: #e8e8e8;
+  --color-secondary: #f5f5f5;
+  --color-secondary-hover: #e5e5e5;
   --color-accent: #ffffff;
-  --color-accent-hover: #e6e6e6;
-  --color-success: #ffffff;
-  --color-warning: #ffffff;
-  --color-error: #ffffff;
-  --color-info: #ffffff;
-  --color-hover: #111111;
-  --color-active: #1a1a1a;
+  --color-accent-hover: #e8e8e8;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
+  --color-hover: #161616;
+  --color-active: #1c1c1c;
   --color-focus: #ffffff;
-  --color-shadow: rgba(0, 0, 0, 0.6);
-  --color-shadow-lg: rgba(0, 0, 0, 0.8);
-
-  /* Readable text colors on top of semantic color surfaces */
+  --color-shadow: rgba(0, 0, 0, 0.55);
+  --color-shadow-lg: rgba(0, 0, 0, 0.72);
   --color-on-primary: #000000;
   --color-on-secondary: #000000;
   --color-on-accent: #000000;
-  --color-on-success: #000000;
-  --color-on-warning: #000000;
-  --color-on-error: #000000;
-  --color-on-info: #000000;
-
-  /* Glassmorphism effects */
-  --glass-bg: rgba(0, 0, 0, 0.78);
-  --glass-bg-light: rgba(20, 20, 20, 0.72);
-  --glass-bg-dark: rgba(0, 0, 0, 0.9);
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --glass-border-hover: rgba(255, 255, 255, 0.35);
-  --glass-backdrop-blur: blur(20px);
-  --glass-backdrop-blur-sm: blur(12px);
-
-  /* Animations */
-  --animation-duration-fast: 150ms;
-  --animation-duration-normal: 250ms;
-  --animation-duration-slow: 350ms;
-  --animation-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
-  --animation-easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  --animation-easing-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --color-on-success: #ffffff;
+  --color-on-warning: #ffffff;
+  --color-on-error: #ffffff;
+  --color-on-info: #ffffff;
 }
 
 html,
 body {
   background-color: var(--color-background);
   color: var(--color-text);
-
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
-  }
 }
 
-/* Emoji Picker React Customization - Match Pufferblow Theme */
-.emoji-picker-react {
-  background-color: rgb(55, 65, 81) !important; /* gray-700 */
-  border: 1px solid rgb(75, 85, 99) !important; /* gray-600 */
-  border-radius: 0.5rem !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
+* {
+  scrollbar-color: var(--color-border-secondary) transparent;
 }
 
-.emoji-picker-react .emoji-group:before {
-  background-color: rgb(75, 85, 99) !important; /* gray-600 */
-  color: rgb(156, 163, 175) !important; /* gray-400 */
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  padding: 0.5rem !important;
-  margin: 0 !important;
+/* Core monochrome utility surfaces */
+.pb-surface-0 {
+  background-color: var(--color-background);
 }
 
-.emoji-picker-react .emoji-search {
-  background-color: rgb(31, 41, 55) !important; /* gray-800 */
-  border: 1px solid rgb(55, 65, 81) !important; /* gray-700 */
-  border-radius: 0.375rem !important;
-  color: rgb(229, 231, 235) !important; /* gray-200 */
-  padding: 0.5rem 0.75rem !important;
-  margin: 0.5rem !important;
+.pb-surface-1 {
+  background-color: var(--color-surface);
 }
 
-.emoji-picker-react .emoji-search:focus {
-  outline: none !important;
-  border-color: rgb(59, 130, 246) !important; /* blue-500 */
-  box-shadow: 0 0 0 1px rgb(59, 130, 246) !important;
+.pb-surface-2 {
+  background-color: var(--color-surface-secondary);
 }
 
-.emoji-picker-react .emoji-search::placeholder {
-  color: rgb(107, 114, 128) !important; /* gray-500 */
+.pb-surface-3 {
+  background-color: var(--color-surface-tertiary);
 }
 
-.emoji-picker-react .emoji-scroll-wrapper {
-  background-color: rgb(55, 65, 81) !important; /* gray-700 */
+.pb-border {
+  border-color: var(--color-border);
 }
 
-.emoji-picker-react .emoji-category {
-  background-color: rgb(55, 65, 81) !important; /* gray-700 */
+.pb-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
 }
 
-.emoji-picker-react .emoji-group .emoji-img {
-  filter: brightness(1.1) !important;
+.pb-modal {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 20px 50px var(--color-shadow-lg);
 }
 
-.emoji-picker-react .emoji-group .emoji-img:hover {
-  background-color: rgba(59, 130, 246, 0.2) !important; /* blue-500 with opacity */
-  border-radius: 0.25rem !important;
+.pb-menu {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 14px 36px var(--color-shadow-lg);
 }
 
-.emoji-picker-react .emoji-group .emoji-img:active {
-  background-color: rgba(59, 130, 246, 0.4) !important; /* blue-500 with higher opacity */
+.pb-focus-ring:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
-.emoji-picker-react .active-category-indicator-wrapper {
-  background-color: rgb(55, 65, 81) !important; /* gray-700 */
+.pb-status-danger {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
+  color: var(--color-error);
 }
 
-.emoji-picker-react .active-category-indicator-wrapper .active-category-indicator {
-  background-color: rgb(59, 130, 246) !important; /* blue-500 */
+.pb-status-warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+  color: var(--color-warning);
 }
 
-.emoji-picker-react .emoji-categories {
-  background-color: rgb(55, 65, 81) !important; /* gray-700 */
-  border-bottom: 1px solid rgb(75, 85, 99) !important; /* gray-600 */
+.pb-status-success {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+  color: var(--color-success);
 }
 
-.emoji-picker-react .emoji-categories button {
-  background-color: transparent !important;
-  border-radius: 0.375rem !important;
-  padding: 0.5rem !important;
-  margin: 0.125rem !important;
-  transition: all 0.2s ease !important;
+.pb-status-info {
+  background: color-mix(in srgb, var(--color-info) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-info);
 }
 
-.emoji-picker-react .emoji-categories button:hover {
-  background-color: rgba(59, 130, 246, 0.1) !important; /* blue-500 with low opacity */
-}
-
-.emoji-picker-react .emoji-categories button.active {
-  background-color: rgba(59, 130, 246, 0.2) !important; /* blue-500 with medium opacity */
-}
-
-.emoji-picker-react .emoji-scroll-wrapper::-webkit-scrollbar {
-  width: 8px !important;
-}
-
-.emoji-picker-react .emoji-scroll-wrapper::-webkit-scrollbar-track {
-  background: rgb(31, 41, 55) !important; /* gray-800 */
-  border-radius: 4px !important;
-}
-
-.emoji-picker-react .emoji-scroll-wrapper::-webkit-scrollbar-thumb {
-  background: rgb(75, 85, 99) !important; /* gray-600 */
-  border-radius: 4px !important;
-}
-
-.emoji-picker-react .emoji-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-  background: rgb(107, 114, 128) !important; /* gray-500 */
-}
-
-/* Glassmorphism utility classes */
-.glassmorphism {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-backdrop-blur);
-  -webkit-backdrop-filter: var(--glass-backdrop-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  transition: all var(--animation-duration-normal) var(--animation-easing);
-}
-
-.glassmorphism:hover {
-  background: var(--glass-bg-light);
-  border-color: var(--glass-border-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.45);
-}
-
-.glassmorphism-light {
-  background: var(--glass-bg-light);
-  backdrop-filter: var(--glass-backdrop-blur-sm);
-  -webkit-backdrop-filter: var(--glass-backdrop-blur-sm);
-  border: 1px solid var(--glass-border);
-  transition: all var(--animation-duration-normal) var(--animation-easing);
-}
-
-.glassmorphism-dark {
-  background: var(--glass-bg-dark);
-  backdrop-filter: var(--glass-backdrop-blur);
-  -webkit-backdrop-filter: var(--glass-backdrop-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  transition: all var(--animation-duration-normal) var(--animation-easing);
-}
-
-/* Animation utilities */
-.animate-fade-in {
-  animation: fadeIn var(--animation-duration-normal) var(--animation-easing) forwards;
-}
-
-.animate-slide-in-right {
-  animation: slideInRight var(--animation-duration-normal) var(--animation-easing) forwards;
-}
-
-.animate-slide-in-left {
-  animation: slideInLeft var(--animation-duration-normal) var(--animation-easing) forwards;
-}
-
-.animate-scale-in {
-  animation: scaleIn var(--animation-duration-normal) var(--animation-easing-bounce) forwards;
-}
-
-.animate-bounce-in {
-  animation: bounceIn var(--animation-duration-slow) var(--animation-easing-bounce) forwards;
-}
-
-.animate-elastic {
-  animation: elastic var(--animation-duration-slow) var(--animation-easing-elastic) forwards;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite alternate;
-}
-
-/* Hover animations */
-.hover-lift {
-  transition: all var(--animation-duration-normal) var(--animation-easing);
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.3);
-}
-
-.hover-glow:hover {
-  box-shadow: 0 0 20px rgba(94, 129, 172, 0.4), 0 0 40px rgba(94, 129, 172, 0.2);
-}
-
-.hover-ripple {
-  position: relative;
-  overflow: hidden;
-}
-
-.hover-ripple::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  transition: width 0.6s, height 0.6s;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-/* Ensure text remains readable on semantic color backgrounds in all themes */
-[class*="bg-[var(--color-primary)]"][class*="text-white"],
-[class*="from-[var(--color-primary)]"][class*="text-white"],
-[class*="to-[var(--color-primary)]"][class*="text-white"],
-[class*="from-[var(--color-accent)]"][class*="text-white"],
-[class*="to-[var(--color-accent)]"][class*="text-white"],
-[class*="via-[var(--color-accent)]"][class*="text-white"],
-[class*="from-[var(--color-secondary)]"][class*="text-white"],
-[class*="to-[var(--color-secondary)]"][class*="text-white"] {
-  color: var(--color-on-primary) !important;
-}
-
-[class*="bg-[var(--color-primary)]"] .text-white,
-[class*="from-[var(--color-primary)]"] .text-white,
-[class*="to-[var(--color-accent)]"] .text-white {
-  color: var(--color-on-primary) !important;
-}
-
-/* Consistent icon/button primitives for dashboard controls */
+/* Icon/button primitives */
 .pb-icon-btn {
   width: 2rem;
   height: 2rem;
@@ -305,15 +129,15 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 0.5rem;
+  border: 1px solid transparent;
   color: var(--color-text-secondary);
-  transition: background-color var(--animation-duration-fast) var(--animation-easing),
-    color var(--animation-duration-fast) var(--animation-easing),
-    transform var(--animation-duration-fast) var(--animation-easing);
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 .pb-icon-btn:hover {
-  background-color: var(--color-surface-tertiary);
+  background-color: var(--color-hover);
   color: var(--color-text);
+  border-color: var(--color-border-secondary);
 }
 
 .pb-icon-btn:disabled {
@@ -331,178 +155,19 @@ body {
   height: 1.25rem;
 }
 
-.pb-btn {
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.9rem;
-  font-weight: 600;
-  transition: background-color var(--animation-duration-fast) var(--animation-easing),
-    color var(--animation-duration-fast) var(--animation-easing);
+/* Minimal motion helpers */
+.animate-fade-in {
+  animation: fadeIn 180ms ease forwards;
 }
 
-/* Scoped remap for legacy hardcoded utility colors in large pages */
-.pb-theme-scope [class*="bg-gray-900"],
-.pb-theme-scope [class*="bg-gray-800"],
-.pb-theme-scope [class*="bg-gray-750"] {
-  background-color: var(--color-surface-tertiary) !important;
+.animate-slide-in-right {
+  animation: slideInRight 200ms ease forwards;
 }
 
-.pb-theme-scope [class*="bg-gray-700"],
-.pb-theme-scope [class*="bg-gray-600"],
-.pb-theme-scope [class*="bg-gray-500"] {
-  background-color: var(--color-surface-secondary) !important;
+.animate-scale-in {
+  animation: scaleIn 180ms ease forwards;
 }
 
-.pb-theme-scope [class*="bg-white/"],
-.pb-theme-scope [class*="hover:bg-white/"]:hover {
-  background-color: var(--color-surface-secondary) !important;
-}
-
-.pb-theme-scope [class*="border-gray-"] {
-  border-color: var(--color-border) !important;
-}
-
-.pb-theme-scope [class*="border-white/"] {
-  border-color: var(--color-border-secondary) !important;
-}
-
-.pb-theme-scope [class*="text-white"] {
-  color: var(--color-text) !important;
-}
-
-.pb-theme-scope [class*="text-black"] {
-  color: var(--color-text) !important;
-}
-
-.pb-theme-scope [class*="text-gray-100"],
-.pb-theme-scope [class*="text-gray-200"],
-.pb-theme-scope [class*="text-gray-300"] {
-  color: var(--color-text) !important;
-}
-
-.pb-theme-scope [class*="text-gray-400"] {
-  color: var(--color-text-secondary) !important;
-}
-
-.pb-theme-scope [class*="text-gray-500"],
-.pb-theme-scope [class*="text-gray-600"],
-.pb-theme-scope [class*="text-gray-700"] {
-  color: var(--color-text-muted) !important;
-}
-
-.pb-theme-scope [class*="bg-blue-"] {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-}
-
-.pb-theme-scope [class*="hover:bg-blue-"]:hover {
-  background-color: var(--color-primary-hover) !important;
-}
-
-.pb-theme-scope [class*="bg-green-"] {
-  background-color: var(--color-success) !important;
-  border-color: var(--color-success) !important;
-}
-
-.pb-theme-scope [class*="hover:bg-green-"]:hover {
-  background-color: var(--color-success) !important;
-  filter: brightness(0.92);
-}
-
-.pb-theme-scope [class*="bg-red-"] {
-  background-color: var(--color-error) !important;
-  border-color: var(--color-error) !important;
-}
-
-.pb-theme-scope [class*="hover:bg-red-"]:hover {
-  background-color: var(--color-error) !important;
-  filter: brightness(0.92);
-}
-
-.pb-theme-scope [class*="bg-yellow-"] {
-  background-color: var(--color-warning) !important;
-  border-color: var(--color-warning) !important;
-}
-
-.pb-theme-scope [class*="hover:bg-yellow-"]:hover {
-  background-color: var(--color-warning) !important;
-  filter: brightness(0.92);
-}
-
-.pb-theme-scope [class*="bg-purple-"] {
-  background-color: var(--color-accent) !important;
-  border-color: var(--color-accent) !important;
-}
-
-.pb-theme-scope [class*="hover:bg-purple-"]:hover {
-  background-color: var(--color-accent-hover) !important;
-}
-
-.pb-theme-scope [class*="text-blue-"] {
-  color: var(--color-primary) !important;
-}
-
-.pb-theme-scope [class*="text-green-"] {
-  color: var(--color-success) !important;
-}
-
-.pb-theme-scope [class*="text-red-"] {
-  color: var(--color-error) !important;
-}
-
-.pb-theme-scope [class*="text-yellow-"] {
-  color: var(--color-warning) !important;
-}
-
-.pb-theme-scope [class*="text-purple-"] {
-  color: var(--color-accent) !important;
-}
-
-.pb-theme-scope [class*="bg-blue-"][class*="text-white"] {
-  color: var(--color-on-primary) !important;
-}
-
-.pb-theme-scope [class*="bg-green-"][class*="text-white"] {
-  color: var(--color-on-success) !important;
-}
-
-.pb-theme-scope [class*="bg-red-"][class*="text-white"] {
-  color: var(--color-on-error) !important;
-}
-
-.pb-theme-scope [class*="bg-yellow-"][class*="text-white"] {
-  color: var(--color-on-warning) !important;
-}
-
-.pb-theme-scope [class*="bg-purple-"][class*="text-white"] {
-  color: var(--color-on-accent) !important;
-}
-
-.pb-theme-scope [class*="bg-[#313338]"],
-.pb-theme-scope [class*="bg-[#2b2d31]"],
-.pb-theme-scope [class*="bg-[#1e1f22]"],
-.pb-theme-scope [class*="bg-[#35373c]"] {
-  background-color: var(--color-surface) !important;
-}
-
-.pb-theme-scope [class*="bg-[#23a559]"] {
-  background-color: var(--color-success) !important;
-}
-
-.pb-theme-scope [class*="text-[#b5bac1]"] {
-  color: var(--color-text-secondary) !important;
-}
-
-.pb-theme-scope [class*="border-[#1e1f22]"],
-.pb-theme-scope [class*="border-[#35373c]"] {
-  border-color: var(--color-border) !important;
-}
-
-.hover-ripple:hover::before {
-  width: 300px;
-  height: 300px;
-}
-
-/* Keyframe animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -514,18 +179,7 @@ body {
 
 @keyframes slideInRight {
   from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    transform: translateX(-100%);
+    transform: translateX(10px);
     opacity: 0;
   }
   to {
@@ -536,81 +190,16 @@ body {
 
 @keyframes scaleIn {
   from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes bounceIn {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.8;
-  }
-  80% {
-    transform: scale(0.95);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes elastic {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1.04);
-    opacity: 0.7;
-  }
-  70% {
     transform: scale(0.98);
-    opacity: 0.9;
+    opacity: 0;
   }
-  100% {
+  to {
     transform: scale(1);
     opacity: 1;
   }
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes glow {
-  from {
-    box-shadow: 0 0 10px rgba(94, 129, 172, 0.3);
-  }
-  to {
-    box-shadow: 0 0 20px rgba(94, 129, 172, 0.6);
-  }
-}
-
-/* Smooth transitions for all interactive elements */
-button,
-input,
-textarea,
-select,
-[role="button"] {
-  transition: all var(--animation-duration-fast) var(--animation-easing);
-}
-
-/* Custom scrollbar styling */
+/* Global scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -618,127 +207,59 @@ select,
 
 ::-webkit-scrollbar-track {
   background: var(--color-background-secondary);
-  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--color-border-secondary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-secondary);
+  background: var(--color-border);
 }
 
-/* Focus styles */
-.focus-glow:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(94, 129, 172, 0.5);
+/* Emoji picker tokenized styling */
+.emoji-picker-react {
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 0.75rem !important;
 }
 
-/* Noto Emoji font for emoji rendering */
+.emoji-picker-react .emoji-group:before {
+  background-color: var(--color-surface-secondary) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+.emoji-picker-react .emoji-search {
+  background-color: var(--color-surface-secondary) !important;
+  border: 1px solid var(--color-border-secondary) !important;
+  color: var(--color-text) !important;
+}
+
+.emoji-picker-react .emoji-search::placeholder {
+  color: var(--color-text-muted) !important;
+}
+
+.emoji-picker-react .emoji-scroll-wrapper,
+.emoji-picker-react .emoji-category,
+.emoji-picker-react .active-category-indicator-wrapper,
+.emoji-picker-react .emoji-categories {
+  background-color: var(--color-surface) !important;
+}
+
+.emoji-picker-react .emoji-categories button:hover,
+.emoji-picker-react .emoji-group .emoji-img:hover {
+  background-color: var(--color-hover) !important;
+}
+
+.emoji-picker-react .active-category-indicator-wrapper .active-category-indicator {
+  background-color: var(--color-primary) !important;
+}
+
 .emoji-char {
-  font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Android Emoji", "EmojiSymbols", "EmojiOne Mozilla", "Twemoji Mozilla", "Segoe UI", sans-serif;
+  font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Android Emoji", "EmojiSymbols", "EmojiOne Mozilla", "Twemoji Mozilla", "Segoe UI",
+    sans-serif;
   font-variant-emoji: unicode;
 }
 
-/* Ensure emoji buttons don't interfere with emoji font rendering */
-.emoji-button {
-  font-family: inherit;
-}
-
-/* Highlight.js Nord Theme - Custom syntax highlighting for code blocks */
-.hljs {
-  display: block;
-  overflow-x: auto;
-  padding: 1em;
-  background: var(--color-background-tertiary);
-  color: var(--color-text);
-  border-radius: 0.375rem;
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-subst {
-  color: var(--color-primary);
-  font-weight: bold;
-}
-
-.hljs-number,
-.hljs-literal,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-tag .hljs-attr {
-  color: var(--color-secondary);
-}
-
-.hljs-string,
-.hljs-doctag {
-  color: var(--color-success);
-}
-
-.hljs-title,
-.hljs-section,
-.hljs-selector-id {
-  color: var(--color-accent);
-  font-weight: bold;
-}
-
-.hljs-subst {
-  font-weight: normal;
-}
-
-.hljs-type,
-.hljs-class .hljs-title {
-  color: var(--color-warning);
-  font-weight: bold;
-}
-
-.hljs-tag,
-.hljs-name,
-.hljs-attribute {
-  color: var(--color-error);
-  font-weight: normal;
-}
-
-.hljs-regexp,
-.hljs-link {
-  color: var(--color-info);
-}
-
-.hljs-symbol,
-.hljs-bullet {
-  color: var(--color-text-secondary);
-}
-
-.hljs-built_in,
-.hljs-builtin-name {
-  color: var(--color-primary-hover);
-}
-
-.hljs-meta {
-  color: var(--color-text-muted);
-  font-weight: bold;
-}
-
-.hljs-deletion {
-  background: var(--color-error);
-}
-
-.hljs-addition {
-  background: var(--color-success);
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: bold;
-}

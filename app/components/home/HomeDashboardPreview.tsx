@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 type PreviewMessage = {
   id: string;
@@ -71,7 +71,7 @@ export default function HomeDashboardPreview() {
           </div>
         </div>
 
-        <div className="pb-theme-scope h-[560px] overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
+        <div className="h-[560px] overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
           <div className="flex flex-col gap-0 h-full shrink-0">
             <div className="flex flex-1 gap-2 min-h-0">
               <div className="w-16 shrink-0 bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col items-center py-2 space-y-2">
@@ -268,4 +268,5 @@ export default function HomeDashboardPreview() {
     </div>
   );
 }
+
 

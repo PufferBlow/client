@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { getAuthTokenFromCookies, listUsers, type ListUsersResponse, useUserProfile } from "../../services/user";
 import { listChannels, deleteChannel, createChannel } from "../../services/channel";
 import {
@@ -133,9 +133,9 @@ export function TasksTab({
   };
 
   const statusColors = {
-    idle: 'text-gray-400',
+    idle: 'text-[var(--color-text-secondary)]',
     running: 'text-green-400',
-    completed: 'text-blue-400',
+    completed: 'text-[var(--color-primary)]',
     disabled: 'text-red-400',
     error: 'text-red-500'
   };
@@ -173,14 +173,14 @@ export function TasksTab({
       <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium text-white">Automated Tasks</h2>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+          <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
             Add New Task
           </button>
         </div>
 
         <div className="space-y-4">
           {tasks.map((task) => (
-            <div key={task.id} className="bg-gray-700 rounded-lg p-4">
+            <div key={task.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
@@ -190,13 +190,13 @@ export function TasksTab({
                       <span>{task.status}</span>
                     </span>
                     {task.isManual ? (
-                      <span className="px-2 py-1 rounded text-xs bg-blue-600 text-white">Manual</span>
+                      <span className="px-2 py-1 rounded text-xs bg-[var(--color-primary)] text-white">Manual</span>
                     ) : (
                       <span className="px-2 py-1 rounded text-xs bg-green-600 text-white">Scheduled</span>
                     )}
                   </div>
-                  <p className="text-gray-400 text-sm mb-2">{task.description}</p>
-                  <div className="flex items-center space-x-4 text-xs text-gray-500">
+                  <p className="text-[var(--color-text-secondary)] text-sm mb-2">{task.description}</p>
+                  <div className="flex items-center space-x-4 text-xs text-[var(--color-text-muted)]">
                     <span>Script: {task.script}</span>
                     <span>Schedule: {task.schedule}</span>
                     <span>Last Run: {new Date(task.lastRun).toLocaleString()}</span>
@@ -211,9 +211,9 @@ export function TasksTab({
                       type="checkbox"
                       checked={task.isEnabled}
                       onChange={() => handleToggleTask(task.id)}
-                      className="rounded border-gray-600 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
                     />
-                    <span className="text-sm text-gray-300">Enabled</span>
+                    <span className="text-sm text-[var(--color-text)]">Enabled</span>
                   </label>
                 </div>
 
@@ -222,7 +222,7 @@ export function TasksTab({
                     <button
                       onClick={() => handleRunTask(task.id)}
                       disabled={task.status === 'running'}
-                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors flex items-center space-x-1"
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-[var(--color-surface-tertiary)] text-white px-3 py-1 rounded text-sm transition-colors flex items-center space-x-1"
                     >
                       {task.status === 'running' ? (
                         <>
@@ -241,7 +241,7 @@ export function TasksTab({
                       )}
                     </button>
                   )}
-                  <button className="text-gray-400 hover:text-white transition-colors">
+                  <button className="text-[var(--color-text-secondary)] hover:text-white transition-colors">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                     </svg>
@@ -252,9 +252,9 @@ export function TasksTab({
           ))}
         </div>
 
-        <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-500/30">
+        <div className="mt-6 p-4 bg-gradient-to-r from-[var(--color-primary)]/20 to-purple-900/20 rounded-lg border border-[var(--color-primary)]/30">
           <h3 className="text-lg font-medium text-white mb-2">About Automated Tasks</h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-[var(--color-text-secondary)] text-sm">
             Tasks are Python scripts that run scheduled operations for server maintenance, reporting, or automation.
             You can enable/disable automatic execution or run tasks manually. Scripts should be placed in the server's
             tasks directory and follow the established API conventions.
@@ -487,12 +487,12 @@ export function StorageTab({
   };
 
   const getFileTypeIcon = (type: string) => {
-    if (type.startsWith('image/')) return '🖼️';
-    if (type.startsWith('video/')) return '🎥';
-    if (type.startsWith('audio/')) return '🔊';
-    if (type === 'application/pdf') return '📄';
-    if (type.includes('zip') || type.includes('rar')) return '📦';
-    return '📄';
+    if (type.startsWith('image/')) return 'ðŸ–¼ï¸';
+    if (type.startsWith('video/')) return 'ðŸŽ¥';
+    if (type.startsWith('audio/')) return 'ðŸ”Š';
+    if (type === 'application/pdf') return 'ðŸ“„';
+    if (type.includes('zip') || type.includes('rar')) return 'ðŸ“¦';
+    return 'ðŸ“„';
   };
 
   if (loading) {
@@ -500,11 +500,11 @@ export function StorageTab({
       <div className="space-y-6">
         <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
           <div className="animate-pulse space-y-4">
-            <div className="h-6 bg-gray-600 rounded w-48"></div>
-            <div className="h-32 bg-gray-600 rounded"></div>
+            <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
+            <div className="h-32 bg-[var(--color-surface-tertiary)] rounded"></div>
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-16 bg-gray-600 rounded"></div>
+                <div key={i} className="h-16 bg-[var(--color-surface-tertiary)] rounded"></div>
               ))}
             </div>
           </div>
@@ -525,7 +525,7 @@ export function StorageTab({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadFiles}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -542,13 +542,13 @@ export function StorageTab({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-white">CDN File Manager</h2>
-            <p className="text-gray-400 text-sm mt-1">Manage uploaded files and attachments</p>
+            <p className="text-[var(--color-text-secondary)] text-sm mt-1">Manage uploaded files and attachments</p>
           </div>
           <div className="flex items-center space-x-4">
             <button
               onClick={handleCleanupOrphanedFiles}
               disabled={isCleaningOrphaned}
-              className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+              className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-[var(--color-surface-tertiary)] text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
             >
               {isCleaningOrphaned ? (
                 <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -566,19 +566,19 @@ export function StorageTab({
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-700 rounded-lg p-4">
+          <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-gray-400 text-sm">Total Files</div>
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="text-[var(--color-text-secondary)] text-sm">Total Files</div>
+              <svg className="w-5 h-5 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
             <div className="text-2xl font-bold text-white">{files.length.toLocaleString()}</div>
           </div>
 
-          <div className="bg-gray-700 rounded-lg p-4">
+          <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-gray-400 text-sm">Total Size</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Total Size</div>
               <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
               </svg>
@@ -588,9 +588,9 @@ export function StorageTab({
             </div>
           </div>
 
-          <div className="bg-gray-700 rounded-lg p-4">
+          <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-gray-400 text-sm">Image Files</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Image Files</div>
               <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
@@ -600,9 +600,9 @@ export function StorageTab({
             </div>
           </div>
 
-          <div className="bg-gray-700 rounded-lg p-4">
+          <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-gray-400 text-sm">Orphaned Files</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Orphaned Files</div>
               <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
@@ -621,21 +621,21 @@ export function StorageTab({
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Upload Zone */}
           <div className="flex-1">
-            <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 transition-colors hover:border-blue-400 hover:bg-gray-750/30">
+            <div className="border-2 border-dashed border-[var(--color-border)] rounded-lg p-6 transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-secondary)]/30">
               <div className="text-center">
-                <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-12 h-12 text-[var(--color-text-secondary)] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
                 <h3 className="text-lg font-medium text-white mb-2">Upload Files to CDN</h3>
-                <p className="text-gray-400 mb-4">Drop files here or click to browse</p>
+                <p className="text-[var(--color-text-secondary)] mb-4">Drop files here or click to browse</p>
 
                 {/* Directory selection for upload */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Upload to:</label>
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Upload to:</label>
                   <select
                     value={selectedDirectory}
                     onChange={(e) => setSelectedDirectory(e.target.value)}
-                    className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500 mx-auto block"
+                    className="bg-[var(--color-surface-secondary)] text-white px-3 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] mx-auto block"
                   >
                     {directories.slice(0, -1).map(dir => (
                       <option key={dir.value} value={dir.value}>{dir.label}</option>
@@ -653,7 +653,7 @@ export function StorageTab({
                 />
                 <label
                   htmlFor="cdn-file-upload"
-                  className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors inline-flex items-center space-x-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  className="cursor-pointer bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-3 rounded-lg transition-colors inline-flex items-center space-x-2 disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed"
                   style={{ pointerEvents: isUploading ? 'none' : 'auto' }}
                 >
                   {isUploading ? (
@@ -678,14 +678,14 @@ export function StorageTab({
               {Object.keys(uploadProgress).length > 0 && (
                 <div className="mt-6 space-y-2">
                   {Object.entries(uploadProgress).map(([fileId, progress]) => (
-                    <div key={fileId} className="bg-gray-700 rounded-lg p-3">
+                    <div key={fileId} className="bg-[var(--color-surface-secondary)] rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">Uploading...</span>
+                        <span className="text-sm text-[var(--color-text-secondary)]">Uploading...</span>
                         <span className="text-sm text-white">{progress}%</span>
                       </div>
-                      <div className="w-full bg-gray-600 rounded-full h-2">
+                      <div className="w-full bg-[var(--color-surface-tertiary)] rounded-full h-2">
                         <div
-                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          className="bg-[var(--color-primary)] h-2 rounded-full transition-all duration-300"
                           style={{ width: `${progress}%` }}
                         />
                       </div>
@@ -696,15 +696,15 @@ export function StorageTab({
             </div>
 
             {/* File Type Information */}
-            <div className="mt-4 p-4 bg-gray-700/50 rounded-lg">
+            <div className="mt-4 p-4 bg-[var(--color-surface-secondary)]/50 rounded-lg">
               <h4 className="text-sm font-medium text-white mb-2">Supported File Types:</h4>
-              <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
-                <div>• Images (PNG, JPG, GIF, WebP)</div>
-                <div>• Videos (MP4, WebM)</div>
-                <div>• Audio (MP3, MP4)</div>
-                <div>• Documents (PDF, TXT)</div>
-                <div>• Archives (ZIP)</div>
-                <div>• Max size: 10MB per file</div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-[var(--color-text-secondary)]">
+                <div>â€¢ Images (PNG, JPG, GIF, WebP)</div>
+                <div>â€¢ Videos (MP4, WebM)</div>
+                <div>â€¢ Audio (MP3, MP4)</div>
+                <div>â€¢ Documents (PDF, TXT)</div>
+                <div>â€¢ Archives (ZIP)</div>
+                <div>â€¢ Max size: 10MB per file</div>
               </div>
             </div>
           </div>
@@ -716,7 +716,7 @@ export function StorageTab({
             <button
               onClick={() => document.getElementById('cdn-file-upload')?.click()}
               disabled={isUploading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-start space-x-2"
+              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-start space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -725,14 +725,14 @@ export function StorageTab({
             </button>
 
             {/* Batch Upload Info */}
-            <div className="bg-gray-700/50 rounded-lg p-3">
+            <div className="bg-[var(--color-surface-secondary)]/50 rounded-lg p-3">
               <div className="flex items-center space-x-2 mb-2">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-sm text-gray-300">Batch Upload</span>
+                <span className="text-sm text-[var(--color-text)]">Batch Upload</span>
               </div>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-[var(--color-text-secondary)]">
                 Select multiple files to upload them all at once to the current directory.
               </p>
             </div>
@@ -749,7 +749,7 @@ export function StorageTab({
             <select
               value={selectedDirectory}
               onChange={(e) => setSelectedDirectory(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="bg-[var(--color-surface-secondary)] text-white px-3 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             >
               {directories.map(dir => (
                 <option key={dir.value} value={dir.value}>{dir.label}</option>
@@ -764,15 +764,15 @@ export function StorageTab({
               placeholder="Search files..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             />
           </div>
         </div>
 
         {/* File List */}
         {filteredFiles.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+          <div className="text-center text-[var(--color-text-secondary)] py-12">
+            <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
               </svg>
@@ -780,7 +780,7 @@ export function StorageTab({
             <p className="text-lg font-medium mb-2">
               {files.length === 0 ? `No files found in ${selectedDirectory}` : 'No files match your search'}
             </p>
-            <p className="text-gray-500 text-sm">
+            <p className="text-[var(--color-text-muted)] text-sm">
               {files.length === 0 ? 'Files will appear here once uploaded' : 'Try adjusting your search terms'}
             </p>
           </div>
@@ -789,7 +789,7 @@ export function StorageTab({
             {filteredFiles.map((file) => (
               <div
                 key={file.id}
-                className="flex items-center justify-between p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors"
+                className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg hover:bg-[var(--color-surface-secondary)] transition-colors"
               >
                 {/* File Info */}
                 <div className="flex items-center space-x-4 flex-1">
@@ -808,13 +808,13 @@ export function StorageTab({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center space-x-4 text-sm text-gray-400">
+                    <div className="flex items-center space-x-4 text-sm text-[var(--color-text-secondary)]">
                       <span>{formatFileSize(file.size)}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>{file.type}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>Uploaded {new Date(file.uploaded_at).toLocaleDateString()}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>by {file.uploader}</span>
                     </div>
                   </div>
@@ -828,7 +828,7 @@ export function StorageTab({
                       e.stopPropagation();
                       setFileViewerModal({ isOpen: true, file });
                     }}
-                    className="text-gray-400 hover:text-blue-400 transition-colors p-2"
+                    className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors p-2"
                     title="View file"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -839,7 +839,7 @@ export function StorageTab({
 
                   <button
                     onClick={() => setDeleteConfirmFile(file)}
-                    className="text-gray-400 hover:text-red-400 transition-colors p-2"
+                    className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors p-2"
                     title="Delete file"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -862,7 +862,7 @@ export function StorageTab({
                 <h3 className="text-lg font-semibold text-[var(--color-text)]">Delete File</h3>
                 <button
                   onClick={() => setDeleteConfirmFile(null)}
-                  className="text-gray-400 hover:text-white transition-colors p-2"
+                  className="text-[var(--color-text-secondary)] hover:text-white transition-colors p-2"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -879,7 +879,7 @@ export function StorageTab({
                   <div className="flex-1">
                     <h4 className="text-[var(--color-text)] font-medium truncate">{deleteConfirmFile.filename}</h4>
                     <div className="text-sm text-[var(--color-text-secondary)]">
-                      {formatFileSize(deleteConfirmFile.size)} • {deleteConfirmFile.type}
+                      {formatFileSize(deleteConfirmFile.size)} â€¢ {deleteConfirmFile.type}
                     </div>
                   </div>
                 </div>
@@ -896,7 +896,7 @@ export function StorageTab({
                   </svg>
                   <div className="text-sm">
                     <h4 className="text-red-400 font-medium mb-1">Permanently Delete File</h4>
-                    <p className="text-gray-300">
+                    <p className="text-[var(--color-text)]">
                       This action cannot be undone. The file will be permanently removed from the CDN and cannot be recovered.
                     </p>
                   </div>
@@ -1060,10 +1060,10 @@ export function RecentActivity() {
         <h2 className="text-[var(--color-text)] font-semibold mb-4">Recent Activity</h2>
         <div className="animate-pulse space-y-3">
           <div className="flex items-center space-x-3 p-3 bg-[var(--color-background-secondary)] rounded-lg">
-            <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+            <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] rounded-full"></div>
             <div className="flex-1">
-              <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
-              <div className="h-3 bg-gray-600 rounded w-32"></div>
+              <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-1 w-24"></div>
+              <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
             </div>
           </div>
         </div>
@@ -1106,19 +1106,19 @@ export function RecentActivity() {
             const getActivityStyle = (type: string) => {
               switch (type) {
                 case 'user_joined':
-                  return { color: 'var(--color-success)', icon: '👤' };
+                  return { color: 'var(--color-success)', icon: 'ðŸ‘¤' };
                 case 'channel_created':
-                  return { color: 'var(--color-primary)', icon: '📝' };
+                  return { color: 'var(--color-primary)', icon: 'ðŸ“' };
                 case 'moderation':
-                  return { color: 'var(--color-warning)', icon: '⚠️' };
+                  return { color: 'var(--color-warning)', icon: 'âš ï¸' };
                 case 'message_sent':
-                  return { color: 'var(--color-text-secondary)', icon: '💬' };
+                  return { color: 'var(--color-text-secondary)', icon: 'ðŸ’¬' };
                 case 'setting_changed':
-                  return { color: 'var(--color-error)', icon: '⚙️' };
+                  return { color: 'var(--color-error)', icon: 'âš™ï¸' };
                 case 'file_upload':
-                  return { color: 'var(--color-success)', icon: '📁' };
+                  return { color: 'var(--color-success)', icon: 'ðŸ“' };
                 default:
-                  return { color: 'var(--color-text-secondary)', icon: '📌' };
+                  return { color: 'var(--color-text-secondary)', icon: 'ðŸ“Œ' };
               }
             };
 
@@ -1142,7 +1142,7 @@ export function RecentActivity() {
                       <span>
                         <span
                           onClick={(e) => handleUsernameClick(parsedDesc.username, parsedDesc.userId, e)}
-                          className="text-blue-500 font-semibold hover:text-blue-400 underline decoration-2 decoration-blue-500 hover:decoration-blue-400 cursor-pointer transition-colors select-none bg-blue-50 dark:bg-blue-900/30 px-1 rounded"
+                          className="text-[var(--color-primary)] font-semibold hover:text-[var(--color-primary)] underline decoration-2 decoration-[var(--color-primary)] hover:decoration-[var(--color-primary)] cursor-pointer transition-colors select-none bg-[var(--color-surface-secondary)] dark:bg-[var(--color-primary)]/30 px-1 rounded"
                           title={`Click to view ${parsedDesc.username}'s profile`}
                         >
                           @{parsedDesc.username}
@@ -1455,8 +1455,8 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
           key={period}
           onClick={() => setSelectedPeriod({ period })}
           className={`px-3 py-1 rounded text-sm transition-colors ${selectedPeriod.period === period
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600'
+              ? 'bg-[var(--color-primary)] text-white'
+              : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-surface-tertiary)]'
             }`}
         >
           {period}
@@ -1530,7 +1530,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <p className="text-[var(--color-text-secondary)] mb-3">{serverInfo.server_description}</p>
                 <div className="flex items-center space-x-4 text-sm text-[var(--color-text-muted)]">
                   <span>Version {serverInfo.version}</span>
-                  <span>•</span>
+                  <span>â€¢</span>
                   <span>Created {serverInfo.creation_date ? new Date(serverInfo.creation_date).toLocaleDateString() : 'Unknown'}</span>
                 </div>
               </div>
@@ -1575,7 +1575,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-text-secondary)]">Online Now</div>
                     <div className="text-3xl font-bold text-white">
-                      {activityMetrics?.current_online?.toLocaleString() ?? rawStats.onlineUsers?.currently_online?.toLocaleString() ?? '—'}
+                      {activityMetrics?.current_online?.toLocaleString() ?? rawStats.onlineUsers?.currently_online?.toLocaleString() ?? 'â€”'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1588,7 +1588,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-success)]">New This Week</div>
                     <div className="text-3xl font-bold text-white">
-                      +{rawStats.userRegistrations?.new_this_week?.toLocaleString() ?? '—'}
+                      +{rawStats.userRegistrations?.new_this_week?.toLocaleString() ?? 'â€”'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1601,7 +1601,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-info)]">Messages Today</div>
                     <div className="text-3xl font-bold text-white">
-                      {serverOverview?.messages_this_period?.toLocaleString() ?? rawStats.messageActivity?.messages_today?.toLocaleString() ?? '—'}
+                      {serverOverview?.messages_this_period?.toLocaleString() ?? rawStats.messageActivity?.messages_today?.toLocaleString() ?? 'â€”'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1614,7 +1614,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   <div>
                     <div className="text-lg text-[var(--color-warning)]">Total Channels</div>
                     <div className="text-3xl font-bold text-white">
-                      {activityMetrics?.total_channels?.toLocaleString() ?? rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
+                      {activityMetrics?.total_channels?.toLocaleString() ?? rawStats.channelCreation?.total_channels?.toLocaleString() ?? 'â€”'}
                     </div>
                   </div>
                   <svg className="w-8 h-8 text-[var(--color-warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1627,7 +1627,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
             {/* Detailed Stats in Categories */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Server Overview */}
-              <div className="bg-gray-700 rounded-lg p-4">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1637,21 +1637,21 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">
-                      {rawStats.userRegistrations?.total_users?.toLocaleString() ?? '—'}
+                      {rawStats.userRegistrations?.total_users?.toLocaleString() ?? 'â€”'}
                     </div>
-                    <div className="text-xs text-gray-400">Total Members</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Total Members</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">
-                      {rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
+                      {rawStats.channelCreation?.total_channels?.toLocaleString() ?? 'â€”'}
                     </div>
-                    <div className="text-xs text-gray-400">Active Channels</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Active Channels</div>
                   </div>
                 </div>
               </div>
 
               {/* Activity Metrics */}
-              <div className="bg-gray-700 rounded-lg p-4">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -1661,11 +1661,11 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">12</div>
-                    <div className="text-xs text-gray-400">Messages/Hour</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Messages/Hour</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">89%</div>
-                    <div className="text-xs text-gray-400">Active Users</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Active Users</div>
                   </div>
                 </div>
               </div>
@@ -1731,7 +1731,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                       <h4 className="text-red-400 font-medium mb-2">Resource Monitoring Error</h4>
-                      <p className="text-gray-400 text-sm mb-4">{usageError}</p>
+                      <p className="text-[var(--color-text-secondary)] text-sm mb-4">{usageError}</p>
                       <button
                         onClick={() => {
                           setUsageLoading(true);
@@ -1759,104 +1759,104 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                     {/* Main Metrics Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                       {/* CPU Usage */}
-                      <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-2">
-                            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                             </svg>
-                            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">CPU</span>
+                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">CPU</span>
                           </div>
                         </div>
                         <div className="text-center">
                           <div className="text-2xl font-bold text-white mb-1">{serverUsage.cpu_percent}%</div>
-                          <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
                             <div
-                              className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
+                              className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] h-2 rounded-full transition-all duration-500"
                               style={{ width: `${Math.min(serverUsage.cpu_percent, 100)}%` }}
                             />
                           </div>
-                          <div className="text-xs text-gray-500">Utilization</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">Utilization</div>
                         </div>
                       </div>
 
                       {/* Memory Usage */}
-                      <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-2">
                             <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-7 7V5a2 2 0 114 0v14m0 0l-4-4m4 4l4-4" />
                             </svg>
-                            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Memory</span>
+                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Memory</span>
                           </div>
                         </div>
                         <div className="text-center">
                           <div className="text-2xl font-bold text-white mb-1">{serverUsage.ram_percent}%</div>
-                          <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
                             <div
                               className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500"
                               style={{ width: `${Math.min(serverUsage.ram_percent, 100)}%` }}
                             />
                           </div>
-                          <div className="text-xs text-gray-500">{serverUsage.ram_used_gb}GB / {serverUsage.ram_total_gb}GB</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">{serverUsage.ram_used_gb}GB / {serverUsage.ram_total_gb}GB</div>
                         </div>
                       </div>
 
                       {/* Storage Usage */}
-                      <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-2">
                             <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
                             </svg>
-                            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Storage</span>
+                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Storage</span>
                           </div>
                         </div>
                         <div className="text-center">
                           <div className="text-2xl font-bold text-white mb-1">{serverUsage.storage_percent}%</div>
-                          <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
                             <div
                               className="bg-gradient-to-r from-purple-500 to-purple-600 h-2 rounded-full transition-all duration-500"
                               style={{ width: `${Math.min(serverUsage.storage_percent, 100)}%` }}
                             />
                           </div>
-                          <div className="text-xs text-gray-500">{serverUsage.storage_used_gb}GB / {serverUsage.storage_total_gb}GB</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">{serverUsage.storage_used_gb}GB / {serverUsage.storage_total_gb}GB</div>
                         </div>
                       </div>
 
                       {/* Disk I/O */}
-                      <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-2">
                             <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m-6 0v10M6 20h12v-4a2 2 0 00-2-2H8a2 2 0 00-2 2v4z" />
                             </svg>
-                            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Disk I/O</span>
+                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Disk I/O</span>
                           </div>
                         </div>
                         <div className="text-center space-y-1">
                           <div className="text-xs text-cyan-400 font-medium">{serverUsage.disk_read_mb_per_sec}MB/s Read</div>
                           <div className="text-xs text-orange-400 font-medium">{serverUsage.disk_write_mb_per_sec}MB/s Write</div>
-                          <div className="text-xs text-gray-500 mt-2">IO Throughput</div>
+                          <div className="text-xs text-[var(--color-text-muted)] mt-2">IO Throughput</div>
                         </div>
                       </div>
                     </div>
 
                     {/* System Status Bar */}
-                    <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                    <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
                           <div className="flex items-center space-x-2">
                             <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                             <span className="text-sm font-medium text-green-400">System Online</span>
                           </div>
-                          <div className="h-4 w-px bg-gray-600"></div>
-                          <span className="text-sm text-gray-400">Uptime:</span>
+                          <div className="h-4 w-px bg-[var(--color-surface-tertiary)]"></div>
+                          <span className="text-sm text-[var(--color-text-secondary)]">Uptime:</span>
                           <span className="text-sm font-semibold text-white">{serverUsage.uptime_formatted}</span>
                         </div>
 
                         {/* Last Updated */}
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <div className="flex items-center space-x-2 text-xs text-[var(--color-text-muted)]">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
@@ -1866,14 +1866,14 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-4 text-gray-400 text-sm">
+                  <div className="text-center py-4 text-[var(--color-text-secondary)] text-sm">
                     No usage data available
                   </div>
                 )}
               </div>
 
               {/* Peak Performance */}
-              <div className="bg-gray-700 rounded-lg p-4">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -1883,18 +1883,18 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">127</div>
-                    <div className="text-xs text-gray-400">Peak Online</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Peak Online</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xl font-bold text-slate-300">367</div>
-                    <div className="text-xs text-gray-400">Msgs 24H</div>
+                    <div className="text-xs text-[var(--color-text-secondary)]">Msgs 24H</div>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Additional Growth Stats */}
-            <div className="bg-gray-700 rounded-lg p-4">
+            <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
               <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
                 <svg className="w-5 h-5 mr-2 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -1903,7 +1903,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
               </h3>
               <div className="text-center">
                 <div className="text-2xl font-bold text-slate-300 mb-1">15</div>
-                <div className="text-sm text-gray-400">New Channels Created This Month</div>
+                <div className="text-sm text-[var(--color-text-secondary)]">New Channels Created This Month</div>
               </div>
             </div>
           </div>
@@ -1913,19 +1913,19 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
             <PeriodSelector />
 
             {loading ? (
-              <div className="bg-gray-700 rounded-lg p-6 h-64 flex items-center justify-center">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
                 <div className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 bg-blue-600 rounded-full flex items-center justify-center animate-spin">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-primary)] rounded-full flex items-center justify-center animate-spin">
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </div>
                   <h3 className="text-lg font-semibold text-white mb-2">Loading Charts</h3>
-                  <p className="text-gray-400">Fetching chart data...</p>
+                  <p className="text-[var(--color-text-secondary)]">Fetching chart data...</p>
                 </div>
               </div>
             ) : error ? (
-              <div className="bg-gray-700 rounded-lg p-6 h-64 flex items-center justify-center">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
                 <div className="text-center">
                   <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1933,7 +1933,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                     </svg>
                   </div>
                   <h3 className="text-lg font-semibold text-white mb-2">Error Loading Charts</h3>
-                  <p className="text-gray-400">{error}</p>
+                  <p className="text-[var(--color-text-secondary)]">{error}</p>
                 </div>
               </div>
             ) : (
@@ -1942,7 +1942,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {/* User Registrations Chart */}
                   {chartData.userRegistrations && (
-                    <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                       <h4 className="text-md font-semibold text-white mb-3">User Registrations</h4>
                       <Line
                         data={chartData.userRegistrations}
@@ -1962,7 +1962,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
                   {/* Message Activity Chart */}
                   {chartData.messageActivity && (
-                    <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                       <h4 className="text-md font-semibold text-white mb-3">Message Activity</h4>
                       <Bar
                         data={chartData.messageActivity}
@@ -1982,7 +1982,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
                   {/* Online Users Chart */}
                   {chartData.onlineUsers && (
-                    <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                       <h4 className="text-md font-semibold text-white mb-3">Online Users</h4>
                       <Line
                         data={chartData.onlineUsers}
@@ -2002,7 +2002,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
                   {/* Channel Creation Chart */}
                   {chartData.channelCreation && (
-                    <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                       <h4 className="text-md font-semibold text-white mb-3">Channel Creations</h4>
                       <Bar
                         data={chartData.channelCreation}
@@ -2022,7 +2022,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
                   {/* User Status Chart */}
                   {chartData.userStatus && (
-                    <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                       <h4 className="text-md font-semibold text-white mb-3">User Status Distribution</h4>
                       <Pie
                         data={chartData.userStatus}
@@ -2038,15 +2038,15 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 </div>
 
                 {Object.keys(chartData).length === 0 && !loading && (
-                  <div className="bg-gray-700 rounded-lg p-6 h-64 flex items-center justify-center">
+                  <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="w-16 h-16 mx-auto mb-4 bg-gray-600 rounded-full flex items-center justify-center">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-tertiary)] rounded-full flex items-center justify-center">
                         <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
                       </div>
                       <h3 className="text-lg font-semibold text-white mb-2">No Chart Data Available</h3>
-                      <p className="text-gray-400">Chart data is not currently available from the server.</p>
+                      <p className="text-[var(--color-text-secondary)]">Chart data is not currently available from the server.</p>
                     </div>
                   </div>
                 )}
@@ -2077,7 +2077,7 @@ export function MembersTab({
         <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-medium text-white">Manage Members</h2>
-            <button className="bg-gray-600 text-white px-4 py-2 rounded-lg cursor-not-allowed">
+            <button className="bg-[var(--color-surface-tertiary)] text-white px-4 py-2 rounded-lg cursor-not-allowed">
               Invite Member
             </button>
           </div>
@@ -2086,24 +2086,24 @@ export function MembersTab({
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex items-center px-4 py-3">
                 <div className="flex items-center space-x-3 flex-1">
-                  <div className="w-10 h-10 bg-gray-600 rounded-full"></div>
+                  <div className="w-10 h-10 bg-[var(--color-surface-tertiary)] rounded-full"></div>
                   <div>
-                    <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
-                    <div className="h-3 bg-gray-600 rounded w-32"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-1 w-24"></div>
+                    <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
                   </div>
                 </div>
                 <div className="flex-1 text-center">
-                  <div className="h-3 bg-gray-600 rounded"></div>
+                  <div className="h-3 bg-[var(--color-surface-tertiary)] rounded"></div>
                 </div>
                 <div className="w-12">
-                  <div className="w-5 h-5 bg-gray-600 rounded"></div>
+                  <div className="w-5 h-5 bg-[var(--color-surface-tertiary)] rounded"></div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="text-center text-gray-400 py-8">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+          <div className="text-center text-[var(--color-text-secondary)] py-8">
+            <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
@@ -2177,9 +2177,9 @@ export function MembersTab({
               placeholder="Search members..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             />
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
               Invite Member
             </button>
           </div>
@@ -2193,7 +2193,7 @@ export function MembersTab({
           ).map((user) => (
             <div
               key={user.user_id}
-              className="flex items-center px-4 py-3 hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
+              className="flex items-center px-4 py-3 hover:bg-[var(--color-surface-secondary)] rounded-lg transition-colors cursor-pointer"
             >
               {/* User info on the left */}
               <div className="flex items-center space-x-3 flex-1">
@@ -2206,7 +2206,7 @@ export function MembersTab({
                   <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-green-400' :
                       user.status === 'idle' ? 'bg-yellow-400' :
                         user.status === 'dnd' ? 'bg-red-400' :
-                          'bg-gray-400'
+                          'bg-[var(--color-border)]'
                     }`}></div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -2221,7 +2221,7 @@ export function MembersTab({
               </div>
 
               {/* Joined date in the middle */}
-              <div className="flex-1 text-center text-gray-400">
+              <div className="flex-1 text-center text-[var(--color-text-secondary)]">
                 Joined {new Date(user.created_at || '2023-01-01').toLocaleDateString()}
               </div>
 
@@ -2229,7 +2229,7 @@ export function MembersTab({
               <div className="w-12 flex justify-end">
                 <button
                   onClick={(event) => { event.stopPropagation(); handleUserMenu(user, event); }}
-                  className="text-gray-400 hover:text-white transition-colors p-1"
+                  className="text-[var(--color-text-secondary)] hover:text-white transition-colors p-1"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -2244,12 +2244,12 @@ export function MembersTab({
       {/* User Menu Dropdown */}
       {userMenuOpen && selectedUserMenu && (
         <div
-          className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 w-48"
+          className="fixed z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 w-48"
           style={{ left: userMenuPosition.x, top: userMenuPosition.y }}
         >
           <button
             onClick={() => handleUserAction('editRoles')}
-            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center space-x-2"
+            className="w-full px-3 py-2 text-left text-white hover:bg-[var(--color-surface-secondary)] transition-colors flex items-center space-x-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -2259,7 +2259,7 @@ export function MembersTab({
 
           <button
             onClick={() => handleUserAction('mute')}
-            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors flex items-center space-x-2"
+            className="w-full px-3 py-2 text-left text-white hover:bg-[var(--color-surface-secondary)] transition-colors flex items-center space-x-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -2337,7 +2337,7 @@ export function ChannelsTab({
           <h2 className="text-lg font-medium text-white">Manage Channels</h2>
           <button
             onClick={onOpenChannelModal}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
           >
             Create Channel
           </button>
@@ -2346,12 +2346,12 @@ export function ChannelsTab({
         {hasChannels ? (
           <div className="space-y-3">
             {channels.map((channel) => (
-              <div key={channel.channel_id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+              <div key={channel.channel_id} className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <span className="text-gray-400">#</span>
+                  <span className="text-[var(--color-text-secondary)]">#</span>
                   <span className="text-white font-medium">{channel.channel_name}</span>
                   {channel.is_private && (
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   )}
@@ -2368,14 +2368,14 @@ export function ChannelsTab({
                   )}
                 </div>
                 <div className="flex space-x-2">
-                  <button className="text-gray-400 hover:text-white transition-colors">
+                  <button className="text-[var(--color-text-secondary)] hover:text-white transition-colors">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </button>
                   <button
                     onClick={() => setDeleteConfirmChannel(channel)}
-                    className="text-gray-400 hover:text-red-400 transition-colors"
+                    className="text-[var(--color-text-secondary)] hover:text-red-400 transition-colors"
                     title={`Delete ${channel.channel_name}`}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2387,14 +2387,14 @@ export function ChannelsTab({
             ))}
           </div>
         ) : (
-          <div className="text-center text-gray-400 py-12">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+          <div className="text-center text-[var(--color-text-secondary)] py-12">
+            <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
             <p className="text-lg font-medium mb-2">No channels found</p>
-            <p className="text-gray-500">Create your first channel to get started with discussions.</p>
+            <p className="text-[var(--color-text-muted)]">Create your first channel to get started with discussions.</p>
           </div>
         )}
       </div>
@@ -2402,22 +2402,22 @@ export function ChannelsTab({
       {/* Delete Confirmation Modal */}
       {deleteConfirmChannel && (
         <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Delete Channel</h3>
             </div>
             <div className="mb-6">
-              <p className="text-gray-300 mb-2">
+              <p className="text-[var(--color-text)] mb-2">
                 Are you sure you want to delete <span className="font-semibold text-white">#{deleteConfirmChannel.channel_name}</span>?
               </p>
               <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
-                ⚠️ This action cannot be undone. All messages in this channel will be permanently deleted.
+                âš ï¸ This action cannot be undone. All messages in this channel will be permanently deleted.
               </div>
             </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setDeleteConfirmChannel(null)}
-                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
               >
                 Cancel
               </button>
@@ -2690,11 +2690,11 @@ export function SettingsTab({
       <div className="space-y-6">
         <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
           <div className="animate-pulse space-y-6">
-            <div className="h-6 bg-gray-600 rounded w-48"></div>
+            <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
             <div className="space-y-4">
-              <div className="h-16 bg-gray-600 rounded"></div>
-              <div className="h-24 bg-gray-600 rounded"></div>
-              <div className="h-12 bg-gray-600 rounded"></div>
+              <div className="h-16 bg-[var(--color-surface-tertiary)] rounded"></div>
+              <div className="h-24 bg-[var(--color-surface-tertiary)] rounded"></div>
+              <div className="h-12 bg-[var(--color-surface-tertiary)] rounded"></div>
             </div>
           </div>
         </div>
@@ -2719,27 +2719,27 @@ export function SettingsTab({
             <h3 className="text-md font-medium text-white">Basic Information</h3>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                 Server Name
               </label>
               <input
                 type="text"
                 value={serverInfo.server_name}
                 onChange={(e) => setServerInfo({ ...serverInfo, server_name: e.target.value })}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                 disabled={saving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                 Description
               </label>
               <textarea
                 value={serverInfo.server_description}
                 onChange={(e) => setServerInfo({ ...serverInfo, server_description: e.target.value })}
                 rows={3}
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                 disabled={saving}
               />
             </div>
@@ -2753,7 +2753,7 @@ export function SettingsTab({
                 className="mr-3"
                 disabled={saving}
               />
-              <label htmlFor="isPrivate" className="text-sm font-medium text-gray-300">
+              <label htmlFor="isPrivate" className="text-sm font-medium text-[var(--color-text)]">
                 Make server private (invite only)
               </label>
             </div>
@@ -2761,7 +2761,7 @@ export function SettingsTab({
 
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                 Maximum Message Length
               </label>
               <input
@@ -2771,7 +2771,7 @@ export function SettingsTab({
                 min="100"
                 max="10000"
                 placeholder="Default (4000)"
-                className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                 disabled={saving}
               />
             </div>
@@ -2804,12 +2804,12 @@ export function SettingsTab({
                       className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs font-bold"
                       disabled={saving}
                     >
-                      ×
+                      Ã—
                     </button>
                   </div>
                   <div className="flex-1">
                     <h4 className="text-white font-medium mb-1">Server Avatar</h4>
-                    <p className="text-gray-400 text-sm mb-2">Upload a static image or animated GIF</p>
+                    <p className="text-[var(--color-text-secondary)] text-sm mb-2">Upload a static image or animated GIF</p>
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
@@ -2851,7 +2851,7 @@ export function SettingsTab({
                   <div className="flex items-center space-x-3">
                     <div className="flex-1">
                       <h4 className="text-white font-medium mb-1">Server Banner</h4>
-                      <p className="text-gray-400 text-sm mb-2">Upload a banner image or GIF for the server header</p>
+                      <p className="text-[var(--color-text-secondary)] text-sm mb-2">Upload a banner image or GIF for the server header</p>
                       <input
                         type="file"
                         accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
@@ -2900,7 +2900,7 @@ export function SettingsTab({
                         className="absolute top-2 right-2 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center text-white text-xs font-bold opacity-75 group-hover:opacity-100 transition-opacity"
                         disabled={saving}
                       >
-                        ×
+                        Ã—
                       </button>
                     </div>
                   )}
@@ -2909,15 +2909,15 @@ export function SettingsTab({
             </div>
 
             {/* File Format Info */}
-            <div className="bg-gray-700/50 rounded-lg p-3">
+            <div className="bg-[var(--color-surface-secondary)]/50 rounded-lg p-3">
               <div className="flex items-start space-x-2">
-                <svg className="w-5 h-5 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-[var(--color-primary)] mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <div className="text-sm text-gray-300">
+                <div className="text-sm text-[var(--color-text)]">
                   <strong>GIF Support:</strong> Both static and animated GIF files are supported for avatar and banner images.
                   Recommended sizes: Avatar (128x128px), Banner (1200x300px).
-                  <div className="mt-1 text-xs text-gray-400">
+                  <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
                     Supported formats: PNG, JPEG/JPG, GIF, WebP
                   </div>
                 </div>
@@ -2931,7 +2931,7 @@ export function SettingsTab({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                   Allowed Image Types
                 </label>
                 <input
@@ -2939,13 +2939,13 @@ export function SettingsTab({
                   value={serverInfo.allowed_image_types || 'PNG, JPG, JPEG, GIF, WebP'}
                   onChange={(e) => setServerInfo({ ...serverInfo, allowed_image_types: e.target.value })}
                   placeholder="PNG, JPG, JPEG, GIF, WebP"
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                   disabled={saving}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                   Allowed Video Types
                 </label>
                 <input
@@ -2953,13 +2953,13 @@ export function SettingsTab({
                   value={serverInfo.allowed_video_types || 'MP4, WebM'}
                   onChange={(e) => setServerInfo({ ...serverInfo, allowed_video_types: e.target.value })}
                   placeholder="MP4, WebM"
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                   disabled={saving}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                   Allowed Document Types
                 </label>
                 <input
@@ -2967,13 +2967,13 @@ export function SettingsTab({
                   value={serverInfo.allowed_file_types || 'PDF, DOC, DOCX, TXT, ZIP'}
                   onChange={(e) => setServerInfo({ ...serverInfo, allowed_file_types: e.target.value })}
                   placeholder="PDF, DOC, DOCX, TXT, ZIP"
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                   disabled={saving}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                   Allowed Sticker Types
                 </label>
                 <input
@@ -2981,7 +2981,7 @@ export function SettingsTab({
                   value={serverInfo.allowed_sticker_types || 'PNG, GIF'}
                   onChange={(e) => setServerInfo({ ...serverInfo, allowed_sticker_types: e.target.value })}
                   placeholder="PNG, GIF"
-                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                   disabled={saving}
                 />
               </div>
@@ -2990,11 +2990,11 @@ export function SettingsTab({
 
 
 
-          <div className="pt-4 border-t border-gray-600">
+          <div className="pt-4 border-t border-[var(--color-border)]">
             <button
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg transition-colors flex items-center space-x-2"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg transition-colors flex items-center space-x-2"
             >
               {saving && (
                 <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3023,42 +3023,42 @@ export function SecurityTab() {
         <h2 className="text-lg font-medium text-white mb-6">Security Settings</h2>
 
         <div className="space-y-6">
-          <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
             <div>
               <div className="text-white font-medium">Content Moderation</div>
-              <div className="text-gray-400 text-sm">Automatically filter inappropriate content</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Automatically filter inappropriate content</div>
             </div>
             <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
               Enable
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
             <div>
               <div className="text-white font-medium">Spam Protection</div>
-              <div className="text-gray-400 text-sm">Prevent spam messages and raids</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Prevent spam messages and raids</div>
             </div>
             <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
               Enable
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
             <div>
               <div className="text-white font-medium">IP Logging</div>
-              <div className="text-gray-400 text-sm">Log IP addresses for security monitoring</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Log IP addresses for security monitoring</div>
             </div>
             <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors">
               Disable
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+          <div className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
             <div>
               <div className="text-white font-medium">Two-Factor Authentication</div>
-              <div className="text-gray-400 text-sm">Require 2FA for all administrators</div>
+              <div className="text-[var(--color-text-secondary)] text-sm">Require 2FA for all administrators</div>
             </div>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors">
               Configure
             </button>
           </div>
@@ -3185,11 +3185,11 @@ export function BlockedIPsTab({
       <div className="space-y-6">
         <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
           <div className="animate-pulse space-y-4">
-            <div className="h-6 bg-gray-600 rounded w-48"></div>
-            <div className="h-32 bg-gray-600 rounded"></div>
+            <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
+            <div className="h-32 bg-[var(--color-surface-tertiary)] rounded"></div>
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-16 bg-gray-600 rounded"></div>
+                <div key={i} className="h-16 bg-[var(--color-surface-tertiary)] rounded"></div>
               ))}
             </div>
           </div>
@@ -3210,7 +3210,7 @@ export function BlockedIPsTab({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadBlockedIPs}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -3227,20 +3227,20 @@ export function BlockedIPsTab({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-white">Blocked IP Addresses</h2>
-            <p className="text-gray-400 text-sm mt-1">Manage IP addresses that are blocked from accessing the server</p>
+            <p className="text-[var(--color-text-secondary)] text-sm mt-1">Manage IP addresses that are blocked from accessing the server</p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-white">{blockedIPs.length}</div>
-            <div className="text-sm text-gray-400">Total Blocked</div>
+            <div className="text-sm text-[var(--color-text-secondary)]">Total Blocked</div>
           </div>
         </div>
 
         {/* Add New IP Block */}
-        <div className="bg-gray-700 rounded-lg p-4 mb-6">
+        <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4 mb-6">
           <h3 className="text-md font-medium text-white mb-4">Block New IP Address</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                 IP Address
               </label>
               <input
@@ -3248,12 +3248,12 @@ export function BlockedIPsTab({
                 value={newIP}
                 onChange={(e) => setNewIP(e.target.value)}
                 placeholder="192.168.1.1 or 2001:db8::1"
-                className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--color-surface)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                 disabled={isAddingIP}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                 Reason
               </label>
               <input
@@ -3261,7 +3261,7 @@ export function BlockedIPsTab({
                 value={newReason}
                 onChange={(e) => setNewReason(e.target.value)}
                 placeholder="Reason for blocking"
-                className="w-full bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--color-surface)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
                 disabled={isAddingIP}
               />
             </div>
@@ -3269,7 +3269,7 @@ export function BlockedIPsTab({
               <button
                 onClick={handleBlockIP}
                 disabled={isAddingIP || !newIP.trim() || !newReason.trim()}
-                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-[var(--color-surface-tertiary)] disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg border border-red-500/50 transition-colors flex items-center justify-center space-x-2"
               >
                 {isAddingIP ? (
                   <>
@@ -3299,12 +3299,12 @@ export function BlockedIPsTab({
               placeholder="Search blocked IPs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             />
           </div>
           <button
             onClick={loadBlockedIPs}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3315,8 +3315,8 @@ export function BlockedIPsTab({
 
         {/* Blocked IPs List */}
         {filteredIPs.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+          <div className="text-center text-[var(--color-text-secondary)] py-12">
+            <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -3324,7 +3324,7 @@ export function BlockedIPsTab({
             <p className="text-lg font-medium mb-2">
               {blockedIPs.length === 0 ? 'No blocked IPs' : 'No IPs match your search'}
             </p>
-            <p className="text-gray-500 text-sm">
+            <p className="text-[var(--color-text-muted)] text-sm">
               {blockedIPs.length === 0 ? 'IP addresses will appear here once blocked' : 'Try adjusting your search terms'}
             </p>
           </div>
@@ -3333,7 +3333,7 @@ export function BlockedIPsTab({
             {filteredIPs.map((blockedIP, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors"
+                className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg hover:bg-[var(--color-surface-secondary)] transition-colors"
               >
                 {/* IP Info */}
                 <div className="flex items-center space-x-4 flex-1">
@@ -3352,9 +3352,9 @@ export function BlockedIPsTab({
                         Blocked
                       </span>
                     </div>
-                    <div className="flex items-center space-x-4 text-sm text-gray-400">
+                    <div className="flex items-center space-x-4 text-sm text-[var(--color-text-secondary)]">
                       <span>Reason: {blockedIP.reason}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>Blocked: {new Date(blockedIP.blocked_at).toLocaleDateString()}</span>
                     </div>
                   </div>
@@ -3364,7 +3364,7 @@ export function BlockedIPsTab({
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setDeleteConfirmIP(blockedIP)}
-                    className="text-gray-400 hover:text-green-400 transition-colors p-2"
+                    className="text-[var(--color-text-secondary)] hover:text-green-400 transition-colors p-2"
                     title="Unblock IP"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3380,7 +3380,7 @@ export function BlockedIPsTab({
         {/* Information Panel */}
         <div className="mt-6 p-4 bg-gradient-to-r from-red-900/20 to-orange-900/20 rounded-lg border border-red-500/30">
           <h3 className="text-lg font-medium text-white mb-2">About IP Blocking</h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-[var(--color-text-secondary)] text-sm">
             Blocked IP addresses are automatically prevented from accessing the server by the rate limiting middleware.
             IPs are typically blocked when they exceed rate limits or engage in malicious activities.
             You can manually block IPs here for security purposes, or unblock them if needed.
@@ -3391,12 +3391,12 @@ export function BlockedIPsTab({
       {/* Unblock Confirmation Modal */}
       {deleteConfirmIP && (
         <div className="fixed inset-0 backdrop-blur-lg bg-white bg-opacity-5 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Unblock IP Address</h3>
             </div>
             <div className="mb-6">
-              <p className="text-gray-300 mb-2">
+              <p className="text-[var(--color-text)] mb-2">
                 Are you sure you want to unblock <span className="font-semibold text-white">{deleteConfirmIP.ip}</span>?
               </p>
               <div className="text-sm text-green-400 bg-green-900/20 p-3 rounded">
@@ -3407,7 +3407,7 @@ export function BlockedIPsTab({
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setDeleteConfirmIP(null)}
-                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
               >
                 Cancel
               </button>
@@ -3445,7 +3445,7 @@ export function UserProfileModal({
 
   return (
     <div
-      className="fixed z-50 bg-gray-800 rounded-lg shadow-lg border border-gray-600 py-2 w-64"
+      className="fixed z-50 bg-[var(--color-surface)] rounded-lg shadow-lg border border-[var(--color-border)] py-2 w-64"
       style={{
         left: position?.x || '50%',
         top: position?.y || '50%',
@@ -3458,26 +3458,26 @@ export function UserProfileModal({
           <img
             src={user.avatar}
             alt={user.username}
-            className="w-8 h-8 rounded-full border border-gray-600"
+            className="w-8 h-8 rounded-full border border-[var(--color-border)]"
           />
           <div className="flex-1 min-w-0">
             <div className="text-white font-medium truncate">{user.username}</div>
-            <div className="text-xs text-gray-400">{user.bio}</div>
+            <div className="text-xs text-[var(--color-text-secondary)]">{user.bio}</div>
           </div>
         </div>
 
         {/* Joined date */}
-        <div className="text-xs text-gray-500 pb-2">
+        <div className="text-xs text-[var(--color-text-muted)] pb-2">
           Joined {new Date(user.joinedAt).toLocaleDateString()}
         </div>
 
         {/* Actions (if different from current user) */}
         {user.id !== currentUserId && (
-          <div className="border-t border-gray-600 pt-2">
-            <button className="w-full text-left px-2 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors">
+          <div className="border-t border-[var(--color-border)] pt-2">
+            <button className="w-full text-left px-2 py-1 text-sm text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-surface-secondary)] rounded transition-colors">
               Start Conversation
             </button>
-            <button className="w-full text-left px-2 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors">
+            <button className="w-full text-left px-2 py-1 text-sm text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-surface-secondary)] rounded transition-colors">
               Add Friend
             </button>
           </div>
@@ -3671,10 +3671,10 @@ export function LogsTab({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-white">Server Logs</h2>
-            <p className="text-gray-400 text-sm mt-1">Live server logs with filtering and color support</p>
+            <p className="text-[var(--color-text-secondary)] text-sm mt-1">Live server logs with filtering and color support</p>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-[var(--color-text-secondary)]">
               {filteredLogs.length} / {logs.length} entries
             </div>
             <button
@@ -3699,7 +3699,7 @@ export function LogsTab({
               placeholder="Search logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             />
           </div>
 
@@ -3709,7 +3709,7 @@ export function LogsTab({
             <select
               value={logLevel}
               onChange={(e) => setLogLevel(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500"
+              className="bg-[var(--color-surface-secondary)] text-white px-3 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
             >
               <option value="all">All</option>
               <option value="error">Errors</option>
@@ -3726,9 +3726,9 @@ export function LogsTab({
                 type="checkbox"
                 checked={autoScroll}
                 onChange={(e) => setAutoScroll(e.target.checked)}
-                className="rounded border-gray-600 text-blue-600"
+                className="rounded border-[var(--color-border)] text-[var(--color-primary)]"
               />
-              <span className="text-sm text-gray-300">Auto-scroll</span>
+              <span className="text-sm text-[var(--color-text)]">Auto-scroll</span>
             </label>
           </div>
         </div>
@@ -3758,8 +3758,8 @@ export function LogsTab({
         </div>
 
         {loading ? (
-          <div className="text-center text-gray-400 py-12">
-            <svg className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="text-center text-[var(--color-text-secondary)] py-12">
+            <svg className="w-8 h-8 animate-spin text-[var(--color-primary)] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             <p>Loading server logs...</p>
@@ -3773,7 +3773,7 @@ export function LogsTab({
             <p className="text-sm mb-4">{error}</p>
             <button
               onClick={loadLogs}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded-lg transition-colors"
             >
               Retry
             </button>
@@ -3785,7 +3785,7 @@ export function LogsTab({
               <h3 className="text-white font-medium">
                 Server Logs
                 {filteredLogs.length !== logs.length && (
-                  <span className="text-gray-400 text-sm ml-2">
+                  <span className="text-[var(--color-text-secondary)] text-sm ml-2">
                     (filtered)
                   </span>
                 )}
@@ -3793,14 +3793,14 @@ export function LogsTab({
             </div>
             <div className="p-4 max-h-96 overflow-y-auto font-mono text-sm bg-[var(--color-background-tertiary)]">
               {filteredLogs.length === 0 ? (
-                <div className="text-center text-gray-400 py-8">
+                <div className="text-center text-[var(--color-text-secondary)] py-8">
                   {logs.length === 0 ? (
                     <>
-                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-16 h-16 mx-auto mb-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <p>No logs available</p>
-                      <p className="text-xs text-gray-500 mt-2">Server logs will appear here when they become available</p>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-2">Server logs will appear here when they become available</p>
                     </>
                   ) : (
                     <p>No logs match your search criteria</p>
@@ -3811,7 +3811,7 @@ export function LogsTab({
                   {filteredLogs.map((line, index) => (
                     <div
                       key={index}
-                      className="mb-1 hover:bg-gray-800 px-2 py-1 rounded text-gray-300"
+                      className="mb-1 hover:bg-[var(--color-surface)] px-2 py-1 rounded text-[var(--color-text)]"
                       dangerouslySetInnerHTML={{ __html: ansiToHtml(line) }}
                     />
                   ))}
@@ -3823,9 +3823,9 @@ export function LogsTab({
         )}
 
         {/* Information Panel */}
-        <div className="mt-6 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-500/30">
+        <div className="mt-6 p-4 bg-gradient-to-r from-[var(--color-primary)]/20 to-purple-900/20 rounded-lg border border-[var(--color-primary)]/30">
           <h3 className="text-lg font-medium text-white mb-2">About Server Logs</h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-[var(--color-text-secondary)] text-sm">
             Server logs capture all system activity including requests, errors, warnings, and debug information.
             Color codes are preserved for better readability. Use filters to focus on specific types of logs or search by content.
           </p>
@@ -3998,8 +3998,8 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('reports')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'reports'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:text-white'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
             Reports ({mockReportedMessages.filter(r => r.status === 'pending').length})
@@ -4007,8 +4007,8 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('users')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'users'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:text-white'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
             Reported Users
@@ -4016,8 +4016,8 @@ export function ModerationTab({
           <button
             onClick={() => setActiveSubTab('messages')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'messages'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:text-white'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
           >
             Message Queue
@@ -4034,7 +4034,7 @@ export function ModerationTab({
                 placeholder="Search reports..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500 w-64"
+                className="bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] w-64"
               />
             </div>
 
@@ -4046,7 +4046,7 @@ export function ModerationTab({
                   report.reportedBy.toLowerCase().includes(searchTerm.toLowerCase())
                 )
                 .map((report) => (
-                  <div key={report.id} className="bg-gray-700 rounded-lg p-4">
+                  <div key={report.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
@@ -4059,11 +4059,11 @@ export function ModerationTab({
                             >
                               {report.senderUser}
                             </span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-gray-400 text-sm">Reported by</span>
+                            <span className="text-[var(--color-text-secondary)]">â€¢</span>
+                            <span className="text-[var(--color-text-secondary)] text-sm">Reported by</span>
                             <span
                               onClick={(e) => handleOpenUserProfile(report, 'reporter', e)}
-                              className="text-gray-400 text-sm hover:text-gray-300 cursor-pointer transition-colors hover:underline"
+                              className="text-[var(--color-text-secondary)] text-sm hover:text-[var(--color-text)] cursor-pointer transition-colors hover:underline"
                               title={`View ${report.reportedBy}'s profile`}
                             >
                               {report.reportedBy}
@@ -4076,18 +4076,18 @@ export function ModerationTab({
                           </span>
                         </div>
                         <div
-                          className="bg-gray-800 rounded p-3 mb-2 cursor-pointer hover:bg-gray-750 transition-colors duration-200"
+                          className="bg-[var(--color-surface)] rounded p-3 mb-2 cursor-pointer hover:bg-[var(--color-surface-secondary)] transition-colors duration-200"
                           onPointerDown={() => handleMessagePointerDown(report.messageId)}
                           onPointerUp={handleMessagePointerUp}
                           onPointerLeave={handleMessagePointerLeave}
                         >
                           <p className="text-white text-sm">{report.messageContent}</p>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {report.category} • {new Date(report.reportedAt).toLocaleString()}
+                        <div className="text-xs text-[var(--color-text-secondary)]">
+                          {report.category} â€¢ {new Date(report.reportedAt).toLocaleString()}
                         </div>
                         {report.description && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-[var(--color-text-muted)] mt-1">
                             "{report.description}"
                           </div>
                         )}
@@ -4102,13 +4102,13 @@ export function ModerationTab({
                       </button>
                       <button
                         onClick={() => handleResolveReport(report.id, 'warn')}
-                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                        className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-sm border border-amber-500/50 transition-colors"
                       >
                         Warn User
                       </button>
                       <button
                         onClick={() => handleResolveReport(report.id, 'dismiss')}
-                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-colors"
+                        className="bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-white px-3 py-1 rounded text-sm transition-colors"
                       >
                         Dismiss
                       </button>
@@ -4128,7 +4128,7 @@ export function ModerationTab({
                 placeholder="Search users..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-500 w-64"
+                className="bg-[var(--color-surface-secondary)] text-white px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] w-64"
               />
             </div>
 
@@ -4140,7 +4140,7 @@ export function ModerationTab({
                   user.reason.toLowerCase().includes(searchTerm.toLowerCase())
                 )
                 .map((user) => (
-                  <div key={user.id} className="bg-gray-700 rounded-lg p-4">
+                  <div key={user.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <img
@@ -4150,14 +4150,14 @@ export function ModerationTab({
                         />
                         <div>
                           <div className="text-white font-medium">{user.username}</div>
-                          <div className="text-gray-400 text-sm">{user.reportCount} reports</div>
-                          <div className="text-gray-500 text-xs">{user.reason}</div>
+                          <div className="text-[var(--color-text-secondary)] text-sm">{user.reportCount} reports</div>
+                          <div className="text-[var(--color-text-muted)] text-xs">{user.reason}</div>
                         </div>
                       </div>
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleUserAction(user.id, 'warn')}
-                          className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                          className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-sm border border-amber-500/50 transition-colors"
                         >
                           Warn
                         </button>
@@ -4184,14 +4184,14 @@ export function ModerationTab({
         {activeSubTab === 'messages' && (
           <div>
             <h2 className="text-lg font-medium text-white mb-6">Message Moderation Queue</h2>
-            <div className="text-center text-gray-400 py-8">
-              <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
+            <div className="text-center text-[var(--color-text-secondary)] py-8">
+              <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
               <p>No messages in moderation queue</p>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-[var(--color-text-muted)] mt-2">
                 All messages are currently passing automatic moderation
               </p>
             </div>
@@ -4202,13 +4202,13 @@ export function ModerationTab({
       {/* Message Selection Modal Overlay */}
       {selectedMessageId && (
         <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-700 transform scale-105">
+          <div className="bg-[var(--color-surface)] rounded-xl w-full max-w-md mx-auto shadow-2xl border border-[var(--color-border)] transform scale-105">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Message Options</h3>
                 <button
                   onClick={clearMessageSelection}
-                  className="text-gray-400 hover:text-white transition-colors"
+                  className="text-[var(--color-text-secondary)] hover:text-white transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4216,7 +4216,7 @@ export function ModerationTab({
                 </button>
               </div>
 
-              <div className="bg-gray-700 rounded-lg p-4 mb-4">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4 mb-4">
                 <p className="text-white text-sm">
                   {mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.messageContent}
                 </p>
@@ -4237,7 +4237,7 @@ export function ModerationTab({
                     mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
                     'warn'
                   )}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded text-sm font-medium border border-amber-500/50 transition-colors"
                 >
                   Warn User
                 </button>
@@ -4246,7 +4246,7 @@ export function ModerationTab({
                     mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
                     'dismiss'
                   )}
-                  className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                  className="bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-white px-4 py-2 rounded text-sm font-medium transition-colors"
                 >
                   Dismiss
                 </button>
@@ -4270,3 +4270,5 @@ export function ModerationTab({
     </div>
   );
 }
+
+

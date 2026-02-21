@@ -1,7 +1,25 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useState } from "react";
+
+export type ToastTone = "success" | "warning" | "error";
+export type ToastCategory = "destructive" | "system" | "validation" | "info";
+
+export interface ToastEvent {
+  message: string;
+  tone: ToastTone;
+  category: ToastCategory;
+  dedupeKey?: string;
+  ttlMs?: number;
+}
+
+type LegacyToastTone = "success" | "error";
+
+interface ShowToast {
+  (event: ToastEvent): void;
+  (message: string, legacyTone?: LegacyToastTone): void;
+}
 
 interface ToastContextType {
-  showToast: (message: string, type?: 'success' | 'error') => void;
+  showToast: ShowToast;
 }
 
 const ToastContext = createContext<ToastContextType | null>(null);
@@ -10,69 +28,120 @@ interface ToastProviderProps {
   children: React.ReactNode;
 }
 
-export function ToastProvider({ children }: ToastProviderProps) {
-  const [currentToast, setCurrentToast] = useState<{
-    isOpen: boolean;
-    message: string;
-    type: 'success' | 'error';
-  }>({ isOpen: false, message: '', type: 'success' });
+const NOISY_PATTERNS = [
+  /message sent/i,
+  /connected to/i,
+  /disconnected from/i,
+  /copied to clipboard/i,
+  /copied message/i,
+  /audio devices updated/i,
+  /microphone muted/i,
+  /microphone unmuted/i,
+];
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    setCurrentToast({ isOpen: true, message, type });
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-      setCurrentToast({ isOpen: false, message: '', type: 'success' });
-    }, 3000);
-  }, []);
+function normalizeToastInput(input: ToastEvent | string, legacyTone?: LegacyToastTone): ToastEvent {
+  if (typeof input !== "string") {
+    return input;
+  }
 
-  const contextValue = {
-    showToast,
+  return {
+    message: input,
+    tone: legacyTone === "error" ? "error" : "success",
+    category: legacyTone === "error" ? "validation" : "info",
   };
+}
+
+function shouldSuppressToast(event: ToastEvent): boolean {
+  if (event.tone === "error" || event.tone === "warning") {
+    return false;
+  }
+
+  if (event.category === "destructive" || event.category === "system") {
+    return false;
+  }
+
+  return NOISY_PATTERNS.some((pattern) => pattern.test(event.message));
+}
+
+export function ToastProvider({ children }: ToastProviderProps) {
+  const [currentToast, setCurrentToast] = useState<(ToastEvent & { isOpen: boolean }) | null>(null);
+  const dedupeTrackerRef = useRef<Map<string, number>>(new Map());
+  const activeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast: ShowToast = (input: ToastEvent | string, legacyTone?: LegacyToastTone) => {
+    const event = normalizeToastInput(input, legacyTone);
+
+    if (!event.message || shouldSuppressToast(event)) {
+      return;
+    }
+
+    const now = Date.now();
+    const dedupeKey = event.dedupeKey || `${event.category}:${event.tone}:${event.message}`;
+    const lastShownAt = dedupeTrackerRef.current.get(dedupeKey);
+
+    if (lastShownAt && now - lastShownAt < 1600) {
+      return;
+    }
+
+    dedupeTrackerRef.current.set(dedupeKey, now);
+    setCurrentToast({ ...event, isOpen: true });
+
+    if (activeTimerRef.current) {
+      clearTimeout(activeTimerRef.current);
+    }
+
+    const ttl =
+      event.ttlMs ??
+      (event.tone === "error" ? 5000 : event.tone === "warning" ? 4500 : 3000);
+
+    activeTimerRef.current = setTimeout(() => {
+      setCurrentToast(null);
+    }, ttl);
+  };
+
+  const toneClass =
+    currentToast?.tone === "error"
+      ? "border-[var(--color-error)]/70 text-[var(--color-text)]"
+      : currentToast?.tone === "warning"
+        ? "border-[var(--color-warning)]/70 text-[var(--color-text)]"
+        : "border-[var(--color-success)]/70 text-[var(--color-text)]";
+
+  const contextValue = { showToast };
 
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      {currentToast.isOpen && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-sm animate-slide-in-right">
-          <div className={`glassmorphism px-4 py-3 rounded-xl flex items-center space-x-3 border transition-all duration-300 hover:scale-105 ${
-            currentToast.type === 'error'
-              ? 'bg-red-500/80 text-white border-red-400/60'
-              : 'bg-emerald-500/80 text-white border-emerald-400/60'
-          }`}>
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 animate-bounce-in ${
-              currentToast.type === 'error'
-                ? 'bg-red-400/30'
-                : 'bg-emerald-400/30'
-            }`}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
-                  currentToast.type === 'error'
-                    ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                    : "M5 13l4 4L19 7"
-                } />
-              </svg>
+      {currentToast?.isOpen ? (
+        <div className="animate-slide-in-right fixed right-4 top-4 z-[9999] max-w-sm">
+          <div
+            className={`rounded-lg border-l-4 border bg-[var(--color-surface)] px-4 py-3 shadow-xl ${toneClass}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
+                {currentToast.tone}
+              </div>
+              <p className="flex-1 text-sm leading-relaxed">{currentToast.message}</p>
+              <button
+                onClick={() => setCurrentToast(null)}
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                aria-label="Close"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <span className="text-sm font-medium leading-relaxed">{currentToast.message}</span>
-            <button
-              onClick={() => setCurrentToast({ isOpen: false, message: '', type: 'success' })}
-              className="text-white hover:bg-white/20 rounded-full p-1.5 transition-all duration-200 hover:scale-110 hover:rotate-90 flex-shrink-0"
-              aria-label="Close"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
           </div>
         </div>
-      )}
+      ) : null}
     </ToastContext.Provider>
   );
 }
 
-export function useToast(): ToastContextType['showToast'] {
+export function useToast(): ShowToast {
   const context = useContext(ToastContext);
   if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
+    throw new Error("useToast must be used within a ToastProvider");
   }
   return context.showToast;
 }

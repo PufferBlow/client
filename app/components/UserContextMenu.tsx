@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { ContextMenu, type ContextMenuItem } from "./ui/ContextMenu";
 
 interface UserContextMenuProps {
   isOpen: boolean;
@@ -16,6 +16,14 @@ interface UserContextMenuProps {
   isBlocked?: boolean;
 }
 
+function icon(path: string) {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+    </svg>
+  );
+}
+
 export function UserContextMenu({
   isOpen,
   position,
@@ -29,71 +37,66 @@ export function UserContextMenu({
   canBlock = true,
   canReport = true,
   isFriend = false,
-  isBlocked = false
+  isBlocked = false,
 }: UserContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
+  const items: ContextMenuItem[] = [];
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
+  if (onViewProfile) {
+    items.push({
+      id: "view-profile",
+      label: "View Profile",
+      icon: icon("M5.121 17.804A9 9 0 1118.88 6.197M15 11a3 3 0 11-6 0"),
+      onSelect: onViewProfile,
+    });
+  }
 
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
+  if (onSendMessage) {
+    items.push({
+      id: "send-message",
+      label: "Send Message",
+      icon: icon("M8 10h8m-8 4h4m8 5l-3-3H5a2 2 0 01-2-2V6a2 2 0 012-2h14"),
+      onSelect: onSendMessage,
+    });
+  }
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
-    }
+  if (onAddFriend) {
+    items.push({
+      id: "friend",
+      label: isFriend ? "Remove Friend" : "Add Friend",
+      icon: icon("M18 9a3 3 0 11-6 0 3 3 0 016 0M6 20v-1a4 4 0 014-4h4"),
+      onSelect: onAddFriend,
+    });
+  }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen, onClose]);
+  if (onMention) {
+    items.push({
+      id: "mention",
+      label: "Mention",
+      icon: icon("M16 8a6 6 0 11-4.472 10M12 12a2 2 0 10-2-2"),
+      onSelect: onMention,
+    });
+  }
 
-  if (!isOpen) return null;
+  if (canBlock && onBlock) {
+    items.push({
+      id: "block",
+      label: isBlocked ? "Unblock" : "Block",
+      tone: isBlocked ? "success" : "danger",
+      icon: icon("M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728"),
+      onSelect: onBlock,
+    });
+  }
 
-  const menuItems = [
-    { label: 'View Profile', icon: '👤', action: onViewProfile, show: !!onViewProfile },
-    { label: 'Send Message', icon: '💬', action: onSendMessage, show: !!onSendMessage },
-    { label: isFriend ? 'Remove Friend' : 'Add Friend', icon: isFriend ? '👥' : '➕', action: onAddFriend, show: !!onAddFriend },
-    { label: 'Mention', icon: '@', action: onMention, show: !!onMention },
-    { label: 'Block', icon: '🚫', action: onBlock, show: canBlock && !!onBlock && !isBlocked, danger: true },
-    { label: 'Unblock', icon: '✅', action: onBlock, show: canBlock && !!onBlock && isBlocked },
-    { label: 'Report', icon: '⚠️', action: onReport, show: canReport && !!onReport, danger: true },
-  ].filter(item => item.show);
+  if (canReport && onReport) {
+    items.push({
+      id: "report",
+      label: "Report",
+      tone: "warning",
+      icon: icon("M12 9v2m0 4h.01M5.07 19h13.86L12 5z"),
+      onSelect: onReport,
+    });
+  }
 
-  return (
-    <div
-      ref={menuRef}
-      className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 min-w-48"
-      style={{
-        left: position.x,
-        top: position.y,
-        transform: 'translate(-50%, -100%)', // Position above the click point
-      }}
-    >
-      {menuItems.map((item, index) => (
-        <button
-          key={index}
-          onClick={() => {
-            item.action?.();
-            onClose();
-          }}
-          className={`w-full px-3 py-2 text-left text-sm flex items-center hover:bg-gray-700 transition-colors ${
-            item.danger ? 'text-red-400 hover:bg-red-900 hover:bg-opacity-20' : 'text-gray-300'
-          }`}
-        >
-          <span className="mr-3 text-base">{item.icon}</span>
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </div>
-  );
+  return <ContextMenu isOpen={isOpen} position={position} onClose={onClose} items={items} minWidth={220} />;
 }
+

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router";
+﻿import { Link, useNavigate } from "react-router";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactDOM from 'react-dom';
 import { ServerCreationModal } from "../../components/ServerCreationModal";
@@ -513,7 +513,7 @@ export default function Dashboard() {
   if (showServerConfigError) {
     logger.ui.error('Server configuration error', { error: errorMessage });
     return (
-      <div className="pb-theme-scope h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
         <div className="text-center text-white">
           <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -521,14 +521,14 @@ export default function Dashboard() {
             </svg>
           </div>
           <h2 className="text-xl font-bold mb-2">Server Configuration Error</h2>
-          <p className="text-gray-400 mb-4">Unable to connect to server. Please check your server settings.</p>
+          <p className="text-[var(--color-text-secondary)] mb-4">Unable to connect to server. Please check your server settings.</p>
           <button
             onClick={() => {
               if (typeof window !== 'undefined') {
                 window.location.reload();
               }
             }}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium"
           >
             Try Again
           </button>
@@ -540,7 +540,7 @@ export default function Dashboard() {
   // Show timeout error if it took too long to load
   if (loadingTimeout) {
     return (
-      <div className="pb-theme-scope h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
         <div className="text-center text-white">
           <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -548,14 +548,14 @@ export default function Dashboard() {
             </svg>
           </div>
           <h2 className="text-xl font-bold mb-2">Loading Timeout</h2>
-          <p className="text-gray-400 mb-4">The app took too long to load. This may be due to a network issue or server problems.</p>
+          <p className="text-[var(--color-text-secondary)] mb-4">The app took too long to load. This may be due to a network issue or server problems.</p>
           <button
             onClick={() => {
               if (typeof window !== 'undefined') {
                 window.location.reload();
               }
             }}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+            className="px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-lg font-medium"
           >
             Try Again
           </button>
@@ -567,10 +567,10 @@ export default function Dashboard() {
   // Show skeleton loading state for dashboard
   if (!currentUser) {
     return (
-      <div className="pb-theme-scope h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
         {/* Server Sidebar */}
         <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm animate-pulse">
-          <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+          <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
           {/* Server Icons */}
           {Array.from({ length: 5 }).map((_, i) => (
@@ -580,8 +580,8 @@ export default function Dashboard() {
           ))}
 
           {/* Add Server Button */}
-          <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
-            <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
+            <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </div>
@@ -607,7 +607,7 @@ export default function Dashboard() {
             <div className="px-2 py-4">
               {/* Channels Header */}
               <div className="flex items-center px-2 mb-1">
-                <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
                 <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
@@ -616,13 +616,13 @@ export default function Dashboard() {
               {/* Channel Items */}
               <div className="space-y-0.5">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-gray-600 cursor-pointer group transition-colors">
+                  <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-[var(--color-surface-tertiary)] cursor-pointer group transition-colors">
                     <div className="w-2 h-2 bg-[var(--color-surface-secondary)] rounded-full mr-2 flex-shrink-0"></div>
                     <div className="flex-1">
                       <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
                     </div>
                     {i % 5 === 0 && (
-                      <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-[var(--color-text-muted)] ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
                     )}
@@ -676,18 +676,18 @@ export default function Dashboard() {
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${i % 4 === 0 ? 'bg-blue-900/10 border-l-4 border-blue-500' : ''
+                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${i % 4 === 0 ? 'bg-[var(--color-primary)]/10 border-l-4 border-[var(--color-primary)]' : ''
                   }`}
               >
                 {/* Avatar */}
-                <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
+                <div className="w-10 h-10 bg-gradient-to-br from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
 
                 {/* Message Content */}
                 <div className="flex-1">
                   {/* Message Header */}
                   <div className="flex items-center space-x-2 mb-3">
                     {/* Username */}
-                    <div className={`h-4 bg-gradient-to-r from-white to-gray-200 rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
+                    <div className={`h-4 bg-gradient-to-r from-white to-[var(--color-border-secondary)] rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
 
                     {/* Role badge */}
                     {i % 5 === 0 && (
@@ -697,31 +697,31 @@ export default function Dashboard() {
                     )}
 
                     {/* Timestamp */}
-                    <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-16 opacity-60"></div>
+                    <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-16 opacity-60"></div>
                   </div>
 
                   {/* Message Lines */}
                   <div className="space-y-2">
-                    <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-full"></div>
+                    <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-full"></div>
                     {i % 3 === 0 && (
-                      <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-4/5"></div>
+                      <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-4/5"></div>
                     )}
                     {i % 4 === 0 && (
                       <>
-                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-3/4"></div>
-                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-1/2"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-3/4"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-1/2"></div>
                       </>
                     )}
                   </div>
 
                   {/* Attachment Preview */}
                   {i % 6 === 2 && (
-                    <div className="mt-3 p-3 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg border border-gray-500 animate-pulse">
+                    <div className="mt-3 p-3 bg-gradient-to-br from-[var(--color-surface-tertiary)] to-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border)] animate-pulse">
                       <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 flex-shrink-0 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                         </svg>
-                        <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-24"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-24"></div>
                       </div>
                     </div>
                   )}
@@ -730,7 +730,7 @@ export default function Dashboard() {
                 {/* Hover Menu Button */}
                 {(i + 1) % 2 === 0 && (
                   <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
-                    <button className="w-8 h-8 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors">
+                    <button className="w-8 h-8 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] rounded flex items-center justify-center text-[var(--color-text)] hover:text-white transition-colors">
                       <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
                       </svg>
@@ -743,14 +743,14 @@ export default function Dashboard() {
 
           {/* Message Input */}
           <div className="p-4">
-            <div className="bg-gray-600 rounded-lg px-4 py-3 animate-pulse">
+            <div className="bg-[var(--color-surface-tertiary)] rounded-lg px-4 py-3 animate-pulse">
               <div className="flex items-end space-x-3">
-                <div className="w-8 h-8 bg-gray-500 rounded flex-shrink-0"></div>
+                <div className="w-8 h-8 bg-[var(--color-hover)] rounded flex-shrink-0"></div>
                 <div className="flex-1 min-h-0">
-                  <div className="w-full bg-gray-700 rounded px-2 py-1 opacity-60"></div>
+                  <div className="w-full bg-[var(--color-surface-secondary)] rounded px-2 py-1 opacity-60"></div>
                 </div>
-                <div className="w-8 h-8 bg-gray-500 rounded"></div>
-                <div className="w-8 h-8 bg-gray-500 rounded"></div>
+                <div className="w-8 h-8 bg-[var(--color-hover)] rounded"></div>
+                <div className="w-8 h-8 bg-[var(--color-hover)] rounded"></div>
               </div>
             </div>
           </div>
@@ -993,14 +993,14 @@ export default function Dashboard() {
   // Show skeleton loading state for dashboard
   if (!currentUser) {
     return (
-      <div className="pb-theme-scope h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
+      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
         {/* Left Sidebar Container */}
         <div className="flex flex-col gap-0 h-full">
           {/* Server and Channel Sidebars Row */}
           <div className="flex flex-1 gap-2">
             {/* Server Sidebar */}
             <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm rounded-br-none animate-pulse">
-              <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+              <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
               {/* Server Icons */}
               {Array.from({ length: 5 }).map((_, i) => (
@@ -1010,8 +1010,8 @@ export default function Dashboard() {
               ))}
 
               {/* Add Server Button */}
-              <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
-                <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
+                <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
@@ -1046,7 +1046,7 @@ export default function Dashboard() {
                 <div className="px-2 py-4">
                   {/* Channels Header */}
                   <div className="flex items-center px-2 mb-1">
-                    <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                     <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
@@ -1057,22 +1057,22 @@ export default function Dashboard() {
                     {Array.from({ length: 12 }).map((_, i) => (
                       <div
                         key={i}
-                        className={`flex items-center px-2 py-1 rounded hover:bg-gray-600 cursor-pointer ${i % 4 === 0 ? 'bg-gray-600' : ''}`}
+                        className={`flex items-center px-2 py-1 rounded hover:bg-[var(--color-surface-tertiary)] cursor-pointer ${i % 4 === 0 ? 'bg-[var(--color-surface-tertiary)]' : ''}`}
                       >
-                        <span className="text-gray-400 mr-2">#</span>
-                        <span className="text-gray-400 text-sm break-words overflow-wrap-anywhere flex-1">
+                        <span className="text-[var(--color-text-secondary)] mr-2">#</span>
+                        <span className="text-[var(--color-text-secondary)] text-sm break-words overflow-wrap-anywhere flex-1">
                           <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
                         </span>
                         <div className="flex items-center ml-auto">
                           {i % 5 === 0 && (
                             <div className="flex items-center mr-1">
-                              <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3 h-3 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
                             </div>
                           )}
                           {i % 7 === 0 && (
-                            <svg className="w-4 h-4 text-gray-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-[var(--color-text-muted)] ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
                           )}
@@ -1089,7 +1089,7 @@ export default function Dashboard() {
           <div className="w-full bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded-b-2xl border-t border-[var(--color-border)] animate-pulse">
             <div className="px-2 pb-2 pt-4">
               <div className="flex items-center space-x-3 p-2 rounded-xl bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
-                <div className="w-8 h-8 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full animate-pulse shadow-md border-2 border-green-300"></div>
+                <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded-full animate-pulse shadow-md border-2 border-green-300"></div>
                 <div className="flex-1">
                   <div className="h-4 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-20 mb-1"></div>
                   <div className="flex items-center space-x-2">
@@ -1128,46 +1128,46 @@ export default function Dashboard() {
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${i % 4 === 0 ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''}`}
+                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${i % 4 === 0 ? 'bg-[var(--color-primary)]/20 border-l-4 border-[var(--color-primary)]' : ''}`}
               >
                 {/* Avatar */}
-                <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
+                <div className="w-10 h-10 bg-gradient-to-br from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
                     {/* Username */}
-                    <div className={`h-4 bg-gradient-to-r from-white to-gray-200 rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
+                    <div className={`h-4 bg-gradient-to-r from-white to-[var(--color-border-secondary)] rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
 
                     {/* Role badge */}
                     {i % 5 === 0 && (
                       <div className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
-                        <div className="h-3 bg-gradient-to-r from-white to-gray-200 rounded w-8"></div>
+                        <div className="h-3 bg-gradient-to-r from-white to-[var(--color-border-secondary)] rounded w-8"></div>
                       </div>
                     )}
 
                     {/* Timestamp */}
-                    <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-16 opacity-60"></div>
+                    <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-16 opacity-60"></div>
                   </div>
 
                   {/* Message Lines */}
                   <div className="space-y-2">
-                    <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-full"></div>
+                    <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-full"></div>
                     {i % 3 === 0 && (
-                      <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-4/5"></div>
+                      <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-4/5"></div>
                     )}
                     {i % 4 === 1 && (
                       <>
-                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-3/4"></div>
-                        <div className="h-3 bg-gradient-to-r from-gray-300 to-gray-500 rounded animate-pulse w-1/2"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-3/4"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-1/2"></div>
                       </>
                     )}
                   </div>
 
                   {/* Attachment Preview */}
                   {i % 6 === 2 && (
-                    <div className="mt-3 p-3 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg border border-gray-500 animate-pulse">
+                    <div className="mt-3 p-3 bg-gradient-to-br from-[var(--color-surface-tertiary)] to-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border)] animate-pulse">
                       <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 bg-gray-400 rounded flex-shrink-0"></div>
-                        <div className="h-3 bg-gradient-to-r from-gray-400 to-gray-600 rounded w-24"></div>
+                        <div className="w-4 h-4 bg-[var(--color-border)] rounded flex-shrink-0"></div>
+                        <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-24"></div>
                       </div>
                     </div>
                   )}
@@ -1176,7 +1176,7 @@ export default function Dashboard() {
                 {/* Hover Menu Button */}
                 {(i + 1) % 2 === 0 && (
                   <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
-                    <div className="w-8 h-8 bg-gray-600 hover:bg-gray-500 rounded flex items-center justify-center text-gray-300 hover:text-white transition-colors">
+                    <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] rounded flex items-center justify-center text-[var(--color-text)] hover:text-white transition-colors">
                       <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
                       </svg>
@@ -1192,18 +1192,18 @@ export default function Dashboard() {
             <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl animate-pulse">
               <div className="flex items-end space-x-3">
                 {/* File Upload Button */}
-                <div className="flex-shrink-0 w-8 h-8 bg-gray-500 rounded"></div>
+                <div className="flex-shrink-0 w-8 h-8 bg-[var(--color-hover)] rounded"></div>
 
                 {/* Message Input */}
                 <div className="flex-1 min-h-0">
-                  <div className="w-full bg-gray-700 rounded px-2 py-1 opacity-60 h-6"></div>
+                  <div className="w-full bg-[var(--color-surface-secondary)] rounded px-2 py-1 opacity-60 h-6"></div>
                 </div>
 
                 {/* Emoji Button */}
-                <div className="w-8 h-8 bg-gray-500 rounded"></div>
+                <div className="w-8 h-8 bg-[var(--color-hover)] rounded"></div>
 
                 {/* Send Button */}
-                <div className="w-8 h-8 bg-blue-600 rounded"></div>
+                <div className="w-8 h-8 bg-[var(--color-primary)] rounded"></div>
               </div>
             </div>
           </div>
@@ -1937,14 +1937,14 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="pb-theme-scope h-screen overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
+    <div className="h-screen overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
       {/* Left Sidebar Container */}
       <div className="flex flex-col gap-0 h-full shrink-0">
         {/* Server and Channel Sidebars Row */}
         <div className="flex flex-1 gap-2 min-h-0">
           {/* Server Sidebar */}
           <div className="w-16 shrink-0 bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col items-center py-2 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
-            <div className="w-8 h-px bg-[#35373c] rounded mb-2"></div>
+            <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
             {/* Current Server */}
             {serverInfo && (
@@ -1960,13 +1960,13 @@ export default function Dashboard() {
                     {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
                   </span>
                 )}
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#23a559] rounded-full border-2 border-[#1e1f22] opacity-100"></div>
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[var(--color-success)] rounded-full border-2 border-[var(--color-border)] opacity-100"></div>
               </div>
             )}
 
             {/* Add Server Button */}
-            <div className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto">
-              <svg className="w-6 h-6 text-[#b5bac1] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-[var(--color-surface)] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[var(--color-success)] transition-all duration-200 cursor-pointer group mt-auto">
+              <svg className="w-6 h-6 text-[var(--color-text-secondary)] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
@@ -1996,7 +1996,7 @@ export default function Dashboard() {
                     <h1 className="text-white font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
                       {serverInfo?.server_name || 'Loading...'}
                     </h1>
-                    <p className="text-gray-400 text-xs truncate">{serverInfo?.server_description}</p>
+                    <p className="text-[var(--color-text-secondary)] text-xs truncate">{serverInfo?.server_description}</p>
                   </div>
 
                   {/* Server Dropdown */}
@@ -2008,7 +2008,7 @@ export default function Dashboard() {
                       aria-label="Server options"
                     >
                       <svg
-                        className={`pb-icon text-gray-400 group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
+                        className={`pb-icon text-[var(--color-text-secondary)] group-hover:text-white transition-colors ${serverDropdownOpen ? 'rotate-180' : ''}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2027,7 +2027,7 @@ export default function Dashboard() {
                               console.log('Server Info clicked');
                               setServerDropdownOpen(false);
                             }}
-                            className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
+                            className="w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer rounded-md"
                             title="View server information"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2046,8 +2046,8 @@ export default function Dashboard() {
                             }}
                             disabled={!currentUser?.is_admin && !currentUser?.is_owner && !((currentUser?.roles || [])?.includes('Admin')) && !((currentUser?.roles || [])?.includes('Moderator'))}
                             className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_admin || currentUser?.is_owner || (currentUser?.roles && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Moderator'))))
-                                ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                                ? 'text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
                               }`}
                             title={
                               ((currentUser?.roles || [])?.includes('Admin') || (currentUser?.roles || [])?.includes('Moderator') || currentUser?.is_admin || currentUser?.is_owner)
@@ -2072,8 +2072,8 @@ export default function Dashboard() {
                               }
                             }}
                             className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
-                                ? 'text-gray-300 hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
-                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                                ? 'text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)] hover:text-white cursor-pointer'
+                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
                               }`}
                             title={
                               (currentUser?.is_owner || currentUser?.roles?.includes('Owner') || currentUser?.is_admin || currentUser?.roles?.includes('Admin'))
@@ -2102,7 +2102,7 @@ export default function Dashboard() {
                             disabled={!currentUser?.is_owner && !currentUser?.roles?.includes('Owner')}
                             className={`w-full px-3 py-2 text-left transition-colors flex items-center space-x-3 rounded-md ${(currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
                                 ? 'text-red-300 hover:bg-red-900/20 hover:text-red-100 cursor-pointer'
-                                : 'text-gray-500 cursor-not-allowed opacity-60'
+                                : 'text-[var(--color-text-muted)] cursor-not-allowed opacity-60'
                               }`}
                             title={
                                 (currentUser?.is_owner || currentUser?.roles?.includes('Owner'))
@@ -2156,7 +2156,7 @@ export default function Dashboard() {
                     <h3 className="text-xl font-bold text-white mb-3 drop-shadow-sm">
                       Channels Unavailable
                     </h3>
-                    <p className="text-gray-400 leading-relaxed mb-4">
+                    <p className="text-[var(--color-text-secondary)] leading-relaxed mb-4">
                       {channelsError}
                     </p>
                   </div>
@@ -2165,7 +2165,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-center">
                     <button
                       onClick={() => window.location.reload()}
-                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
+                      className="px-6 py-3 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] hover:from-[var(--color-primary)] hover:to-[var(--color-primary-hover)] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -2176,23 +2176,23 @@ export default function Dashboard() {
                 </div>
               ) : channels.length === 0 ? (
                 <div className="px-4 py-12 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
-                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                   </div>
-                  <p className="text-lg font-medium mb-2 text-gray-400">No channels available</p>
-                  <p className="text-gray-500">Ask a server admin to create some channels to get started.</p>
+                  <p className="text-lg font-medium mb-2 text-[var(--color-text-secondary)]">No channels available</p>
+                  <p className="text-[var(--color-text-muted)]">Ask a server admin to create some channels to get started.</p>
                 </div>
               ) : (
                 <>
                   {/* Channels */}
                   <div className="px-2 py-4">
                     <div className="flex items-center px-2 mb-1">
-                      <svg className="w-3 h-3 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Channels</span>
+                      <span className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">Channels</span>
                     </div>
 
                     <div className="space-y-2">
@@ -2227,7 +2227,7 @@ export default function Dashboard() {
                             <div className="flex items-center ml-auto">
                               {hasDraft && (
                                 <div className="flex items-center mr-1" title="Has unsent message">
-                                  <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <svg className="w-3 h-3 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                   </svg>
                                 </div>
@@ -2324,9 +2324,9 @@ export default function Dashboard() {
         >
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center text-gray-400">
-                <div className="text-gray-500 text-sm">No messages yet</div>
-                <div className="text-gray-600 text-xs mt-1">
+              <div className="text-center text-[var(--color-text-secondary)]">
+                <div className="text-[var(--color-text-muted)] text-sm">No messages yet</div>
+                <div className="text-[var(--color-text-muted)] text-xs mt-1">
                   {selectedChannel ? `This is the beginning of #${selectedChannel.channel_name}` : 'Select a channel to view messages'}
                 </div>
               </div>
@@ -2405,8 +2405,8 @@ export default function Dashboard() {
               return (
                   <div
                     key={firstMessage.message_id}
-                    className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-gray-700/30 transition-colors ${firstMessage.sender_user_id === currentUser?.user_id
-                        ? 'bg-blue-900/20 border-l-4 border-blue-500 hover:bg-blue-900/30'
+                    className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${firstMessage.sender_user_id === currentUser?.user_id
+                        ? 'bg-[var(--color-primary)]/20 border-l-4 border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]/30'
                         : ''
                       }`}
                     onMouseEnter={() => setHoveredMessageId(firstMessage.message_id)}
@@ -2439,12 +2439,12 @@ export default function Dashboard() {
                         ) : firstMessage.sender_roles?.includes("moderator") || firstMessage.sender_roles?.includes("Moderator") ? (
                           <span className="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">MOD</span>
                         ) : null}
-                        <span className="text-gray-400 text-xs select-text">{messageTimestamp}</span>
+                        <span className="text-[var(--color-text-secondary)] text-xs select-text">{messageTimestamp}</span>
                       </div>
                       <div className="space-y-1">
                         {group.map((message) => (
                           <div key={message.message_id}>
-                            <MarkdownRenderer content={message.message} className="text-gray-300" />
+                            <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
 
                             {/* Render attachments with Discord-style bubble layout */}
                             {message.attachments && message.attachments.length > 0 && (
@@ -2466,7 +2466,7 @@ export default function Dashboard() {
                               onReport: () => handleMessageReport(firstMessage.message_id)
                             });
                           }}
-                          className="pb-icon-btn mr-2 bg-gray-600 hover:bg-gray-500 text-gray-300 hover:text-white"
+                          className="pb-icon-btn mr-2 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-[var(--color-text)] hover:text-white"
                           title="More options"
                           aria-label="Message options"
                         >
@@ -2490,7 +2490,7 @@ export default function Dashboard() {
               {messageAttachments.map((file, index) => (
                 <div
                   key={index}
-                  className="relative bg-gray-700 rounded-lg p-3 border border-gray-600 group hover:border-gray-500 transition-colors"
+                  className="relative bg-[var(--color-surface-secondary)] rounded-lg p-3 border border-[var(--color-border)] group hover:border-[var(--color-border)] transition-colors"
                 >
                   {/* File content preview */}
                   {file.type.startsWith('image/') ? (
@@ -2504,22 +2504,22 @@ export default function Dashboard() {
                         <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
                           {file.name}
                         </p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-[var(--color-text-secondary)]">
                           {(file.size / (1024 * 1024)).toFixed(1)}MB
                         </p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center space-y-2 text-center">
-                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-12 h-12 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
                         <p className="text-xs text-white font-medium truncate max-w-24" title={file.name}>
                           {file.name}
                         </p>
-                        <p className="text-xs text-gray-400">
-                          {(file.size / (1024 * 1024)).toFixed(1)}MB • {file.type || 'Unknown type'}
+                        <p className="text-xs text-[var(--color-text-secondary)]">
+                          {(file.size / (1024 * 1024)).toFixed(1)}MB â€¢ {file.type || 'Unknown type'}
                         </p>
                       </div>
                     </div>
@@ -2571,7 +2571,7 @@ export default function Dashboard() {
               {/* File Upload Button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="pb-icon-btn flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-500"
+                className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-hover)]"
                 disabled={!selectedChannel}
                 title="Upload file"
                 aria-label="Upload file"
@@ -2597,7 +2597,7 @@ export default function Dashboard() {
                   onKeyDown={handleKeyPress}
                   placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
                   disabled={!selectedChannel}
-                  className="w-full bg-transparent text-white placeholder-gray-400 focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-transparent text-white placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
                   rows={1}
                 />
               </div>
@@ -2607,8 +2607,8 @@ export default function Dashboard() {
                 onClick={handleEmojiClick}
                 disabled={!selectedChannel}
                 className={`pb-icon-btn ${isEmojiPickerOpen
-                    ? 'bg-blue-600 text-white hover:bg-blue-600'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-500'
+                    ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-hover)]'
                   }`}
                 title="Add emoji"
                 aria-label="Add emoji"
@@ -2622,7 +2622,7 @@ export default function Dashboard() {
               {messageInput.trim() && selectedChannel && (
                 <button
                   onClick={handleSendMessage}
-                  className="pb-icon-btn bg-blue-600 hover:bg-blue-700 text-white transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
+                  className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
                   title="Send message"
                   aria-label="Send message"
                 >
@@ -2674,11 +2674,11 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <p className="text-center text-lg font-medium mb-2 text-red-400">Failed to load members</p>
-                <p className="text-center text-gray-500 mb-4">{usersError}</p>
+                <p className="text-center text-[var(--color-text-muted)] mb-4">{usersError}</p>
                 <div className="text-center">
                   <button
                     onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                    className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded transition-colors"
                   >
                     Retry
                   </button>
@@ -2686,13 +2686,13 @@ export default function Dashboard() {
               </div>
             ) : users.length === 0 ? (
               <div className="p-4">
-                <div className="w-16 h-16 mx-auto mb-4 bg-gray-700 rounded-full flex items-center justify-center">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-secondary)] rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-                <p className="text-center text-lg font-medium mb-2 text-gray-400">No members found</p>
-                <p className="text-center text-gray-500">This server appears to be empty.</p>
+                <p className="text-center text-lg font-medium mb-2 text-[var(--color-text-secondary)]">No members found</p>
+                <p className="text-center text-[var(--color-text-muted)]">This server appears to be empty.</p>
               </div>
             ) : (
               <div className="p-4 space-y-4">
@@ -2818,7 +2818,7 @@ export default function Dashboard() {
       {/* Channel Context Menu for Deletion */}
       {channelContextMenu.isOpen && channelContextMenu.channel && (
         <div
-          className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 w-48"
+          className="fixed z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 w-48"
           style={{
             left: Math.min(channelContextMenu.position.x, window.innerWidth - 200),
             top: Math.min(channelContextMenu.position.y, window.innerHeight - 100),
@@ -2842,22 +2842,22 @@ export default function Dashboard() {
       {/* Channel Deletion Confirmation Modal */}
       {channelDeleteConfirm.isOpen && channelDeleteConfirm.channel && (
         <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
             <div className="mb-4">
               <h3 className="text-xl font-bold text-white">Delete Channel</h3>
             </div>
             <div className="mb-6">
-              <p className="text-gray-300 mb-2">
+              <p className="text-[var(--color-text)] mb-2">
                 Are you sure you want to delete <span className="font-semibold text-white">#{channelDeleteConfirm.channel.channel_name}</span>?
               </p>
               <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded">
-                ⚠️ This action cannot be undone. All messages in this channel will be permanently deleted.
+                âš ï¸ This action cannot be undone. All messages in this channel will be permanently deleted.
               </div>
             </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setChannelDeleteConfirm({ isOpen: false, channel: null, isDeleting: false })}
-                className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
                 disabled={channelDeleteConfirm.isDeleting}
               >
                 Cancel
@@ -2979,3 +2979,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+

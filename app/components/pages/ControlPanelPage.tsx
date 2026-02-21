@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+﻿import { Link } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import {
   BarChart3,
@@ -120,14 +120,14 @@ export default function ControlPanel() {
   }, []);
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
-    console.log("🔍 handleCreateChannel called with:", channelData);
+    console.log("ðŸ” handleCreateChannel called with:", channelData);
 
     try {
       const authToken = getAuthTokenFromCookies() || '';
-      console.log("🔍 Auth token present:", !!authToken);
+      console.log("ðŸ” Auth token present:", !!authToken);
 
       if (!authToken) {
-        console.error("❌ No auth token available for channel creation");
+        console.error("âŒ No auth token available for channel creation");
         showToast('Authentication error: Please log in again.', 'error');
         return;
       }
@@ -176,17 +176,17 @@ export default function ControlPanel() {
   if (isLoading) {
     return (
       <>
-        <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+        <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
           {/* Nord-themed Sidebar Skeleton */}
           <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
             {/* Server Branding Header Skeleton */}
             <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
-                <div className="h-4 bg-gray-600 rounded w-32"></div>
+                <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] rounded-full"></div>
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
               </div>
               <div className="ml-auto">
-                <div className="w-6 h-6 bg-gray-600 rounded"></div>
+                <div className="w-6 h-6 bg-[var(--color-surface-tertiary)] rounded"></div>
               </div>
             </div>
 
@@ -196,14 +196,14 @@ export default function ControlPanel() {
                 {/* Overview/Dashboard Section */}
                 <div className="mb-6">
                   <div className="px-4 py-2 mb-2">
-                    <div className="h-4 bg-gray-600 rounded w-24"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-24"></div>
                   </div>
                   <div className="space-y-1">
                     {Array.from({ length: 1 }).map((_, i) => (
                       <div key={`overview-${i}`} className="px-3 py-2 rounded-md">
                         <div className="flex items-center space-x-3">
-                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
-                          <div className="h-4 bg-gray-600 rounded w-20"></div>
+                          <div className="w-6 h-6 bg-[var(--color-surface-tertiary)] rounded"></div>
+                          <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-20"></div>
                         </div>
                       </div>
                     ))}
@@ -213,14 +213,14 @@ export default function ControlPanel() {
                 {/* Management Section */}
                 <div className="mb-6">
                   <div className="px-4 py-2 mb-2">
-                    <div className="h-4 bg-gray-600 rounded w-40"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-40"></div>
                   </div>
                   <div className="space-y-1">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <div key={`management-${i}`} className="px-3 py-2 rounded-md">
                         <div className="flex items-center space-x-3">
-                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
-                          <div className="h-4 bg-gray-600 rounded w-16"></div>
+                          <div className="w-6 h-6 bg-[var(--color-surface-tertiary)] rounded"></div>
+                          <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-16"></div>
                         </div>
                       </div>
                     ))}
@@ -230,14 +230,14 @@ export default function ControlPanel() {
                 {/* Configuration Section */}
                 <div className="mb-6">
                   <div className="px-4 py-2 mb-2">
-                    <div className="h-4 bg-gray-600 rounded w-44"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-44"></div>
                   </div>
                   <div className="space-y-1">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <div key={`config-${i}`} className="px-3 py-2 rounded-md">
                         <div className="flex items-center space-x-3">
-                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
-                          <div className="h-4 bg-gray-600 rounded w-18"></div>
+                          <div className="w-6 h-6 bg-[var(--color-surface-tertiary)] rounded"></div>
+                          <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-18"></div>
                         </div>
                       </div>
                     ))}
@@ -247,14 +247,14 @@ export default function ControlPanel() {
                 {/* Security Section */}
                 <div className="mb-6">
                   <div className="px-4 py-2 mb-2">
-                    <div className="h-4 bg-gray-600 rounded w-32"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
                   </div>
                   <div className="space-y-1">
                     {Array.from({ length: 2 }).map((_, i) => (
                       <div key={`security-${i}`} className="px-3 py-2 rounded-md">
                         <div className="flex items-center space-x-3">
-                          <div className="w-6 h-6 bg-gray-600 rounded"></div>
-                          <div className="h-4 bg-gray-600 rounded w-20"></div>
+                          <div className="w-6 h-6 bg-[var(--color-surface-tertiary)] rounded"></div>
+                          <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-20"></div>
                         </div>
                       </div>
                     ))}
@@ -265,11 +265,11 @@ export default function ControlPanel() {
 
             {/* Back to Dashboard Button Skeleton */}
             <div className="m-2 p-2">
-              <div className="hover:bg-gray-700 rounded-lg transition-all duration-200 flex items-center space-x-3 text-gray-300 cursor-pointer p-2">
+              <div className="hover:bg-[var(--color-surface-secondary)] rounded-lg transition-all duration-200 flex items-center space-x-3 text-[var(--color-text)] cursor-pointer p-2">
                 <div className="w-5 h-5 ml-3">
-                  <div className="w-5 h-5 bg-gray-600 rounded"></div>
+                  <div className="w-5 h-5 bg-[var(--color-surface-tertiary)] rounded"></div>
                 </div>
-                <div className="h-4 bg-gray-600 rounded w-28"></div>
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-28"></div>
               </div>
             </div>
           </div>
@@ -279,34 +279,34 @@ export default function ControlPanel() {
             {/* Header Skeleton */}
             <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
               <div className="flex items-center space-x-4">
-                <div className="h-4 bg-gray-600 rounded w-40"></div>
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-40"></div>
               </div>
               <div className="ml-auto">
-                <div className="h-6 bg-gray-600 rounded w-12 px-2 py-1"></div>
+                <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-12 px-2 py-1"></div>
               </div>
             </div>
 
             {/* Content Area Skeleton */}
             <div className="flex-1 p-6 overflow-y-auto bg-[var(--color-background)]">
               {/* Server Information Card Skeleton */}
-              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600 mb-6">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 border border-[var(--color-border)] mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="h-4 bg-gray-600 rounded w-32"></div>
+                  <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
                   <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-                    <div className="h-4 bg-gray-600 rounded w-12"></div>
+                    <div className="w-2 h-2 bg-[var(--color-hover)] rounded-full"></div>
+                    <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-12"></div>
                   </div>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                   <div className="flex items-start space-x-4">
-                    <div className="w-16 h-16 bg-gray-600 rounded-xl"></div>
+                    <div className="w-16 h-16 bg-[var(--color-surface-tertiary)] rounded-xl"></div>
                     <div className="flex-1">
-                      <div className="h-6 bg-gray-600 rounded w-48 mb-2"></div>
-                      <div className="h-4 bg-gray-600 rounded w-64 mb-3"></div>
+                      <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-48 mb-2"></div>
+                      <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-64 mb-3"></div>
                       <div className="flex items-center space-x-4">
-                        <div className="h-4 bg-gray-600 rounded w-20"></div>
-                        <div className="h-4 bg-gray-600 rounded w-4"></div>
-                        <div className="h-4 bg-gray-600 rounded w-24"></div>
+                        <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-20"></div>
+                        <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-4"></div>
+                        <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-24"></div>
                       </div>
                     </div>
                   </div>
@@ -314,15 +314,15 @@ export default function ControlPanel() {
               </div>
 
               {/* Server Statistics Cards Skeleton */}
-              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600 mb-6">
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 border border-[var(--color-border)] mb-6">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="h-4 bg-gray-600 rounded w-36"></div>
+                  <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-36"></div>
                   <div className="flex space-x-2">
-                    <div className="px-4 py-2 bg-gray-600 rounded-lg">
-                      <div className="h-4 bg-gray-500 rounded w-12"></div>
+                    <div className="px-4 py-2 bg-[var(--color-surface-tertiary)] rounded-lg">
+                      <div className="h-4 bg-[var(--color-hover)] rounded w-12"></div>
                     </div>
-                    <div className="px-4 py-2 bg-gray-800 rounded-lg">
-                      <div className="h-4 bg-gray-500 rounded w-10"></div>
+                    <div className="px-4 py-2 bg-[var(--color-surface)] rounded-lg">
+                      <div className="h-4 bg-[var(--color-hover)] rounded w-10"></div>
                     </div>
                   </div>
                 </div>
@@ -331,13 +331,13 @@ export default function ControlPanel() {
                   {/* Key Metrics Skeleton */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                      <div key={i} className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="h-4 bg-gray-600 rounded mb-2 w-20"></div>
-                            <div className="h-8 bg-gray-600 rounded w-12"></div>
+                            <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-2 w-20"></div>
+                            <div className="h-8 bg-[var(--color-surface-tertiary)] rounded w-12"></div>
                           </div>
-                          <div className="w-8 h-8 bg-gray-600 rounded"></div>
+                          <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] rounded"></div>
                         </div>
                       </div>
                     ))}
@@ -346,25 +346,25 @@ export default function ControlPanel() {
                   {/* Detailed Stats Grid Skeleton */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="bg-gray-800 rounded-lg p-4">
+                      <div key={i} className="bg-[var(--color-surface)] rounded-lg p-4">
                         <div className="flex items-center mb-3">
-                          <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
-                          <div className="h-4 bg-gray-600 rounded w-24"></div>
+                          <div className="w-5 h-5 bg-[var(--color-surface-tertiary)] rounded mr-2"></div>
+                          <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-24"></div>
                         </div>
                         {i === 2 ? (
                           <div>
-                            <div className="h-6 bg-gray-600 rounded mb-2"></div>
-                            <div className="w-full bg-gray-600 rounded-full h-2"></div>
+                            <div className="h-6 bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
+                            <div className="w-full bg-[var(--color-surface-tertiary)] rounded-full h-2"></div>
                           </div>
                         ) : (
                           <div className="grid grid-cols-2 gap-4">
                             <div className="text-center">
-                              <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                              <div className="h-3 bg-gray-600 rounded"></div>
+                              <div className="h-6 bg-[var(--color-surface-tertiary)] rounded mb-1"></div>
+                              <div className="h-3 bg-[var(--color-surface-tertiary)] rounded"></div>
                             </div>
                             <div className="text-center">
-                              <div className="h-6 bg-gray-600 rounded mb-1"></div>
-                              <div className="h-3 bg-gray-600 rounded"></div>
+                              <div className="h-6 bg-[var(--color-surface-tertiary)] rounded mb-1"></div>
+                              <div className="h-3 bg-[var(--color-surface-tertiary)] rounded"></div>
                             </div>
                           </div>
                         )}
@@ -373,29 +373,29 @@ export default function ControlPanel() {
                   </div>
 
                   {/* Additional Stats Skeleton */}
-                  <div className="bg-gray-800 rounded-lg p-4">
+                  <div className="bg-[var(--color-surface)] rounded-lg p-4">
                     <div className="flex items-center mb-3">
-                      <div className="w-5 h-5 bg-gray-600 rounded mr-2"></div>
-                      <div className="h-4 bg-gray-600 rounded w-32"></div>
+                      <div className="w-5 h-5 bg-[var(--color-surface-tertiary)] rounded mr-2"></div>
+                      <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
                     </div>
                     <div className="text-center">
-                      <div className="h-6 bg-gray-600 rounded mb-1 w-8 mx-auto"></div>
-                      <div className="h-3 bg-gray-600 rounded w-32 mx-auto"></div>
+                      <div className="h-6 bg-[var(--color-surface-tertiary)] rounded mb-1 w-8 mx-auto"></div>
+                      <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-32 mx-auto"></div>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Recent Activity Skeleton */}
-              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
-                <div className="h-4 bg-gray-600 rounded mb-4 w-32"></div>
+              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 border border-[var(--color-border)]">
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-4 w-32"></div>
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-3 p-3 bg-gray-800 rounded-lg">
-                      <div className="w-8 h-8 bg-gray-600 rounded-full"></div>
+                    <div key={i} className="flex items-center space-x-3 p-3 bg-[var(--color-surface)] rounded-lg">
+                      <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] rounded-full"></div>
                       <div className="flex-1">
-                        <div className="h-4 bg-gray-600 rounded mb-1 w-24"></div>
-                        <div className="h-3 bg-gray-600 rounded w-32"></div>
+                        <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-1 w-24"></div>
+                        <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
                       </div>
                     </div>
                   ))}
@@ -513,8 +513,8 @@ export default function ControlPanel() {
         );
       } else if (content) {
         return (
-          <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-auto">
-            <pre className="text-gray-100 text-sm whitespace-pre-wrap break-words font-mono">
+          <div className="bg-[var(--color-surface-tertiary)] rounded-lg p-4 max-h-96 overflow-auto">
+            <pre className="text-[var(--color-text)] text-sm whitespace-pre-wrap break-words font-mono">
               {content}
             </pre>
           </div>
@@ -522,8 +522,8 @@ export default function ControlPanel() {
       } else if (loading) {
         return (
           <div className="flex justify-center items-center py-12">
-            <div className="text-center text-gray-400">
-              <div className="w-8 h-8 animate-spin border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <div className="text-center text-[var(--color-text-secondary)]">
+              <div className="w-8 h-8 animate-spin border-2 border-[var(--color-primary)] border-t-transparent rounded-full mx-auto mb-4"></div>
               <p>Loading file content...</p>
             </div>
           </div>
@@ -535,7 +535,7 @@ export default function ControlPanel() {
               href={file.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -550,19 +550,19 @@ export default function ControlPanel() {
     if (!isOpen || !file) return null;
 
     return (
-      <div className="pb-theme-scope fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-gray-700">
-          <div className="flex items-center justify-between p-6 border-b border-gray-700">
+      <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-[var(--color-surface)] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-[var(--color-border)]">
+          <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
             <div>
               <h3 className="text-lg font-semibold text-white truncate max-w-md">{file.filename}</h3>
-              <p className="text-gray-400 text-sm mt-1">
-                {formatFileSize(file.size)} • {file.type} •
+              <p className="text-[var(--color-text-secondary)] text-sm mt-1">
+                {formatFileSize(file.size)} â€¢ {file.type} â€¢
                 Uploaded {new Date(file.uploaded_at).toLocaleDateString()} by {file.uploader}
               </p>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors p-2"
+              className="text-[var(--color-text-secondary)] hover:text-white transition-colors p-2"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -574,10 +574,10 @@ export default function ControlPanel() {
             {renderFileContent()}
           </div>
 
-          <div className="flex justify-end space-x-3 p-6 border-t border-gray-700 bg-gray-750">
+          <div className="flex justify-end space-x-3 p-6 border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              className="px-4 py-2 text-[var(--color-text)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-tertiary)] rounded transition-colors"
             >
               Close
             </button>
@@ -585,7 +585,7 @@ export default function ControlPanel() {
               href={file.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors flex items-center space-x-2"
+              className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-4 py-2 rounded transition-colors flex items-center space-x-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -600,7 +600,7 @@ export default function ControlPanel() {
 
   return (
     <>
-      <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         {/* Nord-themed Sidebar */}
         <div className="w-64 bg-[var(--color-background-secondary)]/80 backdrop-blur-xl border-r border-[var(--color-border)]/50 flex flex-col shadow-2xl">
           {/* Server Branding Header */}
@@ -787,3 +787,4 @@ export default function ControlPanel() {
     </>
   );
 }
+

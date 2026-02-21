@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+﻿import { Link } from "react-router";
 import { useTheme, themePresets, type AppearanceConfig } from "../../components/ThemeProvider";
 import { useState, useEffect } from "react";
 import { FileUploadInput } from "../../components/FileUploadInput";
@@ -711,7 +711,7 @@ export default function Settings() {
   // Show skeleton loading state
   if (userLoading) {
     return (
-      <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         {/* Nord-themed Sidebar Skeleton */}
         <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
           <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
@@ -726,14 +726,14 @@ export default function Settings() {
           </div>
         </div>
         <div className="flex-1 p-6 animate-pulse">
-          <div className="h-8 bg-gray-600 rounded w-48 mb-6"></div>
+          <div className="h-8 bg-[var(--color-surface-tertiary)] rounded w-48 mb-6"></div>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-gray-700 rounded-lg p-6 mb-6">
-              <div className="h-6 bg-gray-600 rounded mb-4 w-48"></div>
+            <div key={i} className="bg-[var(--color-surface-secondary)] rounded-lg p-6 mb-6">
+              <div className="h-6 bg-[var(--color-surface-tertiary)] rounded mb-4 w-48"></div>
               <div className="space-y-4">
-                <div className="h-4 bg-gray-600 rounded w-full"></div>
-                <div className="h-4 bg-gray-600 rounded w-3/4"></div>
-                <div className="h-10 bg-gray-600 rounded w-32"></div>
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-full"></div>
+                <div className="h-4 bg-[var(--color-surface-tertiary)] rounded w-3/4"></div>
+                <div className="h-10 bg-[var(--color-surface-tertiary)] rounded w-32"></div>
               </div>
             </div>
           ))}
@@ -745,7 +745,7 @@ export default function Settings() {
   // Show error state - redirect to dashboard if profile fetch fails
   if (userError) {
     return (
-      <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
@@ -774,7 +774,7 @@ export default function Settings() {
   // Show loading timeout error
   if (loadingTimeout) {
     return (
-      <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
@@ -810,7 +810,7 @@ export default function Settings() {
 
   return (
     <>
-      <div className="pb-theme-scope h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         {/* Nord-themed Sidebar */}
         <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
           {/* User Settings Header */}
@@ -1044,7 +1044,7 @@ export default function Settings() {
                             setBannerFile(null);
                             setBannerPreview(null);
                           }}
-                          className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          className="px-4 py-2 border border-[var(--color-border)] shadow-sm text-sm font-medium rounded-md text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
                         >
                           Reset Changes
                         </button>
@@ -1741,7 +1741,7 @@ export default function Settings() {
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => resetToPreset('Nord Dark')}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 text-sm rounded transition-colors"
+                    className="px-4 py-2 border border-[var(--color-border)] text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] text-sm rounded transition-colors"
                   >
                     Reset to Default
                   </button>
@@ -1835,10 +1835,10 @@ export default function Settings() {
                             onChange={(e) => setSelectedInputDevice(e.target.value)}
                             className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] text-[var(--color-text)] focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all duration-200 text-sm"
                           >
-                            <option value="">🎙️ Default Device</option>
+                            <option value="">ðŸŽ™ï¸ Default Device</option>
                             {inputDevices.map((device, index) => (
                               <option key={device.deviceId} value={device.deviceId}>
-                                🎙️ {device.label || `Microphone ${index + 1}`}
+                                ðŸŽ™ï¸ {device.label || `Microphone ${index + 1}`}
                               </option>
                             ))}
                           </select>
@@ -2271,7 +2271,7 @@ export default function Settings() {
                         className={`py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
                           isTestingMicrophone
                             ? 'bg-red-500 hover:bg-red-600 text-white'
-                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                            : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
                         }`}
                       >
                         {isTestingMicrophone ? 'Stop Mic Test' : 'Test Microphone'}
@@ -2337,14 +2337,14 @@ export default function Settings() {
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Noise Suppression</span>
-                        <span className={`text-sm font-medium ${noiseSuppression ? 'text-green-400' : 'text-gray-400'}`}>
+                        <span className={`text-sm font-medium ${noiseSuppression ? 'text-green-400' : 'text-[var(--color-text-secondary)]'}`}>
                           {noiseSuppression ? 'On' : 'Off'}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Echo Cancellation</span>
-                        <span className={`text-sm font-medium ${echoCancellation ? 'text-green-400' : 'text-gray-400'}`}>
+                        <span className={`text-sm font-medium ${echoCancellation ? 'text-green-400' : 'text-[var(--color-text-secondary)]'}`}>
                           {echoCancellation ? 'On' : 'Off'}
                         </span>
                       </div>
@@ -2353,7 +2353,7 @@ export default function Settings() {
 
                   <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
                     <p className="text-xs text-[var(--color-text-muted)]">
-                      💡 <strong>Tip:</strong> Adjust sensitivity for your environment. Test your setup regularly to ensure optimal voice quality.
+                      ðŸ’¡ <strong>Tip:</strong> Adjust sensitivity for your environment. Test your setup regularly to ensure optimal voice quality.
                     </p>
                   </div>
                 </div>
@@ -2442,7 +2442,7 @@ export default function Settings() {
 
         {/* Reset Auth Token Modal */}
         {showResetModal && (
-          <div className="pb-theme-scope fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-md w-full mx-4 border border-[var(--color-border)]">
               <h3 className="text-lg font-medium text-[var(--color-text)] mb-4">Reset Authentication Token</h3>
               <p className="text-sm text-[var(--color-text-secondary)] mb-4">
@@ -2458,7 +2458,7 @@ export default function Settings() {
                   <button type="button" onClick={() => {
                     setShowResetModal(false);
                     setResetPassword('');
-                  }} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  }} className="inline-flex justify-center py-2 px-4 border border-[var(--color-border)] shadow-sm text-sm font-medium rounded-md text-[var(--color-text-muted)] bg-white hover:bg-[var(--color-surface)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]">
                     Cancel
                   </button>
                   <button type="button" onClick={handleResetAuthToken} disabled={!resetPassword.trim() || resetAuthTokenMutation.isPending} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-error)] disabled:opacity-50">
@@ -2472,7 +2472,7 @@ export default function Settings() {
 
         {/* Profile Preview Modal */}
         {isProfileModalOpen && (
-          <div className="pb-theme-scope fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-[var(--color-background)] rounded-2xl shadow-2xl w-full max-w-lg mx-auto border border-[var(--color-border)]">
               <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-[var(--color-text)]">Profile Preview</h3>
@@ -2519,7 +2519,7 @@ export default function Settings() {
 
         {/* Image Cropping Modal */}
         {isCroppingModalOpen && croppingImageSrc && croppingImageType && (
-          <div className="pb-theme-scope fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-[var(--color-background)] rounded-2xl shadow-2xl w-full max-w-xl mx-auto border border-[var(--color-border)]">
               <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-[var(--color-text)]">
@@ -2552,3 +2552,4 @@ export default function Settings() {
     </>
   );
 }
+
