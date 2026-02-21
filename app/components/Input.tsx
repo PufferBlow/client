@@ -119,9 +119,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   const baseClasses = 'block w-full transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantClasses = {
-    default: 'border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500',
-    filled: 'border-0 rounded-lg focus:ring-2 focus:ring-blue-500 bg-gray-100 text-gray-900 placeholder-gray-500 focus:bg-white',
-    outlined: 'border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-transparent text-gray-900 placeholder-gray-500',
+    default: 'border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
+    filled: 'border-0 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:bg-[var(--color-surface)]',
+    outlined: 'border-2 border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
   };
 
   const sizeClasses = {
@@ -149,7 +149,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       {label && (
         <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2"
         >
           {label}
         </label>
@@ -158,7 +158,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       <div className="relative">
         {startIcon && (
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <span className="text-gray-400" aria-hidden="true">
+            <span className="text-[var(--color-text-muted)]" aria-hidden="true">
               {startIcon}
             </span>
           </div>
@@ -180,7 +180,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 
         {endIcon && (
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-            <span className="text-gray-400" aria-hidden="true">
+            <span className="text-[var(--color-text-muted)]" aria-hidden="true">
               {endIcon}
             </span>
           </div>
@@ -189,7 +189,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
         {loading && (
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
             <svg
-              className="animate-spin h-4 w-4 text-gray-400"
+              className="animate-spin h-4 w-4 text-[var(--color-text-muted)]"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -226,7 +226,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       {!error && helperText && (
         <p
           id={`${inputId}-helper`}
-          className="mt-1 text-sm text-gray-500"
+          className="mt-1 text-sm text-[var(--color-text-muted)]"
         >
           {helperText}
         </p>

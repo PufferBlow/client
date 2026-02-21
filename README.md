@@ -51,8 +51,11 @@ npm run dev
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
-- `npm run dev:tauri` - Run desktop app in Tauri dev mode
-- `npm run build:tauri` - Build desktop app with Tauri
+- `npm run desktop:dev` - Run desktop app in Tauri dev mode
+- `npm run desktop:build` - Build desktop app for the current OS
+- `npm run desktop:build:windows` - Build Windows bundles (`.msi`, `.exe`)
+- `npm run desktop:build:linux` - Build Linux bundles (`.AppImage`, `.deb`, `.rpm`)
+- `npm run desktop:build:macos` - Build macOS bundles (`.dmg`, `.app.tar.gz`)
 - `npm run preview` - Preview production build locally
 - `npm run test` - Run tests in watch mode
 - `npm run test:run` - Run tests once
@@ -62,18 +65,31 @@ npm run dev
 ### Tauri Desktop Setup
 
 1. Install Rust toolchain (`rustup`) and platform prerequisites from the Tauri docs.
-2. Install frontend dependencies:
+2. Install OS prerequisites:
+   - Linux: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`
+   - macOS: Xcode Command Line Tools
+   - Windows: MSVC Build Tools
+3. Install frontend dependencies:
 ```bash
 npm install
 ```
-3. Start Tauri desktop dev:
+4. Start desktop dev:
 ```bash
-npm run dev:tauri
+npm run desktop:dev
 ```
-4. Build desktop binaries:
+5. Build desktop binaries:
 ```bash
-npm run build:tauri
+npm run desktop:build
 ```
+
+### Release Artifacts
+
+The desktop release workflow (`.github/workflows/desktop-release.yml`) builds and publishes stable filenames for direct downloads:
+
+- `pufferblow-client-windows-x64.msi`
+- `pufferblow-client-windows-x64-setup.exe`
+- `pufferblow-client-linux-x86_64.AppImage`
+- `pufferblow-client-macos-universal.dmg`
 
 ## Project Structure
 

@@ -93,13 +93,13 @@ export const Card: React.FC<CardProps> = ({
   className = '',
   ...props
 }) => {
-  const baseClasses = 'bg-white rounded-lg border transition-all duration-200';
+  const baseClasses = 'bg-[var(--color-surface)] rounded-lg border transition-all duration-200';
 
   const variantClasses = {
-    default: 'border-gray-200 shadow-sm',
-    elevated: 'border-gray-200 shadow-lg',
-    outlined: 'border-2 border-gray-300 shadow-none',
-    filled: 'border-0 bg-gray-50 shadow-inner',
+    default: 'border-[var(--color-border)] shadow-sm',
+    elevated: 'border-[var(--color-border)] shadow-lg',
+    outlined: 'border-2 border-[var(--color-border)] shadow-none',
+    filled: 'border-0 bg-[var(--color-surface-secondary)] shadow-inner',
   };
 
   const paddingClasses = {
@@ -124,7 +124,7 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div className={cardClasses} {...props}>
       {header && (
-        <div className="border-b border-gray-200 px-4 py-3">
+        <div className="border-b border-[var(--color-border)] px-4 py-3">
           {header}
         </div>
       )}
@@ -134,7 +134,7 @@ export const Card: React.FC<CardProps> = ({
       </div>
 
       {footer && (
-        <div className="border-t border-gray-200 px-4 py-3">
+        <div className="border-t border-[var(--color-border)] px-4 py-3">
           {footer}
         </div>
       )}
@@ -188,7 +188,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   children,
   ...props
 }) => {
-  const classes = `flex items-center justify-between border-b border-gray-200 px-4 py-3 ${className}`;
+  const classes = `flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3 ${className}`;
 
   return (
     <div className={classes} {...props}>
@@ -200,12 +200,12 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
         )}
         <div>
           {title && (
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-[var(--color-text)]">
               {title}
             </h3>
           )}
           {subtitle && (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-[var(--color-text-secondary)]">
               {subtitle}
             </p>
           )}
@@ -264,7 +264,7 @@ export const CardContent: React.FC<CardContentProps> = ({
 /**
  * CardFooter component for consistent card footers
  */
-export interface CardFooterProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface CardFooterProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'content'> {
   /**
    * Actions to display in the footer (typically buttons)
    */
@@ -286,7 +286,7 @@ export const CardFooter: React.FC<CardFooterProps> = ({
   children,
   ...props
 }) => {
-  const classes = `flex items-center justify-between border-t border-gray-200 px-4 py-3 ${className}`;
+  const classes = `flex items-center justify-between border-t border-[var(--color-border)] px-4 py-3 ${className}`;
 
   return (
     <div className={classes} {...props}>

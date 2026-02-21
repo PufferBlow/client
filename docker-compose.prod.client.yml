@@ -1,0 +1,18 @@
+services:
+  pufferblow-webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: pufferblow-webapp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      - pufferblow-client-net
+
+networks:
+  pufferblow-client-net:
+    driver: bridge

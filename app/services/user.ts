@@ -74,7 +74,7 @@ export interface UserProfile {
   username: string;
   discriminator: string;
   avatar?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
+  status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
   bio?: string;
   joinedAt: string;
   roles: UserRole[];
@@ -87,7 +87,7 @@ export interface ApiUserProfile {
   about?: string;
   avatar_url?: string;
   banner_url?: string;
-  status: 'online' | 'offline' | 'idle' | 'dnd';
+  status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
   origin_server: string;
   inbox_id?: string;
   roles_ids: string[];
@@ -138,7 +138,7 @@ export const getUserProfileById = async (hostPort: string, userId: string, authT
 
 export const getUserProfileByIdWithQuery = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
   const apiClient = new ApiClient(`http://${hostPort}`);
-  return apiClient.get('/api/v1/users/profile', {
+  return apiClient.post('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
   });
@@ -152,7 +152,7 @@ export interface GetUserProfileResponse {
     about?: string;
     avatar_url?: string;
     banner_url?: string;
-    status: 'online' | 'offline' | 'idle' | 'dnd';
+    status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
     origin_server: string;
     inbox_id?: string;
     roles_ids: string[];
@@ -178,7 +178,7 @@ export interface ListUsersResponse {
   users: Array<{
     user_id: string;
     username: string;
-    status: 'online' | 'offline' | 'idle' | 'inactive' | 'dnd';
+    status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
     last_seen: string;
     conversations: any[];
     contacts: any[];
@@ -202,7 +202,7 @@ export interface DisplayUser {
   bannerColor?: string;
   customStatus?: string;
   externalLinks?: { platform: string; url: string }[];
-  status: 'online' | 'idle' | 'offline' | 'dnd';
+  status: 'online' | 'idle' | 'afk' | 'offline' | 'dnd';
   bio?: string;
   joinedAt: string;
   originServer?: string;
@@ -230,7 +230,7 @@ export interface UpdateUsernameRequest {
 
 export interface UpdateStatusRequest {
   auth_token: string;
-  status: 'online' | 'offline' | 'idle' | 'inactive';
+  status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
 }
 
 export interface UpdatePasswordRequest {
@@ -678,7 +678,7 @@ export const useCurrentUserProfile = () => {
         banner_url: fullBannerUrl,
         inbox_id: userData.inbox_id,
         origin_server: userData.origin_server,
-        status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+        status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
         roles_ids: userData.roles_ids,
         last_seen: userData.last_seen,
         joined_servers_ids: userData.joined_servers_ids,
@@ -750,12 +750,11 @@ export const useUpdateUsername = () => {
 // Hook to update status (frequent updates - no profile invalidation to prevent excessive API calls)
 export const useUpdateStatus = () => {
   return useMutation({
-    mutationFn: async (status: 'online' | 'offline' | 'idle' | 'dnd') => {
+    mutationFn: async (status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd') => {
       const authToken = getAuthTokenFromCookies();
       if (!authToken) throw new Error('No authentication token');
 
-      const apiStatus = status === 'dnd' ? 'offline' : status; // Map dnd to offline for API
-      const response = await updateUserStatus({ auth_token: authToken, status: apiStatus as any });
+      const response = await updateUserStatus({ auth_token: authToken, status });
       if (!response.success) {
         throw new Error(response.error || 'Failed to update status');
       }
@@ -935,7 +934,7 @@ export const useUserProfile = (userId: string) => {
         banner_url: fullBannerUrl,
         inbox_id: userData.inbox_id,
         origin_server: userData.origin_server,
-        status: userData.status as 'online' | 'idle' | 'dnd' | 'offline',
+        status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
         roles_ids: userData.roles_ids,
         last_seen: userData.last_seen,
         joined_servers_ids: userData.joined_servers_ids,

@@ -36,6 +36,15 @@
   --color-shadow: rgba(0, 0, 0, 0.6);
   --color-shadow-lg: rgba(0, 0, 0, 0.8);
 
+  /* Readable text colors on top of semantic color surfaces */
+  --color-on-primary: #000000;
+  --color-on-secondary: #000000;
+  --color-on-accent: #000000;
+  --color-on-success: #000000;
+  --color-on-warning: #000000;
+  --color-on-error: #000000;
+  --color-on-info: #000000;
+
   /* Glassmorphism effects */
   --glass-bg: rgba(0, 0, 0, 0.78);
   --glass-bg-light: rgba(20, 20, 20, 0.72);
@@ -268,6 +277,224 @@ body {
   transition: width 0.6s, height 0.6s;
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+/* Ensure text remains readable on semantic color backgrounds in all themes */
+[class*="bg-[var(--color-primary)]"][class*="text-white"],
+[class*="from-[var(--color-primary)]"][class*="text-white"],
+[class*="to-[var(--color-primary)]"][class*="text-white"],
+[class*="from-[var(--color-accent)]"][class*="text-white"],
+[class*="to-[var(--color-accent)]"][class*="text-white"],
+[class*="via-[var(--color-accent)]"][class*="text-white"],
+[class*="from-[var(--color-secondary)]"][class*="text-white"],
+[class*="to-[var(--color-secondary)]"][class*="text-white"] {
+  color: var(--color-on-primary) !important;
+}
+
+[class*="bg-[var(--color-primary)]"] .text-white,
+[class*="from-[var(--color-primary)]"] .text-white,
+[class*="to-[var(--color-accent)]"] .text-white {
+  color: var(--color-on-primary) !important;
+}
+
+/* Consistent icon/button primitives for dashboard controls */
+.pb-icon-btn {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--color-text-secondary);
+  transition: background-color var(--animation-duration-fast) var(--animation-easing),
+    color var(--animation-duration-fast) var(--animation-easing),
+    transform var(--animation-duration-fast) var(--animation-easing);
+}
+
+.pb-icon-btn:hover {
+  background-color: var(--color-surface-tertiary);
+  color: var(--color-text);
+}
+
+.pb-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pb-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.pb-icon-lg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.pb-btn {
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+  transition: background-color var(--animation-duration-fast) var(--animation-easing),
+    color var(--animation-duration-fast) var(--animation-easing);
+}
+
+/* Scoped remap for legacy hardcoded utility colors in large pages */
+.pb-theme-scope [class*="bg-gray-900"],
+.pb-theme-scope [class*="bg-gray-800"],
+.pb-theme-scope [class*="bg-gray-750"] {
+  background-color: var(--color-surface-tertiary) !important;
+}
+
+.pb-theme-scope [class*="bg-gray-700"],
+.pb-theme-scope [class*="bg-gray-600"],
+.pb-theme-scope [class*="bg-gray-500"] {
+  background-color: var(--color-surface-secondary) !important;
+}
+
+.pb-theme-scope [class*="bg-white/"],
+.pb-theme-scope [class*="hover:bg-white/"]:hover {
+  background-color: var(--color-surface-secondary) !important;
+}
+
+.pb-theme-scope [class*="border-gray-"] {
+  border-color: var(--color-border) !important;
+}
+
+.pb-theme-scope [class*="border-white/"] {
+  border-color: var(--color-border-secondary) !important;
+}
+
+.pb-theme-scope [class*="text-white"] {
+  color: var(--color-text) !important;
+}
+
+.pb-theme-scope [class*="text-black"] {
+  color: var(--color-text) !important;
+}
+
+.pb-theme-scope [class*="text-gray-100"],
+.pb-theme-scope [class*="text-gray-200"],
+.pb-theme-scope [class*="text-gray-300"] {
+  color: var(--color-text) !important;
+}
+
+.pb-theme-scope [class*="text-gray-400"] {
+  color: var(--color-text-secondary) !important;
+}
+
+.pb-theme-scope [class*="text-gray-500"],
+.pb-theme-scope [class*="text-gray-600"],
+.pb-theme-scope [class*="text-gray-700"] {
+  color: var(--color-text-muted) !important;
+}
+
+.pb-theme-scope [class*="bg-blue-"] {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.pb-theme-scope [class*="hover:bg-blue-"]:hover {
+  background-color: var(--color-primary-hover) !important;
+}
+
+.pb-theme-scope [class*="bg-green-"] {
+  background-color: var(--color-success) !important;
+  border-color: var(--color-success) !important;
+}
+
+.pb-theme-scope [class*="hover:bg-green-"]:hover {
+  background-color: var(--color-success) !important;
+  filter: brightness(0.92);
+}
+
+.pb-theme-scope [class*="bg-red-"] {
+  background-color: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+}
+
+.pb-theme-scope [class*="hover:bg-red-"]:hover {
+  background-color: var(--color-error) !important;
+  filter: brightness(0.92);
+}
+
+.pb-theme-scope [class*="bg-yellow-"] {
+  background-color: var(--color-warning) !important;
+  border-color: var(--color-warning) !important;
+}
+
+.pb-theme-scope [class*="hover:bg-yellow-"]:hover {
+  background-color: var(--color-warning) !important;
+  filter: brightness(0.92);
+}
+
+.pb-theme-scope [class*="bg-purple-"] {
+  background-color: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+}
+
+.pb-theme-scope [class*="hover:bg-purple-"]:hover {
+  background-color: var(--color-accent-hover) !important;
+}
+
+.pb-theme-scope [class*="text-blue-"] {
+  color: var(--color-primary) !important;
+}
+
+.pb-theme-scope [class*="text-green-"] {
+  color: var(--color-success) !important;
+}
+
+.pb-theme-scope [class*="text-red-"] {
+  color: var(--color-error) !important;
+}
+
+.pb-theme-scope [class*="text-yellow-"] {
+  color: var(--color-warning) !important;
+}
+
+.pb-theme-scope [class*="text-purple-"] {
+  color: var(--color-accent) !important;
+}
+
+.pb-theme-scope [class*="bg-blue-"][class*="text-white"] {
+  color: var(--color-on-primary) !important;
+}
+
+.pb-theme-scope [class*="bg-green-"][class*="text-white"] {
+  color: var(--color-on-success) !important;
+}
+
+.pb-theme-scope [class*="bg-red-"][class*="text-white"] {
+  color: var(--color-on-error) !important;
+}
+
+.pb-theme-scope [class*="bg-yellow-"][class*="text-white"] {
+  color: var(--color-on-warning) !important;
+}
+
+.pb-theme-scope [class*="bg-purple-"][class*="text-white"] {
+  color: var(--color-on-accent) !important;
+}
+
+.pb-theme-scope [class*="bg-[#313338]"],
+.pb-theme-scope [class*="bg-[#2b2d31]"],
+.pb-theme-scope [class*="bg-[#1e1f22]"],
+.pb-theme-scope [class*="bg-[#35373c]"] {
+  background-color: var(--color-surface) !important;
+}
+
+.pb-theme-scope [class*="bg-[#23a559]"] {
+  background-color: var(--color-success) !important;
+}
+
+.pb-theme-scope [class*="text-[#b5bac1]"] {
+  color: var(--color-text-secondary) !important;
+}
+
+.pb-theme-scope [class*="border-[#1e1f22]"],
+.pb-theme-scope [class*="border-[#35373c]"] {
+  border-color: var(--color-border) !important;
 }
 
 .hover-ripple:hover::before {

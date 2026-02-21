@@ -55,15 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <ToastProvider>
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {children}
-              </div>
-            </ToastProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
+        <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -93,18 +85,14 @@ export default function App() {
   // Universal authentication logic for both web and desktop:
 
   // 1. If authenticated user tries to access auth pages, redirect to dashboard
+  let content: React.ReactNode = <Outlet />;
+
   if (isAuthRoute && isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // 2. Authenticated users on home page redirect to dashboard
-  if (isHomeRoute && isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // 3. If accessing protected route without authentication, redirect to login
-  if (isProtectedRoute && !isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    content = <Navigate to="/dashboard" replace />;
+  } else if (isHomeRoute && isAuthenticated) {
+    content = <Navigate to="/dashboard" replace />;
+  } else if (isProtectedRoute && !isAuthenticated) {
+    content = <Navigate to="/login" replace />;
   }
 
   // 4. Debug authentication state for settings page access
@@ -114,7 +102,13 @@ export default function App() {
 
   
 
-  return <Outlet />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <ToastProvider>{content}</ToastProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -140,7 +134,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
               <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.29-.966-5.5-2.5M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" />
                 </svg>
               </div>
@@ -151,7 +145,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
             <div className="space-y-4">
               <Link
                 to="/"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
               >
                 Go Home
               </Link>

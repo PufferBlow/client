@@ -312,9 +312,9 @@ export const getServerLogs = async (authToken: string, request: ServerLogsReques
   });
 };
 
-export const clearServerLogs = async (authToken: string): Promise<ApiResponse<{ status_code: number; message: string; lines_cleared?: number }>> => {
-  const apiClient = createApiClient();
-  return apiClient.post('/api/v1/system/logs/clear', {
-    auth_token: authToken,
-  });
+export const clearServerLogs = async (_authToken: string): Promise<ApiResponse<{ status_code: number; message: string; lines_cleared?: number }>> => {
+  return {
+    success: false,
+    error: 'Server-side log clearing is not available on this server version.',
+  };
 };

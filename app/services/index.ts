@@ -124,3 +124,23 @@ export type {
   DecentralizedVerifyResponse,
   DecentralizedSessionIntrospectResponse
 } from './decentralizedAuth';
+
+// ActivityPub and federated DM services
+export {
+  getWebFinger,
+  getActivityPubActor,
+  getActivityPubOutbox,
+  followRemoteActor,
+  sendDirectMessage,
+  loadDirectMessages
+} from './activitypub';
+export type {
+  WebFingerResponse,
+  ActivityPubActorDocument,
+  ActivityPubOutboxPage,
+  FollowRemoteActorResponse,
+  SendDirectMessageRequest,
+  SendDirectMessageResponse,
+  DirectMessagePayload,
+  LoadDirectMessagesResponse
+} from './activitypub';

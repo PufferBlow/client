@@ -1,7 +1,40 @@
 import { logger } from '../utils/logger';
+import { getHostPortFromStorage } from './user';
 
 // Use network logger for WebSocket since it's networking related
 const websocketLogger = logger.network;
+
+const buildWebSocketBaseUrl = (hostPort: string): string => {
+  const trimmed = hostPort.trim().replace(/\/$/, '');
+  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed.replace(/^http/i, 'ws');
+  }
+
+  const protocol =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? 'wss'
+      : 'ws';
+  return `${protocol}://${trimmed}`;
+};
+
+const buildHttpBaseUrl = (hostPort: string): string => {
+  const trimmed = hostPort.trim().replace(/\/$/, '');
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
+    return trimmed.replace(/^ws/i, 'http');
+  }
+
+  const protocol =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? 'https'
+      : 'http';
+  return `${protocol}://${trimmed}`;
+};
 
 export interface WebRTCData {
   offer?: RTCSessionDescriptionInit;
@@ -10,7 +43,6 @@ export interface WebRTCData {
   fromUserId: string;
   toUserId?: string; // for direct signaling (optional, undefined = broadcast)
   channelId: string;
-  userId?: string; // target user for signaling (legacy support)
 }
 
 export interface WebSocketMessage {
@@ -27,12 +59,11 @@ export interface WebSocketMessage {
   sent_at?: string;
   attachments?: string[];
   webrtcData?: WebRTCData; // WebRTC signaling data
-  // Legacy fields (kept for backward compatibility)
   user_id?: string;
   avatar?: string;
   content?: string;
   timestamp?: string;
-  status?: 'online' | 'idle' | 'dnd' | 'offline';
+  status?: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
   error?: string;
 }
 
@@ -52,6 +83,7 @@ export class GlobalWebSocket {
   private authToken: string;
   private hostPort: string;
   private isDestroyed = false;
+  private beforeUnloadHandler: (() => void) | null = null;
 
   constructor(authToken: string, hostPort: string, callbacks: WebSocketCallbacks = {}) {
     this.authToken = authToken;
@@ -60,9 +92,7 @@ export class GlobalWebSocket {
   }
 
   private getWebSocketUrl(): string {
-    const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-    const protocol = isDevelopment ? 'ws' : 'ws';
-    const baseUrl = isDevelopment ? '' : `${protocol}://${this.hostPort}`;
+    const baseUrl = buildWebSocketBaseUrl(this.hostPort);
     return `${baseUrl}/ws?auth_token=${encodeURIComponent(this.authToken)}`;
   }
 
@@ -75,6 +105,7 @@ export class GlobalWebSocket {
     try {
       this.ws = new WebSocket(this.getWebSocketUrl());
       this.setupEventHandlers();
+      this.registerBeforeUnloadHandler();
     } catch (error) {
       websocketLogger.error('Failed to create global WebSocket connection', error);
       this.callbacks.onError?.(error as Event);
@@ -131,10 +162,41 @@ export class GlobalWebSocket {
 
   disconnect(): void {
     this.isDestroyed = true;
+    this.unregisterBeforeUnloadHandler();
     if (this.ws) {
       this.ws.close(1000, 'Global WebSocket component unmounted');
       this.ws = null;
     }
+  }
+
+  private registerBeforeUnloadHandler(): void {
+    if (typeof window === 'undefined' || this.beforeUnloadHandler) {
+      return;
+    }
+
+    this.beforeUnloadHandler = () => {
+      try {
+        const payload = JSON.stringify({
+          auth_token: this.authToken,
+          status: 'offline',
+        });
+        const body = new Blob([payload], { type: 'application/json' });
+        const endpoint = `${buildHttpBaseUrl(this.hostPort)}/api/v1/users/profile`;
+        navigator.sendBeacon(endpoint, body);
+      } catch (error) {
+        websocketLogger.warn('Failed to send offline presence beacon', error);
+      }
+    };
+
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+  }
+
+  private unregisterBeforeUnloadHandler(): void {
+    if (typeof window === 'undefined' || !this.beforeUnloadHandler) {
+      return;
+    }
+    window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+    this.beforeUnloadHandler = null;
   }
 
   sendMessage(content: string): boolean {
@@ -297,11 +359,6 @@ export class GlobalWebSocket {
     return false;
   }
 
-  // Legacy compatibility method (channelId not needed for global websocket)
-  sendReadConfirmationLegacy(messageId: string): boolean {
-    return this.sendReadConfirmation(messageId, '');
-  }
-
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN || false;
   }
@@ -330,9 +387,7 @@ export class ChannelWebSocket {
   }
 
   private getWebSocketUrl(): string {
-    const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-    const protocol = isDevelopment ? 'ws' : 'ws';
-    const baseUrl = isDevelopment ? '' : `${protocol}://${this.hostPort}`;
+    const baseUrl = buildWebSocketBaseUrl(this.hostPort);
     return `${baseUrl}/ws/channels/${this.channelId}?auth_token=${encodeURIComponent(this.authToken)}`;
   }
 
@@ -481,14 +536,23 @@ export const createChannelWebSocket = (
 
 // Helper function to get hostPort from storage (similar to user service)
 export const getHostPortForWebSocket = (): string => {
+  const serviceHostPort = getHostPortFromStorage();
+  if (serviceHostPort) {
+    return serviceHostPort;
+  }
+
   if (typeof window !== 'undefined') {
-    // First check sessionStorage
+    // First check sessionStorage (legacy key names)
     const sessionHostPort = sessionStorage.getItem('serverHostPort');
     if (sessionHostPort) return sessionHostPort;
+    const sessionLegacyHostPort = sessionStorage.getItem('host_port');
+    if (sessionLegacyHostPort) return decodeURIComponent(sessionLegacyHostPort);
 
-    // Then localStorage
+    // Then localStorage (legacy key names)
     const localHostPort = localStorage.getItem('serverHostPort');
     if (localHostPort) return localHostPort;
+    const localLegacyHostPort = localStorage.getItem('host_port');
+    if (localLegacyHostPort) return decodeURIComponent(localLegacyHostPort);
 
     // Fallback
     return 'localhost:7575';

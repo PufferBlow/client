@@ -381,7 +381,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   if (messagesError) {
     return (
-      <div className={`flex-1 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] resize-x min-w-96 backdrop-blur-sm ${className}`}>
+      <div className={`flex-1 min-w-0 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] overflow-hidden backdrop-blur-sm ${className}`}>
         <ErrorState
           title="Failed to load messages"
           message={messagesError}
@@ -394,7 +394,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <>
-      <div className={`flex-1 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] resize-x min-w-96 backdrop-blur-sm ${className}`}>
+      <div className={`flex-1 min-w-0 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] overflow-hidden backdrop-blur-sm ${className}`}>
         {/* Channel Header */}
         <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)] flex-shrink-0">
           <div className="flex items-center">

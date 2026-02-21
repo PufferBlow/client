@@ -130,7 +130,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
   if (channelsLoading) {
     return (
-      <div className={`w-80 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm animate-pulse ${className}`}>
+      <div className={`w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden backdrop-blur-sm animate-pulse ${className}`}>
         <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
           <div className="h-4 bg-gray-600 rounded w-32"></div>
           <div className="w-8 h-8 bg-gray-600 rounded"></div>
@@ -146,7 +146,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
   if (channelsError) {
     return (
-      <div className={`w-80 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm ${className}`}>
+      <div className={`w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden backdrop-blur-sm ${className}`}>
         <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
           <div className="h-4 bg-gray-600 rounded w-32"></div>
           <div className="w-8 h-8 bg-gray-600 rounded"></div>
@@ -172,7 +172,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
 
   return (
     <>
-      <div className={`w-80 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col resize-x min-w-48 max-w-96 backdrop-blur-sm ${className}`}>
+      <div className={`w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden backdrop-blur-sm ${className}`}>
         {/* Server Header */}
         <div className="relative">
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
@@ -191,7 +191,7 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
                 (currentUser?.roles && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner')))) && (
                 <button
                   onClick={() => setChannelCreationModalOpen(true)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--color-surface-tertiary)] transition-all duration-200 group"
+                  className="pb-icon-btn group"
                   title="Create channel"
                   aria-label="Create channel"
                 >

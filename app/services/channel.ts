@@ -1,7 +1,6 @@
 import type { ApiResponse } from './apiClient';
 import { createApiClient } from './apiClient';
 import type { Channel } from '../models';
-import type { Message } from '../models';
 
 export interface CreateChannelRequest {
   name: string;
@@ -34,6 +33,11 @@ export interface VoiceChannelStatusResponse {
   error?: string;
 }
 
+const unsupportedChannelOperation = <T>(operation: string): ApiResponse<T> => ({
+  success: false,
+  error: `${operation} is not available on the current server API.`,
+});
+
 // Channel API functions
 export const getChannels = async (serverId: string, authToken: string): Promise<ApiResponse<Channel[]>> => {
   const apiClient = createApiClient();
@@ -57,12 +61,8 @@ export const createChannel = async (channelData: { channel_name: string; is_priv
   });
 };
 
-export const updateChannel = async (channelId: string, channelData: Partial<CreateChannelRequest>, authToken: string): Promise<ApiResponse<Channel>> => {
-  const apiClient = createApiClient();
-  return apiClient.put(`/api/v1/channels/${channelId}/update`, {
-    auth_token: authToken,
-    ...channelData
-  });
+export const updateChannel = async (_channelId: string, _channelData: Partial<CreateChannelRequest>, _authToken: string): Promise<ApiResponse<Channel>> => {
+  return unsupportedChannelOperation<Channel>('Updating channels');
 };
 
 export const deleteChannel = async (channelId: string, authToken: string): Promise<ApiResponse<void>> => {
@@ -77,10 +77,10 @@ export const deleteChannel = async (channelId: string, authToken: string): Promi
 // Add user to private channel (Admin only)
 export const addUserToChannel = async (channelId: string, userIdToAdd: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
   const apiClient = createApiClient();
-  return apiClient.put(`/api/v1/channels/${channelId}/add_user`, {
+  return apiClient.get(`/api/v1/channels/${channelId}/add_user`, {
     auth_token: authToken,
     to_add_user_id: userIdToAdd,
-  });
+  }, undefined, 'PUT');
 };
 
 // Remove user from private channel (Admin only)
@@ -97,16 +97,16 @@ export const removeUserFromChannel = async (channelId: string, userIdToRemove: s
 // Voice channel functions
 export const joinVoiceChannel = async (channelId: string, authToken: string): Promise<ApiResponse<VoiceChannelJoinResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.post(`/api/v1/channels/${channelId}/join-audio`, {
+  return apiClient.get(`/api/v1/channels/${channelId}/join-audio`, {
     auth_token: authToken,
-  });
+  }, undefined, 'POST');
 };
 
 export const leaveVoiceChannel = async (channelId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
   const apiClient = createApiClient();
-  return apiClient.post(`/api/v1/channels/${channelId}/leave-audio`, {
+  return apiClient.get(`/api/v1/channels/${channelId}/leave-audio`, {
     auth_token: authToken,
-  });
+  }, undefined, 'POST');
 };
 
 export const getVoiceChannelStatus = async (channelId: string, authToken: string): Promise<ApiResponse<VoiceChannelStatusResponse>> => {

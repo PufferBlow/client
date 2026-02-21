@@ -30,6 +30,11 @@ export interface SearchResult {
   timestamp?: string;
 }
 
+const unsupportedMessageOperation = <T>(operation: string): ApiResponse<T> => ({
+  success: false,
+  error: `${operation} is not available on the current server API.`,
+});
+
 // Message API functions
 export const getMessages = async (hostPort: string, channelId: string, authToken: string, limit = 50, before?: string): Promise<ApiResponse<Message[]>> => {
   const apiClient = createApiClient(hostPort);
@@ -84,12 +89,8 @@ export const sendMessage = async (hostPort: string, channelId: string, messageDa
   return apiClient.post(`/api/v1/channels/${channelId}/send_message`, formData);
 };
 
-export const updateMessage = async (hostPort: string, messageId: string, content: string, authToken: string): Promise<ApiResponse<Message>> => {
-  const apiClient = createApiClient(hostPort);
-  return apiClient.put(`/api/v1/messages/${messageId}`, {
-    content,
-    auth_token: authToken,
-  });
+export const updateMessage = async (_hostPort: string, _messageId: string, _content: string, _authToken: string): Promise<ApiResponse<Message>> => {
+  return unsupportedMessageOperation<Message>('Editing messages');
 };
 
 export const deleteMessage = async (
@@ -111,25 +112,16 @@ export const deleteMessage = async (
   });
 };
 
-export const addReaction = async (hostPort: string, messageId: string, emoji: string, authToken: string): Promise<ApiResponse<void>> => {
-  const apiClient = createApiClient(hostPort);
-  return apiClient.post(`/api/v1/messages/${messageId}/reactions`, {
-    emoji,
-    auth_token: authToken,
-  });
+export const addReaction = async (_hostPort: string, _messageId: string, _emoji: string, _authToken: string): Promise<ApiResponse<void>> => {
+  return unsupportedMessageOperation<void>('Message reactions');
 };
 
-export const removeReaction = async (hostPort: string, messageId: string, emoji: string, authToken: string): Promise<ApiResponse<void>> => {
-  const apiClient = createApiClient(hostPort);
-  return apiClient.delete(`/api/v1/messages/${messageId}/reactions/${encodeURIComponent(emoji)}?auth_token=${authToken}`);
+export const removeReaction = async (_hostPort: string, _messageId: string, _emoji: string, _authToken: string): Promise<ApiResponse<void>> => {
+  return unsupportedMessageOperation<void>('Message reactions');
 };
 
-export const searchMessages = async (hostPort: string, query: string, authToken: string): Promise<ApiResponse<SearchResult[]>> => {
-  const apiClient = createApiClient(hostPort);
-  return apiClient.get('/api/v1/search', {
-    q: query,
-    auth_token: authToken,
-  });
+export const searchMessages = async (_hostPort: string, _query: string, _authToken: string): Promise<ApiResponse<SearchResult[]>> => {
+  return unsupportedMessageOperation<SearchResult[]>('Message search');
 };
 
 // Additional messaging functions moved from channel service
@@ -144,8 +136,8 @@ export const loadMessages = async (hostPort: string, channelId: string, authToke
 
 export const markMessageAsRead = async (hostPort: string, channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
   const apiClient = createApiClient(hostPort);
-  return apiClient.put(`/api/v1/channels/${channelId}/mark_message_as_read`, {
+  return apiClient.get(`/api/v1/channels/${channelId}/mark_message_as_read`, {
     auth_token: authToken,
     message_id: messageId,
-  });
+  }, undefined, 'PUT');
 };

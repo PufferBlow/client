@@ -46,7 +46,7 @@ export default function Home() {
               {isAuthenticated ? (
                 <Link
                   to="/dashboard"
-                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-white px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.3)] flex items-center gap-3 group"
+                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-[var(--color-on-primary)] px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.3)] flex items-center gap-3 group"
                 >
                   <svg className="w-5 h-5 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -63,7 +63,7 @@ export default function Home() {
                   </Link>
                   <Link
                     to="/signup"
-                    className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl"
+                    className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-[var(--color-on-primary)] px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl"
                   >
                     Get Started Free
                   </Link>
@@ -125,7 +125,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
               <Link
                 to="/signup"
-                className="group bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] hover:from-[var(--color-primary-hover)] hover:via-[#6e9cf1] hover:to-[var(--color-secondary-hover)] text-white px-10 py-5 rounded-2xl text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.25)] flex items-center gap-3"
+                className="group bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] hover:from-[var(--color-primary-hover)] hover:via-[#6e9cf1] hover:to-[var(--color-secondary-hover)] text-[var(--color-on-primary)] px-10 py-5 rounded-2xl text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.25)] flex items-center gap-3"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -145,12 +145,12 @@ export default function Home() {
               <Link
                 to="/download"
                 className="border-3 border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] hover:border-[var(--color-success)] hover:text-[var(--color-success)] px-10 py-5 rounded-2xl text-xl font-semibold transition-all duration-300 transform hover:scale-105 backdrop-blur-sm bg-[var(--color-surface)]/30 hover:bg-[var(--color-surface)]/50 flex items-center gap-3"
-                title="Download Desktop App"
+                title="Download Client"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Download App
+                Download Client
               </Link>
             </div>
 
@@ -226,7 +226,7 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">
+              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-6 text-[var(--color-on-primary)] text-2xl font-bold">
                 1
               </div>
               <h3 className="text-2xl font-bold text-[var(--color-text)] mb-4">
@@ -764,7 +764,7 @@ export default function Home() {
               placeholder="Enter your email"
               className="flex-1 px-4 py-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             />
-            <button className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200">
+            <button className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200">
               Subscribe
             </button>
           </div>
@@ -774,7 +774,7 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-24 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)]">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-white mb-6">
+          <h2 className="text-4xl font-bold text-[var(--color-on-primary)] mb-6">
             Ready to Join the Decentralized Revolution?
           </h2>
           <p className="text-xl text-[var(--color-text-secondary)] mb-8">
@@ -790,7 +790,7 @@ export default function Home() {
             {!isAuthenticated && (
               <Link
                 to="/login"
-                className="border-2 border-white text-white hover:bg-white hover:text-[var(--color-primary)] px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-200"
+                className="border-2 border-[var(--color-on-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-on-primary)] hover:text-[var(--color-primary)] px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-200"
               >
                 Sign In
               </Link>

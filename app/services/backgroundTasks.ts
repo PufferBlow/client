@@ -12,17 +12,29 @@ export interface BackgroundTask {
   result?: any;
 }
 
+export interface BackgroundTaskStatusesResponse {
+  status_code: number;
+  tasks: Record<string, BackgroundTask> | BackgroundTask[];
+  message?: string;
+}
+
+export interface RunBackgroundTaskResponse {
+  status_code: number;
+  message: string;
+}
+
 // Background Tasks Management functions (Server Owner only)
-export const getBackgroundTaskStatuses = async (authToken: string): Promise<ApiResponse<{ status_code: number; tasks: BackgroundTask[] }>> => {
+export const getBackgroundTaskStatuses = async (authToken: string): Promise<ApiResponse<BackgroundTaskStatusesResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/background-tasks/status`, {
+  return apiClient.post('/api/v1/background-tasks/status', {
     auth_token: authToken,
   });
 };
 
-export const runBackgroundTask = async (taskId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string; task: BackgroundTask }>> => {
+export const runBackgroundTask = async (taskId: string, authToken: string): Promise<ApiResponse<RunBackgroundTaskResponse>> => {
   const apiClient = createApiClient();
-  return apiClient.get(`/api/v1/background-tasks/run/${taskId}`, {
+  return apiClient.post('/api/v1/background-tasks/run', {
     auth_token: authToken,
+    task_id: taskId,
   });
 };

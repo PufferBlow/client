@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { login, signup, getUserProfile, extractUserIdFromToken } from './user'
+import { login, signup, getUserProfile, extractUserIdFromToken, UserRole } from './user'
 import type { AuthToken, UserProfile } from './user'
 
 // Mock fetch
@@ -123,7 +123,8 @@ describe('User Service', () => {
         status: 'online',
         bio: 'Test bio',
         joinedAt: '2023-01-01T00:00:00Z',
-        roles: ['Member']
+        roles: [UserRole.USER],
+        primaryRole: UserRole.USER
       }
 
       mockFetch.mockResolvedValueOnce({

@@ -174,15 +174,54 @@ export const getNordThemePresets = (): Record<string, AppearanceConfig> => {
   );
 };
 
+const parseColorToRgb = (color: string): [number, number, number] | null => {
+  const normalized = color.trim();
+
+  // #RRGGBB
+  const hex6 = normalized.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+  if (hex6) {
+    return [
+      parseInt(hex6[1], 16),
+      parseInt(hex6[2], 16),
+      parseInt(hex6[3], 16),
+    ];
+  }
+
+  // #RGB
+  const hex3 = normalized.match(/^#([a-f\d])([a-f\d])([a-f\d])$/i);
+  if (hex3) {
+    return [
+      parseInt(hex3[1] + hex3[1], 16),
+      parseInt(hex3[2] + hex3[2], 16),
+      parseInt(hex3[3] + hex3[3], 16),
+    ];
+  }
+
+  // rgb() / rgba()
+  const rgb = normalized.match(
+    /^rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})/i
+  );
+  if (rgb) {
+    return [
+      Math.min(255, parseInt(rgb[1], 10)),
+      Math.min(255, parseInt(rgb[2], 10)),
+      Math.min(255, parseInt(rgb[3], 10)),
+    ];
+  }
+
+  return null;
+};
+
 // Helper function to calculate color brightness (moved to top for utility use)
-const getBrightness = (hex: string) => {
-  const rgb = hex.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+const getBrightness = (color: string) => {
+  const rgb = parseColorToRgb(color);
   if (!rgb) return 255; // fallback to light
-  const r = parseInt(rgb[1], 16);
-  const g = parseInt(rgb[2], 16);
-  const b = parseInt(rgb[3], 16);
+  const [r, g, b] = rgb;
   return (r * 299 + g * 587 + b * 114) / 1000;
 };
+
+const getReadableTextColor = (background: string): string =>
+  getBrightness(background) < 128 ? '#ffffff' : '#000000';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
@@ -657,6 +696,37 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    setTheme(isDark ? 'dark' : 'light');
+
+    // Derived semantic "on-color" tokens keep text legible on colored surfaces.
+    root.style.setProperty(
+      '--color-on-primary',
+      getReadableTextColor(appearanceConfig.colors.primary)
+    );
+    root.style.setProperty(
+      '--color-on-secondary',
+      getReadableTextColor(appearanceConfig.colors.secondary)
+    );
+    root.style.setProperty(
+      '--color-on-accent',
+      getReadableTextColor(appearanceConfig.colors.accent)
+    );
+    root.style.setProperty(
+      '--color-on-success',
+      getReadableTextColor(appearanceConfig.colors.success)
+    );
+    root.style.setProperty(
+      '--color-on-warning',
+      getReadableTextColor(appearanceConfig.colors.warning)
+    );
+    root.style.setProperty(
+      '--color-on-error',
+      getReadableTextColor(appearanceConfig.colors.error)
+    );
+    root.style.setProperty(
+      '--color-on-info',
+      getReadableTextColor(appearanceConfig.colors.info)
+    );
 
     // Save custom theme
     saveCustomConfig(appearanceConfig);

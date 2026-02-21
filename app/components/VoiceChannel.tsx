@@ -71,6 +71,7 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           }
         }
       });
+      websocket.connect();
 
       // Extract user ID from auth token (simple extract - you might need to decode this properly)
       const userId = authToken.split('.')[0]; // Assuming format: userId.token

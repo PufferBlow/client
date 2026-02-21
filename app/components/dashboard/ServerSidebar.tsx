@@ -115,7 +115,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
       }}>
         <button
           onClick={onToggleServerDropdown}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 hover:rounded-xl hover:bg-[var(--color-primary)] group"
+          className="pb-icon-btn w-12 h-12 rounded-2xl hover:rounded-xl hover:bg-[var(--color-primary)] group"
           title="Server options"
           aria-label="Server options"
           aria-expanded={serverDropdownOpen}
@@ -206,7 +206,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
       {/* Add Server Button */}
       <button
         onClick={() => onServerDropdownAction('add-server')}
-        className="w-12 h-12 bg-[#313338] rounded-2xl flex items-center justify-center hover:rounded-xl hover:bg-[#23a559] transition-all duration-200 cursor-pointer group mt-auto"
+        className="pb-icon-btn w-12 h-12 bg-[#313338] rounded-2xl hover:rounded-xl hover:bg-[#23a559] cursor-pointer group mt-auto"
         title="Add a server"
         aria-label="Add a server"
       >
