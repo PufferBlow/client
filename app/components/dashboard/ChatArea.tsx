@@ -3,9 +3,11 @@
 import { Button } from '../Button';
 import { LoadingState } from '../LoadingState';
 import { ErrorState } from '../ErrorState';
+import { MessageEmbeds } from '../MessageEmbeds';
 
 import { validateMessageInput } from '../../utils/markdown';
 import { logger } from '../../utils/logger';
+import type { ServerInfo } from '../../services/system';
 
 import type { Channel, Message, MessageAttachment, User } from '../../models';
 
@@ -114,10 +116,44 @@ export interface ChatAreaProps {
   onOpenSearch?: () => void;
 
   /**
+   * Instance-authoritative messaging and upload policy
+   */
+  serverInfo?: ServerInfo | null;
+
+  /**
    * Additional CSS classes
    */
   className?: string;
 }
+
+type UploadCategory = 'image' | 'video' | 'audio' | 'file';
+
+const normalizeExtensions = (extensions?: string[] | null): string[] =>
+  (extensions ?? [])
+    .map((extension) => extension.trim().toLowerCase().replace(/^\./, ''))
+    .filter(Boolean);
+
+const getAttachmentCategory = (
+  file: File,
+  policy: {
+    imageExtensions: string[];
+    videoExtensions: string[];
+    audioExtensions: string[];
+  }
+): UploadCategory => {
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/^\./, '') || '';
+
+  if (policy.imageExtensions.includes(extension) || file.type.startsWith('image/')) {
+    return 'image';
+  }
+  if (policy.videoExtensions.includes(extension) || file.type.startsWith('video/')) {
+    return 'video';
+  }
+  if (policy.audioExtensions.includes(extension) || file.type.startsWith('audio/')) {
+    return 'audio';
+  }
+  return 'file';
+};
 
 /**
  * ChatArea component - main chat interface with message display and input.
@@ -151,11 +187,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onMessageAction,
   onMessageContextMenu,
   onOpenSearch,
+  serverInfo,
   className = '',
 }) => {
   // State management
   const [messageInput, setMessageInput] = useState('');
   const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [messageContextMenu, setMessageContextMenu] = useState<{
@@ -177,6 +215,45 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadPolicy = React.useMemo(() => {
+    const imageExtensions = normalizeExtensions(serverInfo?.allowed_image_types);
+    const videoExtensions = normalizeExtensions(serverInfo?.allowed_video_types);
+    const audioExtensions = normalizeExtensions(serverInfo?.allowed_audio_types);
+    const fileExtensions = normalizeExtensions(serverInfo?.allowed_file_types);
+    const stickerExtensions = normalizeExtensions(serverInfo?.allowed_sticker_types);
+    const gifExtensions = normalizeExtensions(serverInfo?.allowed_gif_types);
+
+    return {
+      imageExtensions,
+      videoExtensions,
+      audioExtensions,
+      fileExtensions,
+      allExtensions: [
+        ...imageExtensions,
+        ...videoExtensions,
+        ...audioExtensions,
+        ...fileExtensions,
+        ...stickerExtensions,
+        ...gifExtensions,
+      ],
+      maxSizesMb: {
+        image: serverInfo?.max_image_size ?? null,
+        video: serverInfo?.max_video_size ?? null,
+        audio: serverInfo?.max_audio_size ?? null,
+        file: serverInfo?.max_file_size ?? null,
+      },
+      maxTotalAttachmentSizeMb: serverInfo?.max_total_attachment_size ?? null,
+      maxMessageLength: serverInfo?.max_message_length ?? 4000,
+    };
+  }, [serverInfo]);
+
+  const inputAccept = React.useMemo(() => {
+    if (uploadPolicy.allExtensions.length === 0) {
+      return 'image/*,video/*,audio/*,application/pdf,text/plain,application/zip';
+    }
+    return uploadPolicy.allExtensions.map((extension) => `.${extension}`).join(',');
+  }, [uploadPolicy.allExtensions]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -202,7 +279,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     // Validate message for security and length if present
     if (trimmedMessage) {
-      const validationResult = validateMessageInput(trimmedMessage, 4000); // Default max length
+      const validationResult = validateMessageInput(
+        trimmedMessage,
+        uploadPolicy.maxMessageLength
+      );
       if (!validationResult.isValid) {
         logger.ui.error('Message validation failed', { error: validationResult.error });
         return;
@@ -210,6 +290,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
 
     try {
+      setIsSendingMessage(true);
       await onSendMessage(trimmedMessage, messageAttachments);
 
       // Clear input and attachments on success
@@ -217,6 +298,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setMessageAttachments([]);
     } catch (error) {
       logger.ui.error('Failed to send message', { error });
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -245,43 +328,53 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // Basic validation
-    const maxSizeMB = 10;
-    const allowedTypes = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
-      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave',
-      'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/opus',
-      'application/pdf', 'text/plain', 'application/zip'
-    ];
-    const allowedAudioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'];
-    const allowedVideoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
-    const allowedImageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
-    const allowedDocumentExtensions = ['pdf', 'txt', 'zip'];
-
     const validFiles: File[] = [];
+    let totalAttachmentBytes = messageAttachments.reduce((sum, file) => sum + file.size, 0);
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const extension = file.name.split('.').pop()?.toLowerCase() || '';
 
-      if (file.size > maxSizeMB * 1024 * 1024) {
-        logger.ui.warn('File too large', { fileName: file.name, size: file.size });
+      const category = getAttachmentCategory(file, uploadPolicy);
+      const allowedExtensions =
+        category === 'image'
+          ? uploadPolicy.imageExtensions
+          : category === 'video'
+            ? uploadPolicy.videoExtensions
+            : category === 'audio'
+              ? uploadPolicy.audioExtensions
+              : uploadPolicy.fileExtensions;
+      const maxCategorySizeMb = uploadPolicy.maxSizesMb[category];
+
+      if (allowedExtensions.length > 0 && !allowedExtensions.includes(extension)) {
+        logger.ui.warn('File type not allowed', { fileName: file.name, type: file.type, category });
         continue;
       }
 
-      const extensionAllowed =
-        allowedAudioExtensions.includes(extension) ||
-        allowedVideoExtensions.includes(extension) ||
-        allowedImageExtensions.includes(extension) ||
-        allowedDocumentExtensions.includes(extension);
+      if (maxCategorySizeMb && file.size > maxCategorySizeMb * 1024 * 1024) {
+        logger.ui.warn('File too large', {
+          fileName: file.name,
+          size: file.size,
+          category,
+          maxCategorySizeMb,
+        });
+        continue;
+      }
 
-      if (!allowedTypes.includes(file.type) && !extensionAllowed) {
-        logger.ui.warn('File type not allowed', { fileName: file.name, type: file.type });
+      if (
+        uploadPolicy.maxTotalAttachmentSizeMb &&
+        totalAttachmentBytes + file.size > uploadPolicy.maxTotalAttachmentSizeMb * 1024 * 1024
+      ) {
+        logger.ui.warn('Total attachment size exceeded', {
+          fileName: file.name,
+          size: file.size,
+          maxTotalAttachmentSizeMb: uploadPolicy.maxTotalAttachmentSizeMb,
+        });
         continue;
       }
 
       validFiles.push(file);
+      totalAttachmentBytes += file.size;
     }
 
     setMessageAttachments(prev => [...prev, ...validFiles]);
@@ -403,6 +496,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     return groups;
   }, [messages]);
+
+  const canSendMessage =
+    Boolean(selectedChannel) &&
+    !isSendingMessage &&
+    (Boolean(messageInput.trim()) || messageAttachments.length > 0);
 
   if (messagesError) {
     return (
@@ -539,6 +637,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       {group.map((message) => (
                         <div key={message.message_id}>
                           <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                          <MessageEmbeds content={message.message} />
                           {message.attachments && message.attachments.length > 0 && (
                             <AttachmentGrid attachments={message.attachments} />
                           )}
@@ -614,7 +713,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 multiple
                 onChange={handleFileUpload}
                 className="hidden"
-                accept="image/*,video/*,audio/*,application/pdf,text/plain,application/zip"
+                accept={inputAccept}
               />
 
               {/* File Upload Button */}
@@ -641,6 +740,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="h-6 w-full resize-none break-words bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none overflow-wrap-anywhere disabled:cursor-not-allowed disabled:opacity-50"
                   rows={1}
                 />
+                <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--color-text-muted)]">
+                  <span>
+                    Instance max: {uploadPolicy.maxMessageLength.toLocaleString()} chars
+                  </span>
+                  <span>
+                    {messageInput.length.toLocaleString()}/{uploadPolicy.maxMessageLength.toLocaleString()}
+                  </span>
+                </div>
               </div>
 
               {/* Emoji Button */}
@@ -661,17 +768,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
 
               {/* Send Button */}
-              {messageInput.trim() && selectedChannel && (
+              {canSendMessage && (
                 <Button
                   onClick={handleSendMessage}
+                  disabled={isSendingMessage}
                   size="sm"
                   className="animate-in slide-in-from-left-4 fade-in"
                   title="Send message"
                   aria-label="Send message"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
+                  {isSendingMessage ? (
+                    <span className="text-xs font-medium">Sending...</span>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  )}
                 </Button>
               )}
             </div>
@@ -735,7 +847,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               mutualFriends={userCardTooltip.user.mutualFriends || 0}
               badges={userCardTooltip.user.badges}
               customStatus={userCardTooltip.user.customStatus}
-              accentColor={userCardTooltip.user.accentColor || '#5865f2'}
+              accentColor={userCardTooltip.user.accentColor || 'var(--color-accent)'}
               bannerColor={userCardTooltip.user.bannerColor}
               externalLinks={userCardTooltip.user.externalLinks || []}
               joinDate={userCardTooltip.user.joinedAt}
@@ -750,4 +862,3 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 };
 
 export default ChatArea;
-

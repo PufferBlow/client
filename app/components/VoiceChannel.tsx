@@ -13,6 +13,7 @@ import {
   type VoiceTransport,
   type VoiceTransportState,
 } from '../services/voiceTransport';
+import type { RTCMediaQuality } from '../services/system';
 import { getAuthTokenFromCookies } from '../services/user';
 import { logger } from '../utils/logger';
 
@@ -29,6 +30,7 @@ interface VoiceChannelProps {
     channelName: string;
     participants: number;
   }) => void;
+  mediaQuality?: RTCMediaQuality | null;
 }
 
 export const VoiceChannel: React.FC<VoiceChannelProps> = ({
@@ -36,6 +38,7 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   channelName,
   onToggleConnection,
   onConnectionStateChange,
+  mediaQuality,
 }) => {
   const transportRef = useRef<VoiceTransport | null>(null);
 
@@ -46,6 +49,13 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
+  const [qualityProfile, setQualityProfile] = useState<'low' | 'balanced' | 'high'>(
+    mediaQuality?.default_profile ?? 'balanced'
+  );
+
+  useEffect(() => {
+    setQualityProfile(mediaQuality?.default_profile ?? 'balanced');
+  }, [mediaQuality?.default_profile]);
 
   const isConnected = useMemo(
     () => connectionState === 'connected' || connectionState === 'reconnecting',
@@ -97,7 +107,7 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
     setIsJoining(true);
 
     try {
-      const response = await joinVoiceChannel(channelId, authToken, 'balanced');
+      const response = await joinVoiceChannel(channelId, authToken, qualityProfile);
       if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to initialize voice session');
       }
@@ -111,6 +121,8 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         join_token: bootstrap.join_token,
         signaling_url: bootstrap.signaling_url,
         ice_servers: bootstrap.ice_servers,
+        quality_profile: bootstrap.quality_profile,
+        media_quality: bootstrap.media_quality ?? mediaQuality ?? undefined,
       });
 
       const statusResponse = await getVoiceChannelStatus(
@@ -236,13 +248,13 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           disabled={isJoining}
           className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-all border border-[var(--color-border)] ${
             isConnected
-              ? 'bg-[var(--color-error)]/85 hover:bg-[var(--color-error)] text-white'
-              : 'bg-[var(--color-success)]/85 hover:bg-[var(--color-success)] text-white'
+              ? 'bg-[var(--color-error)]/85 text-[var(--color-on-error)] hover:bg-[var(--color-error)]'
+              : 'bg-[var(--color-success)]/85 text-[var(--color-on-success)] hover:bg-[var(--color-success)]'
           } ${isJoining ? 'opacity-60 cursor-not-allowed' : ''}`}
         >
           {isJoining ? (
             <>
-              <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin" />
               <span>Joining...</span>
             </>
           ) : isConnected ? (
@@ -259,13 +271,40 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         </button>
       </div>
 
+      {!isConnected && mediaQuality && (
+        <div className="space-y-2 rounded-lg border border-border bg-[var(--color-surface)] p-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+              Quality
+            </label>
+            <select
+              value={qualityProfile}
+              onChange={(event) => setQualityProfile(event.target.value as 'low' | 'balanced' | 'high')}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-2 py-1 text-xs text-[var(--color-text)]"
+            >
+              <option value="low">Low</option>
+              <option value="balanced">Balanced</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-[var(--color-text-secondary)]">
+            <div>
+              Audio: {mediaQuality.audio.profiles[qualityProfile].bitrate_kbps} kbps
+            </div>
+            <div>
+              Video: {mediaQuality.video.profiles[qualityProfile].width}x{mediaQuality.video.profiles[qualityProfile].height} @{mediaQuality.video.profiles[qualityProfile].fps}fps
+            </div>
+          </div>
+        </div>
+      )}
+
       {isConnected && (
         <div className="flex justify-center space-x-2">
           <button
             onClick={toggleMute}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors border border-[var(--color-border)] ${
               isMuted
-                ? 'bg-[var(--color-error)] text-white'
+                ? 'bg-[var(--color-error)] text-[var(--color-on-error)]'
                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]'
             }`}
             title={isMuted ? 'Unmute' : 'Mute'}
@@ -277,7 +316,7 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
             onClick={toggleDeafen}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors border border-[var(--color-border)] ${
               isDeafened
-                ? 'bg-[var(--color-error)] text-white'
+                ? 'bg-[var(--color-error)] text-[var(--color-on-error)]'
                 : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]'
             }`}
             title={isDeafened ? 'Undeafen' : 'Deafen'}

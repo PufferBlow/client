@@ -6,7 +6,10 @@ interface MessageReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (report: { category: string; description: string }) => void;
-  messageCount: number;
+  messageCount?: number;
+  entityLabel?: string;
+  title?: string;
+  description?: string;
 }
 
 const REPORT_CATEGORIES = [
@@ -28,22 +31,25 @@ export function MessageReportModal({
   isOpen,
   onClose,
   onSubmit,
-  messageCount,
+  messageCount = 1,
+  entityLabel = "message",
+  title,
+  description: modalDescription = "Help keep the server safe by reporting policy violations.",
 }: MessageReportModalProps) {
   const [step, setStep] = useState<"category" | "description">("category");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
 
   useEffect(() => {
     if (!isOpen) {
       setStep("category");
       setSelectedCategory("");
-      setDescription("");
+      setReportDescription("");
     }
   }, [isOpen]);
 
   const submitReport = () => {
-    onSubmit({ category: selectedCategory, description: description.trim() });
+    onSubmit({ category: selectedCategory, description: reportDescription.trim() });
     onClose();
   };
 
@@ -51,8 +57,15 @@ export function MessageReportModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Report ${messageCount === 1 ? "Message" : `${messageCount} Messages`}`}
-      description="Help keep the server safe by reporting policy violations."
+      title={
+        title ||
+        `Report ${
+          messageCount === 1
+            ? entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)
+            : `${messageCount} ${entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1)}s`
+        }`
+      }
+      description={modalDescription}
       widthClassName="max-w-lg"
       footer={
         <div className="flex justify-end gap-2">
@@ -106,14 +119,14 @@ export function MessageReportModal({
             </label>
             <textarea
               id="reportDescription"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              value={reportDescription}
+              onChange={(event) => setReportDescription(event.target.value)}
               maxLength={500}
               rows={4}
-              placeholder="Describe why this content should be reviewed."
+              placeholder={`Describe why this ${entityLabel} should be reviewed.`}
               className="w-full rounded-lg border pb-border bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
             />
-            <p className="mt-1 text-right text-xs text-[var(--color-text-muted)]">{description.length}/500</p>
+            <p className="mt-1 text-right text-xs text-[var(--color-text-muted)]">{reportDescription.length}/500</p>
           </div>
         </div>
       )}

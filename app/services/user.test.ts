@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { login, signup, getUserProfile, extractUserIdFromToken, UserRole } from './user'
 import type { AuthToken, UserProfile } from './user'
@@ -32,7 +33,9 @@ describe('User Service', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:7575/api/v1/users/signin?username=testuser&password=testpass',
         {
-          headers: { 'Content-Type': 'application/json' },
+          method: 'GET',
+          body: undefined,
+          headers: {},
         }
       )
     })
@@ -51,7 +54,7 @@ describe('User Service', () => {
       })
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('HTTP 401: Unauthorized')
+      expect(result.error).toBe('Invalid credentials')
     })
 
     it('should handle network errors', async () => {
@@ -87,10 +90,14 @@ describe('User Service', () => {
       expect(result.success).toBe(true)
       expect(result.data).toEqual(mockResponse)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:7575/api/v1/users/signup?username=newuser&password=newpass',
+        'http://localhost:7575/api/v1/users/signup',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: 'newuser',
+            password: 'newpass',
+          }),
         }
       )
     })
@@ -109,7 +116,7 @@ describe('User Service', () => {
       })
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('HTTP 409: Conflict')
+      expect(result.error).toBe('User already exists')
     })
   })
 
@@ -137,9 +144,14 @@ describe('User Service', () => {
       expect(result.success).toBe(true)
       expect(result.data).toEqual(mockProfile)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:7575/api/v1/users/profile?user_id=user123&auth_token=auth-token',
+        'http://localhost:7575/api/v1/users/profile',
         {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: 'user123',
+            auth_token: 'auth-token',
+          }),
         }
       )
     })
@@ -155,7 +167,7 @@ describe('User Service', () => {
       const result = await getUserProfile('localhost:7575', 'nonexistent', 'token')
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('HTTP 404: Not Found')
+      expect(result.error).toBe('User not found')
     })
   })
 

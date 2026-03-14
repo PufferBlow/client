@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChannelWebSocket, createChannelWebSocket, getHostPortForWebSocket } from '../services/websocket';
+import {
+  ChannelWebSocket,
+  createChannelWebSocket,
+  getHostPortForWebSocket,
+  isChatWebSocketMessage,
+  normalizeChatWebSocketMessage,
+  type WebSocketMessage,
+} from '../services/websocket';
 import { logger } from '../utils/logger';
-import type { Message, MessageAttachment } from '../models';
+import type { Message } from '../models';
 
 /**
  * WebSocket connection states
@@ -15,7 +22,7 @@ export interface WebSocketEventHandlers {
   /**
    * Called when a message is received
    */
-  onMessage?: (message: any) => void;
+  onMessage?: (message: Message | Exclude<WebSocketMessage, { type?: 'message' }>) => void;
 
   /**
    * Called when the connection is established
@@ -60,7 +67,7 @@ export interface UseWebSocketReturn {
   /**
    * Send a message through the WebSocket
    */
-  sendMessage: (message: any) => void;
+  sendMessage: (message: string) => void;
 
   /**
    * Last error that occurred
@@ -102,84 +109,11 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
   /**
    * Enhanced message handler that normalizes WebSocket message data
    */
-  const handleMessage = useCallback((message: any) => {
+  const handleMessage = useCallback((message: WebSocketMessage) => {
     logger.network.info('WebSocket message received', { type: message.type, userId });
 
-    if (message.type === 'message') {
-      // Normalize attachments from WebSocket (may be simple URLs or objects)
-      let normalizedAttachments: MessageAttachment[] = [];
-
-      if (message.attachments && Array.isArray(message.attachments)) {
-        logger.network.debug('Processing attachments', { count: message.attachments.length, userId });
-        const tempAttachments: MessageAttachment[] = [];
-        message.attachments.forEach((att: any, index: number) => {
-          logger.network.debug(`Processing attachment ${index}`, { type: typeof att, hasUrl: att?.url, attType: att?.type, filename: att?.filename });
-          // If it's already an object with proper structure, use it
-          if (typeof att === 'object' && att.url) {
-            // Ensure all required fields are present and properly typed
-            const normalizedAtt: MessageAttachment = {
-              url: att.url,
-              filename: att.filename || att.url.split('/').pop() || 'attachment',
-              type: att.type || 'application/octet-stream',
-              size: att.size || null
-            };
-            tempAttachments.push(normalizedAtt);
-            logger.network.debug(`Added normalized attachment ${index}`, { url: normalizedAtt.url, type: normalizedAtt.type, filename: normalizedAtt.filename });
-          }
-          // If it's a string URL, convert to MessageAttachment object
-          else if (typeof att === 'string') {
-            const filename = att.split('/').pop() || 'attachment';
-            const ext = filename.split('.').pop()?.toLowerCase() || '';
-            let mimeType = 'application/octet-stream';
-
-            // Guess MIME type from extension (fallback)
-            if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {
-              mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-            } else if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
-              mimeType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
-            } else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) {
-              mimeType =
-                ext === 'mp3'
-                  ? 'audio/mpeg'
-                  : ext === 'm4a'
-                    ? 'audio/mp4'
-                    : `audio/${ext}`;
-            } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
-              mimeType = ext === 'pdf' ? 'application/pdf' :
-                       ext === 'doc' ? 'application/msword' :
-                       ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                       ext === 'txt' ? 'text/plain' : 'application/octet-stream';
-            }
-
-            tempAttachments.push({
-              url: att,
-              filename: filename,
-              type: mimeType,
-              size: null
-            });
-            logger.network.debug(`Converted string attachment ${index}`, { url: att, type: mimeType, filename });
-          } else {
-            logger.network.warn(`Invalid attachment format ${index}`, { attachment: att });
-          }
-        });
-        normalizedAttachments = tempAttachments;
-        logger.network.debug('Final normalized attachments', { count: normalizedAttachments.length, attachments: normalizedAttachments });
-      }
-
-      // Create normalized message object
-      const normalizedMessage: Message = {
-        message_id: message.message_id || `ws-${Date.now()}-${Math.random()}`,
-        sender_user_id: message.sender_user_id || '',
-        message: message.message || '',
-        hashed_message: message.hashed_message || '',
-        username: message.username,
-        sender_avatar_url: message.sender_avatar_url,
-        sender_status: message.sender_status,
-        sender_roles: message.sender_roles,
-        sent_at: message.sent_at || new Date().toISOString(),
-        channel_id: message.channel_id || '',
-        attachments: normalizedAttachments
-      };
+    if (isChatWebSocketMessage(message)) {
+      const normalizedMessage: Message = normalizeChatWebSocketMessage(message);
 
       // Call user-provided handler with normalized message
       handlersRef.current.onMessage?.(normalizedMessage);
@@ -241,7 +175,7 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
     try {
       const hostPort = getHostPortForWebSocket();
       if (!hostPort) {
-        throw new Error('No server host:port configured for WebSocket connection');
+        throw new Error('No home instance configured for WebSocket connection');
       }
 
       logger.network.info('Creating WebSocket connection', { channelId, hostPort });
@@ -280,7 +214,7 @@ export const useWebSocket = (userId?: string): UseWebSocketReturn => {
   /**
    * Send a message through the WebSocket
    */
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: string) => {
     if (connectionRef.current && state === 'connected') {
       connectionRef.current.sendMessage(message);
     } else {

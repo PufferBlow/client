@@ -13,6 +13,7 @@ import { useEffect } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { PufferblowMark } from "./components/PufferblowBrand";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ToastProvider } from "./components/Toast";
 import {
@@ -21,6 +22,7 @@ import {
 } from '@tanstack/react-query';
 import { getAuthTokenFromCookies } from "./services/user";
 import { startBackgroundAuthRefresh } from "./services/authSession";
+import { buildAuthRedirectPath, resolvePostAuthRedirect } from "./utils/authRedirect";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -34,7 +36,10 @@ const queryClient = new QueryClient({
 });
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", type: "image/png", href: "/pufferblow-art-pixel-32x32.png" },
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+  { rel: "icon", type: "image/png", href: "/favicon.png" },
+  { rel: "shortcut icon", href: "/favicon.ico" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -76,7 +81,11 @@ export default function App() {
       const currentPath = window.location.pathname;
       const publicPaths = new Set(['/login', '/signup', '/', '/download']);
       if (!publicPaths.has(currentPath)) {
-        window.location.href = '/login';
+        window.location.href = buildAuthRedirectPath(
+          window.location.pathname,
+          window.location.search,
+          window.location.hash,
+        );
       }
     });
   }, []);
@@ -96,6 +105,8 @@ export default function App() {
   const isAuthRoute = authRoutes.includes(currentPath);
   const isPublicRoute = publicRoutes.includes(currentPath);
   const isProtectedRoute = !isPublicRoute && !isHomeRoute;
+  const searchParams = new URLSearchParams(location.search);
+  const redirectTarget = resolvePostAuthRedirect(searchParams.get("redirect"));
 
   // Universal authentication logic for both web and desktop:
 
@@ -103,11 +114,16 @@ export default function App() {
   let content: React.ReactNode = <Outlet />;
 
   if (isAuthRoute && isAuthenticated) {
-    content = <Navigate to="/dashboard" replace />;
+    content = <Navigate to={redirectTarget} replace />;
   } else if (isHomeRoute && isAuthenticated) {
     content = <Navigate to="/dashboard" replace />;
   } else if (isProtectedRoute && !isAuthenticated) {
-    content = <Navigate to="/login" replace />;
+    content = (
+      <Navigate
+        to={buildAuthRedirectPath(location.pathname, location.search, location.hash)}
+        replace
+      />
+    );
   }
 
   // 4. Debug authentication state for settings page access
@@ -148,10 +164,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <div className="max-w-md w-full text-center">
           <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
             <div className="mb-6">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.29-.966-5.5-2.5M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" />
-                </svg>
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] shadow-[0_18px_45px_rgba(0,0,0,0.35)]">
+                <PufferblowMark
+                  size={44}
+                  surfaceColor="var(--color-surface-secondary)"
+                />
               </div>
               <h1 className="text-6xl font-bold text-[var(--color-text)] mb-2">{message}</h1>
               <p className="text-xl text-[var(--color-text-secondary)]">{details}</p>

@@ -10,8 +10,12 @@ interface UserContextMenuProps {
   onMention?: () => void;
   onBlock?: () => void;
   onReport?: () => void;
+  onTimeout?: () => void;
+  onBan?: () => void;
   canBlock?: boolean;
   canReport?: boolean;
+  canTimeout?: boolean;
+  canBan?: boolean;
   isFriend?: boolean;
   isBlocked?: boolean;
 }
@@ -34,8 +38,12 @@ export function UserContextMenu({
   onMention,
   onBlock,
   onReport,
+  onTimeout,
+  onBan,
   canBlock = true,
   canReport = true,
+  canTimeout = false,
+  canBan = false,
   isFriend = false,
   isBlocked = false,
 }: UserContextMenuProps) {
@@ -94,6 +102,26 @@ export function UserContextMenu({
       tone: "warning",
       icon: icon("M12 9v2m0 4h.01M5.07 19h13.86L12 5z"),
       onSelect: onReport,
+    });
+  }
+
+  if (canTimeout && onTimeout) {
+    items.push({
+      id: "timeout",
+      label: "Timeout",
+      tone: "warning",
+      icon: icon("M12 8v4l3 3M12 3a9 9 0 100 18 9 9 0 000-18z"),
+      onSelect: onTimeout,
+    });
+  }
+
+  if (canBan && onBan) {
+    items.push({
+      id: "ban",
+      label: "Ban",
+      tone: "danger",
+      icon: icon("M18.364 5.636L5.636 18.364M5.636 5.636l12.728 12.728"),
+      onSelect: onBan,
     });
   }
 

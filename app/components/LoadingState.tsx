@@ -86,13 +86,13 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
   const containerClasses = [
     'flex flex-col items-center justify-center',
     fullWidth ? 'w-full' : '',
-    overlay ? 'absolute inset-0 bg-white/80 backdrop-blur-sm z-10' : '',
+    overlay ? 'absolute inset-0 z-10 bg-[color:color-mix(in_srgb,var(--color-background)_76%,transparent)] backdrop-blur-sm' : '',
     className,
   ].filter(Boolean).join(' ');
 
   const renderSpinner = () => (
     <svg
-      className={`animate-spin text-blue-600 ${sizeClasses[size]}`}
+      className={`animate-spin text-[var(--color-primary)] ${sizeClasses[size]}`}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -119,7 +119,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className={`bg-blue-600 rounded-full animate-pulse ${sizeClasses[size]}`}
+          className={`rounded-full bg-[var(--color-primary)] animate-pulse ${sizeClasses[size]}`}
           style={{
             animationDelay: `${i * 0.2}s`,
             animationDuration: '1.4s',
@@ -132,14 +132,14 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
 
   const renderSkeleton = () => (
     <div className="space-y-3 w-full max-w-md">
-      <div className="h-4 bg-gray-300 rounded animate-pulse" />
-      <div className="h-4 bg-gray-300 rounded animate-pulse w-3/4" />
-      <div className="h-4 bg-gray-300 rounded animate-pulse w-1/2" />
+      <div className="h-4 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
+      <div className="h-4 w-3/4 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
+      <div className="h-4 w-1/2 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
     </div>
   );
 
   const renderPulse = () => (
-    <div className={`bg-gray-300 rounded animate-pulse ${sizeClasses[size]}`} />
+    <div className={`rounded bg-[var(--color-surface-tertiary)] animate-pulse ${sizeClasses[size]}`} />
   );
 
   const renderLoadingIndicator = () => {
@@ -167,7 +167,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
       {renderLoadingIndicator()}
 
       {message && variant !== 'skeleton' && (
-        <p className="mt-3 text-sm text-gray-600 text-center">
+        <p className="mt-3 text-center text-sm text-[var(--color-text-secondary)]">
           {message}
         </p>
       )}
@@ -215,7 +215,7 @@ export const TableLoadingState: React.FC<TableLoadingStateProps> = ({
         {Array.from({ length: columns }).map((_, colIndex) => (
           <div
             key={colIndex}
-            className="flex-1 h-4 bg-gray-300 rounded animate-pulse"
+            className="h-4 flex-1 rounded bg-[var(--color-surface-tertiary)] animate-pulse"
             style={{
               width: colIndex === 0 ? '20%' : colIndex === columns - 1 ? '15%' : '25%',
             }}
@@ -257,14 +257,14 @@ export const CardLoadingState: React.FC<CardLoadingStateProps> = ({
 }) => (
   <div className="space-y-4">
     {showHeader && (
-      <div className="h-6 bg-gray-300 rounded animate-pulse w-1/3" />
+      <div className="h-6 w-1/3 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
     )}
 
     <div className="space-y-2">
       {Array.from({ length: contentLines }).map((_, index) => (
         <div
           key={index}
-          className="h-4 bg-gray-300 rounded animate-pulse"
+          className="h-4 rounded bg-[var(--color-surface-tertiary)] animate-pulse"
           style={{
             width: index === contentLines - 1 ? '60%' : '100%',
           }}

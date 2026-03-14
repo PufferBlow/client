@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { getAuthTokenForRequests, refreshAuthSession } from './authSession';
+import { resolveInstance, resolveStoredInstance } from './instance';
 import { getHostPortFromStorage as getHostPort } from './user';
 
 export interface ApiResponse<T = any> {
@@ -239,20 +240,14 @@ export class ApiClient {
 }
 
 export const createApiClient = (hostPort?: string): ApiClient => {
-  let selectedHostPort = hostPort || getHostPort();
+  const selectedHostPort = hostPort || getHostPort();
 
-  // If no host/port is configured, throw an error instead of defaulting
+  // If no instance is configured, fail fast instead of guessing.
   if (!selectedHostPort) {
-    throw new Error('No server host:port configured. Please configure your server connection first.');
+    throw new Error('No home instance configured. Please configure your server connection first.');
   }
 
-  // If no port is specified, default to 7575
-  if (selectedHostPort && !selectedHostPort.includes(':')) {
-    selectedHostPort = `${selectedHostPort}:7575`;
-  }
-
-  const baseUrl = `http://${selectedHostPort}`;
-  return new ApiClient(baseUrl);
+  return new ApiClient(resolveInstance(selectedHostPort).apiBaseUrl);
 };
 
 // Utility function to convert relative storage URLs to full API URLs
@@ -264,9 +259,8 @@ export const convertToFullStorageUrl = (storageUrl: string): string => {
 
   // If it's a relative storage URL starting with /storage, convert it to full API URL
   if (storageUrl.startsWith('/storage')) {
-    const hostPort = getHostPort() || 'localhost:7575';
-    const baseUrl = `http://${hostPort}`;
-    return `${baseUrl}${storageUrl}`;
+    const resolved = resolveStoredInstance(getHostPort());
+    return resolved ? `${resolved.apiBaseUrl}${storageUrl}` : storageUrl;
   }
 
   // Otherwise return as-is (might be unrelated URL)

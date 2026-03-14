@@ -5,6 +5,9 @@
   "description": "PufferBlow Desktop App",
   "homepage": "./",
   "private": true,
+  "engines": {
+    "node": ">=20.17.0"
+  },
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",

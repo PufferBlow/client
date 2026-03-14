@@ -23,7 +23,7 @@ export interface RunBackgroundTaskResponse {
   message: string;
 }
 
-// Background Tasks Management functions (Server Owner only)
+// Background Tasks Management functions (requires manage_background_tasks)
 export const getBackgroundTaskStatuses = async (authToken: string): Promise<ApiResponse<BackgroundTaskStatusesResponse>> => {
   const apiClient = createApiClient();
   return apiClient.post('/api/v1/background-tasks/status', {

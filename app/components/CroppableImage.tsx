@@ -29,6 +29,7 @@ export function CroppableImage({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<CropArea | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const zoomPercentage = ((zoom - 0.1) / 2.9) * 100;
 
   const onCropChange = useCallback((crop: { x: number; y: number }) => {
     setCrop(crop);
@@ -113,15 +114,27 @@ export function CroppableImage({
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 animate-fade-in ${className}`}>
-      {/* Enhanced backdrop with gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/40 to-black/60 backdrop-blur-xl"></div>
+      <div
+        className="absolute inset-0 backdrop-blur-xl"
+        style={{
+          background:
+            "radial-gradient(circle at top, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 40%), color-mix(in srgb, var(--color-shadow-lg) 55%, transparent)",
+        }}
+      ></div>
 
-      <div className="relative glassmorphism animate-scale-in rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)] border border-white/20 max-w-md w-full mx-4 transition-all duration-300 transform scale-100 opacity-100">
+      <div
+        className="relative animate-scale-in max-w-md w-full mx-4 transform rounded-3xl border bg-[var(--color-surface)] opacity-100 shadow-2xl transition-all duration-300 scale-100"
+        style={{
+          borderColor: "color-mix(in srgb, var(--color-border) 85%, var(--color-accent) 15%)",
+          boxShadow:
+            "0 25px 50px -12px color-mix(in srgb, var(--color-shadow-lg) 65%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-border) 65%, transparent)",
+        }}
+      >
 
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
-          <h3 className="text-white font-semibold text-lg flex items-center space-x-3">
-            <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center justify-between border-b border-[var(--color-border-secondary)] p-6">
+          <h3 className="flex items-center space-x-3 text-lg font-semibold text-[var(--color-text)]">
+            <svg className="w-6 h-6 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011-1V6.414a1 1 0 00-.293-.707l-2-2A1 1 0 0012.414 4H11z" />
             </svg>
             <span>Crop Image</span>
@@ -129,7 +142,7 @@ export function CroppableImage({
         </div>
 
         {/* Crop Area */}
-        <div className="relative h-64 bg-black mx-6 mt-4 mb-2 overflow-hidden rounded-2xl">
+        <div className="relative mx-6 mb-2 mt-4 h-64 overflow-hidden rounded-2xl bg-[var(--color-background)]">
           <Cropper
             image={imageSrc}
             crop={crop}
@@ -143,13 +156,13 @@ export function CroppableImage({
               containerStyle: {
                 width: '100%',
                 height: '100%',
-                backgroundColor: '#000'
+                backgroundColor: 'var(--color-background)'
               },
               cropAreaStyle: {
-                border: '3px solid #60A5FA',
+                border: '3px solid var(--color-accent)',
                 borderRadius: shape === 'round' ? '50%' : '8px',
-                boxShadow: '0 0 20px rgba(96, 165, 250, 0.3)',
-                background: 'rgba(96, 165, 250, 0.1)'
+                boxShadow: '0 0 20px color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
               },
               mediaStyle: {
                 objectFit: 'contain'
@@ -158,7 +171,7 @@ export function CroppableImage({
           />
 
           {/* Overlay instructions */}
-          <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
+          <div className="absolute left-2 top-2 rounded-full border border-[var(--color-border-secondary)] bg-[color:color-mix(in_srgb,var(--color-surface)_82%,transparent)] px-3 py-1 text-xs text-[var(--color-text)] backdrop-blur-sm">
             {shape === 'round' ? 'Avatar - Round' : 'Banner - Rectangle'}
           </div>
         </div>
@@ -167,8 +180,8 @@ export function CroppableImage({
         <div className="p-6 space-y-6">
           {/* Zoom Slider */}
           <div>
-            <label className="block text-sm font-medium text-white mb-3 flex items-center space-x-2">
-              <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <label className="mb-3 flex items-center space-x-2 text-sm font-medium text-[var(--color-text)]">
+              <svg className="w-4 h-4 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <span>Zoom Level</span>
@@ -180,21 +193,21 @@ export function CroppableImage({
               step={0.1}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-full h-3 bg-white/10 rounded-lg appearance-none cursor-pointer slider align-middle"
+              className="slider h-3 w-full cursor-pointer appearance-none rounded-lg align-middle"
               style={{
-                background: `linear-gradient(to right, #60A5FA 0%, #60A5FA ${((zoom - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((zoom - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
+                background: `linear-gradient(to right, var(--color-accent) 0%, var(--color-accent) ${zoomPercentage}%, color-mix(in srgb, var(--color-border-secondary) 70%, transparent) ${zoomPercentage}%, color-mix(in srgb, var(--color-border-secondary) 70%, transparent) 100%)`
               }}
             />
-            <div className="flex justify-between text-xs text-white/60 mt-2 font-medium">
+            <div className="mt-2 flex justify-between text-xs font-medium text-[var(--color-text-muted)]">
               <span>0.1x</span>
-              <span className="text-white font-semibold text-sm">{zoom.toFixed(1)}x</span>
+              <span className="text-sm font-semibold text-[var(--color-text)]">{zoom.toFixed(1)}x</span>
               <span>3x</span>
             </div>
           </div>
 
           {/* Instructions */}
-          <div className="text-sm text-white/70 text-center bg-white/5 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
-            <svg className="w-5 h-5 mx-auto mb-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4 text-center text-sm text-[var(--color-text-secondary)]">
+            <svg className="mx-auto mb-2 w-5 h-5 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
             {shape === 'round'
@@ -208,7 +221,7 @@ export function CroppableImage({
             <button
               onClick={onCancel}
               disabled={isProcessing}
-              className="glassmorphism-light px-5 py-2.5 text-white/80 hover:text-white border border-white/20 hover:border-white/30 rounded-xl transition-all duration-300 font-medium hover-lift hover:shadow-lg hover:shadow-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-5 py-2.5 font-medium text-[var(--color-text-secondary)] transition-all duration-300 hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <div className="flex items-center space-x-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,7 +233,7 @@ export function CroppableImage({
             <button
               onClick={handleCropConfirm}
               disabled={isProcessing}
-              className="glassmorphism px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white border border-blue-400/30 hover:border-blue-400/50 rounded-xl transition-all duration-300 font-medium hover-lift hover:shadow-xl hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary)] px-5 py-2.5 font-medium text-[var(--color-on-primary)] transition-all duration-300 hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <div className="flex items-center space-x-2">
                 {isProcessing ? (

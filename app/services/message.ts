@@ -18,7 +18,16 @@ export interface Reaction {
 
 export interface SendMessageRequest {
   content: string;
+  sentAt?: string;
   attachments?: File[];
+}
+
+export interface SendMessageResponse {
+  status_code: number;
+  message: string;
+  message_id: string;
+  attachments: string[];
+  message_data?: Message;
 }
 
 export interface SearchResult {
@@ -28,6 +37,12 @@ export interface SearchResult {
   subtitle?: string;
   content?: string;
   timestamp?: string;
+}
+
+export interface MessageReadHistoryResponse {
+  status_code: number;
+  viewed_message_ids: string[];
+  unread_counts: Record<string, number>;
 }
 
 const unsupportedMessageOperation = <T>(operation: string): ApiResponse<T> => ({
@@ -66,7 +81,12 @@ export const getMessages = async (hostPort: string, channelId: string, authToken
   };
 };
 
-export const sendMessage = async (hostPort: string, channelId: string, messageData: SendMessageRequest, authToken: string): Promise<ApiResponse<Message>> => {
+export const sendMessage = async (
+  hostPort: string | undefined,
+  channelId: string,
+  messageData: SendMessageRequest,
+  authToken: string,
+): Promise<ApiResponse<SendMessageResponse>> => {
   const apiClient = createApiClient(hostPort);
 
   // Always use FormData for consistency with backend expectations
@@ -78,6 +98,10 @@ export const sendMessage = async (hostPort: string, channelId: string, messageDa
     formData.append('message', messageData.content.trim());
   }
 
+  if (messageData.sentAt) {
+    formData.append('sent_at', messageData.sentAt);
+  }
+
   // Add attachments if present
   if (messageData.attachments && messageData.attachments.length > 0) {
     messageData.attachments.forEach((file) => {
@@ -86,7 +110,7 @@ export const sendMessage = async (hostPort: string, channelId: string, messageDa
   }
 
   // Use correct endpoint with channel_id as path parameter
-  return apiClient.post(`/api/v1/channels/${channelId}/send_message`, formData);
+  return apiClient.post<SendMessageResponse>(`/api/v1/channels/${channelId}/send_message`, formData);
 };
 
 export const updateMessage = async (_hostPort: string, _messageId: string, _content: string, _authToken: string): Promise<ApiResponse<Message>> => {
@@ -140,4 +164,14 @@ export const markMessageAsRead = async (hostPort: string, channelId: string, mes
     auth_token: authToken,
     message_id: messageId,
   }, undefined, 'PUT');
+};
+
+export const getMessageReadHistory = async (
+  hostPort: string,
+  authToken: string,
+): Promise<ApiResponse<MessageReadHistoryResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.get('/api/v1/channels/read-history', {
+    auth_token: authToken,
+  });
 };

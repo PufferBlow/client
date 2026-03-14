@@ -1,54 +1,34 @@
 import { logger } from '../utils/logger';
+import { resolveInstance } from './instance';
 import { getHostPortFromStorage } from './user';
+import type { Message, MessageAttachment } from '../models';
 
 // Use network logger for WebSocket since it's networking related
 const websocketLogger = logger.network;
 
-const buildWebSocketBaseUrl = (hostPort: string): string => {
-  const trimmed = hostPort.trim().replace(/\/$/, '');
-  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
-    return trimmed;
-  }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed.replace(/^http/i, 'ws');
-  }
+const buildWebSocketBaseUrl = (hostPort: string): string =>
+  resolveInstance(hostPort).wsBaseUrl;
 
-  const protocol =
-    typeof window !== 'undefined' && window.location.protocol === 'https:'
-      ? 'wss'
-      : 'ws';
-  return `${protocol}://${trimmed}`;
-};
+const buildHttpBaseUrl = (hostPort: string): string =>
+  resolveInstance(hostPort).apiBaseUrl;
 
-const buildHttpBaseUrl = (hostPort: string): string => {
-  const trimmed = hostPort.trim().replace(/\/$/, '');
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
-    return trimmed.replace(/^ws/i, 'http');
-  }
+export type PresenceStatus = 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
 
-  const protocol =
-    typeof window !== 'undefined' && window.location.protocol === 'https:'
-      ? 'https'
-      : 'http';
-  return `${protocol}://${trimmed}`;
-};
-
-export interface WebRTCData {
-  offer?: RTCSessionDescriptionInit;
-  answer?: RTCSessionDescriptionInit;
-  candidate?: RTCIceCandidateInit;
-  fromUserId: string;
-  toUserId?: string; // for direct signaling (optional, undefined = broadcast)
-  channelId: string;
+export interface WebSocketAttachmentPayload {
+  url: string;
+  filename?: string;
+  type?: string;
+  size?: number | null;
 }
 
-export interface WebSocketMessage {
-  type: 'message' | 'user_joined' | 'user_left' | 'user_status_changed' | 'error' | 'read_confirmation' | 'webrtc_offer' | 'webrtc_answer' | 'webrtc_ice' | 'webrtc_join' | 'webrtc_leave' | 'webrtc_mute' | 'webrtc_unmute';
-  channel_id?: string;  // Now always included in global websocket
+interface WebSocketBaseMessage {
+  channel_id?: string;
   message_id?: string;
+}
+
+export interface WebSocketChatMessage extends WebSocketBaseMessage {
+  // The current server may omit `type` for chat payloads sent over websocket.
+  type?: 'message';
   sender_user_id?: string;
   username?: string;
   sender_avatar_url?: string | null;
@@ -57,15 +37,126 @@ export interface WebSocketMessage {
   message?: string;
   hashed_message?: string;
   sent_at?: string;
-  attachments?: string[];
-  webrtcData?: WebRTCData; // WebRTC signaling data
+  attachments?: Array<string | WebSocketAttachmentPayload>;
+}
+
+export interface WebSocketPresenceMessage extends WebSocketBaseMessage {
+  type: 'user_status_changed';
   user_id?: string;
-  avatar?: string;
-  content?: string;
   timestamp?: string;
-  status?: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
+  status?: PresenceStatus;
+  source?: string;
+}
+
+export interface WebSocketChannelMembershipMessage extends WebSocketBaseMessage {
+  type: 'user_joined' | 'user_left';
+  user_id?: string;
+  username?: string;
+  timestamp?: string;
+}
+
+export interface WebSocketReadConfirmationMessage extends WebSocketBaseMessage {
+  type: 'read_confirmation';
+}
+
+export interface WebSocketErrorMessage extends WebSocketBaseMessage {
+  type: 'error';
   error?: string;
 }
+
+export type WebSocketMessage =
+  | WebSocketChatMessage
+  | WebSocketPresenceMessage
+  | WebSocketChannelMembershipMessage
+  | WebSocketReadConfirmationMessage
+  | WebSocketErrorMessage;
+
+export const isChatWebSocketMessage = (
+  message: WebSocketMessage
+): message is WebSocketChatMessage =>
+  (message.type === 'message' || message.type === undefined) &&
+  Boolean(message.message_id);
+
+const guessAttachmentMimeType = (filename: string): string => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {
+    return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  }
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
+    return `video/${ext === 'mov' ? 'quicktime' : ext}`;
+  }
+  if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) {
+    return ext === 'mp3'
+      ? 'audio/mpeg'
+      : ext === 'm4a'
+        ? 'audio/mp4'
+        : `audio/${ext}`;
+  }
+  if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
+    return ext === 'pdf'
+      ? 'application/pdf'
+      : ext === 'doc'
+        ? 'application/msword'
+        : ext === 'docx'
+          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          : ext === 'txt'
+            ? 'text/plain'
+            : 'application/octet-stream';
+  }
+
+  return 'application/octet-stream';
+};
+
+export const normalizeWebSocketAttachments = (
+  attachments?: Array<string | WebSocketAttachmentPayload>
+): MessageAttachment[] => {
+  if (!attachments || !Array.isArray(attachments)) {
+    return [];
+  }
+
+  const normalized: MessageAttachment[] = [];
+
+  for (const attachment of attachments) {
+    if (typeof attachment === 'object' && attachment?.url) {
+      normalized.push({
+        url: attachment.url,
+        filename: attachment.filename || attachment.url.split('/').pop() || 'attachment',
+        type: attachment.type || 'application/octet-stream',
+        size: attachment.size || null,
+      });
+      continue;
+    }
+
+    if (typeof attachment === 'string') {
+      const filename = attachment.split('/').pop() || 'attachment';
+      normalized.push({
+        url: attachment,
+        filename,
+        type: guessAttachmentMimeType(filename),
+        size: null,
+      });
+    }
+  }
+
+  return normalized;
+};
+
+export const normalizeChatWebSocketMessage = (
+  message: WebSocketChatMessage
+): Message => ({
+  message_id: message.message_id || `ws-${Date.now()}-${Math.random()}`,
+  sender_user_id: message.sender_user_id || '',
+  message: message.message || '',
+  hashed_message: message.hashed_message || '',
+  username: message.username,
+  sender_avatar_url: message.sender_avatar_url,
+  sender_status: message.sender_status,
+  sender_roles: message.sender_roles,
+  sent_at: message.sent_at || new Date().toISOString(),
+  channel_id: message.channel_id || '',
+  attachments: normalizeWebSocketAttachments(message.attachments),
+});
 
 export interface WebSocketCallbacks {
   onMessage?: (message: WebSocketMessage) => void;
@@ -226,133 +317,18 @@ export class GlobalWebSocket {
     return false;
   }
 
-  // WebRTC signaling methods
-  sendWebRTCOffer(channelId: string, offer: RTCSessionDescriptionInit, toUserId?: string): boolean {
+  sendPresenceUpdate(status: PresenceStatus): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
-        const message = JSON.stringify({
-          type: 'webrtc_offer',
-          channel_id: channelId,
-          webrtcData: {
-            offer,
-            fromUserId: '', // Will be set by server from auth
-            toUserId,
-            channelId
-          }
-        });
-        this.ws.send(message);
+        this.ws.send(
+          JSON.stringify({
+            type: 'presence_update',
+            status,
+          }),
+        );
         return true;
       } catch (error) {
-        websocketLogger.error('Failed to send WebRTC offer', error);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  sendWebRTCAnswer(channelId: string, answer: RTCSessionDescriptionInit, toUserId: string): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        const message = JSON.stringify({
-          type: 'webrtc_answer',
-          channel_id: channelId,
-          webrtcData: {
-            answer,
-            fromUserId: '', // Will be set by server from auth
-            toUserId,
-            channelId
-          }
-        });
-        this.ws.send(message);
-        return true;
-      } catch (error) {
-        websocketLogger.error('Failed to send WebRTC answer', error);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  sendWebRTCIceCandidate(channelId: string, candidate: RTCIceCandidateInit, toUserId: string): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        const message = JSON.stringify({
-          type: 'webrtc_ice',
-          channel_id: channelId,
-          webrtcData: {
-            candidate,
-            fromUserId: '', // Will be set by server from auth
-            toUserId,
-            channelId
-          }
-        });
-        this.ws.send(message);
-        return true;
-      } catch (error) {
-        websocketLogger.error('Failed to send WebRTC ICE candidate', error);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  sendVoiceChannelJoin(channelId: string): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        const message = JSON.stringify({
-          type: 'webrtc_join',
-          channel_id: channelId,
-          webrtcData: {
-            fromUserId: '', // Will be set by server from auth
-            channelId
-          }
-        });
-        this.ws.send(message);
-        return true;
-      } catch (error) {
-        websocketLogger.error('Failed to send voice channel join', error);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  sendVoiceChannelLeave(channelId: string): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        const message = JSON.stringify({
-          type: 'webrtc_leave',
-          channel_id: channelId,
-          webrtcData: {
-            fromUserId: '', // Will be set by server from auth
-            channelId
-          }
-        });
-        this.ws.send(message);
-        return true;
-      } catch (error) {
-        websocketLogger.error('Failed to send voice channel leave', error);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  sendVoiceChannelMute(channelId: string, muted: boolean): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        const message = JSON.stringify({
-          type: muted ? 'webrtc_mute' : 'webrtc_unmute',
-          channel_id: channelId,
-          webrtcData: {
-            fromUserId: '', // Will be set by server from auth
-            channelId
-          }
-        });
-        this.ws.send(message);
-        return true;
-      } catch (error) {
-        websocketLogger.error('Failed to send voice channel mute status', error);
+        websocketLogger.error('Failed to send presence update via global WebSocket', error);
         return false;
       }
     }
@@ -553,9 +529,6 @@ export const getHostPortForWebSocket = (): string => {
     if (localHostPort) return localHostPort;
     const localLegacyHostPort = localStorage.getItem('host_port');
     if (localLegacyHostPort) return decodeURIComponent(localLegacyHostPort);
-
-    // Fallback
-    return 'localhost:7575';
   }
-  return 'localhost:7575';
+  return '';
 };

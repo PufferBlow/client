@@ -14,7 +14,7 @@ export interface BlockIPRequest {
   reason: string;
 }
 
-// IP Security Management functions (Server Owner only)
+// IP Security Management functions (requires manage_blocked_ips)
 export const listBlockedIPs = async (authToken: string): Promise<ApiResponse<{ status_code: number; blocked_ips: BlockedIP[] }>> => {
   const apiClient = createApiClient();
   return apiClient.post(`/api/v1/blocked-ips/list`, {

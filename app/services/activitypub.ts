@@ -69,63 +69,67 @@ export interface LoadDirectMessagesResponse {
   messages: DirectMessagePayload[];
 }
 
-export const getWebFinger = async (
+const createFederationClient = (instance?: string) => createApiClient(instance);
+
+// ActivityPub discovery happens against the selected home instance, which then
+// resolves remote actors through WebFinger and ActivityPub routes.
+export const resolveActorHandle = async (
   resource: string,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<WebFingerResponse>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.get('/.well-known/webfinger', { resource });
 };
 
-export const getActivityPubActor = async (
+export const getActorDocument = async (
   userId: string,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<ActivityPubActorDocument>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.get(`/ap/users/${encodeURIComponent(userId)}`);
 };
 
-export const getActivityPubOutbox = async (
+export const getActorOutbox = async (
   userId: string,
   page: number = 1,
   limit: number = 20,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<ActivityPubOutboxPage>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.get(`/ap/users/${encodeURIComponent(userId)}/outbox`, {
     page: String(page),
     limit: String(limit),
   });
 };
 
-export const followRemoteActor = async (
+export const followRemoteAccount = async (
   authToken: string,
   remoteHandle: string,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<FollowRemoteActorResponse>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.post('/api/v1/federation/follow', {
     auth_token: authToken,
     remote_handle: remoteHandle,
   });
 };
 
-export const sendDirectMessage = async (
+export const sendFederatedDirectMessage = async (
   request: SendDirectMessageRequest,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<SendDirectMessageResponse>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.post('/api/v1/dms/send', request);
 };
 
-export const loadDirectMessages = async (
+export const loadFederatedDirectMessages = async (
   authToken: string,
   peer: string,
   page: number = 1,
   messagesPerPage: number = 20,
-  hostPort?: string
+  instance?: string,
 ): Promise<ApiResponse<LoadDirectMessagesResponse>> => {
-  const apiClient = createApiClient(hostPort);
+  const apiClient = createFederationClient(instance);
   return apiClient.get('/api/v1/dms/messages', {
     auth_token: authToken,
     peer,
@@ -133,3 +137,12 @@ export const loadDirectMessages = async (
     messages_per_page: String(messagesPerPage),
   });
 };
+
+// Backward-compatible aliases while the rest of the client migrates off the
+// older generic naming.
+export const getWebFinger = resolveActorHandle;
+export const getActivityPubActor = getActorDocument;
+export const getActivityPubOutbox = getActorOutbox;
+export const followRemoteActor = followRemoteAccount;
+export const sendDirectMessage = sendFederatedDirectMessage;
+export const loadDirectMessages = loadFederatedDirectMessages;

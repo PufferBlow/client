@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ApiClient, createApiClient } from './apiClient'
 
@@ -38,7 +39,9 @@ describe('ApiClient', () => {
       expect(result.success).toBe(true)
       expect(result.data).toEqual(mockResponse)
       expect(mockFetch).toHaveBeenCalledWith('http://test.com/test', {
-        headers: { 'Content-Type': 'application/json' }
+        method: 'GET',
+        body: undefined,
+        headers: {}
       })
     })
 
@@ -53,7 +56,9 @@ describe('ApiClient', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith('http://test.com/test?param1=value1&param2=value2', {
-        headers: { 'Content-Type': 'application/json' }
+        method: 'GET',
+        body: undefined,
+        headers: {}
       })
     })
 
@@ -68,7 +73,7 @@ describe('ApiClient', () => {
       const result = await client.get('/notfound')
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('HTTP 404: Not Found')
+      expect(result.error).toBe('Not found')
     })
   })
 
@@ -84,9 +89,10 @@ describe('ApiClient', () => {
 
       expect(result.success).toBe(true)
       expect(result.data).toEqual(mockResponse)
-      expect(mockFetch).toHaveBeenCalledWith('http://test.com/create?name=test', {
+      expect(mockFetch).toHaveBeenCalledWith('http://test.com/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'test' })
       })
     })
 
@@ -96,15 +102,20 @@ describe('ApiClient', () => {
         json: () => Promise.resolve({})
       })
 
-      const result = await client.post('/signup', {
+      await client.post('/signup', {
         username: 'user',
         password: 'pass',
         email: 'user@test.com'
       })
 
-      expect(mockFetch).toHaveBeenCalledWith('http://test.com/signup?username=user&password=pass&email=user%40test.com', {
+      expect(mockFetch).toHaveBeenCalledWith('http://test.com/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'user',
+          password: 'pass',
+          email: 'user@test.com'
+        })
       })
     })
 
@@ -119,7 +130,7 @@ describe('ApiClient', () => {
       const result = await client.post('/create', { invalid: 'data' })
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('HTTP 400: Bad Request')
+      expect(result.error).toBe('Bad request')
     })
   })
 
@@ -155,7 +166,8 @@ describe('ApiClient', () => {
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith('http://test.com/delete/1', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        body: undefined,
+        headers: {}
       })
     })
   })

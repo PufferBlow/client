@@ -1,22 +1,29 @@
 import { Link } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import {
   BarChart3,
   Shield,
   Users,
+  KeyRound,
   Hash,
   CheckSquare,
   Settings,
   Folder,
   Lock,
   CircleX,
-  FileText,
-  Mic
+  FileText
 } from "lucide-react";
 import { ChannelCreationModal } from "../../components/ChannelCreationModal";
 import { TasksTab, StorageTab, OverviewTab, MembersTab, ChannelsTab, SettingsTab, SecurityTab, BlockedIPsTab, LogsTab, ModerationTab } from "../control-panel/ControlPanelTabs";
-import { getAuthTokenFromCookies, listUsers, type ListUsersResponse } from "../../services/user";
+import { RolesTab } from "../control-panel/RoleManagement";
+import { getAuthTokenFromCookies, hasResolvedPrivilege, listUsers, type ListUsersResponse, useCurrentUserProfile } from "../../services/user";
 import { listChannels, createChannel } from "../../services/channel";
+import {
+  listInstancePrivileges,
+  listInstanceRoles,
+  type InstancePrivilege,
+  type InstanceRole,
+} from "../../services/system";
 import { logger } from "../../utils/logger";
 import type { Channel } from "../../models";
 import { useToast } from "../../components/Toast";
@@ -36,17 +43,34 @@ type StorageFile = {
   url: string;
 };
 
+type ControlPanelTabId =
+  | 'overview'
+  | 'moderation'
+  | 'members'
+  | 'roles'
+  | 'channels'
+  | 'tasks'
+  | 'logs'
+  | 'settings'
+  | 'storage'
+  | 'security'
+  | 'blocked-ips';
+
 export default function ControlPanel() {
   const showToast = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'members' | 'channels' | 'tasks' | 'logs' | 'settings' | 'storage' | 'security' | 'blocked-ips'>('overview');
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUserProfile();
+  const [activeTab, setActiveTab] = useState<ControlPanelTabId>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [controlPanelAuthToken, setControlPanelAuthToken] = useState('');
 
   // Channels state for the control panel
   const [controlPanelChannels, setControlPanelChannels] = useState<Channel[]>([]);
 
   // Users state for the control panel
   const [controlPanelUsers, setControlPanelUsers] = useState<ListUsersResponse['users']>([]);
+  const [controlPanelRoles, setControlPanelRoles] = useState<InstanceRole[]>([]);
+  const [controlPanelPrivileges, setControlPanelPrivileges] = useState<InstancePrivilege[]>([]);
 
   // FileViewerModal state
   const [fileViewerModal, setFileViewerModal] = useState<{
@@ -54,10 +78,66 @@ export default function ControlPanel() {
     file: StorageFile | null;
   }>({ isOpen: false, file: null });
 
+  const canViewOverview = hasResolvedPrivilege(currentUser, 'view_server_stats');
+  const canViewModeration =
+    hasResolvedPrivilege(currentUser, 'moderate_content') ||
+    hasResolvedPrivilege(currentUser, 'ban_users') ||
+    hasResolvedPrivilege(currentUser, 'mute_users') ||
+    hasResolvedPrivilege(currentUser, 'delete_messages');
+  const canViewMembers = hasResolvedPrivilege(currentUser, 'view_users');
+  const canViewRoles = hasResolvedPrivilege(currentUser, 'manage_server_privileges');
+  const canViewChannels =
+    hasResolvedPrivilege(currentUser, 'create_channels') ||
+    hasResolvedPrivilege(currentUser, 'edit_channels') ||
+    hasResolvedPrivilege(currentUser, 'delete_channels') ||
+    hasResolvedPrivilege(currentUser, 'manage_channel_users') ||
+    hasResolvedPrivilege(currentUser, 'view_private_channels');
+  const canViewTasks = hasResolvedPrivilege(currentUser, 'manage_background_tasks');
+  const canViewSettings = hasResolvedPrivilege(currentUser, 'manage_server_settings');
+  const canViewStorage =
+    hasResolvedPrivilege(currentUser, 'view_files') ||
+    hasResolvedPrivilege(currentUser, 'upload_files') ||
+    hasResolvedPrivilege(currentUser, 'delete_files') ||
+    hasResolvedPrivilege(currentUser, 'manage_cdn');
+  const canViewSecurity = hasResolvedPrivilege(currentUser, 'manage_server_settings');
+  const canViewBlockedIps = hasResolvedPrivilege(currentUser, 'manage_blocked_ips');
+  const canViewLogs = hasResolvedPrivilege(currentUser, 'view_audit_logs');
+
+  type ControlPanelTab = {
+    id: ControlPanelTabId;
+    label: string;
+    icon: ReactNode;
+  };
+
+  const dashboardTabs: ControlPanelTab[] = canViewOverview
+    ? [{ id: 'overview', label: 'Overview', icon: <BarChart3 className="w-6 h-6" /> }]
+    : [];
+
+  const managementTabs: ControlPanelTab[] = [
+    canViewModeration ? { id: 'moderation', label: 'Moderation', icon: <Shield className="w-6 h-6" /> } : null,
+    canViewMembers ? { id: 'members', label: 'Members', icon: <Users className="w-6 h-6" /> } : null,
+    canViewRoles ? { id: 'roles', label: 'Roles', icon: <KeyRound className="w-6 h-6" /> } : null,
+    canViewChannels ? { id: 'channels', label: 'Channels', icon: <Hash className="w-6 h-6" /> } : null,
+  ].filter(Boolean) as ControlPanelTab[];
+
+  const configurationTabs: ControlPanelTab[] = [
+    canViewTasks ? { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-6 h-6" /> } : null,
+    canViewSettings ? { id: 'settings', label: 'Settings', icon: <Settings className="w-6 h-6" /> } : null,
+    canViewStorage ? { id: 'storage', label: 'Storage', icon: <Folder className="w-6 h-6" /> } : null,
+  ].filter(Boolean) as ControlPanelTab[];
+
+  const securityTabs: ControlPanelTab[] = [
+    canViewSecurity ? { id: 'security', label: 'Security', icon: <Lock className="w-6 h-6" /> } : null,
+    canViewBlockedIps ? { id: 'blocked-ips', label: 'Blocked IPs', icon: <CircleX className="w-6 h-6" /> } : null,
+    canViewLogs ? { id: 'logs', label: 'Logs', icon: <FileText className="w-6 h-6" /> } : null,
+  ].filter(Boolean) as ControlPanelTab[];
+
+  const tabs = [...dashboardTabs, ...managementTabs, ...configurationTabs, ...securityTabs];
+
   // Fetch channels and users for control panel
-  useEffect(() => {
-    const fetchData = async () => {
-      const authToken = getAuthTokenFromCookies() || '';
+  const fetchControlPanelData = async (authTokenOverride?: string) => {
+      const authToken = authTokenOverride || getAuthTokenFromCookies() || '';
+      setControlPanelAuthToken(authToken);
 
       if (!authToken) {
         logger.ui.error("No auth token available for control panel data fetching");
@@ -69,57 +149,117 @@ export default function ControlPanel() {
         logger.ui.info("Fetching control panel data with auth token", { tokenPresent: !!authToken });
 
         // Fetch channels
-        const channelsResponse = await listChannels(authToken);
-        if (channelsResponse.success && channelsResponse.data?.channels) {
-          setControlPanelChannels(channelsResponse.data.channels);
-          logger.ui.info("Channels fetched successfully for control panel", {
-            count: channelsResponse.data.channels.length,
-            channelNames: channelsResponse.data.channels.map(c => c.channel_name)
-          });
+        if (canViewChannels) {
+          const channelsResponse = await listChannels(authToken);
+          if (channelsResponse.success && channelsResponse.data?.channels) {
+            setControlPanelChannels(channelsResponse.data.channels);
+            logger.ui.info("Channels fetched successfully for control panel", {
+              count: channelsResponse.data.channels.length,
+              channelNames: channelsResponse.data.channels.map(c => c.channel_name)
+            });
+          } else {
+            logger.ui.error("Failed to fetch channels for control panel", {
+              error: channelsResponse.error,
+              authTokenPresent: !!authToken
+            });
+            setControlPanelChannels([]);
+          }
         } else {
-          logger.ui.error("Failed to fetch channels for control panel", {
-            error: channelsResponse.error,
-            authTokenPresent: !!authToken
-          });
           setControlPanelChannels([]);
         }
 
-        // Fetch users
-        const usersResponse = await listUsers(authToken);
-        if (usersResponse.success && usersResponse.data?.users) {
-          setControlPanelUsers(usersResponse.data.users);
-          logger.ui.info("Users fetched successfully for control panel", {
-            count: usersResponse.data.users.length,
-            usernames: usersResponse.data.users.slice(0, 5).map(u => u.username) // Show first 5 users
-          });
+        if (canViewMembers || canViewRoles) {
+          const usersResponse = await listUsers(authToken);
+          if (usersResponse.success && usersResponse.data?.users) {
+            setControlPanelUsers(usersResponse.data.users);
+            logger.ui.info("Users fetched successfully for control panel", {
+              count: usersResponse.data.users.length,
+              usernames: usersResponse.data.users.slice(0, 5).map(u => u.username)
+            });
+          } else {
+            logger.ui.error("Failed to fetch users for control panel", {
+              error: usersResponse.error,
+              authTokenPresent: !!authToken
+            });
+            setControlPanelUsers([]);
+          }
         } else {
-          logger.ui.error("Failed to fetch users for control panel", {
-            error: usersResponse.error,
-            authTokenPresent: !!authToken
-          });
           setControlPanelUsers([]);
+        }
+
+        if (canViewRoles) {
+          const rolesResponse = await listInstanceRoles(authToken);
+          if (rolesResponse.success && rolesResponse.data?.roles) {
+            setControlPanelRoles(rolesResponse.data.roles);
+          } else {
+            logger.ui.warn("Failed to fetch instance roles for control panel", {
+              error: rolesResponse.error,
+            });
+            setControlPanelRoles([]);
+          }
+        } else {
+          setControlPanelRoles([]);
+        }
+
+        if (canViewRoles) {
+          const privilegesResponse = await listInstancePrivileges(authToken);
+          if (privilegesResponse.success && privilegesResponse.data?.privileges) {
+            setControlPanelPrivileges(privilegesResponse.data.privileges);
+          } else {
+            logger.ui.warn("Failed to fetch instance privileges for control panel", {
+              error: privilegesResponse.error,
+            });
+            setControlPanelPrivileges([]);
+          }
+        } else {
+          setControlPanelPrivileges([]);
         }
       } catch (error) {
         logger.ui.error("Unexpected error fetching control panel data", { error });
         setControlPanelChannels([]);
         setControlPanelUsers([]);
+        setControlPanelRoles([]);
+        setControlPanelPrivileges([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, []);
+  useEffect(() => {
+    if (isCurrentUserLoading || !currentUser) {
+      return;
+    }
+    void fetchControlPanelData();
+  }, [
+    canViewChannels,
+    canViewMembers,
+    canViewRoles,
+    currentUser,
+    isCurrentUserLoading,
+  ]);
+
+  useEffect(() => {
+    if (tabs.length === 0) {
+      return;
+    }
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [activeTab, tabs]);
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
-    console.log("üîç handleCreateChannel called with:", channelData);
+    logger.ui.debug("Control panel create channel requested", {
+      channelName: channelData.name,
+      channelType: channelData.type,
+      isPrivate: channelData.isPrivate,
+    });
 
     try {
       const authToken = getAuthTokenFromCookies() || '';
-      console.log("üîç Auth token present:", !!authToken);
+      logger.ui.debug("Control panel channel creation auth state", { hasAuthToken: Boolean(authToken) });
 
       if (!authToken) {
-        console.error("‚ùå No auth token available for channel creation");
+        logger.ui.error("No auth token available for control panel channel creation");
         showToast({
           message: "Authentication error: Please log in again.",
           tone: "error",
@@ -164,7 +304,7 @@ export default function ControlPanel() {
           });
         } else if (response.error?.includes('403') || response.error?.includes('Access denied')) {
           showToast({
-            message: "Access denied. Only admins and moderators can create channels.",
+            message: "Access denied. This account is missing the create_channels privilege on this instance.",
             tone: "error",
             category: "system",
           });
@@ -423,18 +563,12 @@ export default function ControlPanel() {
     );
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: <BarChart3 className="w-6 h-6" /> },
-    { id: 'moderation', label: 'Moderation', icon: <Shield className="w-6 h-6" /> },
-    { id: 'members', label: 'Members', icon: <Users className="w-6 h-6" /> },
-    { id: 'channels', label: 'Channels', icon: <Hash className="w-6 h-6" /> },
-    { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-6 h-6" /> },
-    { id: 'settings', label: 'Settings', icon: <Settings className="w-6 h-6" /> },
-    { id: 'storage', label: 'Storage', icon: <Folder className="w-6 h-6" /> },
-    { id: 'security', label: 'Security', icon: <Lock className="w-6 h-6" /> },
-    { id: 'blocked-ips', label: 'Blocked IPs', icon: <CircleX className="w-6 h-6" /> },
-    { id: 'logs', label: 'Logs', icon: <FileText className="w-6 h-6" /> },
-  ];
+  const openConfigurationTab = () => {
+    const nextTab = configurationTabs[0]?.id || securityTabs[0]?.id || managementTabs[0]?.id || dashboardTabs[0]?.id;
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
+  };
 
   // FileViewerModal Component
   const FileViewerModal = ({ isOpen, file, onClose }: { isOpen: boolean; file: StorageFile | null; onClose: () => void }) => {
@@ -569,7 +703,7 @@ export default function ControlPanel() {
         isOpen={isOpen}
         onClose={onClose}
         title={file.filename}
-        description={`${formatFileSize(file.size)} ï ${file.type} ï Uploaded ${new Date(file.uploaded_at).toLocaleDateString()} by ${file.uploader}`}
+        description={`${formatFileSize(file.size)} ÔøΩ ${file.type} ÔøΩ Uploaded ${new Date(file.uploaded_at).toLocaleDateString()} by ${file.uploader}`}
         widthClassName="max-w-4xl"
         footer={
           <div className="flex justify-end gap-2">
@@ -586,6 +720,32 @@ export default function ControlPanel() {
       </Modal>
     );
   };
+
+  if (!isCurrentUserLoading && currentUser && tabs.length === 0) {
+    return (
+      <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center px-6">
+        <div className="w-full max-w-xl bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-[var(--color-surface-secondary)] flex items-center justify-center text-[var(--color-warning)]">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-[var(--color-text)]">Control Panel Restricted</h1>
+              <p className="text-sm text-[var(--color-text-secondary)]">This account is signed in, but it does not currently hold any control-panel privileges on this home instance.</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4 text-sm text-[var(--color-text-secondary)]">
+            Ask the instance owner to assign a custom role with privileges like <code className="text-[var(--color-text)]">view_server_stats</code>, <code className="text-[var(--color-text)]">manage_server_privileges</code>, <code className="text-[var(--color-text)]">manage_server_settings</code>, or <code className="text-[var(--color-text)]">view_audit_logs</code> depending on the control-panel area you need.
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <Link to="/dashboard">
+              <Button variant="ghost">Back to Dashboard</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -613,7 +773,7 @@ export default function ControlPanel() {
                 <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
                   Dashboard
                 </div>
-                {tabs.slice(0, 1).map((tab) => (
+                {dashboardTabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
@@ -634,79 +794,85 @@ export default function ControlPanel() {
               </div>
 
               {/* Management Section */}
-              <div className="mb-6">
-                <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                  Community Management
+              {managementTabs.length > 0 && (
+                <div className="mb-6">
+                  <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                    Community Management
+                  </div>
+                  {managementTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
+                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
+                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                        }`}
+                    >
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                        {tab.icon}
+                      </div>
+                      <span className="font-medium text-sm">{tab.label}</span>
+                      {activeTab === tab.id && (
+                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
+                      )}
+                    </button>
+                  ))}
                 </div>
-                {tabs.slice(1, 4).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                      }`}
-                  >
-                    <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
-                      {tab.icon}
-                    </div>
-                    <span className="font-medium text-sm">{tab.label}</span>
-                    {activeTab === tab.id && (
-                      <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                    )}
-                  </button>
-                ))}
-              </div>
+              )}
 
               {/* Configuration Section */}
-              <div className="mb-6">
-                <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                  Server Configuration
+              {configurationTabs.length > 0 && (
+                <div className="mb-6">
+                  <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                    Instance Configuration
+                  </div>
+                  {configurationTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
+                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
+                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                        }`}
+                    >
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                        {tab.icon}
+                      </div>
+                      <span className="font-medium text-sm">{tab.label}</span>
+                      {activeTab === tab.id && (
+                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
+                      )}
+                    </button>
+                  ))}
                 </div>
-                {tabs.slice(4, 7).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                      }`}
-                  >
-                    <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
-                      {tab.icon}
-                    </div>
-                    <span className="font-medium text-sm">{tab.label}</span>
-                    {activeTab === tab.id && (
-                      <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                    )}
-                  </button>
-                ))}
-              </div>
+              )}
 
               {/* Security Section */}
-              <div className="mb-6">
-                <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                  Security & Advanced
+              {securityTabs.length > 0 && (
+                <div className="mb-6">
+                  <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                    Security & Advanced
+                  </div>
+                  {securityTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
+                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
+                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                        }`}
+                    >
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                        {tab.icon}
+                      </div>
+                      <span className="font-medium text-sm">{tab.label}</span>
+                      {activeTab === tab.id && (
+                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
+                      )}
+                    </button>
+                  ))}
                 </div>
-                {tabs.slice(7).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                      }`}
-                  >
-                    <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
-                      {tab.icon}
-                    </div>
-                    <span className="font-medium text-sm">{tab.label}</span>
-                    {activeTab === tab.id && (
-                      <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                    )}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
           </div>
 
@@ -731,7 +897,7 @@ export default function ControlPanel() {
           <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
             <div className="flex items-center space-x-4">
               <h1 className="text-[var(--color-text)] font-semibold text-base">
-                {tabs.find(tab => tab.id === activeTab)?.label}
+                {tabs.find(tab => tab.id === activeTab)?.label || 'Control Panel'}
               </h1>
             </div>
             <div className="ml-auto">
@@ -741,9 +907,28 @@ export default function ControlPanel() {
 
           {/* Content Area */}
           <div className="flex-1 p-6 overflow-y-auto bg-[var(--color-background)]">
-            {activeTab === 'overview' && <OverviewTab onSettingsClick={() => setActiveTab('settings')} />}
+            {activeTab === 'overview' && <OverviewTab onSettingsClick={openConfigurationTab} />}
             {activeTab === 'moderation' && <ModerationTab showToast={showToast} />}
-            {activeTab === 'members' && <MembersTab users={controlPanelUsers} showToast={showToast} />}
+            {activeTab === 'members' && (
+              <MembersTab
+                roles={controlPanelRoles}
+                users={controlPanelUsers}
+                onOpenRolesTab={() => setActiveTab('roles')}
+                showToast={showToast}
+              />
+            )}
+            {activeTab === 'roles' && (
+              <RolesTab
+                authToken={controlPanelAuthToken}
+                privileges={controlPanelPrivileges}
+                roles={controlPanelRoles}
+                users={controlPanelUsers}
+                onRolesChanged={async () => {
+                  await fetchControlPanelData(controlPanelAuthToken);
+                }}
+                showToast={showToast}
+              />
+            )}
             {activeTab === 'channels' && <ChannelsTab
               onOpenChannelModal={() => setChannelCreationModalOpen(true)}
               channels={controlPanelChannels}
@@ -776,6 +961,7 @@ export default function ControlPanel() {
     </>
   );
 }
+
 
 
 

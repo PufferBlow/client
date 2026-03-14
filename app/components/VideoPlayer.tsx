@@ -5,13 +5,15 @@ interface VideoPlayerProps {
   filename?: string;
   className?: string;
   onError?: () => void;
+  autoPlay?: boolean;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   src,
   filename,
   className = '',
-  onError
+  onError,
+  autoPlay = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -24,9 +26,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   // Auto-hide controls timer
   const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -35,6 +41,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const skipTime = (seconds: number) => {
+    if (!videoRef.current) return;
+    const nextTime = Math.min(
+      Math.max(0, videoRef.current.currentTime + seconds),
+      duration || videoRef.current.duration || 0,
+    );
+    videoRef.current.currentTime = nextTime;
+    setCurrentTime(nextTime);
   };
 
   const togglePlay = useCallback(() => {
@@ -47,15 +63,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   }, [isPlaying]);
 
+  const retryPlayback = () => {
+    setHasError(false);
+    setIsLoading(true);
+    setIsBuffering(false);
+    setReloadVersion((prev) => prev + 1);
+  };
+
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     setCurrentTime(videoRef.current.currentTime);
   };
 
-  const handleLoadedMetadata = () => {
+    const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
     setDuration(videoRef.current.duration);
     setIsLoading(false);
+    setHasError(false);
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -106,6 +130,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   };
 
+  const togglePictureInPicture = async () => {
+    const video = videoRef.current as (HTMLVideoElement & {
+      requestPictureInPicture?: () => Promise<PictureInPictureWindow>;
+    }) | null;
+    const doc = document as Document & {
+      pictureInPictureEnabled?: boolean;
+      pictureInPictureElement?: Element | null;
+      exitPictureInPicture?: () => Promise<void>;
+    };
+
+    if (!video || !doc.pictureInPictureEnabled) {
+      return;
+    }
+
+    try {
+      if (doc.pictureInPictureElement) {
+        await doc.exitPictureInPicture?.();
+      } else {
+        await video.requestPictureInPicture?.();
+      }
+    } catch {
+      // Ignore PiP failures and keep player usable.
+    }
+  };
+
   const handleMouseMove = () => {
     setShowControls(true);
 
@@ -137,8 +186,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setIsFullscreen(!!document.fullscreenElement);
     };
 
+    const handlePictureInPictureChange = () => {
+      const doc = document as Document & { pictureInPictureElement?: Element | null };
+      setIsPictureInPicture(Boolean(doc.pictureInPictureElement));
+    };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('enterpictureinpicture', handlePictureInPictureChange as EventListener);
+    document.addEventListener('leavepictureinpicture', handlePictureInPictureChange as EventListener);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('enterpictureinpicture', handlePictureInPictureChange as EventListener);
+      document.removeEventListener('leavepictureinpicture', handlePictureInPictureChange as EventListener);
+    };
   }, []);
 
   // Video event handlers
@@ -152,7 +212,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const handleCanPlay = () => setIsBuffering(false);
     const handleError = () => {
       setIsLoading(false);
+      setHasError(true);
       onError?.();
+    };
+
+    const handleRateChange = () => {
+      setPlaybackRate(video.playbackRate || 1);
     };
 
     video.addEventListener('play', handlePlay);
@@ -162,6 +227,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('error', handleError);
+    video.addEventListener('ratechange', handleRateChange);
 
     return () => {
       video.removeEventListener('play', handlePlay);
@@ -171,8 +237,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
+      video.removeEventListener('ratechange', handleRateChange);
     };
   }, [onError]);
+
+  useEffect(() => {
+    if (!videoRef.current || !autoPlay) {
+      return;
+    }
+    videoRef.current.play().catch(() => undefined);
+  }, [autoPlay, src, reloadVersion]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -184,16 +258,56 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, []);
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const pictureInPictureSupported = Boolean(
+    typeof document !== 'undefined' &&
+      (document as Document & { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled,
+  );
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === ' ' || event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      togglePlay();
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      skipTime(10);
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      skipTime(-10);
+      return;
+    }
+    if (event.key.toLowerCase() === 'm') {
+      event.preventDefault();
+      toggleMute();
+      return;
+    }
+    if (event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      toggleFullscreen();
+      return;
+    }
+    if (event.key.toLowerCase() === 'p' && pictureInPictureSupported) {
+      event.preventDefault();
+      void togglePictureInPicture();
+    }
+  };
 
   return (
     <div
       ref={containerRef}
       className={`group relative overflow-hidden rounded-lg bg-[var(--color-surface)] ${className}`}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onDoubleClick={toggleFullscreen}
     >
       {/* Video Element */}
       <video
+        key={reloadVersion}
         ref={videoRef}
         src={src}
         className="w-full h-auto max-h-96 object-contain"
@@ -210,8 +324,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {/* Buffering Indicator */}
       {isBuffering && !isLoading && (
-        <div className="absolute top-4 right-4">
-          <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-[var(--color-text)]"></div>
+        <div className="absolute right-4 top-4 flex items-center gap-2 rounded-full bg-[var(--color-surface)]/85 px-3 py-1.5 text-xs text-[var(--color-text)]">
+          <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[var(--color-text)]"></div>
+          <span>Buffering...</span>
+        </div>
+      )}
+
+      {hasError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--color-surface)]/85">
+          <div className="max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-5 text-center shadow-lg">
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">Video couldn&apos;t be loaded</h3>
+            <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
+              Check that the file is still available and the instance storage route supports streaming this format.
+            </p>
+            <button
+              onClick={retryPlayback}
+              className="mt-4 rounded-md bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
@@ -273,10 +405,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <div className="text-sm font-mono">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
+
+            <button
+              onClick={() => skipTime(-10)}
+              className="rounded-full px-2 py-1 text-xs transition-colors hover:bg-[var(--color-hover)]"
+              title="Back 10 seconds"
+            >
+              -10s
+            </button>
+
+            <button
+              onClick={() => skipTime(10)}
+              className="rounded-full px-2 py-1 text-xs transition-colors hover:bg-[var(--color-hover)]"
+              title="Forward 10 seconds"
+            >
+              +10s
+            </button>
           </div>
 
           {/* Right Controls */}
           <div className="flex items-center space-x-2">
+            <span className="hidden rounded-full border border-[var(--color-border-secondary)] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-secondary)] md:inline-flex">
+              {hasError ? "Error" : isBuffering ? "Buffering" : isPlaying ? "Playing" : "Paused"}
+            </span>
             {/* Volume Control */}
             <div className="flex items-center space-x-2">
               <button
@@ -304,6 +455,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 ></div>
               </div>
             </div>
+
+            <label className="flex items-center gap-2 rounded-full px-2 py-1 text-xs transition-colors hover:bg-[var(--color-hover)]">
+              <span className="text-[var(--color-text-secondary)]">Speed</span>
+              <select
+                value={playbackRate}
+                onChange={(event) => {
+                  const nextRate = Number(event.target.value);
+                  setPlaybackRate(nextRate);
+                  if (videoRef.current) {
+                    videoRef.current.playbackRate = nextRate;
+                  }
+                }}
+                className="rounded border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-1 text-[var(--color-text)]"
+              >
+                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                  <option key={rate} value={rate}>
+                    {rate}x
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {pictureInPictureSupported && (
+              <button
+                onClick={() => void togglePictureInPicture()}
+                className="rounded-full p-2 transition-colors hover:bg-[var(--color-hover)]"
+                title={isPictureInPicture ? 'Exit picture-in-picture' : 'Picture-in-picture'}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {isPictureInPicture ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16v12H4V6zm8 4h5v4h-5v-4z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16v12H4V6zm9 3h4v3h-4V9z" />
+                  )}
+                </svg>
+              </button>
+            )}
 
             {/* Fullscreen Button */}
             <button

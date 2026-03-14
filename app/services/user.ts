@@ -1,5 +1,5 @@
 import type { ApiResponse } from './apiClient';
-import { ApiClient, createApiClient } from './apiClient';
+import { createApiClient } from './apiClient';
 import type { User } from '../models';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useEffect } from 'react';
@@ -15,6 +15,7 @@ import {
   verifyDecentralizedChallenge,
   persistNodeSessionToken,
 } from './decentralizedAuth';
+import { normalizeInstance, resolveStoredInstance } from './instance';
 
 // Role definitions
 export enum UserRole {
@@ -31,32 +32,57 @@ export interface RoleInfo {
   description: string;
 }
 
+export interface ResolvedRole {
+  role_id: string;
+  role_name: string;
+  privileges_ids: string[];
+  is_system: boolean;
+}
+
 // Role configurations
 export const USER_ROLES: Record<UserRole, RoleInfo> = {
   [UserRole.OWNER]: {
     id: UserRole.OWNER,
     name: 'Server Owner',
-    color: '#ff6b6b',
+    color: 'var(--color-info)',
     description: 'Full server control and management'
   },
   [UserRole.ADMIN]: {
     id: UserRole.ADMIN,
     name: 'Administrator',
-    color: '#4ecdc4',
+    color: 'var(--color-error)',
     description: 'Server administration and moderation'
   },
   [UserRole.MODERATOR]: {
     id: UserRole.MODERATOR,
     name: 'Moderator',
-    color: '#45b7d1',
+    color: 'var(--color-accent)',
     description: 'Content moderation and community management'
   },
   [UserRole.USER]: {
     id: UserRole.USER,
     name: 'Member',
-    color: '#96ceb4',
+    color: 'var(--color-text-muted)',
     description: 'Regular server member'
   }
+};
+
+export const DEFAULT_AVATAR_BACKGROUND = 'f1edd1';
+
+export const createFallbackAvatarUrl = (seed: string): string =>
+  `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(seed || 'user')}&backgroundColor=${DEFAULT_AVATAR_BACKGROUND}`;
+
+export const getUserAccentColor = (rolesIds: string[] | undefined): string => {
+  if (rolesIds?.some((role) => role.toLowerCase() === UserRole.OWNER)) {
+    return 'var(--color-info)';
+  }
+  if (rolesIds?.some((role) => role.toLowerCase() === UserRole.ADMIN)) {
+    return 'var(--color-error)';
+  }
+  if (rolesIds?.some((role) => role.toLowerCase() === UserRole.MODERATOR)) {
+    return 'var(--color-accent)';
+  }
+  return 'var(--color-primary)';
 };
 
 // User authentication interfaces
@@ -100,6 +126,16 @@ export interface ApiUserProfile {
   origin_server: string;
   inbox_id?: string;
   roles_ids: string[];
+  resolved_roles?: ResolvedRole[];
+  resolved_privileges?: string[];
+  moderation_state?: {
+    is_banned: boolean;
+    ban_reason?: string | null;
+    banned_at?: string | null;
+    timeout_until?: string | null;
+    timeout_reason?: string | null;
+    is_timed_out: boolean;
+  };
   last_seen?: string;
   joined_servers_ids: any[];
   created_at: string;
@@ -108,10 +144,10 @@ export interface ApiUserProfile {
 
 // User authentication functions
 export const login = async (hostPort: string, credentials: LoginCredentials): Promise<ApiResponse<AuthToken>> => {
-  console.log(`📡 Login function called. Sending request to: http://${hostPort}/api/v1/users/signin`);
+  const apiClient = createApiClient(hostPort);
+  console.log(`📡 Login function called. Sending request to: ${normalizeInstance(hostPort)}/api/v1/users/signin`);
   console.log('📤 Request data:', { username: credentials.username, password: '[REDACTED]' });
 
-  const apiClient = new ApiClient(`http://${hostPort}`);
   const response = await apiClient.get<AuthToken>('/api/v1/users/signin', {
     username: credentials.username,
     password: credentials.password,
@@ -122,7 +158,7 @@ export const login = async (hostPort: string, credentials: LoginCredentials): Pr
 };
 
 export const signup = async (hostPort: string, credentials: SignupCredentials): Promise<ApiResponse<AuthToken>> => {
-  const apiClient = new ApiClient(`http://${hostPort}`);
+  const apiClient = createApiClient(hostPort);
   return apiClient.post('/api/v1/users/signup', {
     username: credentials.username,
     password: credentials.password,
@@ -130,7 +166,7 @@ export const signup = async (hostPort: string, credentials: SignupCredentials): 
 };
 
 export const getUserProfile = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
-  const apiClient = new ApiClient(`http://${hostPort}`);
+  const apiClient = createApiClient(hostPort);
   return apiClient.post('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
@@ -138,7 +174,7 @@ export const getUserProfile = async (hostPort: string, userId: string, authToken
 };
 
 export const getUserProfileById = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<{ user_data: any }>> => {
-  const apiClient = new ApiClient(`http://${hostPort}`);
+  const apiClient = createApiClient(hostPort);
   return apiClient.post('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
@@ -146,7 +182,7 @@ export const getUserProfileById = async (hostPort: string, userId: string, authT
 };
 
 export const getUserProfileByIdWithQuery = async (hostPort: string, userId: string, authToken: string): Promise<ApiResponse<UserProfile>> => {
-  const apiClient = new ApiClient(`http://${hostPort}`);
+  const apiClient = createApiClient(hostPort);
   return apiClient.post('/api/v1/users/profile', {
     user_id: userId,
     auth_token: authToken,
@@ -155,7 +191,7 @@ export const getUserProfileByIdWithQuery = async (hostPort: string, userId: stri
 
 export interface GetUserProfileResponse {
   status_code: number;
-  user_data: {
+    user_data: {
     user_id: string;
     username: string;
     about?: string;
@@ -164,7 +200,17 @@ export interface GetUserProfileResponse {
     status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
     origin_server: string;
     inbox_id?: string;
-    roles_ids: string[];
+      roles_ids: string[];
+    resolved_roles?: ResolvedRole[];
+    resolved_privileges?: string[];
+    moderation_state?: {
+      is_banned: boolean;
+      ban_reason?: string | null;
+      banned_at?: string | null;
+      timeout_until?: string | null;
+      timeout_reason?: string | null;
+      is_timed_out: boolean;
+    };
     last_seen?: string;
     joined_servers_ids: any[];
     created_at: string;
@@ -176,7 +222,7 @@ export interface GetUserProfileResponse {
 
 
 export const getCurrentUserProfile = async (hostPort: string, authToken: string): Promise<ApiResponse<GetUserProfileResponse>> => {
-  const apiClient = new ApiClient(`http://${hostPort}`);
+  const apiClient = createApiClient(hostPort);
   return apiClient.post('/api/v1/users/profile', {
     auth_token: authToken,
   });
@@ -187,6 +233,8 @@ export interface ListUsersResponse {
   users: Array<{
     user_id: string;
     username: string;
+    avatar_url?: string | null;
+    avatar?: string | null;
     status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
     last_seen: string;
     conversations: any[];
@@ -196,10 +244,57 @@ export interface ListUsersResponse {
     auth_token_expire_time: string;
     created_at: string;
     updated_at: string;
+    roles_ids: string[];
+    resolved_roles?: ResolvedRole[];
+    resolved_privileges?: string[];
+    moderation_state?: {
+      is_banned: boolean;
+      ban_reason?: string | null;
+      banned_at?: string | null;
+      timeout_until?: string | null;
+      timeout_reason?: string | null;
+      is_timed_out: boolean;
+    };
     is_admin: boolean;
     is_owner: boolean;
   }>;
 }
+
+export const hasResolvedPrivilege = (
+  userLike:
+    | {
+        resolved_privileges?: string[];
+        is_admin?: boolean;
+        is_owner?: boolean;
+      }
+    | null
+    | undefined,
+  privilegeId: string,
+): boolean => {
+  if (!userLike) return false;
+  return (
+    Boolean(userLike.is_owner) ||
+    Boolean(userLike.is_admin) ||
+    Boolean(userLike.resolved_privileges?.includes(privilegeId))
+  );
+};
+
+export const getResolvedRoleNames = (
+  userLike:
+    | {
+        resolved_roles?: ResolvedRole[];
+        roles_ids?: string[];
+      }
+    | null
+    | undefined,
+): string[] => {
+  if (userLike?.resolved_roles?.length) {
+    return userLike.resolved_roles.map((role) => role.role_name);
+  }
+
+  const fallbackRoles = getUserRoles(userLike?.roles_ids);
+  return fallbackRoles.map((role) => getRoleInfo(role).name);
+};
 
 // DisplayUser interface for UI display purposes
 export interface DisplayUser {
@@ -507,33 +602,34 @@ export const createFullUrl = (relativeUrl: string | undefined | null): string | 
     return relativeUrl;
   }
 
-  // Get server host:port and prepend it to create full URL
-  const hostPort = getHostPortFromStorage();
-  if (!hostPort) return relativeUrl; // Fallback to relative URL if no host:port
+  // Resolve the active home instance and prepend it to create the full URL.
+  const resolved = resolveStoredInstance(getHostPortFromStorage());
+  if (!resolved) return relativeUrl; // Fallback to relative URL if no instance is configured.
 
   // Ensure we don't double-slash
   const cleanPath = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
 
-  return `http://${hostPort}${cleanPath}`;
+  return `${resolved.apiBaseUrl}${cleanPath}`;
 };
 
 export const setHostPortToStorage = async (hostPort: string, persistent: boolean = false): Promise<void> => {
   if (typeof window === 'undefined') return;
+  const normalizedHost = normalizeInstance(hostPort);
 
   try {
     // Update secure storage
-    await secureStorage.set('host_port', hostPort);
+    await secureStorage.set('host_port', normalizedHost);
 
     // Update cache immediately
-    hostPortCache = hostPort;
+    hostPortCache = normalizedHost;
 
     // Maintain backward compatibility with localStorage/sessionStorage
     if (persistent) {
-      localStorage.setItem('host_port', hostPort);
+      localStorage.setItem('host_port', normalizedHost);
       // Clear sessionStorage if setting persistent
       sessionStorage.removeItem('host_port');
     } else {
-      sessionStorage.setItem('host_port', hostPort);
+      sessionStorage.setItem('host_port', normalizedHost);
       // Clear localStorage if setting session
       localStorage.removeItem('host_port');
     }
@@ -541,10 +637,10 @@ export const setHostPortToStorage = async (hostPort: string, persistent: boolean
     console.error('Failed to set host port:', error);
     // Fallback to old method
     if (persistent) {
-      localStorage.setItem('host_port', hostPort);
+      localStorage.setItem('host_port', normalizedHost);
       sessionStorage.removeItem('host_port');
     } else {
-      sessionStorage.setItem('host_port', hostPort);
+      sessionStorage.setItem('host_port', normalizedHost);
       localStorage.removeItem('host_port');
     }
   }
@@ -676,7 +772,7 @@ export const useCurrentUserProfile = () => {
       if (!authToken) throw new Error('No authentication token');
 
       const hostPort = await getHostPortFromStorageAsync();
-      if (!hostPort) throw new Error('No server host:port configured');
+      if (!hostPort) throw new Error('No home instance configured');
 
       const response = await getCurrentUserProfile(hostPort, authToken);
       if (!response.success || !response.data?.user_data) {
@@ -685,7 +781,7 @@ export const useCurrentUserProfile = () => {
 
       const userData = response.data.user_data;
       // Generate avatar URL using DiceBear Bottts Neutral style as fallback
-      const avatarUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(userData.username)}&backgroundColor=5865f2`;
+      const avatarUrl = createFallbackAvatarUrl(userData.username);
 
       // Create full URLs for avatar and banner from server-relative paths
       const fullAvatarUrl = createFullUrl(userData.avatar_url);
@@ -709,6 +805,8 @@ export const useCurrentUserProfile = () => {
         origin_server: userData.origin_server,
         status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
         roles_ids: userData.roles_ids,
+        resolved_roles: userData.resolved_roles,
+        resolved_privileges: userData.resolved_privileges,
         last_seen: userData.last_seen,
         joined_servers_ids: userData.joined_servers_ids,
         auth_token: authToken,
@@ -955,7 +1053,7 @@ export const useUserProfile = (userId: string) => {
       if (!authToken) throw new Error('No authentication token');
 
       const hostPort = getHostPortFromStorage();
-      if (!hostPort) throw new Error('No server host:port configured');
+      if (!hostPort) throw new Error('No home instance configured');
 
       const response = await getUserProfileById(hostPort, userId, authToken);
       if (!response.success || !response.data?.user_data) {
@@ -983,6 +1081,8 @@ export const useUserProfile = (userId: string) => {
         origin_server: userData.origin_server,
         status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
         roles_ids: userData.roles_ids,
+        resolved_roles: userData.resolved_roles,
+        resolved_privileges: userData.resolved_privileges,
         last_seen: userData.last_seen,
         joined_servers_ids: userData.joined_servers_ids,
         auth_token: authToken,

@@ -180,7 +180,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
                         ${currentSize.badge} rounded-full font-bold flex-shrink-0
                         ${isActive
                           ? 'bg-[var(--color-primary)] text-[var(--color-background)]'
-                          : 'bg-[var(--color-error)] text-white'
+                          : 'bg-[var(--color-error)] text-[var(--color-on-error)]'
                         }
                       `}>
                         {tab.badge}
@@ -251,7 +251,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
                     ${currentSize.badge} rounded-full font-bold ml-1
                     ${isActive
                       ? 'bg-[var(--color-primary)] text-[var(--color-background)]'
-                      : 'bg-[var(--color-error)] text-white'
+                      : 'bg-[var(--color-error)] text-[var(--color-on-error)]'
                     }
                   `}>
                     {tab.badge}

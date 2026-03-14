@@ -66,6 +66,24 @@ export interface User {
   /** Legacy admin flags (computed from roles_ids) */
   is_admin?: boolean;
   is_owner?: boolean;
+  /** Resolved instance role metadata */
+  resolved_roles?: Array<{
+    role_id: string;
+    role_name: string;
+    privileges_ids: string[];
+    is_system: boolean;
+  }>;
+  /** Effective privileges resolved from instance roles */
+  resolved_privileges?: string[];
+  /** Current moderation state resolved by the instance */
+  moderation_state?: {
+    is_banned: boolean;
+    ban_reason?: string | null;
+    banned_at?: string | null;
+    timeout_until?: string | null;
+    timeout_reason?: string | null;
+    is_timed_out: boolean;
+  };
   /** Alias for roles_ids */
   roles?: string[];
   /** Alias for created_at */

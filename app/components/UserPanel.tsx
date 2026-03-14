@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useToast } from '../components/Toast';
-import { Mic, MicOff, Headphones, Settings, X, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Headphones, Settings, X, Volume2, ChevronDown } from 'lucide-react';
 
 interface UserPanelProps {
   username: string;
   avatar?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
+  status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
   onClick?: (event: React.MouseEvent) => void;
   onDeviceSelectorClick?: () => void;
   onSettingsClick?: () => void;
+  onStatusChange?: (status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline') => void;
   className?: string;
   voiceChannel?: {
     channelName: string;
@@ -24,6 +25,7 @@ export function UserPanel({
   onClick,
   onDeviceSelectorClick,
   onSettingsClick,
+  onStatusChange,
   className = "",
   voiceChannel
 }: UserPanelProps) {
@@ -32,6 +34,24 @@ export function UserPanel({
 
   const [isMuted, setIsMuted] = useState(true);
   const [isDeafened, setIsDeafened] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!statusMenuOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [statusMenuOpen]);
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
@@ -51,10 +71,23 @@ export function UserPanel({
     switch (status) {
       case 'online': return 'Online';
       case 'idle': return 'Idle';
+      case 'afk': return 'Away';
       case 'dnd': return 'Do Not Disturb';
       default: return 'Offline';
     }
   };
+
+  const statusOptions: Array<{
+    value: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
+    label: string;
+    toneClass: string;
+  }> = [
+    { value: 'online', label: 'Online', toneClass: 'bg-[var(--color-success)]' },
+    { value: 'idle', label: 'Idle', toneClass: 'bg-[var(--color-warning)]' },
+    { value: 'afk', label: 'Away', toneClass: 'bg-[var(--color-info)]' },
+    { value: 'dnd', label: 'Do Not Disturb', toneClass: 'bg-[var(--color-error)]' },
+    { value: 'offline', label: 'Offline', toneClass: 'bg-[var(--color-text-muted)]' },
+  ];
 
   const handleUserInfoClick = (event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent event bubbling
@@ -66,6 +99,8 @@ export function UserPanel({
       ? 'bg-[var(--color-success)]'
       : status === 'idle'
         ? 'bg-[var(--color-warning)]'
+        : status === 'afk'
+          ? 'bg-[var(--color-info)]'
         : status === 'dnd'
           ? 'bg-[var(--color-error)]'
           : 'bg-[var(--color-text-muted)]';
@@ -125,7 +160,40 @@ export function UserPanel({
             </div>
           </button>
 
-          <div className="flex items-center gap-1">
+          <div className="relative flex items-center gap-1">
+            <button
+              onClick={() => setStatusMenuOpen((prev) => !prev)}
+              className="flex h-8 items-center gap-1 rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-2 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+              title="Set status"
+              aria-label="Set status"
+            >
+              <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} />
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+
+            {statusMenuOpen && (
+              <div className="absolute bottom-11 right-0 z-30 w-48 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+                <div className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                  Set your status
+                </div>
+                <div className="p-1">
+                  {statusOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        onStatusChange?.(option.value);
+                        setStatusMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-hover)] ${status === option.value ? 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'}`}
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full ${option.toneClass}`} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               onClick={toggleMute}
               className={`pb-icon-btn h-8 w-8 rounded-md ${isMuted ? 'border border-[var(--color-error)]/40 bg-[var(--color-error)]/20 text-[var(--color-error)]' : 'text-[var(--color-text-secondary)]'}`}

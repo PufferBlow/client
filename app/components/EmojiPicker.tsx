@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface EmojiPickerProps {
   isOpen: boolean;
@@ -179,7 +179,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
 
   return (
     <div
-      className="fixed z-50 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl shadow-2xl"
+      className="fixed z-50 rounded-2xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface)_92%,transparent)] shadow-2xl backdrop-blur-md"
       style={{
         right: '20px',
         bottom: '100px',
@@ -189,7 +189,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
     >
       {/* Header */}
       <div className="relative h-10 px-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">
+        <h3 className="text-sm font-semibold text-[var(--color-text)]">
           {activeTab === 'emoji' && 'Emoji'}
           {activeTab === 'gif' && 'GIF'}
           {activeTab === 'sticker' && 'Sticker'}
@@ -198,7 +198,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         {/* Close button */}
         <button
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -207,16 +207,16 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
       </div>
 
       {/* Border separator */}
-      <div className="border-t border-white/10"></div>
+      <div className="border-t border-[var(--color-border-secondary)]"></div>
 
       {/* Tab Navigation */}
-      <div className="flex border-b border-white/10">
+      <div className="flex border-b border-[var(--color-border-secondary)]">
         <button
           onClick={() => setActiveTab('emoji')}
           className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
             activeTab === 'emoji'
-              ? 'text-white border-b-2 border-blue-400'
-              : 'text-white/60 hover:text-white/80'
+              ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-text)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
           }`}
         >
           😀
@@ -225,8 +225,8 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
           onClick={() => setActiveTab('gif')}
           className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
             activeTab === 'gif'
-              ? 'text-white border-b-2 border-blue-400'
-              : 'text-white/60 hover:text-white/80'
+              ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-text)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
           }`}
         >
           GIF
@@ -235,8 +235,8 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
           onClick={() => setActiveTab('sticker')}
           className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
             activeTab === 'sticker'
-              ? 'text-white border-b-2 border-blue-400'
-              : 'text-white/60 hover:text-white/80'
+              ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-text)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
           }`}
         >
           🏷️
@@ -254,7 +254,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
           }
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-white/20"
+          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
         />
       </div>
 
@@ -267,7 +267,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                 <button
                   key={emoji}
                   onClick={() => onEmojiSelect(emoji)}
-                  className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors emoji-button"
+                  className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-hover)]"
                   title={`Add ${emoji}`}
                 >
                   <span className="text-xl emoji-char">{emoji}</span>
@@ -275,7 +275,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
               ))}
             </div>
             {filteredEmojis.length === 0 && searchQuery && (
-              <div className="text-center py-8 text-white/60">
+              <div className="py-8 text-center text-[var(--color-text-secondary)]">
                 No emojis found for "{searchQuery}"
               </div>
             )}
@@ -285,10 +285,10 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         {activeTab === 'gif' && (
           <>
             {gifError && (
-              <div className="text-center py-8 text-red-300">
+              <div className="py-8 text-center text-[var(--color-error)]">
                 <div className="text-3xl mb-2">⚠️</div>
                 <div className="text-sm">{gifError}</div>
-                <div className="text-xs mt-1">Please check your API key configuration</div>
+                <div className="mt-1 text-xs text-[var(--color-text-secondary)]">Please check your API key configuration</div>
               </div>
             )}
 
@@ -299,7 +299,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                   Array.from({ length: 20 }).map((_, index) => (
                     <div
                       key={`skeleton-${index}`}
-                      className="aspect-square bg-white/5 rounded-md animate-pulse"
+                      className="aspect-square rounded-md bg-[var(--color-surface-tertiary)] animate-pulse"
                     ></div>
                   ))
                 ) : gifs.length > 0 ? (
@@ -316,7 +316,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                           onClose();
                         }
                       }}
-                      className="aspect-square bg-white/5 rounded-md overflow-hidden hover:bg-white/10 transition-colors group"
+                      className="group aspect-square overflow-hidden rounded-md bg-[var(--color-surface-secondary)] transition-colors hover:bg-[var(--color-hover)]"
                       title={gif.title || 'GIF'}
                     >
                       <img
@@ -329,17 +329,17 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                   ))
                 ) : searchQuery.trim() ? (
                   // No results for search
-                  <div className="col-span-4 text-center py-8 text-white/60">
+                  <div className="col-span-4 py-8 text-center text-[var(--color-text-secondary)]">
                     <div className="text-3xl mb-2">🔍</div>
                     <div className="text-sm">No GIFs found for "{searchQuery}"</div>
-                    <div className="text-xs mt-1">Try a different search term</div>
+                    <div className="mt-1 text-xs text-[var(--color-text-muted)]">Try a different search term</div>
                   </div>
                 ) : (
                   // Empty state for trending
-                  <div className="col-span-4 text-center py-8 text-white/60">
+                  <div className="col-span-4 py-8 text-center text-[var(--color-text-secondary)]">
                     <div className="text-3xl mb-2">🎬</div>
                     <div className="text-sm">Trending GIFs</div>
-                    <div className="text-xs mt-1">Start typing to search for GIFs</div>
+                    <div className="mt-1 text-xs text-[var(--color-text-muted)]">Start typing to search for GIFs</div>
                   </div>
                 )}
               </div>
@@ -348,10 +348,10 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         )}
 
         {activeTab === 'sticker' && (
-          <div className="text-center py-8 text-white/60">
+          <div className="py-8 text-center text-[var(--color-text-secondary)]">
             <div className="text-3xl mb-2">🏷️</div>
             <div className="text-sm">Sticker search coming soon</div>
-            <div className="text-xs mt-1">Browse and send animated stickers</div>
+            <div className="mt-1 text-xs text-[var(--color-text-muted)]">Browse and send animated stickers</div>
           </div>
         )}
       </div>

@@ -1,11 +1,9 @@
 import { Link, useNavigate } from "react-router";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactDOM from 'react-dom';
-import { ServerCreationModal } from "../../components/ServerCreationModal";
 import { ChannelCreationModal } from "../../components/ChannelCreationModal";
 import { UserContextMenu } from "../../components/UserContextMenu";
 import { SearchModal } from "../../components/SearchModal";
-import { InviteModal } from "../../components/InviteModal";
 import { EmojiPicker } from "../../components/EmojiPicker";
 import { VoiceChannel } from "../../components/VoiceChannel";
 import { UserPanel } from "../../components/UserPanel";
@@ -13,6 +11,8 @@ import { DeviceSelectorModal } from "../../components/DeviceSelectorModal";
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { MessageReportModal } from "../../components/MessageReportModal";
 import { MessageContextMenu } from "../../components/MessageContextMenu";
+import { MessageEmbeds } from "../../components/MessageEmbeds";
+import { NotificationMenu, type NotificationItem } from "../../components/NotificationMenu";
 import { useToast } from "../../components/Toast";
 import { UserCard } from "../../components/UserCard";
 import { AttachmentGrid } from "../../components/AttachmentBubble";
@@ -23,14 +23,16 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { validateMessageInput } from "../../utils/markdown";
 import { logger } from "../../utils/logger";
 import { usePersistedUIState } from "../../utils/uiStatePersistence";
-import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFullUrl, getUserRoles } from "../../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
-import { loadMessages, sendMessage } from "../../services/message";
-import { GlobalWebSocket, createGlobalWebSocket } from "../../services/websocket";
+import { getMessageReadHistory, loadMessages, markMessageAsRead } from "../../services/message";
+import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
+import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
 import { listUsers, type ListUsersResponse } from "../../services/user";
-import { type ServerInfo } from "../../services/system";
+import { getServerInfo, type ServerInfo } from "../../services/system";
+import { resolveStoredInstance } from "../../services/instance";
 import type { Channel } from "../../models";
-import type { Message, MessageAttachment } from "../../models";
+import type { Message } from "../../models";
 import type { User } from "../../models";
 
 interface DisplayUser {
@@ -57,6 +59,38 @@ interface DisplayUser {
   badges?: string[];
 }
 
+interface ComposerAttachmentPreview {
+  file: File;
+  kind: 'image' | 'video' | 'file';
+  url?: string;
+}
+
+type UploadCategory = 'image' | 'video' | 'audio' | 'file';
+
+const normalizeExtensions = (extensions?: string[] | null): string[] =>
+  (extensions ?? [])
+    .map((extension) => extension.trim().toLowerCase().replace(/^\./, ''))
+    .filter(Boolean);
+
+const getAttachmentCategory = (file: File, policy: {
+  imageExtensions: string[];
+  videoExtensions: string[];
+  audioExtensions: string[];
+}): UploadCategory => {
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/^\./, '') || '';
+
+  if (policy.imageExtensions.includes(extension) || file.type.startsWith('image/')) {
+    return 'image';
+  }
+  if (policy.videoExtensions.includes(extension) || file.type.startsWith('video/')) {
+    return 'video';
+  }
+  if (policy.audioExtensions.includes(extension) || file.type.startsWith('audio/')) {
+    return 'audio';
+  }
+  return 'file';
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const showToast = useToast();
@@ -73,16 +107,13 @@ export default function Dashboard() {
   // UI persistence hook
   const {
     selectedChannelId: persistedChannelId,
-    messageDrafts,
     setSelectedChannel: persistSelectedChannel,
     setMessageDraft,
     getMessageDraft,
     clearMessageDraft,
-    clearAllState
   } = usePersistedUIState(currentUser?.user_id);
 
   // Modal states
-  const [serverCreationModalOpen, setServerCreationModalOpen] = useState(false);
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [deviceSelectorModalOpen, setDeviceSelectorModalOpen] = useState(false);
 
@@ -147,7 +178,6 @@ export default function Dashboard() {
   }, [isTooltipOpen, referenceElement, tooltipSource, userCardTooltipUser, calculateTooltipPosition]);
 
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [messageContextMenu, setMessageContextMenu] = useState<{
     isOpen: boolean;
     position: { x: number; y: number };
@@ -160,9 +190,21 @@ export default function Dashboard() {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
+  const [selectedContextUser, setSelectedContextUser] = useState<{
+    userId: string;
+    username: string;
+    anchorElement: HTMLElement | null;
+    source: 'userpanel' | 'members' | 'messages';
+  } | null>(null);
   const [channelContextMenu, setChannelContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number }; channel: Channel | null }>({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
   const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null; isDeleting?: boolean }>({ isOpen: false, channel: null, isDeleting: false });
-  const [messageReportModal, setMessageReportModal] = useState<{ isOpen: boolean; messages: string[] }>({ isOpen: false, messages: [] });
+  const [reportModal, setReportModal] = useState<{
+    isOpen: boolean;
+    targetType: 'message' | 'user';
+    messages: string[];
+    targetUserId?: string;
+    targetUsername?: string;
+  }>({ isOpen: false, targetType: 'message', messages: [] });
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [serverInfoError, setServerInfoError] = useState<string | null>(null);
@@ -173,6 +215,26 @@ export default function Dashboard() {
   const [users, setUsers] = useState<ListUsersResponse['users']>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [webSocketConnection, setWebSocketConnection] = useState<GlobalWebSocket | null>(null);
+  const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
+  const [unreadCountsByChannel, setUnreadCountsByChannel] = useState<Record<string, number>>({});
+  const [manualPresenceLock, setManualPresenceLock] = useState<'dnd' | 'afk' | 'offline' | null>(null);
+  const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
+  const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
+    typeof window !== 'undefined' && 'Notification' in window
+      ? Notification.permission
+      : 'unsupported',
+  );
+  const webSocketConnectionRef = useRef<GlobalWebSocket | null>(null);
+  const notificationMenuRef = useRef<HTMLDivElement>(null);
+  const unreadDividerRef = useRef<HTMLDivElement | null>(null);
+  const selectedChannelIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(currentUser?.user_id ?? null);
+  const seenRealtimeMessageIdsRef = useRef<Set<string>>(new Set());
+  const readMessageIdsRef = useRef<Set<string>>(new Set());
+  const lastActivityAtRef = useRef<number>(Date.now());
+  const presenceUpdateInFlightRef = useRef(false);
 
   const usersById = useMemo(() => {
     const map = new Map<string, ListUsersResponse['users'][number]>();
@@ -181,6 +243,44 @@ export default function Dashboard() {
     });
     return map;
   }, [users]);
+
+  const currentUserLiveStatus = useMemo(() => {
+    if (!currentUser) {
+      return 'offline' as const;
+    }
+
+    const liveStatus = usersById.get(currentUser.user_id)?.status ?? currentUser.status;
+    if (
+      liveStatus === 'online' ||
+      liveStatus === 'idle' ||
+      liveStatus === 'afk' ||
+      liveStatus === 'dnd'
+    ) {
+      return liveStatus;
+    }
+    return 'offline' as const;
+  }, [currentUser, usersById]);
+
+  useEffect(() => {
+    selectedChannelIdRef.current = selectedChannel?.channel_id ?? null;
+  }, [selectedChannel]);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.user_id ?? null;
+  }, [currentUser]);
+
+  useEffect(() => {
+    webSocketConnectionRef.current = webSocketConnection;
+  }, [webSocketConnection]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setBrowserNotificationPermission('unsupported');
+      return;
+    }
+
+    setBrowserNotificationPermission(Notification.permission);
+  }, [notificationMenuOpen]);
 
   const groupedMessages = useMemo(() => {
     if (messages.length === 0) {
@@ -214,6 +314,248 @@ export default function Dashboard() {
     return groups;
   }, [messages]);
 
+  const getMessageById = useCallback(
+    (messageId: string | null) =>
+      messageId ? messages.find((message) => message.message_id === messageId) ?? null : null,
+    [messages],
+  );
+
+  const buildReplyMessage = useCallback((messageBody: string, target: Message | null) => {
+    if (!target) {
+      return messageBody;
+    }
+
+    const author = target.username || usersById.get(target.sender_user_id)?.username || "Unknown User";
+    const excerpt = (target.message || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(" ")
+      .slice(0, 140);
+    const quotedLines = excerpt ? `> ${excerpt.replace(/\n/g, "\n> ")}\n\n` : "";
+    return `> Replying to @${author}\n${quotedLines}${messageBody}`.trim();
+  }, [usersById]);
+
+  const addReadMessageIds = useCallback((messageIds: string[]) => {
+    if (messageIds.length === 0) {
+      return;
+    }
+
+    setReadMessageIds((prev) => {
+      const next = new Set(prev);
+      messageIds.forEach((messageId) => next.add(messageId));
+      readMessageIdsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const applyReadHistorySnapshot = useCallback(
+    (messageIds: string[], unreadCounts: Record<string, number>) => {
+      const snapshot = new Set(messageIds);
+      readMessageIdsRef.current = snapshot;
+      setReadMessageIds(snapshot);
+      setUnreadCountsByChannel(unreadCounts);
+    },
+    [],
+  );
+
+  const markChannelNotificationsRead = useCallback((channelId: string) => {
+    setNotifications((prev) =>
+      prev.filter((notification) => notification.channelId !== channelId),
+    );
+  }, []);
+
+  const applyPresenceUpdate = useCallback((userId: string, status: DisplayUser['status']) => {
+    setUsers((prevUsers) =>
+      prevUsers.map((user) =>
+        user.user_id === userId
+          ? {
+              ...user,
+              status,
+            }
+          : user,
+      ),
+    );
+
+    setMessages((prevMessages) =>
+      prevMessages.map((message) =>
+        message.sender_user_id === userId
+          ? {
+              ...message,
+              sender_status: status,
+            }
+          : message,
+      ),
+    );
+  }, []);
+
+  const updatePresenceStatus = useCallback(
+    async (
+      status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
+      options?: {
+        silent?: boolean;
+        lockMode?: 'preserve' | 'set' | 'clear';
+      },
+    ) => {
+      if (!currentUser || currentUserLiveStatus === status || presenceUpdateInFlightRef.current) {
+        return;
+      }
+
+      const previousStatus =
+        currentUserLiveStatus === 'online' ||
+        currentUserLiveStatus === 'idle' ||
+        currentUserLiveStatus === 'afk' ||
+        currentUserLiveStatus === 'dnd'
+          ? currentUserLiveStatus
+          : 'offline';
+
+      presenceUpdateInFlightRef.current = true;
+      applyPresenceUpdate(currentUser.user_id, status);
+
+      try {
+        const sentViaWebSocket =
+          webSocketConnectionRef.current?.sendPresenceUpdate(status) ?? false;
+
+        if (!sentViaWebSocket) {
+          const authToken = getAuthTokenFromCookies() || '';
+          if (!authToken) {
+            throw new Error('No authentication token');
+          }
+
+          const response = await updateUserStatus({
+            auth_token: authToken,
+            status,
+          });
+
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to update status');
+          }
+        }
+
+        if (options?.lockMode === 'set') {
+          setManualPresenceLock(
+            status === 'dnd' || status === 'afk' || status === 'offline'
+              ? status
+              : null,
+          );
+        } else if (options?.lockMode === 'clear') {
+          setManualPresenceLock(null);
+        }
+
+        if (!options?.silent) {
+          showToast({
+            message: `Status updated to ${status === 'dnd' ? 'Do Not Disturb' : status}.`,
+            tone: 'success',
+            category: 'system',
+          });
+        }
+      } catch (error) {
+        applyPresenceUpdate(currentUser.user_id, previousStatus);
+        if (!options?.silent) {
+          showToast({
+            message: `Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            tone: 'error',
+            category: 'system',
+          });
+        }
+      } finally {
+        presenceUpdateInFlightRef.current = false;
+      }
+    },
+    [applyPresenceUpdate, currentUser, currentUserLiveStatus, showToast],
+  );
+
+  useEffect(() => {
+    if (!currentUser || manualPresenceLock) {
+      return;
+    }
+
+    const markActivity = () => {
+      lastActivityAtRef.current = Date.now();
+      if (currentUserLiveStatus === 'idle') {
+        void updatePresenceStatus('online', {
+          silent: true,
+          lockMode: 'clear',
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        markActivity();
+      }
+    };
+
+    const events: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'focus',
+    ];
+
+    events.forEach((eventName) => {
+      window.addEventListener(eventName, markActivity, { passive: true });
+    });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const interval = window.setInterval(() => {
+      const idleForMs = Date.now() - lastActivityAtRef.current;
+      const idleThresholdMs = 5 * 60 * 1000;
+      if (idleForMs >= idleThresholdMs && currentUserLiveStatus === 'online') {
+        void updatePresenceStatus('idle', {
+          silent: true,
+          lockMode: 'clear',
+        });
+      }
+    }, 30_000);
+
+    return () => {
+      events.forEach((eventName) => {
+        window.removeEventListener(eventName, markActivity);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [currentUser, currentUserLiveStatus, manualPresenceLock, updatePresenceStatus]);
+
+  const markMessagesRead = useCallback(
+    async (channelId: string, messageIds: string[]) => {
+      const uniqueMessageIds = [...new Set(messageIds)].filter(
+        (messageId) => !readMessageIdsRef.current.has(messageId),
+      );
+
+      if (uniqueMessageIds.length === 0) {
+        return;
+      }
+
+      addReadMessageIds(uniqueMessageIds);
+      markChannelNotificationsRead(channelId);
+      setUnreadCountsByChannel((prev) => {
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+
+      const authToken = getAuthTokenFromCookies() || '';
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!authToken || !hostPort) {
+        return;
+      }
+
+      uniqueMessageIds.forEach((messageId) => {
+        webSocketConnectionRef.current?.sendReadConfirmation(messageId, channelId);
+      });
+
+      await Promise.allSettled(
+        uniqueMessageIds.map((messageId) =>
+          markMessageAsRead(hostPort, channelId, messageId, authToken),
+        ),
+      );
+    },
+    [addReadMessageIds, markChannelNotificationsRead],
+  );
+
   // Voice channel state management
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState<{
     channelId: string;
@@ -228,43 +570,181 @@ export default function Dashboard() {
     return '';
   });
   const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+  const canDeleteChannels = hasResolvedPrivilege(currentUser, "delete_channels");
+  const canTimeoutUsers = hasResolvedPrivilege(currentUser, "mute_users");
+  const canBanUsers = hasResolvedPrivilege(currentUser, "ban_users");
 
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const [maxMessageLength, setMaxMessageLength] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pufferblow-max-message-length');
-      return saved ? parseInt(saved) : 4000;
-    }
-    return 4000; // Default value for SSR
-  });
   const dashboardRef = useRef<HTMLDivElement>(null);
   const messageInputBarRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const serverDropdownRef = useRef<HTMLDivElement>(null);
-  const [cachedTextareaHeight, setCachedTextareaHeight] = useState<number>(24);
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentUserRoles = currentUser?.roles || [];
+  const cachedTextareaHeightRef = useRef(24);
+  const draftPersistTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingDraftRef = useRef<{ channelId: string; message: string } | null>(null);
+  const currentUserPrivileges = currentUser?.resolved_privileges || [];
   const canCreateInvite =
     currentUser?.is_admin ||
     currentUser?.is_owner ||
-    currentUserRoles.includes("Admin") ||
-    currentUserRoles.includes("Moderator");
+    currentUserPrivileges.includes("manage_channel_users");
   const canAccessControlPanel =
     currentUser?.is_owner ||
     currentUser?.is_admin ||
-    currentUserRoles.includes("Owner") ||
-    currentUserRoles.includes("Admin");
-  const canDeleteServer = currentUser?.is_owner || currentUserRoles.includes("Owner");
+    currentUserPrivileges.includes("manage_server_settings");
+  const canDeleteServer =
+    currentUser?.is_owner || currentUserPrivileges.includes("manage_server_settings");
+
+  const uploadPolicy = useMemo(() => {
+    const imageExtensions = normalizeExtensions(serverInfo?.allowed_image_types);
+    const videoExtensions = normalizeExtensions(serverInfo?.allowed_video_types);
+    const audioExtensions = normalizeExtensions(serverInfo?.allowed_audio_types);
+    const fileExtensions = normalizeExtensions(serverInfo?.allowed_file_types);
+    const allExtensions = [
+      ...imageExtensions,
+      ...videoExtensions,
+      ...audioExtensions,
+      ...fileExtensions,
+    ];
+
+    return {
+      maxMessageLength: serverInfo?.max_message_length ?? null,
+      maxTotalAttachmentSizeMb: serverInfo?.max_total_attachment_size ?? null,
+      maxSizesByCategory: {
+        image: serverInfo?.max_image_size ?? null,
+        video: serverInfo?.max_video_size ?? null,
+        audio: serverInfo?.max_audio_size ?? null,
+        file: serverInfo?.max_file_size ?? null,
+      },
+      imageExtensions,
+      videoExtensions,
+      audioExtensions,
+      fileExtensions,
+      allExtensions,
+      acceptAttribute:
+        allExtensions.length > 0
+          ? allExtensions.map((extension) => `.${extension}`).join(',')
+          : undefined,
+    };
+  }, [serverInfo]);
+
+  const composerAttachmentPreviews = useMemo<ComposerAttachmentPreview[]>(
+    () =>
+      messageAttachments.map((file) => ({
+        file,
+        kind: file.type.startsWith('image/')
+          ? 'image'
+          : file.type.startsWith('video/')
+            ? 'video'
+            : 'file',
+        url:
+          file.type.startsWith('image/') || file.type.startsWith('video/')
+            ? URL.createObjectURL(file)
+            : undefined,
+      })),
+    [messageAttachments],
+  );
+
+  const composerAttachmentSummary = useMemo(() => {
+    const totalBytes = messageAttachments.reduce((sum, file) => sum + file.size, 0);
+    return {
+      count: messageAttachments.length,
+      formattedSize:
+        totalBytes >= 1024 * 1024
+          ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(totalBytes / 1024))} KB`,
+    };
+  }, [messageAttachments]);
+
+  const persistDraftForChannel = useCallback((channelId: string, message: string) => {
+    const normalizedMessage = message.trim().length === 0 ? '' : message;
+
+    if (normalizedMessage) {
+      setMessageDraft(channelId, message);
+    } else {
+      clearMessageDraft(channelId);
+    }
+
+    pendingDraftRef.current = null;
+  }, [clearMessageDraft, setMessageDraft]);
+
+  const cancelPendingDraftPersistence = useCallback(() => {
+    if (draftPersistTimeoutRef.current) {
+      clearTimeout(draftPersistTimeoutRef.current);
+      draftPersistTimeoutRef.current = null;
+    }
+
+    pendingDraftRef.current = null;
+  }, []);
+
+  const flushPendingDraftPersistence = useCallback(() => {
+    if (draftPersistTimeoutRef.current) {
+      clearTimeout(draftPersistTimeoutRef.current);
+      draftPersistTimeoutRef.current = null;
+    }
+
+    if (pendingDraftRef.current) {
+      persistDraftForChannel(pendingDraftRef.current.channelId, pendingDraftRef.current.message);
+    }
+  }, [persistDraftForChannel]);
+
+  const scheduleDraftPersistence = useCallback((channelId: string, message: string) => {
+    pendingDraftRef.current = { channelId, message };
+
+    if (draftPersistTimeoutRef.current) {
+      clearTimeout(draftPersistTimeoutRef.current);
+    }
+
+    draftPersistTimeoutRef.current = setTimeout(() => {
+      if (!pendingDraftRef.current) {
+        return;
+      }
+
+      persistDraftForChannel(pendingDraftRef.current.channelId, pendingDraftRef.current.message);
+      draftPersistTimeoutRef.current = null;
+    }, 250);
+  }, [persistDraftForChannel]);
+
+  const resizeMessageComposer = useCallback(() => {
+    const textarea = messageInputRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const minHeight = 24;
+    const maxHeight = 200;
+
+    requestAnimationFrame(() => {
+      textarea.style.height = 'auto';
+
+      const scrollHeight = textarea.scrollHeight;
+      const boundedHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+      const shouldScroll = scrollHeight > maxHeight;
+
+      if (
+        Math.abs(boundedHeight - cachedTextareaHeightRef.current) <= 1 &&
+        textarea.style.overflowY === (shouldScroll ? 'auto' : 'hidden')
+      ) {
+        textarea.style.height = `${boundedHeight}px`;
+        return;
+      }
+
+      textarea.style.overflowY = shouldScroll ? 'auto' : 'hidden';
+      textarea.style.height = `${boundedHeight}px`;
+      cachedTextareaHeightRef.current = boundedHeight;
+    });
+  }, []);
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   useEffect(() => {
     if (userLoading) {
-      console.log('Dashboard: Starting loading timeout...');
+      logger.ui.debug('Starting dashboard loading timeout');
       const timer = setTimeout(() => {
-        console.error('Dashboard: Loading timeout reached - redirecting to login');
+        logger.ui.error('Dashboard loading timeout reached, redirecting to login');
         setLoadingTimeout(true);
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
@@ -272,7 +752,7 @@ export default function Dashboard() {
       }, 10000); // 10 second timeout
 
       return () => {
-        console.log('Dashboard: Clearing loading timeout');
+        logger.ui.debug('Clearing dashboard loading timeout');
         clearTimeout(timer);
       };
     }
@@ -282,7 +762,93 @@ export default function Dashboard() {
   const errorMessage = (userError as any)?.message || '';
   const isInitialLoad = userLoading && !currentUser;
   const shouldRedirectToLogin = isInitialLoad && errorMessage?.includes('No authentication token');
-  const showServerConfigError = errorMessage?.includes('No server host:port configured');
+  const showServerConfigError = errorMessage?.includes('No home instance configured');
+
+  async function fetchChannelsData(authToken: string): Promise<void> {
+    try {
+      const response = await listChannels(authToken);
+      if (response.success && response.data && response.data.channels) {
+        setChannels(response.data.channels);
+        setChannelsError(null);
+        logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
+      } else {
+        logger.ui.error("Failed to fetch channels", { error: response.error });
+        setChannels([]);
+        setChannelsError(response.error || 'Failed to load channels');
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error fetching channels", { error: error instanceof Error ? error.message : String(error) });
+      setChannels([]);
+      setChannelsError('Failed to load channels due to configuration error');
+    }
+  }
+
+  async function fetchUsersData(authToken: string): Promise<void> {
+    try {
+      const response = await listUsers(authToken);
+      if (response.success && response.data && response.data.users) {
+        setUsers(response.data.users);
+        setUsersError(null);
+        logger.ui.info("Users fetched successfully", { count: response.data.users.length });
+      } else {
+        logger.ui.error("Failed to fetch users", { error: response.error });
+        setUsers([]);
+        setUsersError(response.error || 'Failed to load server members');
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error fetching users", { error: error instanceof Error ? error.message : String(error) });
+      setUsers([]);
+      setUsersError('Failed to load server members due to configuration error');
+    }
+  }
+
+  async function fetchServerInfoData(authToken: string): Promise<void> {
+    try {
+      if (!authToken) {
+        return;
+      }
+
+      const response = await getServerInfo();
+      if (response.success && response.data && response.data.server_info) {
+        setServerInfo(response.data.server_info);
+        setServerInfoError(null);
+        logger.ui.info("Server info fetched successfully");
+      } else {
+        logger.ui.error("Failed to fetch server info", { error: response.error });
+        setServerInfo(null);
+        setServerInfoError(response.error || 'Failed to load server information');
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error fetching server info", { error: error instanceof Error ? error.message : String(error) });
+      setServerInfo(null);
+      setServerInfoError('Failed to load server information due to configuration error');
+    }
+  }
+
+  async function fetchReadHistoryData(authToken: string): Promise<void> {
+    try {
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!hostPort) {
+        return;
+      }
+
+      const response = await getMessageReadHistory(hostPort, authToken);
+      if (response.success && response.data) {
+        applyReadHistorySnapshot(
+          response.data.viewed_message_ids || [],
+          response.data.unread_counts || {},
+        );
+        logger.ui.debug("Read history fetched successfully", {
+          readCount: response.data.viewed_message_ids?.length || 0,
+          unreadChannels: Object.keys(response.data.unread_counts || {}).length,
+        });
+      }
+    } catch (error) {
+      logger.ui.warn("Failed to fetch read history snapshot", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   // Handle redirects after all hooks are declared
   useEffect(() => {
@@ -311,6 +877,25 @@ export default function Dashboard() {
     };
   }, [serverDropdownOpen]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationMenuRef.current &&
+        !notificationMenuRef.current.contains(event.target as Node)
+      ) {
+        setNotificationMenuOpen(false);
+      }
+    };
+
+    if (notificationMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationMenuOpen]);
+
   // Handle click outside to close user card tooltip
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -328,66 +913,30 @@ export default function Dashboard() {
     };
   }, [isTooltipOpen]);
 
-  // Save maxMessageLength to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pufferblow-max-message-length', maxMessageLength.toString());
-    }
-  }, [maxMessageLength]);
+    resizeMessageComposer();
+  }, [messageInput, resizeMessageComposer]);
 
-  // Optimized auto-resize message input textarea with debouncing
   useEffect(() => {
-    // Clear any pending resize timeout
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
+    if (!selectedChannel) {
+      flushPendingDraftPersistence();
+      return;
     }
 
-    // Debounce the resize operation to avoid excessive calculations during typing
-    resizeTimeoutRef.current = setTimeout(() => {
-      if (messageInputRef.current) {
-        const textarea = messageInputRef.current;
-        const minHeight = 24; // 1.5rem = 24px
-        const maxHeight = 200; // Maximum height before scrolling
+    scheduleDraftPersistence(selectedChannel.channel_id, messageInput);
+  }, [flushPendingDraftPersistence, messageInput, scheduleDraftPersistence, selectedChannel]);
 
-        // Use requestAnimationFrame for smooth DOM updates
-        requestAnimationFrame(() => {
-          if (!textarea) return;
+  useEffect(() => () => {
+    flushPendingDraftPersistence();
+  }, [flushPendingDraftPersistence]);
 
-          // Reset height to auto to get the correct scrollHeight
-          textarea.style.height = 'auto';
-
-          // Calculate new height
-          const scrollHeight = textarea.scrollHeight;
-          let newHeight = scrollHeight;
-
-          // Apply minimum height
-          newHeight = Math.max(newHeight, minHeight);
-
-          // Avoid unnecessary DOM updates if height hasn't changed significantly
-          if (Math.abs(newHeight - cachedTextareaHeight) > 2) {
-            setCachedTextareaHeight(newHeight);
-
-            // If content exceeds max height, make it scrollable, otherwise expand
-            if (scrollHeight > maxHeight) {
-              newHeight = maxHeight;
-              textarea.style.overflowY = 'auto';
-            } else {
-              textarea.style.overflowY = 'hidden';
-            }
-
-            textarea.style.height = `${newHeight}px`;
-          }
-        });
+  useEffect(() => () => {
+    composerAttachmentPreviews.forEach((preview) => {
+      if (preview.url) {
+        URL.revokeObjectURL(preview.url);
       }
-    }, 50); // 50ms debounce delay
-
-    // Cleanup timeout on unmount or next effect
-    return () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, [messageInput]);
+    });
+  }, [composerAttachmentPreviews]);
 
   // Auto-scroll messages to bottom when new messages arrive or are first loaded
   useEffect(() => {
@@ -400,94 +949,59 @@ export default function Dashboard() {
         }
       }, 50); // Small delay to ensure DOM update
     }
-  }, [messages]);
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!selectedChannel || !currentUser || messages.length === 0) {
+      return;
+    }
+
+    if (unreadMarker?.channelId !== selectedChannel.channel_id) {
+      const firstUnreadMessage = messages.find(
+        (message) =>
+          message.sender_user_id !== currentUser.user_id &&
+          !readMessageIdsRef.current.has(message.message_id),
+      );
+      if (firstUnreadMessage) {
+        setUnreadMarker({
+          channelId: selectedChannel.channel_id,
+          messageId: firstUnreadMessage.message_id,
+        });
+      }
+    }
+
+    const unreadVisibleMessageIds = messages
+      .filter(
+        (message) =>
+          message.sender_user_id !== currentUser.user_id &&
+          !readMessageIds.has(message.message_id),
+      )
+      .map((message) => message.message_id);
+
+    if (unreadVisibleMessageIds.length === 0) {
+      return;
+    }
+
+    void markMessagesRead(selectedChannel.channel_id, unreadVisibleMessageIds);
+  }, [messages, selectedChannel, currentUser, readMessageIds, markMessagesRead, unreadMarker]);
 
   // Fetch channels, users, and server info on mount
   useEffect(() => {
-    const fetchChannels = async () => {
-      try {
-        const authToken = getAuthTokenFromCookies() || '';
-
-        if (!authToken) return;
-
-        const response = await listChannels(authToken);
-        if (response.success && response.data && response.data.channels) {
-          setChannels(response.data.channels);
-          setChannelsError(null);
-          console.log("Channels fetched from API:", response.data.channels);
-          logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
-        } else {
-          console.error("Failed to fetch channels from API:", response.error);
-          logger.ui.error("Failed to fetch channels", { error: response.error });
-          setChannels([]);
-          setChannelsError(response.error || 'Failed to load channels');
-        }
-      } catch (error) {
-        console.error("Unexpected error fetching channels:", error);
-        logger.ui.error("Unexpected error fetching channels", { error: error instanceof Error ? error.message : String(error) });
-        setChannels([]);
-        setChannelsError('Failed to load channels due to configuration error');
-      }
-    };
-
-    const fetchUsers = async () => {
-      try {
-        const authToken = getAuthTokenFromCookies() || '';
-
-        if (!authToken) return;
-
-        const response = await listUsers(authToken);
-        if (response.success && response.data && response.data.users) {
-          setUsers(response.data.users);
-          setUsersError(null);
-          console.log("Users fetched from API:", response.data.users);
-          logger.ui.info("Users fetched successfully", { count: response.data.users.length });
-        } else {
-          console.error("Failed to fetch users from API:", response.error);
-          logger.ui.error("Failed to fetch users", { error: response.error });
-          setUsers([]);
-          setUsersError(response.error || 'Failed to load server members');
-        }
-      } catch (error) {
-        console.error("Unexpected error fetching users:", error);
-        logger.ui.error("Unexpected error fetching users", { error: error instanceof Error ? error.message : String(error) });
-        setUsers([]);
-        setUsersError('Failed to load server members due to configuration error');
-      }
-    };
-
-    const fetchServerInfo = async () => {
-      try {
-        const authToken = getAuthTokenFromCookies() || '';
-
-        if (!authToken) return;
-
-        const { getServerInfo } = await import('../../services/system');
-        const response = await getServerInfo();
-        if (response.success && response.data && response.data.server_info) {
-          setServerInfo(response.data.server_info);
-          setServerInfoError(null);
-          console.log("Server info fetched from API:", response.data.server_info);
-          logger.ui.info("Server info fetched successfully");
-        } else {
-          console.error("Failed to fetch server info from API:", response.error);
-          logger.ui.error("Failed to fetch server info", { error: response.error });
-          setServerInfo(null);
-          setServerInfoError(response.error || 'Failed to load server information');
-        }
-      } catch (error) {
-        console.error("Unexpected error fetching server info:", error);
-        logger.ui.error("Unexpected error fetching server info", { error: error instanceof Error ? error.message : String(error) });
-        setServerInfo(null);
-        setServerInfoError('Failed to load server information due to configuration error');
-      }
-    };
-
-    if (currentUser) {
-      fetchChannels();
-      fetchUsers();
-      fetchServerInfo();
+    if (!currentUser) {
+      return;
     }
+
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      return;
+    }
+
+    void Promise.all([
+      fetchChannelsData(authToken),
+      fetchUsersData(authToken),
+      fetchServerInfoData(authToken),
+      fetchReadHistoryData(authToken),
+    ]);
   }, [currentUser]);
 
   // Initialize from persisted state after channels are loaded
@@ -497,7 +1011,7 @@ export default function Dashboard() {
       if (persistedChannelId) {
         const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
         if (persistedChannel) {
-          console.log("Restoring previously selected channel:", persistedChannel);
+          logger.ui.debug("Restoring previously selected channel", { channelId: persistedChannel.channel_id });
 
           // Set the selected channel and load messages automatically
           setSelectedChannel(persistedChannel);
@@ -510,14 +1024,14 @@ export default function Dashboard() {
           loadChannelMessages(persistedChannel);
           // Note: We don't call persistSelectedChannel here since it was already persisted
         } else {
-          console.log("Persisted channel not found, selecting first available channel");
+          logger.ui.warn("Persisted channel not found, selecting first available channel", { persistedChannelId });
           // Persisted channel no longer exists, select the first available channel
           const firstChannel = channels[0];
           handleChannelSelect(firstChannel);
         }
       } else {
         // No persisted channel, select the first available channel
-        console.log("No persisted channel, selecting first available");
+        logger.ui.debug("No persisted channel found, selecting first available channel");
         const firstChannel = channels[0];
         handleChannelSelect(firstChannel);
       }
@@ -530,13 +1044,13 @@ export default function Dashboard() {
     return (
       <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
         <div className="text-center text-[var(--color-text)]">
-          <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)]">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold mb-2">Server Configuration Error</h2>
-          <p className="text-[var(--color-text-secondary)] mb-4">Unable to connect to server. Please check your server settings.</p>
+          <h2 className="mb-2 text-xl font-bold">Home Instance Configuration Error</h2>
+          <p className="mb-4 text-[var(--color-text-secondary)]">Unable to connect to your configured home instance. Check the instance address in settings and try again.</p>
           <button
             onClick={() => {
               if (typeof window !== 'undefined') {
@@ -557,7 +1071,7 @@ export default function Dashboard() {
     return (
       <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex items-center justify-center">
         <div className="text-center text-[var(--color-text)]">
-          <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)]">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
@@ -594,8 +1108,11 @@ export default function Dashboard() {
             </div>
           ))}
 
-          {/* Add Server Button */}
-          <AddServerButton disabled />
+          <AddServerButton
+            disabled
+            title="Additional home instances are not available in this build"
+            ariaLabel="Additional home instances are not available in this build"
+          />
         </div>
 
         {/* Channel Sidebar */}
@@ -702,7 +1219,7 @@ export default function Dashboard() {
 
                     {/* Role badge */}
                     {i % 5 === 0 && (
-                      <div className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
+                      <div className="rounded bg-[var(--color-success)] px-1.5 py-0.5 text-xs font-medium text-[var(--color-on-success)] opacity-80">
                         ADMIN
                       </div>
                     )}
@@ -741,7 +1258,7 @@ export default function Dashboard() {
                 {/* Hover Menu Button */}
                 {(i + 1) % 2 === 0 && (
                   <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
-                    <button className="w-8 h-8 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] rounded flex items-center justify-center text-[var(--color-text)] hover:text-white transition-colors">
+                    <button className="flex h-8 w-8 items-center justify-center rounded bg-[var(--color-surface-tertiary)] text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]">
                       <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
                       </svg>
@@ -788,466 +1305,13 @@ export default function Dashboard() {
     );
   }
 
-  // Handle click outside to close server dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (serverDropdownRef.current && !serverDropdownRef.current.contains(event.target as Node)) {
-        setServerDropdownOpen(false);
-      }
-    };
-
-    if (serverDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [serverDropdownOpen]);
-
-  // Handle click outside to close user card tooltip
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isTooltipOpen) {
-        setIsTooltipOpen(false);
-      }
-    };
-
-    if (isTooltipOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isTooltipOpen]);
-
-  // Save maxMessageLength to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pufferblow-max-message-length', maxMessageLength.toString());
-    }
-  }, [maxMessageLength]);
-
-  // Optimized auto-resize message input textarea with debouncing
-  useEffect(() => {
-    // Clear any pending resize timeout
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-    }
-
-    // Debounce the resize operation to avoid excessive calculations during typing
-    resizeTimeoutRef.current = setTimeout(() => {
-      if (messageInputRef.current) {
-        const textarea = messageInputRef.current;
-        const minHeight = 24; // 1.5rem = 24px
-        const maxHeight = 200; // Maximum height before scrolling
-
-        // Use requestAnimationFrame for smooth DOM updates
-        requestAnimationFrame(() => {
-          if (!textarea) return;
-
-          // Reset height to auto to get the correct scrollHeight
-          textarea.style.height = 'auto';
-
-          // Calculate new height
-          const scrollHeight = textarea.scrollHeight;
-          let newHeight = scrollHeight;
-
-          // Apply minimum height
-          newHeight = Math.max(newHeight, minHeight);
-
-          // Avoid unnecessary DOM updates if height hasn't changed significantly
-          if (Math.abs(newHeight - cachedTextareaHeight) > 2) {
-            setCachedTextareaHeight(newHeight);
-
-            // If content exceeds max height, make it scrollable, otherwise expand
-            if (scrollHeight > maxHeight) {
-              newHeight = maxHeight;
-              textarea.style.overflowY = 'auto';
-            } else {
-              textarea.style.overflowY = 'hidden';
-            }
-
-            textarea.style.height = `${newHeight}px`;
-          }
-        });
-      }
-    }, 50); // 50ms debounce delay
-
-    // Cleanup timeout on unmount or next effect
-    return () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, [messageInput]);
-
-  // Auto-scroll messages to bottom when new messages arrive or are first loaded
-  useEffect(() => {
-    if (messagesContainerRef.current && messages.length > 0) {
-      // Use setTimeout to ensure DOM has updated with new messages
-      setTimeout(() => {
-        if (messagesContainerRef.current) {
-          const container = messagesContainerRef.current;
-          container.scrollTop = container.scrollHeight;
-        }
-      }, 50); // Small delay to ensure DOM update
-    }
-  }, [messages]);
-
-  // Fetch channels, users, and server info on mount
-  useEffect(() => {
-    const fetchChannels = async () => {
-      const authToken = getAuthTokenFromCookies() || '';
-
-      if (!authToken) return;
-
-      const response = await listChannels(authToken);
-      if (response.success && response.data && response.data.channels) {
-        setChannels(response.data.channels);
-        setChannelsError(null);
-        console.log("Channels fetched from API:", response.data.channels);
-        logger.ui.info("Channels fetched successfully", { count: response.data.channels.length });
-      } else {
-        console.error("Failed to fetch channels from API:", response.error);
-        logger.ui.error("Failed to fetch channels", { error: response.error });
-        setChannels([]);
-        setChannelsError(response.error || 'Failed to load channels');
-      }
-    };
-
-    const fetchUsers = async () => {
-      const authToken = getAuthTokenFromCookies() || '';
-
-      if (!authToken) return;
-
-      const response = await listUsers(authToken);
-      if (response.success && response.data && response.data.users) {
-        setUsers(response.data.users);
-        setUsersError(null);
-        console.log("Users fetched from API:", response.data.users);
-        logger.ui.info("Users fetched successfully", { count: response.data.users.length });
-      } else {
-        console.error("Failed to fetch users from API:", response.error);
-        logger.ui.error("Failed to fetch users", { error: response.error });
-        setUsers([]);
-        setUsersError(response.error || 'Failed to load server members');
-      }
-    };
-
-    const fetchServerInfo = async () => {
-      const authToken = getAuthTokenFromCookies() || '';
-
-      if (!authToken) return;
-
-      const { getServerInfo } = await import('../../services/system');
-      const response = await getServerInfo();
-      if (response.success && response.data && response.data.server_info) {
-        setServerInfo(response.data.server_info);
-        setServerInfoError(null);
-        console.log("Server info fetched from API:", response.data.server_info);
-        logger.ui.info("Server info fetched successfully");
-      } else {
-        console.error("Failed to fetch server info from API:", response.error);
-        logger.ui.error("Failed to fetch server info", { error: response.error });
-        setServerInfo(null);
-        setServerInfoError(response.error || 'Failed to load server information');
-      }
-    };
-
-    if (currentUser) {
-      fetchChannels();
-      fetchUsers();
-      fetchServerInfo();
-    }
-  }, [currentUser]);
-
-  // Initialize from persisted state after channels are loaded
-  useEffect(() => {
-    if (channels.length > 0 && !selectedChannel) {
-      // Try to restore previously selected channel
-      if (persistedChannelId) {
-        const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
-        if (persistedChannel) {
-          console.log("Restoring previously selected channel:", persistedChannel);
-
-          // Set the selected channel and load messages automatically
-          setSelectedChannel(persistedChannel);
-
-          // Restore message draft for the persisted channel
-          const restoredDraft = getMessageDraft(persistedChannel.channel_id);
-          setMessageInput(restoredDraft);
-
-          // Load messages and setup WebSocket connection for the restored channel
-          loadChannelMessages(persistedChannel);
-          // Note: We don't call persistSelectedChannel here since it was already persisted
-        } else {
-          console.log("Persisted channel not found, selecting first available channel");
-          // Persisted channel no longer exists, select the first available channel
-          const firstChannel = channels[0];
-          handleChannelSelect(firstChannel);
-        }
-      } else {
-        // No persisted channel, select the first available channel
-        console.log("No persisted channel, selecting first available");
-        const firstChannel = channels[0];
-        handleChannelSelect(firstChannel);
-      }
-    }
-  }, [channels, persistedChannelId, selectedChannel]);
-
-
-
-
-
-  // Show skeleton loading state for dashboard
-  if (!currentUser) {
-    return (
-      <div className="h-screen bg-gradient-to-br from-[var(--color-background)] to-[var(--color-background-secondary)] flex font-sans gap-2 p-2 select-none relative">
-        {/* Left Sidebar Container */}
-        <div className="flex flex-col gap-0 h-full">
-          {/* Server and Channel Sidebars Row */}
-          <div className="flex flex-1 gap-2">
-            {/* Server Sidebar */}
-            <div className="w-16 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent backdrop-blur-sm rounded-br-none animate-pulse">
-              <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
-
-              {/* Server Icons */}
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
-                  <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
-                </div>
-              ))}
-
-              {/* Add Server Button */}
-              <AddServerButton disabled />
-            </div>
-
-            {/* Channel Sidebar */}
-            <div className="w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden backdrop-blur-sm rounded-bl-none animate-pulse">
-              {/* Modern Server Header */}
-              <div className="relative">
-                {/* Server Banner */}
-                <div className="relative h-20 w-full rounded-t-2xl overflow-hidden bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
-                </div>
-
-                {/* Server Info Section */}
-                <div className="px-4 py-3 relative">
-                  <div className="flex items-center justify-between">
-                    {/* Server Info */}
-                    <div className="min-w-0 flex-1">
-                      <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
-                      <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
-                    </div>
-
-                    {/* Server Dropdown */}
-                    <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Channel List */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="px-2 py-4">
-                  {/* Channels Header */}
-                  <div className="flex items-center px-2 mb-1">
-                    <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
-                  </div>
-
-                  {/* Channel Items */}
-                  <div className="space-y-2">
-                    {Array.from({ length: 12 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex items-center px-2 py-1 rounded hover:bg-[var(--color-surface-tertiary)] cursor-pointer ${i % 4 === 0 ? 'bg-[var(--color-surface-tertiary)]' : ''}`}
-                      >
-                        <span className="text-[var(--color-text-secondary)] mr-2">#</span>
-                        <span className="text-[var(--color-text-secondary)] text-sm break-words overflow-wrap-anywhere flex-1">
-                          <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
-                        </span>
-                        <div className="flex items-center ml-auto">
-                          {i % 5 === 0 && (
-                            <div className="flex items-center mr-1">
-                              <svg className="w-3 h-3 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </div>
-                          )}
-                          {i % 7 === 0 && (
-                            <svg className="w-4 h-4 text-[var(--color-text-muted)] ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Full-width UserPanel as direct child of left sidebar container */}
-          <div className="w-full bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded-b-2xl border-t border-[var(--color-border)] animate-pulse">
-            <div className="px-2 pb-2 pt-4">
-              <div className="flex items-center space-x-3 p-2 rounded-xl bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
-                <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded-full animate-pulse shadow-md border-2 border-green-300"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-20 mb-1"></div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                    <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-16"></div>
-                  </div>
-                </div>
-                <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
-                <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Chat Area */}
-        <div className="flex-1 min-w-0 flex flex-col bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] rounded-2xl shadow-xl border border-[var(--color-border)] overflow-hidden backdrop-blur-sm animate-pulse">
-          {/* Channel Header */}
-          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
-            <div className="flex items-center">
-              <span className="text-[var(--color-text-secondary)] mr-2">#</span>
-              <div className="h-5 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-24"></div>
-              <div className="ml-2 text-[var(--color-text-muted)] text-sm">
-                <div className="h-4 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-48"></div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
-              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
-              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded"></div>
-              <div className="w-5 h-5 bg-[var(--color-surface-secondary)] rounded p-1"></div>
-            </div>
-          </div>
-
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${i % 4 === 0 ? 'bg-[var(--color-primary)]/20 border-l-4 border-[var(--color-primary)]' : ''}`}
-              >
-                {/* Avatar */}
-                <div className="w-10 h-10 bg-gradient-to-br from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded-full flex-shrink-0 animate-pulse shadow-lg"></div>
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    {/* Username */}
-                    <div className={`h-4 bg-gradient-to-r from-white to-[var(--color-border-secondary)] rounded font-medium ${i % 3 === 0 ? 'w-20' : i % 2 === 0 ? 'w-24' : 'w-16'}`}></div>
-
-                    {/* Role badge */}
-                    {i % 5 === 0 && (
-                      <div className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded font-medium opacity-80">
-                        <div className="h-3 bg-gradient-to-r from-white to-[var(--color-border-secondary)] rounded w-8"></div>
-                      </div>
-                    )}
-
-                    {/* Timestamp */}
-                    <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-16 opacity-60"></div>
-                  </div>
-
-                  {/* Message Lines */}
-                  <div className="space-y-2">
-                    <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-full"></div>
-                    {i % 3 === 0 && (
-                      <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-4/5"></div>
-                    )}
-                    {i % 4 === 1 && (
-                      <>
-                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-3/4"></div>
-                        <div className="h-3 bg-gradient-to-r from-[var(--color-border-secondary)] to-[var(--color-border)] rounded animate-pulse w-1/2"></div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Attachment Preview */}
-                  {i % 6 === 2 && (
-                    <div className="mt-3 p-3 bg-gradient-to-br from-[var(--color-surface-tertiary)] to-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border)] animate-pulse">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 bg-[var(--color-border)] rounded flex-shrink-0"></div>
-                        <div className="h-3 bg-gradient-to-r from-[var(--color-border)] to-[var(--color-surface-tertiary)] rounded w-24"></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Hover Menu Button */}
-                {(i + 1) % 2 === 0 && (
-                  <div className="absolute right-0 top-0 opacity-100 mt-2 mr-2">
-                    <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] rounded flex items-center justify-center text-[var(--color-text)] hover:text-white transition-colors">
-                      <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
-                      </svg>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Message Input */}
-          <div className="p-4">
-            <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 shadow-2xl animate-pulse">
-              <div className="flex items-end space-x-3">
-                {/* File Upload Button */}
-                <div className="flex-shrink-0 w-8 h-8 bg-[var(--color-hover)] rounded"></div>
-
-                {/* Message Input */}
-                <div className="flex-1 min-h-0">
-                  <div className="w-full bg-[var(--color-surface-secondary)] rounded px-2 py-1 opacity-60 h-6"></div>
-                </div>
-
-                {/* Emoji Button */}
-                <div className="w-8 h-8 bg-[var(--color-hover)] rounded"></div>
-
-                {/* Send Button */}
-                <div className="w-8 h-8 bg-[var(--color-primary)] rounded"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Member List - Skeleton */}
-        <div className="w-72 bg-[var(--color-surface)] rounded-xl shadow-lg border border-[var(--color-border)] animate-pulse max-xl:hidden">
-          {/* Header */}
-          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
-            <div className="h-4 bg-[var(--color-surface-secondary)] rounded w-20"></div>
-            <div className="w-6 h-6 bg-[var(--color-surface-secondary)] rounded"></div>
-          </div>
-
-          {/* Members */}
-          <div className="flex-1 p-4 space-y-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center space-x-3 px-3 py-2 rounded-xl">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full opacity-60"></div>
-                <div className="flex-1 space-y-1">
-                  <div className="h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-20"></div>
-                  <div className="h-2 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded w-12"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Mock data
-  const currentServer = { id: "server1", name: "General Server" };
-
-  // Event handlers
-  const handleCreateServer = (serverData: { name: string; description: string; isPrivate: boolean }) => {
-    logger.ui.info("Creating server", { serverName: serverData.name, isPrivate: serverData.isPrivate });
-    // TODO: Implement server creation
+  const showUnsupportedSingleInstanceAction = (action: string, detail: string) => {
+    showToast({
+      message: `${action} is not available on this home instance yet. ${detail}`,
+      tone: "warning",
+      category: "system",
+      dedupeKey: `dashboard:unsupported:${action.toLowerCase().replace(/\s+/g, "-")}`,
+    });
   };
 
   const handleCreateChannel = async (channelData: { name: string; type: 'text' | 'voice'; description?: string; isPrivate?: boolean }) => {
@@ -1266,6 +1330,8 @@ export default function Dashboard() {
           isPrivate: channelData.isPrivate
         });
 
+        const createdChannel = (response.data as any)?.channel_data as Channel | undefined;
+
         showToast({
           message: `Channel #${channelData.name} created successfully.`,
           tone: "success",
@@ -1276,6 +1342,14 @@ export default function Dashboard() {
         const channelsResponse = await listChannels(authToken);
         if (channelsResponse.success && channelsResponse.data) {
           setChannels(channelsResponse.data.channels);
+          if (createdChannel?.channel_id) {
+            const matchingChannel = channelsResponse.data.channels.find(
+              (channel) => channel.channel_id === createdChannel.channel_id,
+            );
+            if (matchingChannel) {
+              await handleChannelSelect(matchingChannel);
+            }
+          }
         }
 
         // Close modals
@@ -1290,7 +1364,7 @@ export default function Dashboard() {
           });
         } else if (response.error?.includes('403') || response.error?.includes('Access forbidden')) {
           showToast({
-            message: "Access forbidden. Only admins can create channels and manage channels.",
+            message: "Access forbidden. Your current instance role does not allow channel creation.",
             tone: "error",
             category: "system",
           });
@@ -1326,66 +1400,122 @@ export default function Dashboard() {
   };
 
   const handleSelectSearchResult = (result: any) => {
-    console.log("Selected search result:", result);
+    logger.ui.debug("Selected dashboard search result", { resultType: result?.type, resultId: result?.id });
     // TODO: Navigate to result
   };
 
-  const handleGenerateInvite = async (options: { maxUses?: number; expiresAt?: Date; isPermanent?: boolean }) => {
-    // Mock invite generation
-    return "ABC123";
-  };
-
-  const handleCopyInvite = (inviteCode: string) => {
-    navigator.clipboard.writeText(`https://pufferblow.space/invite/${inviteCode}`);
-    logger.ui.info("Invite link copied to clipboard", { inviteCode: "[REDACTED]" });
+  const handleInviteActionUnavailable = () => {
+    showUnsupportedSingleInstanceAction(
+      "Invite links",
+      "This home instance does not expose invite creation through the current API."
+    );
   };
 
   // Message action handlers
   const handleMessageReply = (messageId: string | null) => {
     if (!messageId) {
-      console.log("No message ID available for reply");
+      logger.ui.warn("Reply action invoked without a message ID");
       return;
     }
-    console.log("Reply to message:", messageId);
-    // TODO: Implement reply functionality
+    const targetMessage = getMessageById(messageId);
+    if (!targetMessage) {
+      showToast({
+        message: "The message you tried to reply to is no longer available.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+
+    logger.ui.debug("Reply action selected", { messageId });
+    setReplyTarget(targetMessage);
+    setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+    requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+    });
   };
 
   const handleMessageReact = (messageId: string) => {
-    console.log("Add reaction to message:", messageId);
+    logger.ui.debug("Reaction action selected", { messageId });
     // TODO: Implement reaction functionality
   };
 
   const handleMessageReport = (messageId: string | null) => {
     if (!messageId) {
-      console.log("No message ID available for reporting");
+      logger.ui.warn("Report action invoked without a message ID");
       return;
     }
     // Handle single message report by opening modal
-    setMessageReportModal({ isOpen: true, messages: [messageId] });
+    setReportModal({ isOpen: true, targetType: 'message', messages: [messageId] });
   };
 
   const handleMessageReportSubmit = async (report: { category: string; description: string }) => {
     const { category, description } = report;
+    const authToken = getAuthTokenFromCookies() || '';
 
-    // TODO: Send report to API - for now just simulate submission
-    console.log("Submitting message report:", {
-      messageIds: messageReportModal.messages,
+    if (!authToken) {
+      showToast({
+        message: "You need to be signed in to submit reports.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    if (reportModal.targetType === 'user' && reportModal.targetUserId) {
+      const response = await submitUserReport({
+        auth_token: authToken,
+        target_user_id: reportModal.targetUserId,
+        category,
+        description,
+      });
+
+      if (!response.success) {
+        showToast({
+          message: `Failed to submit user report: ${response.error || 'Unknown error'}`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+
+      showToast({
+        message: `Report submitted for ${reportModal.targetUsername || 'this user'}.`,
+        tone: "success",
+        category: "system",
+      });
+      logger.ui.info("User report submitted", {
+        targetUserId: reportModal.targetUserId,
+        category,
+      });
+      setReportModal({ isOpen: false, targetType: 'message', messages: [] });
+      return;
+    }
+
+    const response = await submitMessageReport({
+      auth_token: authToken,
+      message_ids: reportModal.messages,
       category,
-      description
+      description,
     });
+
+    if (!response.success) {
+      showToast({
+        message: `Failed to submit message report: ${response.error || 'Unknown error'}`,
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
 
     showToast({
       message: "Report submitted successfully. Thank you for helping keep the community safe.",
       tone: "success",
       category: "system",
     });
-
-    // Close modal
-    setMessageReportModal({ isOpen: false, messages: [] });
-
-    // Log the report
+    setReportModal({ isOpen: false, targetType: 'message', messages: [] });
     logger.ui.info("Message report submitted", {
-      messageCount: messageReportModal.messages.length,
+      messageCount: reportModal.messages.length,
       category,
       descriptionLength: description.length
     });
@@ -1411,7 +1541,7 @@ export default function Dashboard() {
 
     const groupReportHandler = () => {
       // Report all messages in the group
-      setMessageReportModal({ isOpen: true, messages: messageIds });
+      setReportModal({ isOpen: true, targetType: 'message', messages: messageIds });
     };
 
     setMessageContextMenu({
@@ -1447,9 +1577,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleUserReport = (userId: string) => {
-    console.log("Report user:", userId);
-    // TODO: Implement user report functionality
+  const handleUserReport = (userId: string, username?: string) => {
+    logger.ui.debug("User report action selected", { userId });
+    setReportModal({
+      isOpen: true,
+      targetType: 'user',
+      messages: [],
+      targetUserId: userId,
+      targetUsername: username,
+    });
+    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
   };
 
   const handleCopyUserId = async (userId: string) => {
@@ -1467,133 +1604,203 @@ export default function Dashboard() {
   };
 
   const handleSendMessageToUser = (userId: string) => {
-    console.log("Send message to user:", userId);
-    // TODO: Implement direct message functionality
+    logger.ui.debug("Direct message action selected", { userId });
+    showUnsupportedSingleInstanceAction(
+      "Direct messages",
+      "Federated direct messages on Pufferblow go through your home instance ActivityPub routes. This quick action still needs a dedicated conversation surface.",
+    );
+    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+    setSelectedContextUser(null);
   };
+
+  const handleMentionUser = (username: string) => {
+    setMessageInput((prev) => {
+      const prefix = prev.trim().length > 0 ? `${prev} ` : '';
+      return `${prefix}@${username} `;
+    });
+    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+    requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+    });
+  };
+
+  const openUserContextMenu = (
+    userId: string,
+    username: string,
+    event: React.MouseEvent,
+    source: 'userpanel' | 'members' | 'messages' = 'messages',
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedContextUser({
+      userId,
+      username,
+      anchorElement: event.currentTarget as HTMLElement,
+      source,
+    });
+    setUserContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+    });
+  };
+
+  const appendUniqueMessage = useCallback((incomingMessage: Message) => {
+    setMessages((prevMessages) => {
+      const existingIndex = prevMessages.findIndex(
+        (message) => message.message_id === incomingMessage.message_id,
+      );
+
+      if (existingIndex >= 0) {
+        const nextMessages = [...prevMessages];
+        nextMessages[existingIndex] = {
+          ...nextMessages[existingIndex],
+          ...incomingMessage,
+        };
+        return nextMessages;
+      }
+
+      return [...prevMessages, incomingMessage];
+    });
+  }, []);
 
   // Extracted message loading logic for reuse
   const loadChannelMessages = async (channel: Channel) => {
     const authToken = getAuthTokenFromCookies() || '';
-    const hostPort = getHostPortFromCookies();
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
 
-    console.log("Loading messages - authToken:", authToken ? 'exists' : 'missing', "channel_id:", channel.channel_id);
+    logger.ui.debug("Loading channel messages", {
+      channelId: channel.channel_id,
+      hasAuthToken: Boolean(authToken),
+      hasHomeInstance: Boolean(hostPort),
+    });
 
     if (authToken && channel.channel_id && hostPort) {
-      console.log("Making loadMessages API call...");
       const response = await loadMessages(hostPort, channel.channel_id, authToken);
-      console.log("loadMessages response:", response);
 
       if (response.success && response.data && response.data.messages) {
         setMessages(response.data.messages);
         logger.ui.info("Messages loaded successfully", { channelId: channel.channel_id, count: response.data.messages.length });
-        console.log("Messages set:", response.data.messages.length, "messages");
 
         // Establish WebSocket connection after loading messages
         if (currentUser) {
-          console.log("Establishing WebSocket connection for channel:", channel.channel_id);
+          logger.network.info("Establishing dashboard WebSocket connection", { channelId: channel.channel_id });
           const wsConnection = createGlobalWebSocket(authToken, hostPort, {
             onMessage: (message) => {
-              console.log("WebSocket message received:", message);
-              if (message.channel_id !== channel.channel_id) {
+              logger.network.debug("Dashboard WebSocket message received", { type: message.type, channelId: message.channel_id });
+
+              if (
+                message.type === 'user_status_changed' &&
+                message.user_id &&
+                message.status &&
+                (
+                  message.status === 'online' ||
+                  message.status === 'idle' ||
+                  message.status === 'afk' ||
+                  message.status === 'dnd' ||
+                  message.status === 'offline'
+                )
+              ) {
+                applyPresenceUpdate(message.user_id, message.status);
                 return;
               }
 
-              const isChannelMessage = message.type === 'message' || (message.type === undefined && Boolean(message.message_id));
-              // Handle incoming messages from WebSocket
-              if (isChannelMessage) {
-                // Add new message to the list
-                setMessages(prevMessages => {
-                  // Generate a temporary message ID if none provided
-                  const msgId = message.message_id || `ws-${Date.now()}-${Math.random()}`;
+              if (!isChatWebSocketMessage(message)) {
+                return;
+              }
 
-                  // Check if message already exists (avoid duplicates)
-                  const exists = prevMessages.some(m => m.message_id === msgId);
-                  if (!exists) {
-                    // Normalize attachments from WebSocket (may be simple URLs or objects)
-                    let normalizedAttachments: MessageAttachment[] = [];
-                    if (message.attachments && Array.isArray(message.attachments)) {
-                      console.log('Processing WebSocket attachments:', message.attachments.length);
-                      const tempAttachments: MessageAttachment[] = [];
-                      message.attachments.forEach((att: any, index: number) => {
-                        console.log(`Processing WebSocket attachment ${index}:`, { type: typeof att, hasUrl: att?.url, attType: att?.type, filename: att?.filename });
-                        // If it's already an object with proper structure, use it
-                        if (typeof att === 'object' && att.url) {
-                          // Ensure all required fields are present and properly typed
-                          const normalizedAtt: MessageAttachment = {
-                            url: att.url,
-                            filename: att.filename || att.url.split('/').pop() || 'attachment',
-                            type: att.type || 'application/octet-stream',
-                            size: att.size || null
-                          };
-                          tempAttachments.push(normalizedAtt);
-                          console.log(`Added normalized WebSocket attachment ${index}:`, { url: normalizedAtt.url, type: normalizedAtt.type, filename: normalizedAtt.filename });
-                        }
-                        // If it's a string URL, convert to MessageAttachment object
-                        else if (typeof att === 'string') {
-                          const filename = att.split('/').pop() || 'attachment';
-                          const ext = filename.split('.').pop()?.toLowerCase() || '';
-                          let mimeType = 'application/octet-stream';
+              const incomingChannelId = message.channel_id || channel.channel_id;
+              const normalizedMessage = {
+                ...normalizeChatWebSocketMessage(message),
+                channel_id: incomingChannelId,
+              };
 
-                          // Guess MIME type from extension (fallback)
-                          if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {
-                            mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-                          } else if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) {
-                            mimeType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
-                          } else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) {
-                            mimeType =
-                              ext === 'mp3'
-                                ? 'audio/mpeg'
-                                : ext === 'm4a'
-                                  ? 'audio/mp4'
-                                  : `audio/${ext}`;
-                          } else if (['pdf', 'doc', 'docx', 'txt'].includes(ext)) {
-                            mimeType = ext === 'pdf' ? 'application/pdf' :
-                                     ext === 'doc' ? 'application/msword' :
-                                     ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                                     ext === 'txt' ? 'text/plain' : 'application/octet-stream';
-                          }
+              const currentUserId = currentUserIdRef.current;
+              const isOwnMessage =
+                Boolean(currentUserId) &&
+                normalizedMessage.sender_user_id === currentUserId;
+              const isAlreadyProcessed = seenRealtimeMessageIdsRef.current.has(
+                normalizedMessage.message_id,
+              );
+              seenRealtimeMessageIdsRef.current.add(normalizedMessage.message_id);
 
-                          tempAttachments.push({
-                            url: att,
-                            filename: filename,
-                            type: mimeType,
-                            size: null
-                          });
-                          console.log(`Converted WebSocket string attachment ${index}:`, { url: att, type: mimeType, filename });
-                        } else {
-                          console.warn(`Invalid WebSocket attachment format ${index}:`, att);
-                        }
-                      });
-                      normalizedAttachments = tempAttachments;
-                      console.log('Final WebSocket normalized attachments:', normalizedAttachments.length);
-                    }
+              if (incomingChannelId === selectedChannelIdRef.current) {
+                appendUniqueMessage(normalizedMessage);
 
-                    return [...prevMessages, {
-                      message_id: msgId,
-                      sender_user_id: message.sender_user_id || '',
-                      message: message.message || '',
-                      hashed_message: message.hashed_message || '',
-                      username: message.username,
-                      sender_avatar_url: message.sender_avatar_url,
-                      sender_status: message.sender_status,
-                      sender_roles: message.sender_roles,
-                      sent_at: message.sent_at || new Date().toISOString(),
-                      channel_id: channel.channel_id,
-                      attachments: normalizedAttachments
-                    }];
-                  }
-                  return prevMessages;
-                });
+                if (!isOwnMessage) {
+                  void markMessagesRead(incomingChannelId, [
+                    normalizedMessage.message_id,
+                  ]);
+                }
+              }
+
+              if (
+                isOwnMessage ||
+                isAlreadyProcessed ||
+                readMessageIdsRef.current.has(normalizedMessage.message_id)
+              ) {
+                return;
+              }
+
+              const channelName =
+                channels.find((item) => item.channel_id === incomingChannelId)?.channel_name ||
+                'channel';
+              const body =
+                normalizedMessage.message?.trim() ||
+                (normalizedMessage.attachments?.length
+                  ? 'Sent an attachment.'
+                  : 'New message received.');
+              const mentionHandle = currentUser?.username
+                ? `@${currentUser.username.toLowerCase()}`
+                : null;
+              const isMention = mentionHandle
+                ? body.toLowerCase().includes(mentionHandle)
+                : false;
+
+              setUnreadCountsByChannel((prev) => ({
+                ...prev,
+                [incomingChannelId]: (prev[incomingChannelId] || 0) + 1,
+              }));
+
+              setNotifications((prev) => [
+                {
+                  id: normalizedMessage.message_id,
+                  title: normalizedMessage.username || 'New message',
+                  body,
+                  channelId: incomingChannelId,
+                  channelName,
+                  createdAt: normalizedMessage.sent_at || new Date().toISOString(),
+                  unread: true,
+                  kind: isMention ? ('mention' as const) : ('message' as const),
+                },
+                ...prev.filter(
+                  (notification) =>
+                    notification.id !== normalizedMessage.message_id,
+                ),
+              ].slice(0, 25));
+
+              if (
+                incomingChannelId !== selectedChannelIdRef.current &&
+                typeof window !== 'undefined' &&
+                document.hidden &&
+                'Notification' in window &&
+                Notification.permission === 'granted'
+              ) {
+                new Notification(
+                  `${normalizedMessage.username || 'Someone'} in #${channelName}`,
+                  {
+                    body,
+                  },
+                );
               }
             },
             onConnected: () => {
-              console.log("WebSocket connected for channel:", channel.channel_id);
+              logger.network.info("Dashboard WebSocket connected", { channelId: channel.channel_id });
             },
             onDisconnected: (reason) => {
-              console.log("WebSocket disconnected:", reason);
+              logger.network.info("Dashboard WebSocket disconnected", { channelId: channel.channel_id, reason });
             },
             onError: (error) => {
-              console.error("WebSocket error:", error);
+              logger.network.error("Dashboard WebSocket error", { channelId: channel.channel_id, error });
               showToast({
                 message: "Connection error. Messages may not update in real-time.",
                 tone: "error",
@@ -1605,22 +1812,22 @@ export default function Dashboard() {
           setWebSocketConnection(wsConnection);
         }
       } else {
-        console.error("Failed to load messages:", response.error);
         logger.ui.error("Failed to load messages", { channelId: channel.channel_id, error: response.error });
         setMessages([]); // Clear messages if failed
       }
     } else {
-      console.log("Not loading messages - missing authToken, channel_id, or hostPort");
+      logger.ui.warn("Skipping message load because prerequisites are missing", {
+        channelId: channel.channel_id,
+        hasAuthToken: Boolean(authToken),
+        hasHomeInstance: Boolean(hostPort),
+      });
     }
   };
 
   const handleChannelSelect = async (channel: Channel) => {
-    console.log("Channel clicked:", channel);
+    logger.ui.debug("Channel selected", { channelId: channel.channel_id, channelName: channel.channel_name });
 
-    // Save current channel's message draft before switching
-    if (selectedChannel && messageInput) {
-      setMessageDraft(selectedChannel.channel_id, messageInput);
-    }
+    flushPendingDraftPersistence();
 
     // Disconnect from previous WebSocket if exists
     if (webSocketConnection) {
@@ -1629,6 +1836,15 @@ export default function Dashboard() {
     }
 
     setSelectedChannel(channel);
+    setReplyTarget(null);
+    setNotificationMenuOpen(false);
+    setUnreadMarker(null);
+    markChannelNotificationsRead(channel.channel_id);
+    setUnreadCountsByChannel((prev) => {
+      const next = { ...prev };
+      delete next[channel.channel_id];
+      return next;
+    });
 
     // Persist the selected channel
     persistSelectedChannel(channel.channel_id);
@@ -1641,6 +1857,66 @@ export default function Dashboard() {
     await loadChannelMessages(channel);
   };
 
+  const handleNotificationSelect = async (notification: NotificationItem) => {
+    const channel = channels.find(
+      (candidate) => candidate.channel_id === notification.channelId,
+    );
+    if (!channel) {
+      return;
+    }
+
+    setNotifications((prev) =>
+      prev.filter((item) => item.id !== notification.id),
+    );
+    await handleChannelSelect(channel);
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    setNotifications([]);
+    setUnreadCountsByChannel({});
+  };
+
+  const handleEnableBrowserNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setBrowserNotificationPermission('unsupported');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setBrowserNotificationPermission(permission);
+
+    showToast({
+      message:
+        permission === 'granted'
+          ? 'Browser notifications enabled.'
+          : permission === 'denied'
+            ? 'Browser notifications were blocked.'
+            : 'Browser notification prompt dismissed.',
+      tone: permission === 'granted' ? 'success' : 'warning',
+      category: 'system',
+    });
+  };
+
+  const handleJumpToFirstUnread = () => {
+    unreadDividerRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+  };
+
+  const handleStatusChange = async (
+    status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
+  ) => {
+    lastActivityAtRef.current = Date.now();
+    await updatePresenceStatus(status, {
+      silent: false,
+      lockMode:
+        status === 'dnd' || status === 'afk' || status === 'offline'
+          ? 'set'
+          : 'clear',
+    });
+  };
+
   const handleMessageContextMenu = (messageId: string, event: React.MouseEvent) => {
     event.preventDefault();
     setMessageContextMenu({
@@ -1651,8 +1927,7 @@ export default function Dashboard() {
 
   const handleChannelContextMenu = (event: React.MouseEvent, channel: Channel) => {
     event.preventDefault();
-    // Only show context menu for owners
-    if (currentUser?.roles?.includes('Owner')) {
+    if (canDeleteChannels) {
       setChannelContextMenu({
         isOpen: true,
         position: { x: event.clientX, y: event.clientY },
@@ -1661,9 +1936,106 @@ export default function Dashboard() {
     }
   };
 
+  const handleUserTimeout = async (userId: string, username: string) => {
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      showToast({
+        message: "You need to be signed in to moderate users.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    const durationInput = window.prompt(`Timeout ${username} for how many minutes?`, '60');
+    if (!durationInput) {
+      return;
+    }
+
+    const durationMinutes = Number.parseInt(durationInput, 10);
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 1) {
+      showToast({
+        message: "Please enter a valid timeout duration in minutes.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+
+    const reason = window.prompt(`Optional timeout reason for ${username}:`, '') || undefined;
+    const response = await timeoutUser(userId, {
+      auth_token: authToken,
+      duration_minutes: durationMinutes,
+      reason,
+    });
+
+    if (!response.success) {
+      showToast({
+        message: `Failed to timeout ${username}: ${response.error || 'Unknown error'}`,
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    showToast({
+      message: `${username} has been timed out for ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}.`,
+      tone: "success",
+      category: "destructive",
+    });
+    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+    setSelectedContextUser(null);
+  };
+
+  const handleUserBan = async (userId: string, username: string) => {
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      showToast({
+        message: "You need to be signed in to moderate users.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(`Ban ${username} from this home instance?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const reason = window.prompt(`Optional ban reason for ${username}:`, '') || undefined;
+    const response = await banUser(userId, {
+      auth_token: authToken,
+      reason,
+    });
+
+    if (!response.success) {
+      showToast({
+        message: `Failed to ban ${username}: ${response.error || 'Unknown error'}`,
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    showToast({
+      message: `${username} has been banned from this home instance.`,
+      tone: "success",
+      category: "destructive",
+    });
+    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+    setSelectedContextUser(null);
+  };
+
   // Message input handlers
+  const canSendMessage =
+    Boolean(selectedChannel) &&
+    !isSendingMessage &&
+    (Boolean(messageInput.trim()) || messageAttachments.length > 0);
+
   const handleSendMessage = async () => {
     const trimmedMessage = messageInput.trim();
+    const outgoingMessage = buildReplyMessage(trimmedMessage || '', replyTarget);
 
     // Require either a message or attachments
     const hasContent = trimmedMessage || messageAttachments.length > 0;
@@ -1674,7 +2046,10 @@ export default function Dashboard() {
 
     // Validate message for security and length if present
     if (trimmedMessage) {
-      const validationResult = validateMessageInput(trimmedMessage, maxMessageLength);
+      const validationResult = validateMessageInput(
+        trimmedMessage,
+        uploadPolicy.maxMessageLength ?? Number.MAX_SAFE_INTEGER,
+      );
       if (!validationResult.isValid) {
         showToast({
           message: validationResult.error || "Invalid message content.",
@@ -1694,55 +2069,61 @@ export default function Dashboard() {
     }
 
     try {
-      console.log('Sending message:', {
+      setIsSendingMessage(true);
+      logger.ui.debug('Sending message', {
         channelId: selectedChannel.channel_id,
-        message: trimmedMessage,
+        messageLength: outgoingMessage.length,
         attachments: messageAttachments.length,
-        authToken: authToken.substring(0, 20) + '...'
+        isReply: Boolean(replyTarget),
       });
 
       // Send via REST API (attachments require multipart/form-data)
       const messageData = {
-        content: trimmedMessage || '', // Empty string if only attachments
+        content: outgoingMessage || '', // Empty string if only attachments
+        sentAt: new Date().toISOString(),
         attachments: messageAttachments.length > 0 ? messageAttachments : undefined
       };
 
-      const hostPort = getHostPortFromStorage() || 'localhost:7575';
+      const resolvedInstance =
+        resolveStoredInstance(getHostPortFromStorage()) ??
+        resolveStoredInstance(getHostPortFromCookies());
+      if (!resolvedInstance) {
+        throw new Error('No home instance configured');
+      }
       const { sendMessage: sendMessageWithAttachments } = await import('../../services/message');
 
-      const response = await sendMessageWithAttachments(hostPort, selectedChannel.channel_id, messageData, authToken);
-      console.log('Send message response:', response);
+      const response = await sendMessageWithAttachments(
+        resolvedInstance.raw,
+        selectedChannel.channel_id,
+        messageData,
+        authToken,
+      );
+      logger.ui.debug('Send message response received', {
+        channelId: selectedChannel.channel_id,
+        success: response.success,
+        hasError: Boolean(response.error),
+      });
 
       if (response.success) {
         logger.ui.info("Message sent successfully", {
           channelId: selectedChannel.channel_id,
-          messageLength: trimmedMessage.length,
+          messageLength: outgoingMessage.length,
           attachmentCount: messageAttachments.length
         });
 
         // Clear input, draft, and attachments
+        cancelPendingDraftPersistence();
         setMessageInput('');
         setMessageAttachments([]);
+        setReplyTarget(null);
         if (selectedChannel) {
           clearMessageDraft(selectedChannel.channel_id);
         }
 
-        // Add the message to the UI immediately (optimistic update)
-        const tempMessage: Message = {
-          message_id: `temp-${Date.now()}`,
-          sender_user_id: currentUser?.user_id || '',
-          message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`, // Display text for attachment-only messages
-          hashed_message: trimmedMessage || `${messageAttachments.length} attachment${messageAttachments.length > 1 ? 's' : ''}`,
-          sent_at: new Date().toISOString(),
-          channel_id: selectedChannel.channel_id,
-          attachments: messageAttachments.length > 0 ? messageAttachments.map(file => ({
-            url: URL.createObjectURL(file),
-            filename: file.name,
-            type: file.type || 'application/octet-stream',
-            size: file.size
-          })) : [] // Create proper MessageAttachment objects for immediate display
-        };
-        setMessages(prevMessages => [...prevMessages, tempMessage]);
+        const createdMessage = response.data?.message_data;
+        if (createdMessage) {
+          appendUniqueMessage(createdMessage);
+        }
 
       } else {
         logger.ui.error("Failed to send message", { error: response.error });
@@ -1759,6 +2140,8 @@ export default function Dashboard() {
         tone: "error",
         category: "system",
       });
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -1787,36 +2170,32 @@ export default function Dashboard() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // Exploitable file extensions to reject
-    const dangerousExtensions = [
-      // Executables
-      'exe', 'bat', 'cmd', 'scr', 'pif', 'com', 'msi', 'jar', 'app',
-      // Scripts
-      'vbs', 'js', 'jse', 'wsf', 'wsh', 'ps1', 'psm1', 'psd1', 'psc1',
-      // Web files that could contain scripts
-      'html', 'htm', 'xhtml', 'shtml', 'xml', 'svg',
-      // Archives that might contain executables
-      'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz',
-      // Other potentially dangerous
-      'reg', 'inf', 'url', 'lnk', 'scf', 'shb', 'shs'
-    ];
-
     const attachments: File[] = [];
-    const maxTotalSize = 50 * 1024 * 1024; // 50MB total for all attachments
-    let totalSize = 0;
+    const existingTotalSize = messageAttachments.reduce((sum, attachment) => sum + attachment.size, 0);
+    let nextTotalSize = existingTotalSize;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const extension = file.name.split('.').pop()?.toLowerCase();
+      const extension = file.name.split('.').pop()?.toLowerCase().replace(/^\./, '') || '';
+      const category = getAttachmentCategory(file, uploadPolicy);
+      const allowedExtensions =
+        category === 'image'
+          ? uploadPolicy.imageExtensions
+          : category === 'video'
+            ? uploadPolicy.videoExtensions
+            : category === 'audio'
+              ? uploadPolicy.audioExtensions
+              : uploadPolicy.fileExtensions;
+      const maxSizeMb = uploadPolicy.maxSizesByCategory[category];
 
-      if (extension && dangerousExtensions.includes(extension)) {
+      if (allowedExtensions.length > 0 && !allowedExtensions.includes(extension)) {
         logger.ui.warn("Rejected dangerous file upload", {
           fileName: file.name,
           extension,
-          reason: "potentially exploitable file type"
+          reason: "extension blocked by instance policy",
         });
         showToast({
-          message: `File "${file.name}" cannot be uploaded. This file type is not allowed for security reasons.`,
+          message: `File "${file.name}" is not allowed by this instance.`,
           tone: "error",
           category: "validation",
         });
@@ -1824,16 +2203,15 @@ export default function Dashboard() {
         return;
       }
 
-      // Check individual file size (limit to 10MB per file)
-      const maxSize = 100 * 1024 * 1024; // 10MB
-      if (file.size > maxSize) {
+      if (maxSizeMb && file.size > maxSizeMb * 1024 * 1024) {
         logger.ui.warn("Rejected large file upload", {
           fileName: file.name,
           fileSize: file.size,
-          maxSize
+          maxSizeMb,
+          category,
         });
         showToast({
-          message: `File "${file.name}" is too large. Maximum file size is 10MB per file.`,
+          message: `File "${file.name}" is too large for this instance. Maximum ${category} size is ${maxSizeMb}MB.`,
           tone: "error",
           category: "validation",
         });
@@ -1841,24 +2219,25 @@ export default function Dashboard() {
         return;
       }
 
-      // Check total size
-      totalSize += file.size;
+      nextTotalSize += file.size;
+      if (
+        uploadPolicy.maxTotalAttachmentSizeMb &&
+        nextTotalSize > uploadPolicy.maxTotalAttachmentSizeMb * 1024 * 1024
+      ) {
+        logger.ui.warn("Rejected attachments - total size too large", {
+          totalSize: nextTotalSize,
+          maxTotalSizeMb: uploadPolicy.maxTotalAttachmentSizeMb,
+        });
+        showToast({
+          message: `Combined attachment size exceeds this instance limit of ${uploadPolicy.maxTotalAttachmentSizeMb}MB.`,
+          tone: "error",
+          category: "validation",
+        });
+        event.target.value = '';
+        return;
+      }
 
       attachments.push(file);
-    }
-
-    if (totalSize > maxTotalSize) {
-      logger.ui.warn("Rejected attachments - total size too large", {
-        totalSize,
-        maxTotalSize
-      });
-      showToast({
-        message: "Total attachment size is too large. Maximum total size is 50MB.",
-        tone: "error",
-        category: "validation",
-      });
-      event.target.value = '';
-      return;
     }
 
     // Add new attachments to existing ones
@@ -1867,7 +2246,7 @@ export default function Dashboard() {
     logger.ui.info("Attachments added to message", {
       count: attachments.length,
       fileNames: attachments.map(f => f.name),
-      totalSize
+      totalSize: nextTotalSize
     });
 
     // Clear the input so same files can be selected again if needed
@@ -1911,16 +2290,16 @@ export default function Dashboard() {
     const loadingUser: DisplayUser = {
       id: userId,
       username: username,
-      avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
+      avatar: createFallbackAvatarUrl(username),
       banner: undefined,
-      accentColor: '#8b5cf6',
+      accentColor: 'var(--color-accent)',
       bannerColor: undefined,
       customStatus: 'Loading...',
       externalLinks: [],
       status: 'idle', // Show as idle while loading
       bio: 'Loading user information...',
       joinedAt: '',
-      originServer: serverInfo?.server_name || 'Pufferblow Server',
+      originServer: serverInfo?.server_name || 'Pufferblow Home Instance',
       roles: ['Member'],
       activity: {
         type: 'playing' as const,
@@ -1949,10 +2328,10 @@ export default function Dashboard() {
         const displayUser: DisplayUser = {
           id: userData.user_id || userId,
           username: displayedUsername,
-          avatar: userData.avatar_url ? createFullUrl(userData.avatar_url) || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(displayedUsername)}&backgroundColor=5865f2` : `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(displayedUsername)}&backgroundColor=5865f2`,
+          avatar: userData.avatar_url ? createFullUrl(userData.avatar_url) || createFallbackAvatarUrl(displayedUsername) : createFallbackAvatarUrl(displayedUsername),
           banner: userData.banner_url ? createFullUrl(userData.banner_url) : undefined,
-          accentColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
-          bannerColor: userData.roles_ids?.includes('owner') ? '#22d3ee' : userData.roles_ids?.includes('admin') ? '#ef4444' : '#8b5cf6',
+          accentColor: getUserAccentColor(userData.roles_ids),
+          bannerColor: getUserAccentColor(userData.roles_ids),
           customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
           externalLinks: [], // Would be loaded from user preferences/settings in real implementation
           status: (
@@ -1962,9 +2341,9 @@ export default function Dashboard() {
             userData.status === 'dnd' ||
             userData.status === 'offline'
           ) ? userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline' : 'offline',
-          bio: userData.about || `Active member of the server.`,
+          bio: userData.about || 'Active member of this home instance community.',
           joinedAt: userData.created_at || '',
-          originServer: userData.origin_server || serverInfo?.server_name || 'Pufferblow Server',
+          originServer: userData.origin_server || serverInfo?.server_name || 'Pufferblow Home Instance',
           roles: getUserRoles(userData.roles_ids).map(role => role.toString()),
           activity: undefined, // Could be extended later
           mutualServers: undefined, // Could be calculated later
@@ -1979,22 +2358,22 @@ export default function Dashboard() {
         throw new Error(response.error || 'Failed to fetch user profile');
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      logger.ui.error('Error fetching user profile', { error: error instanceof Error ? error.message : String(error), userId });
 
       // Show error in tooltip instead of toast (which might trigger more redirects)
       const errorUser: DisplayUser = {
         id: userId,
         username: username,
-        avatar: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(username)}&backgroundColor=5865f2`,
+        avatar: createFallbackAvatarUrl(username),
         banner: undefined,
-        accentColor: '#ef4444', // Red accent for error
+        accentColor: 'var(--color-error)',
         bannerColor: undefined,
         customStatus: 'Error Loading',
         externalLinks: [],
         status: 'offline',
         bio: 'Failed to load user information. Please try again later.',
         joinedAt: '',
-        originServer: serverInfo?.server_name || 'Pufferblow Server',
+        originServer: serverInfo?.server_name || 'Pufferblow Home Instance',
         roles: ['Member'],
         activity: {
           type: 'playing' as const,
@@ -2053,8 +2432,11 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Add Server Button */}
-            <AddServerButton disabled />
+            <AddServerButton
+              disabled
+              title="Additional home instances are not available in this build"
+              ariaLabel="Additional home instances are not available in this build"
+            />
           </div>
 
           {/* Channel Sidebar */}
@@ -2069,7 +2451,7 @@ export default function Dashboard() {
                     alt={`${serverInfo.server_name} banner`}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-[color:color-mix(in_srgb,var(--color-background)_80%,transparent)] via-[color:color-mix(in_srgb,var(--color-background)_34%,transparent)] to-transparent"></div>
                 </div>
               )}
 
@@ -2093,8 +2475,8 @@ export default function Dashboard() {
                           ? "border-[var(--color-border)] bg-[var(--color-active)] text-[var(--color-text)]"
                           : "border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
                       }`}
-                      title="Server options"
-                      aria-label="Server options"
+                      title="Home instance options"
+                      aria-label="Home instance options"
                       aria-expanded={serverDropdownOpen}
                       aria-haspopup="menu"
                     >
@@ -2115,21 +2497,26 @@ export default function Dashboard() {
                           <p className="truncate text-sm font-semibold text-[var(--color-text)]">
                             {serverInfo?.server_name || "Server"}
                           </p>
-                          <p className="text-xs text-[var(--color-text-secondary)]">Server actions</p>
+                          <p className="text-xs text-[var(--color-text-secondary)]">Home instance actions</p>
                         </div>
 
                         <button
                           onClick={() => {
-                            console.log("Server Info clicked");
+                            showToast({
+                              message:
+                                "Home instance details live in the control panel and settings.",
+                              tone: "warning",
+                              category: "info",
+                            });
                             setServerDropdownOpen(false);
                           }}
                           className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
-                          title="View server information"
+                          title="View home instance information"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <span className="font-medium">Server Info</span>
+                          <span className="font-medium">Instance Info</span>
                         </button>
 
                         <button
@@ -2137,7 +2524,7 @@ export default function Dashboard() {
                             if (!canCreateInvite) {
                               return;
                             }
-                            setInviteModalOpen(true);
+                            handleInviteActionUnavailable();
                             setServerDropdownOpen(false);
                           }}
                           disabled={!canCreateInvite}
@@ -2148,15 +2535,15 @@ export default function Dashboard() {
                           }`}
                           title={
                             canCreateInvite
-                              ? "Create invite code"
+                              ? "Invite creation is not available on this single-instance build"
                               : "Only admins, moderators, and owners can create invite codes"
                           }
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          <span className="font-medium">Create Invite</span>
-                        </button>
+                            <span className="font-medium">Invites Unavailable</span>
+                          </button>
 
                         <Link
                           to="/control-panel"
@@ -2195,7 +2582,12 @@ export default function Dashboard() {
                             }
                             const confirmed = window.confirm("Are you sure you want to delete this server? This action cannot be undone.");
                             if (confirmed) {
-                              console.log("Delete Server confirmed");
+                              showToast({
+                                message:
+                                  "Home instance deletion is unavailable. This client is connected to one home instance, and deleting it is not supported here.",
+                                tone: "warning",
+                                category: "system",
+                              });
                             }
                             setServerDropdownOpen(false);
                           }}
@@ -2205,12 +2597,16 @@ export default function Dashboard() {
                               ? "text-[var(--color-error)] hover:bg-[var(--color-error)]/12"
                               : "cursor-not-allowed text-[var(--color-text-muted)] opacity-60"
                           }`}
-                          title={canDeleteServer ? "Delete this server" : "Only server owner can delete the server"}
+                          title={
+                            canDeleteServer
+                              ? "Delete this server"
+                              : "Home instance deletion is not available on this single-instance build"
+                          }
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                          <span className="font-medium">Delete Server</span>
+                          <span className="font-medium">Delete Unavailable</span>
                         </button>
                       </div>
                     )}
@@ -2225,17 +2621,17 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center justify-center min-h-96 px-6 py-12">
                   <div className="relative">
                     {/* Background Glow */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-full blur-xl scale-150"></div>
+                    <div className="absolute inset-0 scale-150 rounded-full bg-gradient-to-br from-[var(--color-error)]/20 to-[var(--color-warning)]/20 blur-xl"></div>
 
                     {/* Main Icon Container */}
-                    <div className="relative w-20 h-20 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl shadow-2xl flex items-center justify-center mb-6 transform rotate-3 hover:rotate-0 transition-transform duration-300">
+                    <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--color-error)] to-[color:color-mix(in_srgb,var(--color-error)_78%,var(--color-background))] shadow-2xl transition-transform duration-300 transform rotate-3 hover:rotate-0">
                       <svg className="w-10 h-10 text-[var(--color-on-error)] drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
 
                       {/* Decorative Elements */}
-                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
-                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full"></div>
+                      <div className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-[var(--color-warning)] animate-ping"></div>
+                      <div className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-[var(--color-warning)]"></div>
                     </div>
                   </div>
 
@@ -2293,6 +2689,7 @@ export default function Dashboard() {
                               channelId={channel.channel_id}
                               channelName={channel.channel_name}
                               isConnected={currentVoiceChannel?.channelId === channel.channel_id}
+                              mediaQuality={serverInfo?.rtc_media_quality ?? null}
                               onToggleConnection={() => {
                                 // Intentionally lightweight; source of truth comes from onConnectionStateChange.
                               }}
@@ -2316,6 +2713,7 @@ export default function Dashboard() {
 
                         // Render text channels normally
                         const hasDraft = getMessageDraft(channel.channel_id).trim().length > 0;
+                        const unreadCount = unreadCountsByChannel[channel.channel_id] || 0;
                         return (
                           <div
                             key={channel.channel_id}
@@ -2327,6 +2725,11 @@ export default function Dashboard() {
                             <span className="text-[var(--color-text-secondary)] mr-2">#</span>
                             <span className="text-[var(--color-text-secondary)] text-sm break-words overflow-wrap-anywhere flex-1">{channel.channel_name}</span>
                             <div className="flex items-center ml-auto">
+                              {unreadCount > 0 && (
+                                <span className="mr-1 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-on-primary)]">
+                                  {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                              )}
                               {hasDraft && (
                                 <div className="flex items-center mr-1" title="Has unsent message">
                                   <svg className="w-3 h-3 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2357,13 +2760,10 @@ export default function Dashboard() {
             <UserPanel
               username={currentUser.username || ''}
               avatar={currentUser.avatar || ''}
-              status={currentUser.status === 'idle' ? 'idle' :
-                currentUser.status === 'afk' ? 'idle' :
-                currentUser.status === 'dnd' ? 'dnd' :
-                currentUser.status === 'online' ? 'online' :
-                  'offline'}
+              status={currentUserLiveStatus}
               onSettingsClick={() => navigate('/settings')}
               onDeviceSelectorClick={() => setDeviceSelectorModalOpen(true)}
+              onStatusChange={handleStatusChange}
               onClick={(e) => handleUserClick(currentUser.user_id, currentUser.username, e, 'userpanel')}
               className="w-full"
               voiceChannel={currentVoiceChannel ? {
@@ -2389,6 +2789,41 @@ export default function Dashboard() {
             <div className="ml-2 text-[var(--color-text-muted)] text-xs uppercase tracking-wide">channel</div>
           </div>
           <div className="flex items-center space-x-2">
+            <div className="relative" ref={notificationMenuRef}>
+              <button
+                onClick={() => setNotificationMenuOpen((prev) => !prev)}
+                className="pb-icon-btn relative"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {notifications.length > 0 && (
+                  <span className="absolute -right-1 -top-1 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-on-primary)]">
+                    {notifications.length > 99 ? '99+' : notifications.length}
+                  </span>
+                )}
+              </button>
+              <NotificationMenu
+                notifications={notifications}
+                isOpen={notificationMenuOpen}
+                onClose={() => setNotificationMenuOpen(false)}
+                onSelect={handleNotificationSelect}
+                onMarkAllRead={handleMarkAllNotificationsRead}
+                browserNotificationPermission={browserNotificationPermission}
+                onEnableBrowserNotifications={handleEnableBrowserNotifications}
+              />
+            </div>
+            {unreadMarker?.channelId === selectedChannel?.channel_id && (
+              <button
+                onClick={handleJumpToFirstUnread}
+                className="rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/12 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/18"
+                title="Jump to first unread message"
+              >
+                Jump to unread
+              </button>
+            )}
             <button className="pb-icon-btn" title="User details" aria-label="User details">
               <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -2442,15 +2877,16 @@ export default function Dashboard() {
 
                 let messageUser: DisplayUser;
                 if (foundUser) {
+                  const foundUserRoleNames = getResolvedRoleNames(foundUser);
                   // Convert API user format to DisplayUser format
                   messageUser = {
                     id: foundUser.user_id,
                     username: foundUser.username,
-                    avatar: foundUser.username ? `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(foundUser.username)}&backgroundColor=5865f2` : undefined,
+                    avatar: foundUser.username ? createFallbackAvatarUrl(foundUser.username) : undefined,
                     banner: undefined, // Could be extended from API later
-                    accentColor: foundUser.is_owner ? '#22d3ee' : foundUser.is_admin ? '#ef4444' : '#8b5cf6',
-                    bannerColor: foundUser.is_owner ? '#22d3ee' : foundUser.is_admin ? '#ef4444' : '#8b5cf6',
-                    customStatus: foundUser.is_owner ? 'Server Owner' : foundUser.is_admin ? 'Administrator' : 'Active Member',
+                    accentColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
+                    bannerColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
+                    customStatus: foundUserRoleNames[0] || 'Active Member',
                     externalLinks: [], // Would be loaded from user preferences/settings in real implementation
                     status: (
                       foundUser.status === 'online' ||
@@ -2461,10 +2897,10 @@ export default function Dashboard() {
                     )
                       ? foundUser.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline'
                       : 'offline',
-                    bio: `Member of ${serverInfo?.server_name || 'Pufferblow Server'} since ${new Date(foundUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
+                    bio: `Member of ${serverInfo?.server_name || 'Pufferblow Home Instance'} since ${new Date(foundUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
                     joinedAt: foundUser.created_at,
-                    originServer: serverInfo?.server_name || 'Pufferblow Server',
-                    roles: foundUser.is_owner ? ['Owner', 'Admin'] : foundUser.is_admin ? ['Admin'] : ['Member'],
+                    originServer: serverInfo?.server_name || 'Pufferblow Home Instance',
+                    roles: foundUserRoleNames,
                     activity: undefined, // Could be extended later
                     mutualServers: undefined, // Could be calculated later
                     mutualFriends: undefined, // Could be extended later
@@ -2475,9 +2911,9 @@ export default function Dashboard() {
                   messageUser = {
                     id: firstMessage.sender_user_id,
                     username: firstMessage.username || 'Unknown User',
-                    avatar: firstMessage.sender_avatar_url ? createFullUrl(firstMessage.sender_avatar_url) : `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(firstMessage.username || firstMessage.sender_user_id)}&backgroundColor=5865f2`,
+                    avatar: firstMessage.sender_avatar_url ? createFullUrl(firstMessage.sender_avatar_url) : createFallbackAvatarUrl(firstMessage.username || firstMessage.sender_user_id),
                     banner: undefined,
-                    accentColor: '#8b5cf6',
+                    accentColor: 'var(--color-accent)',
                     bannerColor: undefined,
                     customStatus: 'Member',
                     externalLinks: [],
@@ -2487,9 +2923,9 @@ export default function Dashboard() {
                       firstMessage.sender_status === 'afk' ||
                       firstMessage.sender_status === 'dnd'
                     ) ? firstMessage.sender_status as 'online' | 'idle' | 'afk' | 'dnd' : 'offline',
-                    bio: 'Active member of the server',
+                    bio: 'Active member of this home instance community',
                     joinedAt: '',
-                    originServer: serverInfo?.server_name || 'Pufferblow Server',
+                    originServer: serverInfo?.server_name || 'Pufferblow Home Instance',
                     roles: firstMessage.sender_roles ? ['Member'] : [], // Use sender_roles if available
                     activity: undefined,
                     mutualServers: undefined,
@@ -2503,8 +2939,18 @@ export default function Dashboard() {
                 const displayAvatar = messageUser.avatar || firstMessage.sender_avatar_url || '/pufferblow-art-pixel-32x32.png';
 
               return (
+                <React.Fragment key={firstMessage.message_id}>
+                  {unreadMarker?.channelId === selectedChannel?.channel_id &&
+                    group.some((message) => message.message_id === unreadMarker?.messageId) && (
+                      <div ref={unreadDividerRef} className="flex items-center gap-3 px-2 py-2">
+                        <div className="h-px flex-1 bg-[var(--color-border)]" />
+                        <div className="rounded-full border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-primary)]">
+                          New messages
+                        </div>
+                        <div className="h-px flex-1 bg-[var(--color-border)]" />
+                      </div>
+                    )}
                   <div
-                    key={firstMessage.message_id}
                     className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${firstMessage.sender_user_id === currentUser?.user_id
                         ? 'bg-[var(--color-primary)]/20 border-l-4 border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]/30'
                         : ''
@@ -2520,6 +2966,7 @@ export default function Dashboard() {
                         alt={displayName}
                         className="w-full h-full rounded-full cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
+                        onContextMenu={(e) => openUserContextMenu(firstMessage.sender_user_id, displayName, e, 'messages')}
                       />
                     </div>
                     <div className="flex-1">
@@ -2528,6 +2975,7 @@ export default function Dashboard() {
                         <span
                           className="text-[var(--color-text)] font-medium select-text cursor-pointer hover:underline"
                           onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
+                          onContextMenu={(e) => openUserContextMenu(firstMessage.sender_user_id, displayName, e, 'messages')}
                         >
                           {displayName}
                         </span>
@@ -2545,6 +2993,7 @@ export default function Dashboard() {
                         {group.map((message) => (
                           <div key={message.message_id}>
                             <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                            <MessageEmbeds content={message.message} />
 
                             {/* Render attachments with Discord-style bubble layout */}
                             {message.attachments && message.attachments.length > 0 && (
@@ -2577,6 +3026,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
+                </React.Fragment>
               );
             })
           )}
@@ -2584,28 +3034,68 @@ export default function Dashboard() {
 
         {/* Message Input */}
         <div className="p-4">
+          {replyTarget && (
+            <div className="mb-3 flex items-start justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                  Replying to {replyTarget.username || usersById.get(replyTarget.sender_user_id)?.username || 'Unknown User'}
+                </div>
+                <div className="mt-1 line-clamp-2 text-sm text-[var(--color-text-muted)]">
+                  {replyTarget.message || 'Attachment-only message'}
+                </div>
+              </div>
+              <button
+                onClick={() => setReplyTarget(null)}
+                className="ml-4 rounded-md p-1 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                title="Cancel reply"
+                aria-label="Cancel reply"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {/* Attachments Preview */}
           {messageAttachments.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
-              {messageAttachments.map((file, index) => (
+              {composerAttachmentPreviews.map((preview, index) => (
                 <div
                   key={index}
                   className="relative bg-[var(--color-surface-secondary)] rounded-lg p-3 border border-[var(--color-border)] group hover:border-[var(--color-border)] transition-colors"
                 >
                   {/* File content preview */}
-                  {file.type.startsWith('image/') ? (
+                  {preview.kind === 'image' && preview.url ? (
                     <div className="flex flex-col items-center space-y-2">
                       <img
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
+                        src={preview.url}
+                        alt={preview.file.name}
                         className="max-w-24 max-h-24 object-cover rounded"
                       />
                       <div className="text-center">
-                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={file.name}>
-                          {file.name}
+                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={preview.file.name}>
+                          {preview.file.name}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)]">
-                          {(file.size / (1024 * 1024)).toFixed(1)}MB
+                          {(preview.file.size / (1024 * 1024)).toFixed(1)}MB
+                        </p>
+                      </div>
+                    </div>
+                  ) : preview.kind === 'video' && preview.url ? (
+                    <div className="flex flex-col items-center space-y-2">
+                      <video
+                        src={preview.url}
+                        className="max-w-24 max-h-24 rounded object-cover"
+                        muted
+                        preload="metadata"
+                      />
+                      <div className="text-center">
+                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={preview.file.name}>
+                          {preview.file.name}
+                        </p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">
+                          {(preview.file.size / (1024 * 1024)).toFixed(1)}MB • Video
                         </p>
                       </div>
                     </div>
@@ -2615,11 +3105,11 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
-                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={file.name}>
-                          {file.name}
+                        <p className="text-xs text-[var(--color-text)] font-medium truncate max-w-24" title={preview.file.name}>
+                          {preview.file.name}
                         </p>
                         <p className="text-xs text-[var(--color-text-secondary)]">
-                          {(file.size / (1024 * 1024)).toFixed(1)}MB â€¢ {file.type || 'Unknown type'}
+                          {(preview.file.size / (1024 * 1024)).toFixed(1)}MB • {preview.file.type || 'Unknown type'}
                         </p>
                       </div>
                     </div>
@@ -2650,63 +3140,59 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div
-            ref={messageInputBarRef}
-            className={`relative bg-[var(--color-surface-secondary)]/90 backdrop-blur-md border border-[var(--color-border)] rounded-2xl px-6 py-4 shadow-xl transition-all duration-300 hover:bg-[var(--color-surface-secondary)] ${
-              !selectedChannel ? 'opacity-50 pointer-events-none' : ''
-            }`}
-          >
-            <div className="flex items-end space-x-3">
+            <div
+              ref={messageInputBarRef}
+              className={`relative bg-[var(--color-surface-secondary)]/90 backdrop-blur-md border border-[var(--color-border)] rounded-2xl px-6 py-4 shadow-xl transition-all duration-300 hover:bg-[var(--color-surface-secondary)] ${
+                !selectedChannel ? 'opacity-50 pointer-events-none' : ''
+              }`}
+            >
+              <div className="flex items-end space-x-3">
               {/* Hidden File Input */}
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
                 onChange={handleFileUpload}
-                disabled={!selectedChannel}
+                disabled={!selectedChannel || isSendingMessage}
                 className="hidden"
-                accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx"
+                accept={uploadPolicy.acceptAttribute}
               />
 
               {/* File Upload Button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-                disabled={!selectedChannel}
-                title="Upload file"
-                aria-label="Upload file"
-              >
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+                  disabled={!selectedChannel || isSendingMessage}
+                  title="Upload file"
+                  aria-label="Upload file"
+                >
                 <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
               </button>
 
               {/* Message Input */}
-              <div className="flex-1 min-h-0">
-                <textarea
-                  ref={messageInputRef}
-                  value={messageInput}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setMessageInput(newValue);
-                    // Save draft when typing if we have a selected channel
-                    if (selectedChannel) {
-                      setMessageDraft(selectedChannel.channel_id, newValue);
-                    }
-                  }}
-                  onKeyDown={handleKeyPress}
-                  placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
-                  disabled={!selectedChannel}
-                  className="w-full bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
-                  rows={1}
-                />
-              </div>
+                <div className="flex-1 min-h-0">
+                  <textarea
+                    ref={messageInputRef}
+                    value={messageInput}
+                    onChange={(e) => {
+                      setMessageInput(e.target.value);
+                    }}
+                    onBlur={flushPendingDraftPersistence}
+                    onKeyDown={handleKeyPress}
+                    placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
+                    disabled={!selectedChannel || isSendingMessage}
+                    className="w-full bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+                    rows={1}
+                  />
+                </div>
 
               {/* Emoji Button */}
-              <button
-                onClick={handleEmojiClick}
-                disabled={!selectedChannel}
-                className={`pb-icon-btn ${isEmojiPickerOpen
+                <button
+                  onClick={handleEmojiClick}
+                  disabled={!selectedChannel || isSendingMessage}
+                  className={`pb-icon-btn ${isEmojiPickerOpen
                     ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]'
                     : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
                   }`}
@@ -2718,21 +3204,40 @@ export default function Dashboard() {
                 </svg>
               </button>
 
-              {/* Send Button - Only show when message has content */}
-              {messageInput.trim() && selectedChannel && (
                 <button
                   onClick={handleSendMessage}
-                  className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] transition-all duration-300 animate-in slide-in-from-left-4 fade-in"
-                  title="Send message"
+                  disabled={!canSendMessage}
+                  className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--color-primary)]"
+                  title={canSendMessage ? "Send message" : "Type a message or add an attachment"}
                   aria-label="Send message"
                 >
-                  <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
+                  {isSendingMessage ? (
+                    <span className="px-1 text-xs font-medium">Sending...</span>
+                  ) : (
+                    <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  )}
                 </button>
-              )}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{selectedChannel ? 'Enter to send' : 'Select a channel to start typing'}</span>
+                  {selectedChannel && <span>Shift+Enter for newline</span>}
+                  {composerAttachmentSummary.count > 0 && (
+                    <span>
+                      {composerAttachmentSummary.count} attachment{composerAttachmentSummary.count === 1 ? '' : 's'} • {composerAttachmentSummary.formattedSize}
+                    </span>
+                  )}
+                </div>
+                {selectedChannel && (
+                  <span>
+                    {messageInput.trim().length}
+                    {uploadPolicy.maxMessageLength ? `/${uploadPolicy.maxMessageLength}` : ''}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
 
 
 
@@ -2768,12 +3273,12 @@ export default function Dashboard() {
           <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
             {usersError ? (
               <div className="p-4">
-                <div className="w-16 h-16 mx-auto mb-4 bg-red-600 rounded-full flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)]">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
                   </svg>
                 </div>
-                <p className="text-center text-lg font-medium mb-2 text-red-400">Failed to load members</p>
+                <p className="mb-2 text-center text-lg font-medium text-[var(--color-error)]">Failed to load members</p>
                 <p className="text-center text-[var(--color-text-muted)] mb-4">{usersError}</p>
                 <div className="text-center">
                   <button
@@ -2797,13 +3302,21 @@ export default function Dashboard() {
             ) : (
               <div className="p-4 space-y-4">
                 {(() => {
-                  // Group users by role
-                  const owners = users.filter(user => user.is_owner);
-                  const admins = users.filter(user => user.is_admin && !user.is_owner);
-                  const moderators: typeof users = []; // No moderator role defined in API
-                  const members = users.filter(user => !user.is_owner && !user.is_admin);
+                  const roleGroupPriority = ['Server Owner', 'Administrator', 'Moderator', 'Regular User', 'Member'];
+                  const groupedUsers = users.reduce((acc, user) => {
+                    const roleNames = getResolvedRoleNames(user);
+                    const groupTitle =
+                      roleGroupPriority.find((roleName) => roleNames.includes(roleName)) ||
+                      roleNames[0] ||
+                      'Member';
+                    if (!acc[groupTitle]) {
+                      acc[groupTitle] = [];
+                    }
+                    acc[groupTitle].push(user);
+                    return acc;
+                  }, {} as Record<string, typeof users>);
 
-                  const renderUserGroup = (title: string, userList: typeof users, roleColor: string, roleLabel: string) => {
+                  const renderUserGroup = (title: string, userList: typeof users) => {
                     if (userList.length === 0) return null;
 
                     return (
@@ -2818,9 +3331,9 @@ export default function Dashboard() {
                               userId={user.user_id}
                               username={user.username}
                               status={user.status}
-                              isOwner={user.is_owner}
-                              isAdmin={user.is_admin}
+                              roleNames={getResolvedRoleNames(user)}
                               onClick={(e) => handleUserClick(user.user_id, user.username, e, 'members')}
+                              onContextMenu={(e) => openUserContextMenu(user.user_id, user.username, e, 'members')}
                             />
                           ))}
                         </div>
@@ -2828,14 +3341,9 @@ export default function Dashboard() {
                     );
                   };
 
-                  return (
-                    <>
-                      {renderUserGroup("Owner", owners, "red-300", "OWNER")}
-                      {renderUserGroup("Admin", admins, "red-300", "ADMIN")}
-                      {renderUserGroup("Moderators", moderators, "purple-300", "MOD")}
-                      {renderUserGroup("Members", members, "green-300", "MEMBER")}
-                    </>
-                  );
+                  return roleGroupPriority
+                    .filter((title) => groupedUsers[title]?.length)
+                    .map((title) => renderUserGroup(title, groupedUsers[title]));
                 })()}
               </div>
             )}
@@ -2846,12 +3354,6 @@ export default function Dashboard() {
 
 
       {/* Modals */}
-      <ServerCreationModal
-        isOpen={serverCreationModalOpen}
-        onClose={() => setServerCreationModalOpen(false)}
-        onCreateServer={handleCreateServer}
-      />
-
       <ChannelCreationModal
         isOpen={channelCreationModalOpen}
         onClose={() => setChannelCreationModalOpen(false)}
@@ -2863,14 +3365,6 @@ export default function Dashboard() {
         onClose={() => setSearchModalOpen(false)}
         onSearch={handleSearch}
         onSelectResult={handleSelectSearchResult}
-      />
-
-      <InviteModal
-        isOpen={inviteModalOpen}
-        onClose={() => setInviteModalOpen(false)}
-        serverName={serverInfo?.server_name || 'General Server'}
-        onGenerateInvite={handleGenerateInvite}
-        onCopyInvite={handleCopyInvite}
       />
 
       <MessageContextMenu
@@ -2912,7 +3406,48 @@ export default function Dashboard() {
       <UserContextMenu
         isOpen={userContextMenu.isOpen}
         position={userContextMenu.position}
-        onClose={() => setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
+        onClose={() => {
+          setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+          setSelectedContextUser(null);
+        }}
+        onViewProfile={() => {
+          if (!selectedContextUser) return;
+          const anchorElement = selectedContextUser.anchorElement ?? referenceElement ?? document.body;
+          const syntheticEvent = {
+            preventDefault() {},
+            currentTarget: anchorElement,
+          } as unknown as React.MouseEvent;
+          handleUserClick(
+            selectedContextUser.userId,
+            selectedContextUser.username,
+            syntheticEvent,
+            selectedContextUser.source,
+          );
+          setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+        }}
+        onMention={() => {
+          if (!selectedContextUser) return;
+          handleMentionUser(selectedContextUser.username);
+        }}
+        onSendMessage={() => {
+          if (!selectedContextUser) return;
+          handleSendMessageToUser(selectedContextUser.userId);
+          setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+        }}
+        onReport={() => {
+          if (!selectedContextUser) return;
+          handleUserReport(selectedContextUser.userId, selectedContextUser.username);
+        }}
+        onTimeout={() => {
+          if (!selectedContextUser) return;
+          void handleUserTimeout(selectedContextUser.userId, selectedContextUser.username);
+        }}
+        onBan={() => {
+          if (!selectedContextUser) return;
+          void handleUserBan(selectedContextUser.userId, selectedContextUser.username);
+        }}
+        canTimeout={canTimeoutUsers && selectedContextUser?.userId !== currentUser?.user_id}
+        canBan={canBanUsers && selectedContextUser?.userId !== currentUser?.user_id}
       />
 
       <ContextMenu
@@ -2972,12 +3507,20 @@ export default function Dashboard() {
                 category: "destructive",
               });
 
-              try {
-                const listResponse = await listChannels(authToken);
-                if (listResponse.success && listResponse.data?.channels) {
-                  setChannels(listResponse.data.channels);
-                }
-              } catch {
+                try {
+                  const listResponse = await listChannels(authToken);
+                  if (listResponse.success && listResponse.data?.channels) {
+                    setChannels(listResponse.data.channels);
+                    if (selectedChannel?.channel_id === channel.channel_id) {
+                      const fallbackChannel = listResponse.data.channels[0] ?? null;
+                      setSelectedChannel(fallbackChannel);
+                      setMessages([]);
+                      if (fallbackChannel) {
+                        await loadChannelMessages(fallbackChannel);
+                      }
+                    }
+                  }
+                } catch {
                 showToast({
                   message: "Channel deleted but failed to refresh channel list. Please refresh the page.",
                   tone: "error",
@@ -3004,10 +3547,21 @@ export default function Dashboard() {
       />
 
       <MessageReportModal
-        isOpen={messageReportModal.isOpen}
-        onClose={() => setMessageReportModal({ isOpen: false, messages: [] })}
+        isOpen={reportModal.isOpen}
+        onClose={() => setReportModal({ isOpen: false, targetType: 'message', messages: [] })}
         onSubmit={handleMessageReportSubmit}
-        messageCount={messageReportModal.messages.length}
+        messageCount={reportModal.targetType === 'message' ? reportModal.messages.length : 1}
+        entityLabel={reportModal.targetType}
+        title={
+          reportModal.targetType === 'user' && reportModal.targetUsername
+            ? `Report ${reportModal.targetUsername}`
+            : undefined
+        }
+        description={
+          reportModal.targetType === 'user'
+            ? 'Help moderators review profile or behavior issues tied to this user.'
+            : 'Help keep the server safe by reporting policy violations.'
+        }
       />
 
       {/* User Card Tooltip */}
@@ -3042,7 +3596,7 @@ export default function Dashboard() {
             mutualFriends={userCardTooltipUser.mutualFriends || Math.floor(Math.random() * 25) + 1}
             badges={userCardTooltipUser.badges || ['Developer', 'Early Supporter'].slice(0, Math.floor(Math.random() * 3))}
             customStatus={userCardTooltipUser.customStatus}
-            accentColor={userCardTooltipUser.accentColor || '#5865f2'}
+            accentColor={userCardTooltipUser.accentColor || 'var(--color-accent)'}
             bannerColor={userCardTooltipUser.bannerColor}
             externalLinks={userCardTooltipUser.externalLinks || []}
             joinDate={userCardTooltipUser.joinedAt ? new Date(userCardTooltipUser.joinedAt).toISOString().split('T')[0] : undefined}

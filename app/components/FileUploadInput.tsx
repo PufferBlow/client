@@ -88,7 +88,7 @@ export function FileUploadInput({
           onClick={() => setActiveTab('file')}
           className={`flex-1 text-sm font-medium px-3 py-2 rounded-md transition-colors ${
             activeTab === 'file'
-              ? 'bg-[var(--color-primary)] text-white'
+              ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
               : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
           }`}
         >
@@ -99,7 +99,7 @@ export function FileUploadInput({
           onClick={() => setActiveTab('url')}
           className={`flex-1 text-sm font-medium px-3 py-2 rounded-md transition-colors ${
             activeTab === 'url'
-              ? 'bg-[var(--color-primary)] text-white'
+              ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
               : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
           }`}
         >
@@ -158,7 +158,7 @@ export function FileUploadInput({
             type="button"
             onClick={handleUrlSubmit}
             disabled={!urlInput.trim()}
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex justify-center rounded-md border border-transparent bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] shadow-sm transition-colors hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Apply URL
           </button>

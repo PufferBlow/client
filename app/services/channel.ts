@@ -1,6 +1,7 @@
 import type { ApiResponse } from './apiClient';
 import { createApiClient } from './apiClient';
 import type { Channel } from '../models';
+import type { RTCMediaQuality } from './system';
 
 export interface CreateChannelRequest {
   name: string;
@@ -22,6 +23,7 @@ export interface VoiceChannelJoinResponse {
   expires_at: string;
   participant_count: number;
   quality_profile: 'low' | 'balanced' | 'high';
+  media_quality?: RTCMediaQuality;
   backend: 'sfu_v2';
 }
 

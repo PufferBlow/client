@@ -98,6 +98,16 @@ export type {
   SearchResult
 } from './message';
 
+// Moderation and reporting services
+export {
+  submitMessageReport,
+  submitUserReport,
+  banUser,
+  unbanUser,
+  timeoutUser,
+  clearUserTimeout,
+} from './moderation';
+
 // WebSocket Real-time Messaging
 export {
   GlobalWebSocket,
@@ -139,6 +149,12 @@ export type {
 
 // ActivityPub and federated DM services
 export {
+  resolveActorHandle,
+  getActorDocument,
+  getActorOutbox,
+  followRemoteAccount,
+  sendFederatedDirectMessage,
+  loadFederatedDirectMessages,
   getWebFinger,
   getActivityPubActor,
   getActivityPubOutbox,

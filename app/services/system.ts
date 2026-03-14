@@ -147,11 +147,42 @@ export interface ServerInfo {
   max_video_size?: number;
   max_sticker_size?: number;
   max_gif_size?: number;
+  max_audio_size?: number;
+  max_file_size?: number;
+  max_total_attachment_size?: number;
   allowed_image_types?: string[];
   allowed_video_types?: string[];
   allowed_file_types?: string[];
   allowed_sticker_types?: string[];
   allowed_gif_types?: string[];
+  allowed_audio_types?: string[];
+  rtc_media_quality?: RTCMediaQuality;
+}
+
+export interface RTCProfileBitrate {
+  bitrate_kbps: number;
+}
+
+export interface RTCVideoProfile {
+  bitrate_kbps: number;
+  width: number;
+  height: number;
+  fps: number;
+}
+
+export interface RTCMediaQuality {
+  default_profile: 'low' | 'balanced' | 'high';
+  audio: {
+    sample_rate_hz: number;
+    channels: number;
+    stereo_enabled: boolean;
+    dtx_enabled: boolean;
+    fec_enabled: boolean;
+    profiles: Record<'low' | 'balanced' | 'high', RTCProfileBitrate>;
+  };
+  video: {
+    profiles: Record<'low' | 'balanced' | 'high', RTCVideoProfile>;
+  };
 }
 
 export interface UpdateServerInfoRequest {
@@ -161,6 +192,15 @@ export interface UpdateServerInfoRequest {
   is_private?: boolean;
   max_users?: number;
   max_message_length?: number;
+  max_image_size?: number;
+  max_video_size?: number;
+  max_sticker_size?: number;
+  max_gif_size?: number;
+  allowed_image_types?: string[];
+  allowed_video_types?: string[];
+  allowed_file_types?: string[];
+  allowed_sticker_types?: string[];
+  allowed_gif_types?: string[];
 }
 
 export const getServerInfo = async (): Promise<ApiResponse<{ status_code: number; server_info: ServerInfo }>> => {
@@ -189,6 +229,33 @@ export interface RuntimeConfigUpdateRequest {
   settings: Record<string, unknown>;
 }
 
+export interface InstancePrivilege {
+  privilege_id: string;
+  privilege_name: string;
+  category: string;
+}
+
+export interface InstanceRole {
+  role_id: string;
+  role_name: string;
+  privileges_ids: string[];
+  is_system: boolean;
+  user_count: number;
+}
+
+export interface CreateInstanceRoleRequest {
+  auth_token: string;
+  role_name: string;
+  privileges_ids: string[];
+}
+
+export interface UpdateInstanceRoleRequest extends CreateInstanceRoleRequest {}
+
+export interface UpdateUserRolesRequest {
+  auth_token: string;
+  roles_ids: string[];
+}
+
 // Runtime configuration functions
 export const getServerConfig = async (authToken: string, includeSecurity: boolean = false): Promise<ApiResponse<RuntimeConfigResponse>> => {
   const apiClient = createApiClient();
@@ -204,6 +271,42 @@ export const updateServerConfig = async (authToken: string, settings: Record<str
     auth_token: authToken,
     settings,
   });
+};
+
+export const listInstanceRoles = async (authToken: string): Promise<ApiResponse<{ status_code: number; roles: InstanceRole[] }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/roles/list', {
+    auth_token: authToken,
+  });
+};
+
+export const listInstancePrivileges = async (authToken: string): Promise<ApiResponse<{ status_code: number; privileges: InstancePrivilege[] }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/privileges/list', {
+    auth_token: authToken,
+  });
+};
+
+export const createInstanceRole = async (request: CreateInstanceRoleRequest): Promise<ApiResponse<{ status_code: number; message: string; role: InstanceRole }>> => {
+  const apiClient = createApiClient();
+  return apiClient.post('/api/v1/system/roles', request);
+};
+
+export const updateInstanceRole = async (roleId: string, request: UpdateInstanceRoleRequest): Promise<ApiResponse<{ status_code: number; message: string; role: InstanceRole }>> => {
+  const apiClient = createApiClient();
+  return apiClient.put(`/api/v1/system/roles/${encodeURIComponent(roleId)}`, request);
+};
+
+export const deleteInstanceRole = async (roleId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
+  const apiClient = createApiClient();
+  return apiClient.delete(`/api/v1/system/roles/${encodeURIComponent(roleId)}`, {
+    auth_token: authToken,
+  });
+};
+
+export const updateInstanceUserRoles = async (userId: string, request: UpdateUserRolesRequest): Promise<ApiResponse<{ status_code: number; message: string; user: { user_id: string; username: string; roles_ids: string[] } }>> => {
+  const apiClient = createApiClient();
+  return apiClient.put(`/api/v1/system/users/${encodeURIComponent(userId)}/roles`, request);
 };
 
 // File Upload functions for server avatar and banner

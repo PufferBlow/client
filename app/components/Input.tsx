@@ -130,7 +130,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     lg: 'px-4 py-3 text-lg',
   };
 
-  const errorClasses = error ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : '';
+  const errorClasses = error ? 'border-[var(--color-error)] focus:ring-[var(--color-error)] focus:border-[var(--color-error)]' : '';
   const widthClass = fullWidth ? 'w-full' : '';
 
   const inputClasses = [
@@ -216,7 +216,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       {error && (
         <p
           id={`${inputId}-error`}
-          className="mt-1 text-sm text-red-600"
+          className="mt-1 text-sm text-[var(--color-error)]"
           role="alert"
         >
           {error}

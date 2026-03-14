@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import type { RTCMediaQuality } from './system';
 
 const voiceLogger = logger.network;
 
@@ -21,6 +22,8 @@ export interface VoiceSessionBootstrap {
   join_token: string;
   signaling_url: string;
   ice_servers: IceServerConfig[];
+  quality_profile?: 'low' | 'balanced' | 'high';
+  media_quality?: RTCMediaQuality;
 }
 
 export interface VoiceParticipant {
@@ -64,6 +67,8 @@ export class VoiceTransport {
   private remoteAudioEls = new Map<string, HTMLAudioElement>();
   private isMuted = false;
   private isDeafened = false;
+  private activeQualityProfile: 'low' | 'balanced' | 'high' = 'balanced';
+  private mediaQuality: RTCMediaQuality | null = null;
 
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
@@ -107,17 +112,64 @@ export class VoiceTransport {
     return url.toString();
   }
 
+  private getActiveAudioProfile() {
+    const mediaQuality = this.mediaQuality;
+    const profileName = this.activeQualityProfile;
+    return mediaQuality?.audio.profiles?.[profileName];
+  }
+
   private async setupLocalAudio(): Promise<void> {
     if (this.localStream) return;
 
+    const audioSettings = this.mediaQuality?.audio;
     this.localStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        sampleRate: audioSettings?.sample_rate_hz,
+        channelCount: audioSettings?.stereo_enabled
+          ? Math.max(audioSettings.channels, 2)
+          : audioSettings?.channels,
       },
       video: false,
     });
+  }
+
+  private async applyAudioSenderQuality(pc: RTCPeerConnection): Promise<void> {
+    const activeProfile = this.getActiveAudioProfile();
+    if (!activeProfile) {
+      return;
+    }
+
+    const audioSenders = pc
+      .getSenders()
+      .filter((sender) => sender.track?.kind === 'audio');
+
+    await Promise.all(
+      audioSenders.map(async (sender) => {
+        try {
+          const parameters = sender.getParameters();
+          const encodings = parameters.encodings && parameters.encodings.length > 0
+            ? parameters.encodings
+            : [{}];
+
+          encodings[0] = {
+            ...encodings[0],
+            maxBitrate: activeProfile.bitrate_kbps * 1000,
+          };
+
+          await sender.setParameters({
+            ...parameters,
+            encodings,
+          });
+        } catch (error) {
+          voiceLogger.warn('Audio sender quality parameters were not applied', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })
+    );
   }
 
   private ensurePeerConnection(iceServers: IceServerConfig[]): RTCPeerConnection {
@@ -230,7 +282,15 @@ export class VoiceTransport {
       case 'participant_joined': {
         const userId = String(msg.payload?.user_id ?? '');
         if (userId) {
-          this.participants.set(userId, { user_id: userId });
+          const current = this.participants.get(userId);
+          this.participants.set(userId, {
+            user_id: userId,
+            username: String(msg.payload?.username ?? current?.username ?? ''),
+            is_muted: Boolean(msg.payload?.is_muted ?? current?.is_muted ?? false),
+            is_deafened: Boolean(msg.payload?.is_deafened ?? current?.is_deafened ?? false),
+            is_speaking: Boolean(msg.payload?.is_speaking ?? current?.is_speaking ?? false),
+            connected_at: String(msg.payload?.connected_at ?? current?.connected_at ?? ''),
+          });
           this.emitParticipants();
         }
         break;
@@ -269,6 +329,7 @@ export class VoiceTransport {
           ...current,
           is_speaking: Boolean(msg.payload?.is_speaking),
           is_muted: Boolean(msg.payload?.is_muted),
+          is_deafened: Boolean(msg.payload?.is_deafened ?? current.is_deafened),
         });
         this.emitParticipants();
         break;
@@ -287,8 +348,13 @@ export class VoiceTransport {
     this.setState('connecting');
 
     try {
+      this.mediaQuality = bootstrap.media_quality ?? null;
+      this.activeQualityProfile = bootstrap.quality_profile
+        ?? bootstrap.media_quality?.default_profile
+        ?? 'balanced';
       await this.setupLocalAudio();
       const pc = this.ensurePeerConnection(bootstrap.ice_servers || []);
+      await this.applyAudioSenderQuality(pc);
       const signalingUrl = this.buildSignalingUrl(bootstrap.signaling_url, bootstrap.join_token);
       await this.openSignaling(signalingUrl);
 
@@ -364,6 +430,8 @@ export class VoiceTransport {
       audio.srcObject = null;
     }
     this.remoteAudioEls.clear();
+    this.mediaQuality = null;
+    this.activeQualityProfile = 'balanced';
 
     this.participants.clear();
     this.emitParticipants();

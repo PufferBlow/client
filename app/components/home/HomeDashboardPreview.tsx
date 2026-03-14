@@ -62,12 +62,12 @@ export default function HomeDashboardPreview() {
       <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl overflow-hidden">
         <div className="h-10 bg-[var(--color-surface-secondary)] border-b border-[var(--color-border)] flex items-center px-4">
           <div className="flex space-x-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full" />
-            <div className="w-3 h-3 bg-yellow-500 rounded-full" />
-            <div className="w-3 h-3 bg-green-500 rounded-full" />
+            <div className="w-3 h-3 rounded-full bg-[var(--color-error)]" />
+            <div className="w-3 h-3 rounded-full bg-[var(--color-warning)]" />
+            <div className="w-3 h-3 rounded-full bg-[var(--color-success)]" />
           </div>
           <div className="flex-1 text-center text-xs text-[var(--color-text-secondary)]">
-            pufferblow.space/dashboard
+            your.instance.example/dashboard
           </div>
         </div>
 
@@ -75,7 +75,7 @@ export default function HomeDashboardPreview() {
           <div className="flex flex-col gap-0 h-full shrink-0">
             <div className="flex flex-1 gap-2 min-h-0">
               <div className="w-16 shrink-0 bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col items-center py-2 space-y-2">
-                <div className="w-12 h-12 rounded-2xl bg-[var(--color-primary)] text-white text-sm font-bold flex items-center justify-center relative">
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-primary)] text-sm font-bold text-[var(--color-on-primary)]">
                   PB
                   <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[var(--color-success)] rounded-full border-2 border-[var(--color-surface)]" />
                 </div>
@@ -124,7 +124,7 @@ export default function HomeDashboardPreview() {
 
             <div className="w-full bg-[var(--color-surface-secondary)] rounded-b-xl border-t border-[var(--color-border)]">
               <div className="px-3 py-2 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold flex items-center justify-center">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-bold text-[var(--color-on-primary)]">
                   JD
                 </div>
                 <div className="flex-1 min-w-0">
@@ -198,7 +198,7 @@ export default function HomeDashboardPreview() {
               {previewMessages.map((message) => (
                 <div key={message.id} className="flex items-start space-x-3">
                   <div className="relative shrink-0">
-                    <div className="w-9 h-9 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold flex items-center justify-center">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-primary)] text-xs font-bold text-[var(--color-on-primary)]">
                       {message.avatar}
                     </div>
                     <div

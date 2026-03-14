@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageAttachment } from '../models/Message';
 import { VideoPlayer } from './VideoPlayer';
+import { MediaLightbox } from './MediaLightbox';
 import { downloadFileViaBlob } from '../utils/downloadFile';
 import { renderFileTypeIcon } from '../utils/fileTypeMeta';
+import { createFullUrl } from '../services/user';
 
 interface AttachmentBubbleProps extends MessageAttachment {
   onClick?: () => void;
@@ -114,18 +116,7 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
       return rawUrl;
     }
-
-    if (typeof window !== 'undefined') {
-      const savedHostPort =
-        decodeURIComponent(window.localStorage.getItem('host_port') || '') ||
-        decodeURIComponent(window.sessionStorage.getItem('host_port') || '');
-      if (savedHostPort) {
-        const normalizedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
-        return `http://${savedHostPort}${normalizedPath}`;
-      }
-    }
-
-    return rawUrl;
+    return createFullUrl(rawUrl) || rawUrl;
   };
 
   const resolvedUrl = useMemo(() => resolveAttachmentUrl(url), [url]);
@@ -541,6 +532,7 @@ export const AttachmentGrid: React.FC<AttachmentGridProps> = ({
   attachments,
   className = ''
 }) => {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   if (!attachments || attachments.length === 0) return null;
 
   const getGridClasses = () => {
@@ -580,9 +572,19 @@ export const AttachmentGrid: React.FC<AttachmentGridProps> = ({
         <AttachmentBubble
           key={index}
           {...attachment}
+          onClick={() => setLightboxIndex(index)}
           className={getItemClasses(index, attachments.length)}
         />
       ))}
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          attachments={attachments}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onChangeIndex={setLightboxIndex}
+        />
+      )}
     </div>
   );
 };

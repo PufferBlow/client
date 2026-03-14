@@ -43,6 +43,7 @@ export interface ServerSidebarProps {
     is_owner?: boolean;
     is_admin?: boolean;
     roles?: string[];
+    resolved_privileges?: string[];
   } | null;
 
   /**
@@ -77,18 +78,22 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
   className = '',
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const currentUserRoles = currentUser?.roles || [];
-  const canCreateInvite =
+  const userCanCreateInvite =
     currentUser?.is_admin ||
     currentUser?.is_owner ||
-    currentUserRoles.includes("Admin") ||
-    currentUserRoles.includes("Moderator");
+    currentUser?.resolved_privileges?.includes("manage_channel_users");
   const canAccessControlPanel =
     currentUser?.is_owner ||
     currentUser?.is_admin ||
-    currentUserRoles.includes("Owner") ||
-    currentUserRoles.includes("Admin");
-  const canDeleteServer = currentUser?.is_owner || currentUserRoles.includes("Owner");
+    currentUser?.resolved_privileges?.includes("manage_server_settings");
+  const userCanDeleteServer =
+    currentUser?.is_owner ||
+    currentUser?.resolved_privileges?.includes("manage_server_settings");
+  const inviteManagementAvailable = false;
+  const serverDeletionAvailable = false;
+  const multiServerManagementAvailable = false;
+  const canCreateInvite = userCanCreateInvite && inviteManagementAvailable;
+  const canDeleteServer = userCanDeleteServer && serverDeletionAvailable;
 
   useEffect(() => {
     if (!serverDropdownOpen) {
@@ -127,7 +132,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
               className="w-8 h-8 rounded-full object-cover"
             />
           ) : (
-            <div className="w-8 h-8 bg-[var(--color-primary)] rounded-full flex items-center justify-center font-bold text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-primary)] font-bold text-[var(--color-on-primary)]">
               {(serverInfo?.server_name || 'S').charAt(0).toUpperCase()}
             </div>
           )}
@@ -146,8 +151,8 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
               ? "border-[var(--color-border)] bg-[var(--color-active)] text-[var(--color-text)]"
               : "border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
           }`}
-          title="Server options"
-          aria-label="Server options"
+          title="Home instance options"
+          aria-label="Home instance options"
           aria-expanded={serverDropdownOpen}
           aria-haspopup="menu"
         >
@@ -168,7 +173,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
               <p className="truncate text-sm font-semibold text-[var(--color-text)]">
                 {serverInfo?.server_name || "Server"}
               </p>
-              <p className="text-xs text-[var(--color-text-secondary)]">Server actions</p>
+              <p className="text-xs text-[var(--color-text-secondary)]">Home instance actions</p>
             </div>
 
             <div>
@@ -178,12 +183,12 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                   onToggleServerDropdown();
                 }}
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
-                title="View server information"
+                title="View home instance information"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-sm font-medium">Server Info</span>
+                <span className="text-sm font-medium">Instance Info</span>
               </button>
 
               <button
@@ -203,13 +208,15 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                 title={
                   canCreateInvite
                     ? 'Create invite code'
-                    : 'Only admins, moderators, and owners can create invite codes'
+                    : userCanCreateInvite
+                      ? 'Invite creation is not available on this single-instance server build'
+                      : 'Only admins, moderators, and owners can create invite codes'
                 }
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="text-sm font-medium">Create Invite</span>
+                <span className="text-sm font-medium">Invites Unavailable</span>
               </button>
 
               <Link
@@ -259,12 +266,18 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                     ? 'text-[var(--color-error)] hover:bg-[var(--color-error)]/12'
                     : 'cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
                 }`}
-                title={canDeleteServer ? 'Delete this server' : 'Only server owner can delete the server'}
+                title={
+                  canDeleteServer
+                    ? 'Delete this server'
+                    : userCanDeleteServer
+                      ? 'Home instance deletion is not available on this single-instance build'
+                      : 'Only server owner can delete the server'
+                }
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                <span className="text-sm font-medium">Delete Server</span>
+                <span className="text-sm font-medium">Delete Unavailable</span>
               </button>
             </div>
           </div>
@@ -272,7 +285,12 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
       </div>
 
       {/* Add Server Button */}
-      <AddServerButton onClick={() => onServerDropdownAction('add-server')} />
+      <AddServerButton
+        onClick={() => onServerDropdownAction('add-server')}
+        disabled={!multiServerManagementAvailable}
+        title="Additional home instances are not available in this build"
+        ariaLabel="Additional home instances are not available in this build"
+      />
     </div>
   );
 };

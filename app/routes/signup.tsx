@@ -1,7 +1,11 @@
 import type { Route } from "./+types/signup";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import { signup, handleAuthentication } from "../services/user";
+import Button from "../components/Button";
+import { PufferblowBrand } from "../components/PufferblowBrand";
+import { normalizeInstance, resolveInstance } from "../services/instance";
+import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -12,15 +16,20 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Signup() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const redirectTarget = resolvePostAuthRedirect(
+    new URLSearchParams(location.search).get("redirect"),
+  );
+  const isSubmitting = isLoading || signupSuccess;
 
   useEffect(() => {
     if (signupSuccess) {
-      navigate("/dashboard", { replace: true });
+      navigate(redirectTarget, { replace: true });
     }
-  }, [signupSuccess, navigate]);
+  }, [signupSuccess, navigate, redirectTarget]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,30 +61,19 @@ export default function Signup() {
       return;
     }
 
-    // Validate host:port format - support both development (host:port) and production (domain) formats
-    const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]|\b[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\b)(?::(\d+))?$/;
-    if (!hostPortRegex.test(hostPort)) {
-      setError("Invalid server format. For development use '127.0.0.1:7575' or 'localhost:7575'. For production use 'api.example.com'");
-      setIsLoading(false);
-      return;
-    }
-
-    // Additional validation: try to create a URL to check if it's a valid format
+    let normalizedInstance = "";
     try {
-      const testUrl = new URL(`http://${hostPort}`);
-      if (!testUrl.hostname) {
-        throw new Error('Invalid hostname');
-      }
-    } catch (error) {
-      setError("Invalid server format. Please ensure the server address is valid.");
+      normalizedInstance = normalizeInstance(hostPort);
+      resolveInstance(hostPort);
+    } catch {
+      setError("Invalid instance address. Use values like 'localhost:7575', 'https://pufferblow.example', or 'chat.example.com'.");
       setIsLoading(false);
       return;
     }
 
-    const response = await signup(hostPort, { username, password });
+    const response = await signup(normalizedInstance, { username, password });
 
     if (!response.success) {
-      console.error('❌ Signup failed:', response.error);
       setError(response.error || "Signup failed");
       setIsLoading(false);
       return;
@@ -93,14 +91,13 @@ export default function Signup() {
       // Use centralized authentication handler
       await handleAuthentication(
         token,
-        hostPort,
+        normalizedInstance,
         rememberMe,
         expireTime,
         refreshToken,
         refreshTokenExpireTime,
         tokenType
       );
-      console.log('Authentication handled successfully');
       setSignupSuccess(true);
     } else {
       setError("Invalid response from server");
@@ -110,8 +107,20 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(245,245,220,0.08),transparent_35%),linear-gradient(180deg,var(--color-background),var(--color-background-secondary))] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
+        <div className="flex justify-center">
+          <PufferblowBrand
+            size={72}
+            align="center"
+            subtitle="Fediversed Messaging"
+            surfaceColor="var(--color-background)"
+            className="flex-col gap-4"
+            textClassName="items-center"
+            titleClassName="text-4xl"
+            subtitleClassName="text-[11px] tracking-[0.32em] text-[var(--color-text-muted)]"
+          />
+        </div>
         <div className="bg-[var(--color-surface)] backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
           {/* Header */}
           <div className="text-center mb-8">
@@ -124,8 +133,14 @@ export default function Signup() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            <div className="mb-4 rounded-lg border border-[var(--color-error)] bg-[color:color-mix(in_srgb,var(--color-error)_12%,transparent)] p-3 text-[var(--color-error)]">
               {error}
+            </div>
+          )}
+
+          {signupSuccess && (
+            <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[color:color-mix(in_srgb,var(--color-success)_12%,transparent)] p-3 text-[var(--color-success)]">
+              Account created. Redirecting to your home instance...
             </div>
           )}
 
@@ -141,6 +156,7 @@ export default function Signup() {
                 type="text"
                 autoComplete="username"
                 required
+                disabled={isSubmitting}
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
                 placeholder="Choose a username"
               />
@@ -156,6 +172,7 @@ export default function Signup() {
                 type="password"
                 autoComplete="new-password"
                 required
+                disabled={isSubmitting}
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
                 placeholder="Create a password"
               />
@@ -174,6 +191,7 @@ export default function Signup() {
                 type="password"
                 autoComplete="new-password"
                 required
+                disabled={isSubmitting}
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
                 placeholder="Confirm your password"
               />
@@ -181,15 +199,16 @@ export default function Signup() {
 
             <div>
               <label htmlFor="hostPort" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Server Host:Port
+                Home Instance
               </label>
               <input
                 id="hostPort"
                 name="hostPort"
                 type="text"
                 required
+                disabled={isSubmitting}
                 className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="127.0.0.1:7575, localhost:7575, or api.example.com"
+                placeholder="localhost:7575, https://pb.example, or chat.example.com"
               />
             </div>
 
@@ -198,6 +217,7 @@ export default function Signup() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
+                disabled={isSubmitting}
                 className="h-4 w-4 text-[var(--color-primary)] focus:ring-[var(--color-primary)] border-[var(--color-border)] rounded"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-[var(--color-text-secondary)]">
@@ -206,18 +226,29 @@ export default function Signup() {
             </div>
 
             <div>
-              <button
+              <Button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-[var(--color-on-primary)] bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] transition-colors"
+                fullWidth
+                size="lg"
+                loading={isLoading}
+                disabled={signupSuccess}
               >
-                Create account
-              </button>
+                {signupSuccess ? "Redirecting..." : "Create account"}
+              </Button>
+              <p className="mt-2 text-center text-xs text-[var(--color-text-muted)]">
+                {signupSuccess
+                  ? "Your account is ready on this home instance."
+                  : "We'll sign you in immediately after the account is created."}
+              </p>
             </div>
 
             <div className="text-center">
               <p className="text-sm text-[var(--color-text-muted)]">
                 Already have an account?{' '}
-                <Link to="/login" className="font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]">
+                <Link
+                  to={buildSiblingAuthLink("/login", new URLSearchParams(location.search).get("redirect"))}
+                  className="font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
+                >
                   Sign in
                 </Link>
               </p>

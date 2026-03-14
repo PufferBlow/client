@@ -68,7 +68,7 @@ export function ModernSlider({
             absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none
             [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6
-            [&::-webkit-slider-thumb]:bg-white
+            [&::-webkit-slider-thumb]:bg-[var(--color-surface)]
             [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[var(--color-primary)]
             [&::-webkit-slider-thumb]:rounded-full
             [&::-webkit-slider-thumb]:shadow-lg
@@ -77,7 +77,7 @@ export function ModernSlider({
             [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:hover:border-[var(--color-accent)]
             [&::-webkit-slider-thumb]:hover:shadow-xl
             [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6
-            [&::-moz-range-thumb]:bg-white
+            [&::-moz-range-thumb]:bg-[var(--color-surface)]
             [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[var(--color-primary)]
             [&::-moz-range-thumb]:rounded-full
             [&::-moz-range-thumb]:shadow-lg
@@ -154,7 +154,7 @@ export function ModernToggle({
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={`text-xs font-medium transition-all duration-200 ${
           checked
-            ? 'text-white scale-100'
+            ? 'text-[var(--color-on-primary)] scale-100'
             : 'text-[var(--color-text-secondary)] scale-75'
         }`}>
           {checked ? (labels?.on || 'ON') : (labels?.off || 'OFF')}
@@ -164,7 +164,7 @@ export function ModernToggle({
       {/* Thumb */}
       <div
         className={`
-          relative inline-block bg-white rounded-full shadow-lg transition-all duration-300 ease-in-out
+          relative inline-block bg-[var(--color-surface)] rounded-full shadow-lg transition-all duration-300 ease-in-out
           ${currentSize.thumb} flex items-center justify-center
           ${checked ? currentSize.translate : 'translate-x-0'}
         `}
@@ -204,20 +204,20 @@ export function AudioTestButton({
 }: AudioTestButtonProps) {
   const variantClasses = {
     primary: isActive
-      ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/50'
-      : 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-white',
+      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)] shadow-[0_0_24px_color-mix(in_srgb,var(--color-error)_35%,transparent)]'
+      : 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)]',
     secondary: isActive
-      ? 'bg-gray-500 hover:bg-gray-600 text-white shadow-gray-500/50'
+      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)] shadow-[0_0_24px_color-mix(in_srgb,var(--color-error)_35%,transparent)]'
       : 'bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] hover:from-[var(--color-border)] hover:to-[var(--color-border-secondary)] text-[var(--color-text)]',
     success: isActive
-      ? 'bg-red-500 hover:bg-red-600 text-white'
-      : 'bg-green-500 hover:bg-green-600 text-white',
+      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
+      : 'bg-[var(--color-success)] hover:bg-[color:color-mix(in_srgb,var(--color-success)_90%,var(--color-background))] text-[var(--color-on-success)]',
     error: isActive
-      ? 'bg-red-500 hover:bg-red-600 text-white'
-      : 'bg-red-500 hover:bg-red-600 text-white',
+      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
+      : 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]',
     warning: isActive
-      ? 'bg-red-500 hover:bg-red-600 text-white'
-      : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
+      : 'bg-[var(--color-warning)] hover:bg-[color:color-mix(in_srgb,var(--color-warning)_90%,var(--color-background))] text-[var(--color-on-warning)]'
   };
 
   const sizeClasses = {
@@ -244,13 +244,13 @@ export function AudioTestButton({
     >
       {/* Loading Spinner */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-          <Loader2 className="animate-spin w-5 h-5 text-white" />
+        <div className="absolute inset-0 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-background)_72%,transparent)]">
+          <Loader2 className="animate-spin w-5 h-5 text-current" />
         </div>
       )}
 
       {/* Ripple Effect */}
-      <div className="absolute inset-0 bg-white opacity-0 hover:opacity-10 rounded-xl transition-opacity duration-200 pointer-events-none" />
+      <div className="absolute inset-0 rounded-xl bg-[var(--color-text)] opacity-0 transition-opacity duration-200 pointer-events-none hover:opacity-10" />
 
       {/* Content */}
       <div className="flex items-center justify-center space-x-2">
@@ -291,12 +291,18 @@ export function AudioLevelMeter({
 
   // Determine color based on level
   const getColor = (level: number) => {
-    if (level < 30) return 'bg-green-500';
-    if (level < 70) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (level < 30) return 'bg-[var(--color-success)]';
+    if (level < 70) return 'bg-[var(--color-warning)]';
+    return 'bg-[var(--color-error)]';
   };
 
   const meterColor = color.startsWith('bg-') ? color : getColor(percentage);
+  const meterValueColor =
+    meterColor === 'bg-[var(--color-success)]'
+      ? 'text-[var(--color-on-success)]'
+      : meterColor === 'bg-[var(--color-warning)]'
+        ? 'text-[var(--color-on-warning)]'
+        : 'text-[var(--color-on-error)]';
 
   return (
     <div className={`flex items-center space-x-4 ${className}`}>
@@ -334,7 +340,7 @@ export function AudioLevelMeter({
       {/* Value Display */}
       {showValue && (
         <div className="flex items-center space-x-2">
-          <div className={`px-3 py-1 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-lg text-sm font-bold ${meterColor === 'bg-red-500' ? 'text-white' : 'text-current'} shadow-sm`}>
+          <div className={`px-3 py-1 rounded-lg border border-transparent text-sm font-bold shadow-sm ${meterColor} ${meterValueColor}`}>
             {Math.round(percentage)}%
           </div>
         </div>

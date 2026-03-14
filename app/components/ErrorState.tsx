@@ -118,24 +118,74 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   fullWidth = false,
   className = '',
 }) => {
+  const getTone = () => {
+    switch (severity) {
+      case 'error':
+        return {
+          text: 'text-[var(--color-error)]',
+          icon: 'text-[var(--color-error)]',
+          message: 'text-[var(--color-text-secondary)]',
+          code: 'text-[var(--color-text-muted)]',
+          inlineContainer: 'border-[color:color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-error)_12%,transparent)]',
+          inlineTitle: 'text-[var(--color-error)]',
+          inlineMessage: 'text-[var(--color-text-secondary)]',
+          inlineCode: 'text-[var(--color-text-muted)]',
+        };
+      case 'warning':
+        return {
+          text: 'text-[var(--color-warning)]',
+          icon: 'text-[var(--color-warning)]',
+          message: 'text-[var(--color-text-secondary)]',
+          code: 'text-[var(--color-text-muted)]',
+          inlineContainer: 'border-[color:color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-warning)_12%,transparent)]',
+          inlineTitle: 'text-[var(--color-warning)]',
+          inlineMessage: 'text-[var(--color-text-secondary)]',
+          inlineCode: 'text-[var(--color-text-muted)]',
+        };
+      case 'info':
+        return {
+          text: 'text-[var(--color-info)]',
+          icon: 'text-[var(--color-info)]',
+          message: 'text-[var(--color-text-secondary)]',
+          code: 'text-[var(--color-text-muted)]',
+          inlineContainer: 'border-[color:color-mix(in_srgb,var(--color-info)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-info)_12%,transparent)]',
+          inlineTitle: 'text-[var(--color-info)]',
+          inlineMessage: 'text-[var(--color-text-secondary)]',
+          inlineCode: 'text-[var(--color-text-muted)]',
+        };
+      default:
+        return {
+          text: 'text-[var(--color-text-secondary)]',
+          icon: 'text-[var(--color-text-secondary)]',
+          message: 'text-[var(--color-text-secondary)]',
+          code: 'text-[var(--color-text-muted)]',
+          inlineContainer: 'border-[var(--color-border)] bg-[var(--color-surface-secondary)]',
+          inlineTitle: 'text-[var(--color-text)]',
+          inlineMessage: 'text-[var(--color-text-secondary)]',
+          inlineCode: 'text-[var(--color-text-muted)]',
+        };
+    }
+  };
+
+  const tone = getTone();
   const getDefaultIcon = () => {
     const iconClasses = 'w-12 h-12 mx-auto mb-4';
     switch (severity) {
       case 'error':
         return (
-          <svg className={`${iconClasses} text-red-500`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`${iconClasses} ${tone.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
       case 'warning':
         return (
-          <svg className={`${iconClasses} text-yellow-500`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`${iconClasses} ${tone.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
         );
       case 'info':
         return (
-          <svg className={`${iconClasses} text-blue-500`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`${iconClasses} ${tone.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
@@ -144,37 +194,24 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
     }
   };
 
-  const getSeverityClasses = () => {
-    switch (severity) {
-      case 'error':
-        return 'text-red-600';
-      case 'warning':
-        return 'text-yellow-600';
-      case 'info':
-        return 'text-blue-600';
-      default:
-        return 'text-gray-600';
-    }
-  };
-
   const renderDefaultVariant = () => (
     <div className={`text-center py-8 ${fullWidth ? 'w-full' : ''}`}>
       {icon || getDefaultIcon()}
 
       {title && (
-        <h3 className={`text-lg font-semibold mb-2 ${getSeverityClasses()}`}>
+        <h3 className={`mb-2 text-lg font-semibold ${tone.text}`}>
           {title}
         </h3>
       )}
 
       {message && (
-        <p className="text-gray-600 mb-4 max-w-md mx-auto">
+        <p className={`mx-auto mb-4 max-w-md ${tone.message}`}>
           {message}
         </p>
       )}
 
       {code && (
-        <p className="text-sm text-gray-500 mb-4 font-mono">
+        <p className={`mb-4 font-mono text-sm ${tone.code}`}>
           Error code: {code}
         </p>
       )}
@@ -191,10 +228,10 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   );
 
   const renderInlineVariant = () => (
-    <div className={`flex items-start space-x-3 p-3 rounded-lg bg-red-50 border border-red-200 ${fullWidth ? 'w-full' : ''}`}>
+    <div className={`flex items-start space-x-3 rounded-lg border p-3 ${tone.inlineContainer} ${fullWidth ? 'w-full' : ''}`}>
       <div className="flex-shrink-0" aria-hidden="true">
         {icon || (
-          <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`h-5 w-5 ${tone.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         )}
@@ -202,19 +239,19 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
 
       <div className="flex-1">
         {title && (
-          <h4 className="text-sm font-medium text-red-800">
+          <h4 className={`text-sm font-medium ${tone.inlineTitle}`}>
             {title}
           </h4>
         )}
 
         {message && (
-          <p className="text-sm text-red-700 mt-1">
+          <p className={`mt-1 text-sm ${tone.inlineMessage}`}>
             {message}
           </p>
         )}
 
         {code && (
-          <p className="text-xs text-red-600 mt-1 font-mono">
+          <p className={`mt-1 font-mono text-xs ${tone.inlineCode}`}>
             {code}
           </p>
         )}
@@ -229,7 +266,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   );
 
   const renderCardVariant = () => (
-    <div className={`bg-white border border-gray-200 rounded-lg p-6 shadow-sm ${fullWidth ? 'w-full' : ''}`}>
+    <div className={`rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm ${fullWidth ? 'w-full' : ''}`}>
       <div className="flex items-start space-x-4">
         <div className="flex-shrink-0" aria-hidden="true">
           {icon || getDefaultIcon()}
@@ -237,19 +274,19 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
 
         <div className="flex-1">
           {title && (
-            <h3 className={`text-lg font-semibold mb-2 ${getSeverityClasses()}`}>
+            <h3 className={`mb-2 text-lg font-semibold ${tone.text}`}>
               {title}
             </h3>
           )}
 
           {message && (
-            <p className="text-gray-600 mb-3">
+            <p className={`mb-3 ${tone.message}`}>
               {message}
             </p>
           )}
 
           {code && (
-            <p className="text-sm text-gray-500 mb-4 font-mono">
+            <p className={`mb-4 font-mono text-sm ${tone.code}`}>
               Error code: {code}
             </p>
           )}
@@ -268,24 +305,24 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   );
 
   const renderPageVariant = () => (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-background-secondary)]">
+      <div className="max-w-md w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center shadow-lg">
         {icon || getDefaultIcon()}
 
         {title && (
-          <h1 className={`text-2xl font-bold mb-4 ${getSeverityClasses()}`}>
+          <h1 className={`mb-4 text-2xl font-bold ${tone.text}`}>
             {title}
           </h1>
         )}
 
         {message && (
-          <p className="text-gray-600 mb-6">
+          <p className={`mb-6 ${tone.message}`}>
             {message}
           </p>
         )}
 
         {code && (
-          <p className="text-sm text-gray-500 mb-6 font-mono">
+          <p className={`mb-6 font-mono text-sm ${tone.code}`}>
             Error code: {code}
           </p>
         )}

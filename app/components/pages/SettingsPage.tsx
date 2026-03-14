@@ -9,8 +9,10 @@ import { Notice } from "../../components/ui/Notice";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/Button";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../../services/user";
+import { normalizeInstance, resolveInstance } from "../../services/instance";
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Palette, Volume2, Server, Shield, ArrowLeft } from 'lucide-react';
+import { logger } from '../../utils/logger';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'audio' | 'server' | 'security'>('profile');
@@ -126,7 +128,7 @@ export default function Settings() {
             setAutoGainControl(audioSettings.autoGainControl ?? true);
             setAudioQuality(audioSettings.audioQuality || 'better');
           } catch (error) {
-            console.warn('Failed to load saved audio settings:', error);
+            logger.ui.warn('Failed to load saved audio settings', { error: error instanceof Error ? error.message : String(error) });
           }
         }
       }
@@ -194,7 +196,7 @@ export default function Settings() {
       setActiveAudioContext(context);
       return context;
     } catch (error) {
-      console.error('Failed to create audio context:', error);
+      logger.ui.error('Failed to create audio context', { error: error instanceof Error ? error.message : String(error) });
       setMessage({ type: 'error', text: 'Failed to initialize audio system' });
       return null;
     }
@@ -298,7 +300,7 @@ export default function Settings() {
     }
   }, [speakerVolume, outputGainNode, activeAudioContext]);
 
-  const hostPort = getHostPortFromStorage() || 'localhost:7575';
+  const hostPort = getHostPortFromStorage() || '';
 
   const handleUsernameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -515,22 +517,16 @@ export default function Settings() {
   const handleHostPortSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHostPort.trim()) return;
-    const hostPortRegex = /^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\]):(\d+)$/;
-    if (!hostPortRegex.test(newHostPort)) {
-      setMessage({ type: 'error', text: 'Invalid host:port format. Please use format like \'127.0.0.1:7575\' or \'localhost:7575\'' });
-      return;
-    }
+    let normalizedInstance = '';
     try {
-      const testUrl = new URL(`http://${newHostPort}`);
-      if (!testUrl.hostname || !testUrl.port) {
-        throw new Error('Invalid host or port');
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Invalid host:port format. Please ensure the host and port are valid.' });
+      normalizedInstance = normalizeInstance(newHostPort);
+      resolveInstance(newHostPort);
+    } catch {
+      setMessage({ type: 'error', text: 'Invalid instance address. Use values like \'localhost:7575\', \'https://pufferblow.example\', or \'chat.example.com\'.' });
       return;
     }
-    setHostPortToStorage(newHostPort);
-    setMessage({ type: 'success', text: 'Server host:port updated successfully. Changes will take effect on next login.' });
+    setHostPortToStorage(normalizedInstance);
+    setMessage({ type: 'success', text: 'Home instance updated successfully. Changes will take effect on next login.' });
     setNewHostPort('');
   };
 
@@ -563,7 +559,7 @@ export default function Settings() {
     } catch (error) {
       setIsTestingMicrophone(false);
       setMessage({ type: 'error', text: 'Failed to start microphone test. Check permissions and device availability.' });
-      console.error('Microphone test error:', error);
+      logger.ui.error('Microphone test error', { error: error instanceof Error ? error.message : String(error) });
     }
   };
 
@@ -632,7 +628,7 @@ export default function Settings() {
           setAudioContext(null);
           setOutputGainNode(null);
         } catch (error) {
-          console.warn('Speaker test cleanup warning:', error);
+          logger.ui.warn('Speaker test cleanup warning', { error: error instanceof Error ? error.message : String(error) });
         }
         setIsTestingSpeakers(false);
         setMessage({ type: 'success', text: 'Speaker test completed.' });
@@ -642,7 +638,7 @@ export default function Settings() {
     } catch (error) {
       setIsTestingSpeakers(false);
       setMessage({ type: 'error', text: 'Failed to start speaker test. Check output device and permissions.' });
-      console.error('Speaker test error:', error);
+      logger.ui.error('Speaker test error', { error: error instanceof Error ? error.message : String(error) });
     }
   };
 
@@ -654,7 +650,7 @@ export default function Settings() {
           audioContext.close();
         }
       } catch (error) {
-        console.warn('Speaker test stop warning:', error);
+        logger.ui.warn('Speaker test stop warning', { error: error instanceof Error ? error.message : String(error) });
       }
       setAudioContext(null);
     }
@@ -663,7 +659,7 @@ export default function Settings() {
       try {
         outputGainNode.gain.exponentialRampToValueAtTime(0.01, activeAudioContext?.currentTime || 0);
       } catch (error) {
-        console.warn('Output gain ramp warning:', error);
+        logger.ui.warn('Output gain ramp warning', { error: error instanceof Error ? error.message : String(error) });
       }
       setOutputGainNode(null);
     }
@@ -673,7 +669,7 @@ export default function Settings() {
         activeAudioContext.close();
         setActiveAudioContext(null);
       } catch (error) {
-        console.warn('Active context cleanup warning:', error);
+        logger.ui.warn('Active context cleanup warning', { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -684,7 +680,7 @@ export default function Settings() {
   // Real-time audio analysis function
   const startAudioAnalysis = () => {
     if (!audioAnalyser) {
-      console.warn('Audio analyser not available for analysis');
+      logger.ui.warn('Audio analyser not available for analysis');
       return;
     }
 
@@ -708,7 +704,7 @@ export default function Settings() {
           requestAnimationFrame(updateAnalysis);
         }
       } catch (error) {
-        console.warn('Audio analysis error:', error);
+        logger.ui.warn('Audio analysis error', { error: error instanceof Error ? error.message : String(error) });
       }
     };
 
@@ -1895,7 +1891,7 @@ export default function Settings() {
                   <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-[var(--color-surface)]/50 rounded-lg p-3 border border-[var(--color-border)]">
                       <div className="text-xs text-[var(--color-text-secondary)]">Status</div>
-                      <div className={`text-sm font-medium ${selectedInputDevice ? 'text-green-400' : 'text-yellow-400'}`}>
+                      <div className={`text-sm font-medium ${selectedInputDevice ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}>
                         {selectedInputDevice ? 'Ready' : 'Default'}
                       </div>
                     </div>
@@ -2290,9 +2286,9 @@ export default function Settings() {
                         <div className="flex-1 bg-[var(--color-background)] rounded-full h-4 border border-[var(--color-border)] overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-200 ${
-                              inputLevel > 0.3 ? 'bg-red-500' :
-                              inputLevel > 0.1 ? 'bg-yellow-500' :
-                              'bg-green-500'
+                              inputLevel > 0.3 ? 'bg-[var(--color-error)]' :
+                              inputLevel > 0.1 ? 'bg-[var(--color-warning)]' :
+                              'bg-[var(--color-success)]'
                             }`}
                             style={{ width: `${inputLevel * 100}%` }}
                           ></div>
@@ -2418,14 +2414,14 @@ export default function Settings() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Input Device</span>
-                        <span className={`text-sm font-medium ${selectedInputDevice ? 'text-green-400' : 'text-yellow-400'}`}>
+                        <span className={`text-sm font-medium ${selectedInputDevice ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}>
                           {selectedInputDevice ? 'Connected' : 'Default'}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Output Device</span>
-                        <span className={`text-sm font-medium ${selectedOutputDevice ? 'text-green-400' : 'text-yellow-400'}`}>
+                        <span className={`text-sm font-medium ${selectedOutputDevice ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}>
                           {selectedOutputDevice ? 'Connected' : 'Default'}
                         </span>
                       </div>
@@ -2448,14 +2444,14 @@ export default function Settings() {
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Noise Suppression</span>
-                        <span className={`text-sm font-medium ${noiseSuppression ? 'text-green-400' : 'text-[var(--color-text-secondary)]'}`}>
+                        <span className={`text-sm font-medium ${noiseSuppression ? 'text-[var(--color-success)]' : 'text-[var(--color-text-secondary)]'}`}>
                           {noiseSuppression ? 'On' : 'Off'}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--color-text-secondary)]">Echo Cancellation</span>
-                        <span className={`text-sm font-medium ${echoCancellation ? 'text-green-400' : 'text-[var(--color-text-secondary)]'}`}>
+                        <span className={`text-sm font-medium ${echoCancellation ? 'text-[var(--color-success)]' : 'text-[var(--color-text-secondary)]'}`}>
                           {echoCancellation ? 'On' : 'Off'}
                         </span>
                       </div>
@@ -2476,16 +2472,16 @@ export default function Settings() {
                 <h3 className="text-lg leading-6 font-medium text-[var(--color-text)] mb-4">Server Settings</h3>
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-medium text-[var(--color-text)]">Server Host:Port</h4>
-                    <p className="mt-1 text-sm text-[var(--color-text-secondary)] mb-4">Set the server host and port for API requests</p>
+                    <h4 className="text-sm font-medium text-[var(--color-text)]">Home Instance</h4>
+                    <p className="mt-1 mb-4 text-sm text-[var(--color-text-secondary)]">Set the instance origin the client uses for API, websocket, and media requests.</p>
                     <div className="space-y-4">
                       <div>
-                        <label htmlFor="currentHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">Current Server</label>
-                        <input type="text" name="currentHostPort" id="currentHostPort" value={hostPort} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" readOnly />
+                        <label htmlFor="currentHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">Current Instance</label>
+                        <input type="text" name="currentHostPort" id="currentHostPort" value={hostPort || 'No home instance configured'} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" readOnly />
                       </div>
                       <div>
-                        <label htmlFor="newHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">New Server Host:Port</label>
-                        <input type="text" name="newHostPort" id="newHostPort" placeholder="127.0.0.1:7575" value={newHostPort} onChange={e => setNewHostPort(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
+                        <label htmlFor="newHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">New Instance Address</label>
+                        <input type="text" name="newHostPort" id="newHostPort" placeholder="localhost:7575, https://pb.example, or chat.example.com" value={newHostPort} onChange={e => setNewHostPort(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
                       </div>
                       <Button
                         type="button"
@@ -2493,7 +2489,7 @@ export default function Settings() {
                         disabled={!newHostPort.trim()}
                         variant="primary"
                       >
-                        Update Server
+                        Update Instance
                       </Button>
                     </div>
                   </div>
@@ -2674,6 +2670,8 @@ export default function Settings() {
     </>
   );
 }
+
+
 
 
 

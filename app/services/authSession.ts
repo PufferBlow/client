@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { normalizeInstance, resolveInstance } from './instance';
 
 export interface PersistedSessionTokens {
   authToken: string;
@@ -87,13 +88,7 @@ const removeStorageValue = (key: string): void => {
   localStorage.removeItem(key);
 };
 
-const toHttpBaseUrl = (hostPort: string): string => {
-  const trimmed = hostPort.trim().replace(/\/$/, '');
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-  return `http://${trimmed}`;
-};
+const toHttpBaseUrl = (hostPort: string): string => resolveInstance(hostPort).apiBaseUrl;
 
 const getRememberMe = (): boolean => {
   const stored = getStorageValue(STORAGE_KEYS.rememberMe);
@@ -186,8 +181,9 @@ export const persistSessionTokens = (tokens: PersistedSessionTokens): void => {
 
   setCookie(AUTH_COOKIE_KEY, tokens.authToken, tokens.authTokenExpireTime);
   if (tokens.hostPort) {
-    setStorageValue(HOST_COOKIE_KEY, tokens.hostPort, rememberMe);
-    setCookie(HOST_COOKIE_KEY, tokens.hostPort);
+    const normalizedHost = normalizeInstance(tokens.hostPort);
+    setStorageValue(HOST_COOKIE_KEY, normalizedHost, rememberMe);
+    setCookie(HOST_COOKIE_KEY, normalizedHost);
   }
 
   if (tokens.refreshToken) {
@@ -229,7 +225,7 @@ export const refreshAuthSession = async (
       return { success: false, error: 'Missing refresh token', shouldLogout: true };
     }
     if (!hostPort) {
-      return { success: false, error: 'Missing server host:port' };
+      return { success: false, error: 'Missing home instance' };
     }
     if (isExpired(getRefreshExpireTime())) {
       clearSessionTokens();

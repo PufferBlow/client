@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useState, useEffect } from "react";
+import { PufferblowBrand } from "../components/PufferblowBrand";
 
 type SupportedDesktopPlatform = "windows" | "linux" | "macos";
 type DesktopPlatform = SupportedDesktopPlatform | "unknown";
@@ -122,12 +123,15 @@ export default function Download() {
             <div className="flex items-center">
               <Link
                 to="/"
-                className="flex flex-col cursor-pointer group focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)] rounded-lg p-2 -m-2"
+                className="group rounded-lg p-2 -m-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
               >
-                <h1 className="text-4xl font-black text-[var(--color-text)] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-200">
-                  Pufferblow
-                </h1>
-                <span className="text-base text-[var(--color-text-secondary)] font-semibold group-hover:text-[var(--color-text)] transition-colors duration-200">Decentralized Messaging</span>
+                <PufferblowBrand
+                  size={52}
+                  subtitle="Fediversed Messaging"
+                  surfaceColor="var(--color-surface)"
+                  titleClassName="text-3xl md:text-4xl group-hover:translate-x-0.5 transition-transform duration-200"
+                  subtitleClassName="tracking-[0.24em] group-hover:text-[var(--color-text)] transition-colors duration-200"
+                />
               </Link>
             </div>
 
@@ -135,7 +139,7 @@ export default function Download() {
               {isAuthenticated ? (
                 <Link
                   to="/dashboard"
-                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-[var(--color-on-primary)] px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl flex items-center gap-3"
+                  className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-6 py-3 text-sm font-semibold text-[var(--color-on-primary)] shadow-lg transition-all duration-200 hover:scale-105 hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] hover:shadow-2xl"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -145,7 +149,7 @@ export default function Download() {
               ) : (
                 <Link
                   to="/signup"
-                  className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[#6e9cf1] text-[var(--color-on-primary)] px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-2xl"
+                  className="rounded-xl bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-6 py-3 text-sm font-semibold text-[var(--color-on-primary)] shadow-lg transition-all duration-200 hover:scale-105 hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] hover:shadow-2xl"
                 >
                   Get Started Free
                 </Link>
@@ -174,8 +178,23 @@ export default function Download() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="text-center">
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--color-surface)]/50 backdrop-blur-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm font-medium mb-8">
+            <div className="text-center">
+              <div className="mb-10 flex justify-center">
+                <div className="rounded-[2rem] border border-[var(--color-border-secondary)] bg-[radial-gradient(circle_at_top,rgba(245,245,220,0.08),transparent_58%),linear-gradient(180deg,rgba(28,25,25,0.92),rgba(14,13,13,0.92))] px-8 py-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                  <PufferblowBrand
+                    size={86}
+                    align="center"
+                    subtitle="Desktop Client for Fediversed Communities"
+                    surfaceColor="var(--color-surface)"
+                    className="flex-col gap-5"
+                    textClassName="items-center"
+                    titleClassName="text-5xl md:text-6xl"
+                    subtitleClassName="text-xs md:text-sm tracking-[0.32em] text-[var(--color-text-muted)]"
+                  />
+                </div>
+              </div>
+
+              <div className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--color-surface)]/50 backdrop-blur-sm border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm font-medium mb-8">
               <svg className="w-4 h-4 mr-2 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -231,7 +250,7 @@ export default function Download() {
                       ? FALLBACK_RELEASES_URL
                       : downloadLinks[detectedPlatform]
                   }
-                  className="group inline-flex items-center bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] hover:from-[var(--color-primary-hover)] hover:via-[#6e9cf1] hover:to-[var(--color-secondary-hover)] text-[var(--color-on-primary)] px-12 py-6 rounded-2xl text-2xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(94,129,172,0.3)]"
+                  className="group inline-flex items-center rounded-2xl bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] px-12 py-6 text-2xl font-bold text-[var(--color-on-primary)] shadow-2xl transition-all duration-300 hover:scale-105 hover:from-[var(--color-primary-hover)] hover:via-[var(--color-accent-hover)] hover:to-[var(--color-secondary-hover)] hover:shadow-[0_25px_50px_color-mix(in_srgb,var(--color-primary)_28%,transparent)]"
                 >
                   <svg className="w-8 h-8 mr-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -311,7 +330,7 @@ export default function Download() {
               </div>
 
               <div className="text-center mb-8 mt-8">
-                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-gray-300 overflow-hidden">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
                   <img src="/os-logos/windows-logo.svg" alt="Windows Logo" className="w-full h-full object-contain p-2" />
                 </div>
                 <h3 className="text-3xl font-bold text-[var(--color-text)] mb-4">
@@ -324,19 +343,19 @@ export default function Download() {
 
               <div className="flex items-center justify-between text-sm text-[var(--color-text)] mb-6">
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>System Tray</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Quick Launch</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Auto-Start</span>
@@ -345,7 +364,7 @@ export default function Download() {
 
               <a
                 href={downloadLinks.windows}
-                className="w-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+              className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] px-8 py-4 text-lg font-bold text-[var(--color-on-primary)] shadow-lg transition-all duration-300 hover:scale-105 hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)]"
               >
                 <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -367,7 +386,7 @@ export default function Download() {
               </div>
 
               <div className="text-center mb-8 mt-8">
-                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-gray-300 overflow-hidden">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
                   <img src="/os-logos/linux-logo.svg" alt="Linux Logo" className="w-full h-full object-contain p-2" />
                 </div>
                 <h3 className="text-3xl font-bold text-[var(--color-text)] mb-4">
@@ -380,19 +399,19 @@ export default function Download() {
 
               <div className="flex items-center justify-between text-sm text-[var(--color-text)] mb-6">
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>No Root</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Portable</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Cross Distro</span>
@@ -401,7 +420,7 @@ export default function Download() {
 
               <a
                 href={downloadLinks.linux}
-                className="w-full flex items-center justify-center bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-black px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+              className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[var(--color-warning)] to-[var(--color-accent)] px-8 py-4 text-lg font-bold text-[var(--color-on-warning)] shadow-lg transition-all duration-300 hover:scale-105 hover:from-[color:color-mix(in_srgb,var(--color-warning)_90%,var(--color-background))] hover:to-[var(--color-accent-hover)]"
               >
                 <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H6a2 2 0 01-2-2V7a2 2 0 012-2h1m6 0v4m-5 4h10M7 16.5A2.5 2.5 0 019.5 19h5a2.5 2.5 0 002.5-2.5v-9A2.5 2.5 0 0014.5 5h-5A2.5 2.5 0 007 7.5" />
@@ -423,7 +442,7 @@ export default function Download() {
               </div>
 
               <div className="text-center mb-8 mt-8">
-                <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-gray-300 overflow-hidden">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
                   <img src="/os-logos/macos-logo.svg" alt="macOS Logo" className="w-full h-full object-contain p-2" />
                 </div>
                 <h3 className="text-3xl font-bold text-[var(--color-text)] mb-4">
@@ -436,19 +455,19 @@ export default function Download() {
 
               <div className="flex items-center justify-between text-sm text-[var(--color-text)] mb-6">
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Universal</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>Dock Ready</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   <span>System Alerts</span>
@@ -457,7 +476,7 @@ export default function Download() {
 
               <a
                 href={downloadLinks.macos}
-                className="w-full flex items-center justify-center bg-gradient-to-r from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white px-8 py-4 rounded-2xl text-lg font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+              className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[var(--color-surface-tertiary)] to-[var(--color-background-secondary)] px-8 py-4 text-lg font-bold text-[var(--color-text)] shadow-lg transition-all duration-300 hover:scale-105 hover:from-[var(--color-hover)] hover:to-[var(--color-background)]"
               >
                 <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -476,8 +495,8 @@ export default function Download() {
       {/* CTA Section - Modern Call-to-Action */}
       <section className="py-32 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] relative overflow-hidden">
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
+          <div className="absolute top-0 left-1/4 h-96 w-96 rounded-full bg-[var(--color-on-primary)]/10 blur-3xl"></div>
+          <div className="absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-[var(--color-on-primary)]/5 blur-3xl"></div>
         </div>
 
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 relative">
@@ -500,7 +519,7 @@ export default function Download() {
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
             <Link
               to="/signup"
-              className="bg-white text-[var(--color-primary)] hover:bg-gray-100 px-10 py-5 rounded-2xl text-2xl font-bold transition-all duration-300 transform hover:scale-105 shadow-2xl hover:shadow-[0_25px_50px_rgba(0,0,0,0.25)] flex items-center gap-3 group"
+              className="group flex items-center gap-3 rounded-2xl bg-[var(--color-surface)] px-10 py-5 text-2xl font-bold text-[var(--color-text)] shadow-2xl transition-all duration-300 hover:scale-105 hover:bg-[var(--color-hover)] hover:shadow-[0_25px_50px_color-mix(in_srgb,var(--color-background)_25%,transparent)]"
             >
               <svg className="w-8 h-8 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -534,9 +553,13 @@ export default function Download() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-3 mb-4 md:mb-0">
-              <span className="text-xl font-black text-[var(--color-text)] bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] bg-clip-text text-transparent cursor-pointer">
-                Pufferblow
-              </span>
+              <PufferblowBrand
+                size={36}
+                subtitle="Fediversed Messaging"
+                surfaceColor="var(--color-surface)"
+                titleClassName="text-2xl"
+                subtitleClassName="text-[10px] tracking-[0.24em]"
+              />
             </div>
             <div className="flex space-x-6">
               <a href="#" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors">

@@ -71,14 +71,14 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       <button
         aria-label="Close audio settings backdrop"
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0 bg-[color:color-mix(in_srgb,var(--color-background)_76%,transparent)]"
         onClick={onClose}
       />
       <div className="relative w-full max-w-lg rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] p-6">
-          <h3 className="text-[--color-text] font-semibold text-lg flex items-center space-x-3">
-            <svg className="w-6 h-6 text-[--color-primary]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <h3 className="flex items-center space-x-3 text-lg font-semibold text-[var(--color-text)]">
+            <svg className="w-6 h-6 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
             </svg>
             <span>Audio Devices</span>
@@ -98,8 +98,8 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
           {/* Microphones */}
           {mics.length > 0 && (
             <div>
-              <h4 className="text-[--color-text] text-sm font-medium mb-4 flex items-center space-x-3">
-                <svg className="w-5 h-5 text-[--color-info]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <h4 className="mb-4 flex items-center space-x-3 text-sm font-medium text-[var(--color-text)]">
+                <svg className="w-5 h-5 text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
                 <span>Microphones</span>
@@ -152,8 +152,8 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
           {/* Headphones/Speakers */}
           {headphones.length > 0 && (
             <div>
-              <h4 className="text-[--color-text] text-sm font-medium mb-4 flex items-center space-x-3">
-                <svg className="w-5 h-5 text-[--color-accent]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <h4 className="mb-4 flex items-center space-x-3 text-sm font-medium text-[var(--color-text)]">
+                <svg className="w-5 h-5 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19V12a9 9 0 0118 0v7M8.25 15H7.5a1.5 1.5 0 00-1.5 1.5v1.5A1.5 1.5 0 007.5 19h.75m0 0V15m0 0V12a4.5 4.5 0 011 2.25m0 0V15M21 15H16.5a1.5 1.5 0 00-1.5 1.5v1.5a1.5 1.5 0 001.5 1.5H21" />
                 </svg>
                 <span>Headphones/Speakers</span>
@@ -206,10 +206,10 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
           {/* No devices message */}
           {mics.length === 0 && headphones.length === 0 && (
             <div className="text-center py-12">
-              <svg className="w-16 h-16 text-[--color-text-muted] mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="mx-auto mb-4 h-16 w-16 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              <p className="text-[--color-text-secondary] text-sm mb-4">No audio devices found</p>
+              <p className="mb-4 text-sm text-[var(--color-text-secondary)]">No audio devices found</p>
               <button
                 onClick={handleGetDevices}
                 className="rounded-lg bg-[var(--color-primary)] px-4 py-2 font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"

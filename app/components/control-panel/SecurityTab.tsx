@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 import { Card } from '../Card';
 import { Button } from '../Button';
-import { Input } from '../Input';
 import { LoadingState } from '../LoadingState';
 import { ErrorState } from '../ErrorState';
 import type { ShowToast } from '../Toast';
@@ -258,13 +257,13 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
   const getRiskColor = (riskLevel: SecuritySetting['riskLevel']) => {
     switch (riskLevel) {
       case 'low':
-        return 'text-green-400 bg-green-900/20 border-green-500/30';
+        return 'text-[var(--color-success)] bg-[color:color-mix(in_srgb,var(--color-success)_12%,transparent)] border-[color:color-mix(in_srgb,var(--color-success)_35%,transparent)]';
       case 'medium':
-        return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
+        return 'text-[var(--color-warning)] bg-[color:color-mix(in_srgb,var(--color-warning)_12%,transparent)] border-[color:color-mix(in_srgb,var(--color-warning)_35%,transparent)]';
       case 'high':
-        return 'text-red-400 bg-red-900/20 border-red-500/30';
+        return 'text-[var(--color-error)] bg-[color:color-mix(in_srgb,var(--color-error)_12%,transparent)] border-[color:color-mix(in_srgb,var(--color-error)_35%,transparent)]';
       default:
-        return 'text-gray-400 bg-gray-900/20 border-gray-500/30';
+        return 'text-[var(--color-text-secondary)] bg-[var(--color-surface-secondary)] border-[var(--color-border-secondary)]';
     }
   };
 
@@ -302,14 +301,14 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-medium text-white">Security Configuration</h2>
-          <p className="text-gray-400 text-sm mt-1">
-            Configure security settings and policies for your server
+          <h2 className="text-lg font-medium text-[var(--color-text)]">Security Configuration</h2>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+            Review security policies for your instance. This surface is currently a control-panel preview until dedicated backend security endpoints land.
           </p>
         </div>
         <div className="flex items-center space-x-4">
           {hasChanges && (
-            <span className="text-yellow-400 text-sm font-medium">
+            <span className="text-sm font-medium text-[var(--color-warning)]">
               Unsaved changes
             </span>
           )}
@@ -324,13 +323,25 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
         </div>
       </div>
 
+      <Card className="border-[color:color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-warning)_12%,transparent)] p-4">
+        <div className="flex items-start space-x-3">
+          <div className="text-xl text-[var(--color-warning)]">⚠️</div>
+          <div>
+            <h3 className="font-medium text-[var(--color-warning)]">Preview Surface</h3>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              These security toggles are not backed by dedicated instance security routes yet. Use the main Settings and Logs sections for live instance configuration and audit visibility.
+            </p>
+          </div>
+        </div>
+      </Card>
+
       {/* Security Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-400">Active Protections</div>
-              <div className="text-2xl font-bold text-green-400">
+              <div className="text-sm text-[var(--color-text-secondary)]">Active Protections</div>
+              <div className="text-2xl font-bold text-[var(--color-success)]">
                 {settings.filter(s => s.enabled).length}
               </div>
             </div>
@@ -341,8 +352,8 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-400">High Risk Settings</div>
-              <div className="text-2xl font-bold text-red-400">
+              <div className="text-sm text-[var(--color-text-secondary)]">High Risk Settings</div>
+              <div className="text-2xl font-bold text-[var(--color-error)]">
                 {settings.filter(s => s.riskLevel === 'high' && s.enabled).length}
               </div>
             </div>
@@ -353,8 +364,8 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-400">Requires Restart</div>
-              <div className="text-2xl font-bold text-yellow-400">
+              <div className="text-sm text-[var(--color-text-secondary)]">Requires Restart</div>
+              <div className="text-2xl font-bold text-[var(--color-warning)]">
                 {settings.filter(s => s.requiresRestart).length}
               </div>
             </div>
@@ -365,8 +376,8 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-gray-400">Security Score</div>
-              <div className="text-2xl font-bold text-blue-400">
+              <div className="text-sm text-[var(--color-text-secondary)]">Security Score</div>
+              <div className="text-2xl font-bold text-[var(--color-info)]">
                 {Math.round((settings.filter(s => s.enabled).length / settings.length) * 100)}%
               </div>
             </div>
@@ -381,10 +392,10 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
           <div className="flex items-center space-x-3 mb-6">
             <div className="text-2xl">{getCategoryIcon(category as SecuritySetting['category'])}</div>
             <div>
-              <h3 className="text-lg font-semibold text-white capitalize">
+              <h3 className="text-lg font-semibold text-[var(--color-text)] capitalize">
                 {category.replace('_', ' ')} Security
               </h3>
-              <p className="text-gray-400 text-sm">
+              <p className="text-sm text-[var(--color-text-secondary)]">
                 {category === 'content' && 'Control what content is allowed on your server'}
                 {category === 'access' && 'Manage who can access your server and how'}
                 {category === 'monitoring' && 'Track and log server activity for security'}
@@ -397,21 +408,21 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
             {categorySettings.map((setting) => (
               <div
                 key={setting.id}
-                className="flex items-center justify-between p-4 bg-gray-700/50 rounded-lg border border-gray-600/50 hover:border-gray-500/50 transition-colors"
+                className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)]/70 p-4 transition-colors hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)]/70"
               >
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
-                    <h4 className="text-white font-medium">{setting.name}</h4>
+                    <h4 className="font-medium text-[var(--color-text)]">{setting.name}</h4>
                     <span className={`px-2 py-1 text-xs font-medium rounded border ${getRiskColor(setting.riskLevel)}`}>
                       {setting.riskLevel.toUpperCase()}
                     </span>
                     {setting.requiresRestart && (
-                      <span className="px-2 py-1 text-xs font-medium rounded bg-yellow-900/20 text-yellow-400 border border-yellow-500/30">
+                      <span className="rounded border border-[color:color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-warning)_12%,transparent)] px-2 py-1 text-xs font-medium text-[var(--color-warning)]">
                         RESTART REQUIRED
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-400 text-sm">{setting.description}</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">{setting.description}</p>
                 </div>
 
                 <div className="ml-4">
@@ -424,10 +435,10 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
                     />
                     <div className={`
                       relative inline-block w-10 h-6 rounded-full transition-colors
-                      ${setting.enabled ? 'bg-blue-600' : 'bg-gray-600'}
+                      ${setting.enabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)]'}
                     `}>
                       <div className={`
-                        absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform
+                        absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-[var(--color-on-primary)] transition-transform
                         ${setting.enabled ? 'translate-x-4' : 'translate-x-0'}
                       `}></div>
                     </div>
@@ -441,33 +452,33 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
 
       {/* Security Recommendations */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Security Recommendations</h3>
+        <h3 className="mb-4 text-lg font-semibold text-[var(--color-text)]">Security Recommendations</h3>
         <div className="space-y-4">
-          <div className="flex items-start space-x-3 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-            <div className="text-blue-400 text-xl">💡</div>
+          <div className="flex items-start space-x-3 rounded-lg border border-[color:color-mix(in_srgb,var(--color-info)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-info)_12%,transparent)] p-4">
+            <div className="text-xl text-[var(--color-info)]">💡</div>
             <div>
-              <h4 className="text-blue-400 font-medium mb-1">Enable Content Moderation</h4>
-              <p className="text-gray-300 text-sm">
+              <h4 className="mb-1 font-medium text-[var(--color-info)]">Enable Content Moderation</h4>
+              <p className="text-sm text-[var(--color-text-secondary)]">
                 Consider enabling content moderation to automatically filter inappropriate messages and maintain a safe community.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start space-x-3 p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
-            <div className="text-yellow-400 text-xl">⚠️</div>
+          <div className="flex items-start space-x-3 rounded-lg border border-[color:color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-warning)_12%,transparent)] p-4">
+            <div className="text-xl text-[var(--color-warning)]">⚠️</div>
             <div>
-              <h4 className="text-yellow-400 font-medium mb-1">IP Logging Privacy</h4>
-              <p className="text-gray-300 text-sm">
+              <h4 className="mb-1 font-medium text-[var(--color-warning)]">IP Logging Privacy</h4>
+              <p className="text-sm text-[var(--color-text-secondary)]">
                 IP logging can help prevent abuse but may impact user privacy. Consider your local privacy laws before enabling.
               </p>
             </div>
           </div>
 
-          <div className="flex items-start space-x-3 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
-            <div className="text-green-400 text-xl">✅</div>
+          <div className="flex items-start space-x-3 rounded-lg border border-[color:color-mix(in_srgb,var(--color-success)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-success)_12%,transparent)] p-4">
+            <div className="text-xl text-[var(--color-success)]">✅</div>
             <div>
-              <h4 className="text-green-400 font-medium mb-1">Regular Security Audits</h4>
-              <p className="text-gray-300 text-sm">
+              <h4 className="mb-1 font-medium text-[var(--color-success)]">Regular Security Audits</h4>
+              <p className="text-sm text-[var(--color-text-secondary)]">
                 Regularly review your security settings and audit logs to ensure your server remains secure.
               </p>
             </div>
