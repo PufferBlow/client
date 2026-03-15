@@ -25,6 +25,16 @@ export function UserListItem({
   const { data: userProfile } = useUserProfile(userId);
   const avatarUrl = userProfile?.avatar_url || createFallbackAvatarUrl(username);
   const effectiveRoleNames = roleNames.length > 0 ? roleNames : getResolvedRoleNames(userProfile);
+  const statusDotClass =
+    status === "online"
+      ? "pb-presence-dot pb-presence-online"
+      : status === "idle"
+        ? "pb-presence-dot pb-presence-idle"
+        : status === "dnd"
+          ? "pb-presence-dot pb-presence-dnd"
+          : status === "afk"
+            ? "pb-presence-dot pb-presence-away"
+            : "pb-presence-dot pb-presence-offline";
 
   return (
     <div
@@ -38,11 +48,7 @@ export function UserListItem({
           alt={username}
           className="w-8 h-8 rounded-full border border-[var(--color-border)]"
         />
-        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[var(--color-surface)] ${status === "online" ? "bg-[var(--color-success)]" :
-            status === "idle" ? "bg-[var(--color-warning)]" :
-              status === "dnd" ? "bg-[var(--color-error)]" :
-                "bg-[var(--color-text-muted)]"
-          }`}></div>
+        <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ${statusDotClass}`}></div>
       </div>
       <div className="flex items-center space-x-2 flex-1">
         <span className="text-[var(--color-text)] text-sm font-medium select-text truncate">{username}</span>

@@ -20,7 +20,7 @@ const toneClassMap: Record<NoticeTone, string> = {
  */
 export function Notice({ tone, message, onClose }: NoticeProps) {
   return (
-    <div className={`rounded-lg border px-4 py-3 text-sm ${toneClassMap[tone]}`}>
+    <div className={`rounded-xl border px-4 py-3 text-sm ${toneClassMap[tone]}`}>
       <div className="flex items-start justify-between gap-3">
         <div>{message}</div>
         {onClose && (
@@ -43,4 +43,3 @@ export function Notice({ tone, message, onClose }: NoticeProps) {
     </div>
   );
 }
-

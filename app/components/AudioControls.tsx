@@ -27,8 +27,6 @@ export function ModernSlider({
   disabled = false,
   className = ''
 }: ModernSliderProps) {
-  const [isDragging, setIsDragging] = useState(false);
-
   const sizeClasses = {
     small: 'h-1',
     medium: 'h-2',
@@ -46,16 +44,13 @@ export function ModernSlider({
   return (
     <div className={`relative ${className}`}>
       <div className="relative">
-        {/* Track Background */}
-        <div className={`w-full bg-[var(--color-surface-secondary)] rounded-full ${sizeClasses[size]} shadow-inner`} />
+        <div className={`w-full rounded-full bg-[var(--color-surface-secondary)] ${sizeClasses[size]}`} />
 
-        {/* Progress Fill */}
         <div
-          className={`absolute top-0 left-0 h-full bg-gradient-to-r ${color} to-[var(--color-accent)] rounded-full transition-all duration-300 shadow-lg`}
+          className={`absolute left-0 top-0 h-full rounded-full transition-all duration-200 ${color.includes("bg-") ? color : "bg-[var(--color-primary)]"}`}
           style={{ width: `${percentage}%` }}
         />
 
-        {/* Track Handle */}
         <input
           type="range"
           min={min}
@@ -68,31 +63,25 @@ export function ModernSlider({
             absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none
             [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6
-            [&::-webkit-slider-thumb]:bg-[var(--color-surface)]
-            [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[var(--color-primary)]
+            [&::-webkit-slider-thumb]:bg-[var(--color-background)]
+            [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[var(--color-border)]
             [&::-webkit-slider-thumb]:rounded-full
-            [&::-webkit-slider-thumb]:shadow-lg
             [&::-webkit-slider-thumb]:cursor-pointer
-            [&::-webkit-slider-thumb]:transition-all [&::-webkit-slider-thumb]:duration-200
-            [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:hover:border-[var(--color-accent)]
-            [&::-webkit-slider-thumb]:hover:shadow-xl
+            [&::-webkit-slider-thumb]:transition-colors [&::-webkit-slider-thumb]:duration-150
+            [&::-webkit-slider-thumb]:hover:border-[var(--color-primary)]
             [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6
-            [&::-moz-range-thumb]:bg-[var(--color-surface)]
-            [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[var(--color-primary)]
+            [&::-moz-range-thumb]:bg-[var(--color-background)]
+            [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-[var(--color-border)]
             [&::-moz-range-thumb]:rounded-full
-            [&::-moz-range-thumb]:shadow-lg
             [&::-moz-range-thumb]:cursor-pointer
             disabled:cursor-not-allowed
           `}
-          onMouseDown={() => setIsDragging(true)}
-          onMouseUp={() => setIsDragging(false)}
         />
       </div>
 
-      {/* Value Display */}
       {showValue && (
         <div className="flex justify-end mt-1">
-          <span className={`px-3 py-1 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-lg text-sm font-semibold ${color.includes('text') ? color : 'text-[var(--color-text)]'} shadow-sm`}>
+          <span className={`rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-1 text-sm font-medium ${color.includes('text') ? color : 'text-[var(--color-text)]'}`}>
             {value}{max === 100 ? '%' : ''}
           </span>
         </div>
@@ -143,16 +132,14 @@ export function ModernToggle({
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
       className={`
-        relative inline-flex items-center rounded-full transition-all duration-300 ease-in-out
+        relative inline-flex items-center rounded-full transition-colors duration-200 ease-in-out
         ${currentSize.container} ${color} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${checked ? `bg-gradient-to-r ${color} to-[var(--color-accent)] shadow-lg` : 'bg-[var(--color-surface-secondary)] border-2 border-[var(--color-border)]'}
-        hover:shadow-lg active:scale-95
+        ${checked ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border border-[var(--color-primary)]' : 'bg-[var(--color-surface-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)]'}
         ${className}
       `}
     >
-      {/* Background Labels */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`text-xs font-medium transition-all duration-200 ${
+        <span className={`text-[10px] font-medium transition-all duration-150 ${
           checked
             ? 'text-[var(--color-on-primary)] scale-100'
             : 'text-[var(--color-text-secondary)] scale-75'
@@ -161,15 +148,13 @@ export function ModernToggle({
         </span>
       </div>
 
-      {/* Thumb */}
       <div
         className={`
-          relative inline-block bg-[var(--color-surface)] rounded-full shadow-lg transition-all duration-300 ease-in-out
+          relative inline-block rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-background)] transition-all duration-200 ease-in-out
           ${currentSize.thumb} flex items-center justify-center
           ${checked ? currentSize.translate : 'translate-x-0'}
         `}
       >
-        {/* Icon inside thumb */}
         <div className={`transition-all duration-200 ${checked ? 'scale-100' : 'scale-75'}`}>
           {checked ? (
             icons?.on || <Check className="w-3 h-3 text-current" />
@@ -204,20 +189,20 @@ export function AudioTestButton({
 }: AudioTestButtonProps) {
   const variantClasses = {
     primary: isActive
-      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)] shadow-[0_0_24px_color-mix(in_srgb,var(--color-error)_35%,transparent)]'
-      : 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)]',
+      ? 'bg-[var(--color-active)] text-[var(--color-text)] border-[var(--color-border)]'
+      : 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]',
     secondary: isActive
-      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)] shadow-[0_0_24px_color-mix(in_srgb,var(--color-error)_35%,transparent)]'
-      : 'bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] hover:from-[var(--color-border)] hover:to-[var(--color-border-secondary)] text-[var(--color-text)]',
+      ? 'bg-[var(--color-active)] text-[var(--color-text)] border-[var(--color-border)]'
+      : 'bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]',
     success: isActive
-      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
-      : 'bg-[var(--color-success)] hover:bg-[color:color-mix(in_srgb,var(--color-success)_90%,var(--color-background))] text-[var(--color-on-success)]',
+      ? 'bg-[var(--color-active)] text-[var(--color-text)] border-[var(--color-border)]'
+      : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)] border-[var(--color-border)] hover:bg-[var(--color-hover)]',
     error: isActive
-      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
-      : 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]',
+      ? 'bg-[var(--color-active)] text-[var(--color-text)] border-[var(--color-border)]'
+      : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)] border-[var(--color-border)] hover:bg-[var(--color-hover)]',
     warning: isActive
-      ? 'bg-[var(--color-error)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_90%,var(--color-background))] text-[var(--color-on-error)]'
-      : 'bg-[var(--color-warning)] hover:bg-[color:color-mix(in_srgb,var(--color-warning)_90%,var(--color-background))] text-[var(--color-on-warning)]'
+      ? 'bg-[var(--color-active)] text-[var(--color-text)] border-[var(--color-border)]'
+      : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)] border-[var(--color-border)] hover:bg-[var(--color-hover)]'
   };
 
   const sizeClasses = {
@@ -234,35 +219,23 @@ export function AudioTestButton({
       onClick={onClick}
       disabled={isLoading}
       className={`
-        relative overflow-hidden rounded-xl font-semibold transition-all duration-300
-        shadow-lg hover:shadow-xl active:scale-95 active:shadow-lg
+        relative overflow-hidden rounded-xl border font-semibold transition-colors duration-150
         ${variantClass} ${sizeClass}
-        ${isActive ? 'ring-2 ring-current ring-opacity-50 animate-pulse' : ''}
+        ${isActive ? 'ring-2 ring-[var(--color-focus)] ring-offset-2 ring-offset-[var(--color-background)]' : ''}
         disabled:opacity-50 disabled:cursor-not-allowed
         ${className}
       `}
     >
-      {/* Loading Spinner */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-background)_72%,transparent)]">
           <Loader2 className="animate-spin w-5 h-5 text-current" />
         </div>
       )}
 
-      {/* Ripple Effect */}
-      <div className="absolute inset-0 rounded-xl bg-[var(--color-text)] opacity-0 transition-opacity duration-200 pointer-events-none hover:opacity-10" />
-
-      {/* Content */}
       <div className="flex items-center justify-center space-x-2">
-        {/* Icon Animation */}
-        {isActive && <Circle className="w-4 h-4 animate-pulse" />}
+        {isActive && <Circle className="w-4 h-4" />}
         <span>{children}</span>
       </div>
-
-      {/* Animated Border */}
-      {isActive && (
-        <div className="absolute inset-0 rounded-xl border-2 border-current border-opacity-75 animate-ping" />
-      )}
     </button>
   );
 }
@@ -392,14 +365,6 @@ export function SpectrumAnalyzer({
   return (
     <div className={`bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg overflow-hidden ${className}`}>
       <svg width={width} height={height} className="block">
-        <defs>
-          <linearGradient id="spectrumGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor={`rgb(var(--color-primary))`} />
-            <stop offset="50%" stopColor={`rgb(var(--color-accent))`} />
-            <stop offset="100%" stopColor={`rgb(var(--color-info))`} />
-          </linearGradient>
-        </defs>
-
         {Array.from({ length: numBars }).map((_, index) => {
           const dataIndex = Math.floor((index / numBars) * dataLength);
           const value = data[dataIndex] || 0;
@@ -416,17 +381,10 @@ export function SpectrumAnalyzer({
               y={height - barHeight}
               width={barWidth}
               height={barHeight}
-              fill="url(#spectrumGradient)"
+              fill="var(--color-primary)"
               rx={2}
               className="transition-all duration-75"
-            >
-              <animate
-                attributeName="height"
-                dur="50ms"
-                values={`${(data[dataIndex] || 0) / 255 * height};${barHeight}`}
-                fill="freeze"
-              />
-            </rect>
+            />
           );
         })}
       </svg>
@@ -458,29 +416,28 @@ export function DeviceCard({
     <div
       onClick={onSelect}
       className={`
-        relative p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer
-        transition-all duration-300 hover:shadow-lg hover:scale-[1.02]
+        relative rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-4 cursor-pointer
+        transition-colors duration-150
         ${device.selected
-          ? 'ring-2 ring-[var(--color-primary)] bg-gradient-to-br from-[var(--color-primary)]/5 to-[var(--color-accent)]/5'
-          : 'hover:border-[var(--color-primary)]/50'
+          ? 'ring-2 ring-[var(--color-focus)] ring-offset-2 ring-offset-[var(--color-background)] border-[var(--color-border)] bg-[var(--color-surface-secondary)]'
+          : 'hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]'
         }
         ${className}
       `}
     >
-      {/* Selection Indicator */}
       {device.selected && (
         <div className="absolute top-2 right-2">
-          <Check className="w-5 h-5 text-[var(--color-primary)]" />
+          <Check className="w-5 h-5 text-[var(--color-text)]" />
         </div>
       )}
 
       <div className="flex items-center space-x-3">
-        <div className={`p-2 rounded-lg ${device.selected ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-secondary)]'}`}>
+        <div className={`rounded-lg border border-[var(--color-border-secondary)] p-2 ${device.selected ? 'bg-[var(--color-background)]' : 'bg-[var(--color-surface-secondary)]'}`}>
           {icon}
         </div>
 
         <div className="flex-1 min-w-0">
-          <h4 className={`font-semibold truncate ${device.selected ? 'text-[var(--color-primary)]' : 'text-[var(--color-text)]'}`}>
+          <h4 className={`font-semibold truncate ${device.selected ? 'text-[var(--color-text)]' : 'text-[var(--color-text)]'}`}>
             {device.label || `Device ${device.deviceId.slice(-4)}`}
           </h4>
           <p className="text-xs text-[var(--color-text-secondary)] truncate">
@@ -488,11 +445,6 @@ export function DeviceCard({
           </p>
         </div>
       </div>
-
-      {/* Pulse Animation for Selected Device */}
-      {device.selected && (
-        <div className="absolute inset-0 rounded-xl ring-2 ring-[var(--color-primary)] animate-ping opacity-30" />
-      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import type { Route } from "./+types/login";
 import { Link, useLocation, useNavigate } from "react-router";
-import { useState, useEffect } from "react";
-import { login, handleAuthentication } from "../services/user";
+import { useEffect, useState } from "react";
+
 import Button from "../components/Button";
+import Input from "../components/Input";
 import { PufferblowBrand } from "../components/PufferblowBrand";
 import { normalizeInstance, resolveInstance } from "../services/instance";
+import { login, handleAuthentication } from "../services/user";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
@@ -43,7 +45,7 @@ export default function Login() {
     const rememberMe = formData.get("remember-me") === "on";
 
     if (!username || !password || !hostPort) {
-      setError("All fields are required");
+      setError("All fields are required.");
       setIsLoading(false);
       return;
     }
@@ -53,7 +55,9 @@ export default function Login() {
       normalizedInstance = normalizeInstance(hostPort);
       resolveInstance(hostPort);
     } catch {
-      setError("Invalid instance address. Use values like 'localhost:7575', 'https://pufferblow.example', or 'chat.example.com'.");
+      setError(
+        "Invalid instance address. Use values like 'localhost:7575', 'https://pufferblow.example', or 'chat.example.com'.",
+      );
       setIsLoading(false);
       return;
     }
@@ -61,12 +65,11 @@ export default function Login() {
     const response = await login(normalizedInstance, { username, password });
 
     if (!response.success) {
-      setError(response.error || "Login failed");
+      setError(response.error || "Login failed.");
       setIsLoading(false);
       return;
     }
 
-    // Handle server response format
     const data = response.data as any;
     const token = data?.auth_token;
     const refreshToken = data?.refresh_token;
@@ -75,7 +78,6 @@ export default function Login() {
     const refreshTokenExpireTime = data?.refresh_token_expire_time;
 
     if (token) {
-      // Use centralized authentication handler
       await handleAuthentication(
         token,
         normalizedInstance,
@@ -83,125 +85,132 @@ export default function Login() {
         expireTime,
         refreshToken,
         refreshTokenExpireTime,
-        tokenType
+        tokenType,
       );
       setLoginSuccess(true);
     } else {
-      setError("Invalid response from server");
+      setError("Invalid response from server.");
     }
 
     setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(245,245,220,0.08),transparent_35%),linear-gradient(180deg,var(--color-background),var(--color-background-secondary))] flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="flex justify-center">
-          <PufferblowBrand
-            size={72}
-            align="center"
-            subtitle="Fediversed Messaging"
-            surfaceColor="var(--color-background)"
-            className="flex-col gap-4"
-            textClassName="items-center"
-            titleClassName="text-4xl"
-            subtitleClassName="text-[11px] tracking-[0.32em] text-[var(--color-text-muted)]"
-          />
-        </div>
-        <div className="bg-[var(--color-surface)] backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-[var(--color-text)]">
-              Welcome back
-            </h2>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-              Sign in to your account
-            </p>
-          </div>
-
-          {error && (
-            <div className="mb-4 rounded-lg border border-[var(--color-error)] bg-[color:color-mix(in_srgb,var(--color-error)_12%,transparent)] p-3 text-[var(--color-error)]">
-              {error}
-            </div>
-          )}
-
-          {loginSuccess && (
-            <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[color:color-mix(in_srgb,var(--color-success)_12%,transparent)] p-3 text-[var(--color-success)]">
-              Signed in. Redirecting to your home instance...
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="min-h-screen bg-[var(--color-background)]">
+      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
+        <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,440px)]">
+          <section className="hidden rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8 lg:flex lg:flex-col lg:justify-between">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                required
-                disabled={isSubmitting}
-                className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
-                placeholder="Enter your username"
+              <PufferblowBrand
+                size={72}
+                subtitle="Sign in to your home instance"
+                surfaceColor="var(--color-surface)"
+                className="flex-col items-start gap-5"
+                titleClassName="text-5xl"
+                subtitleClassName="text-[11px]"
+              />
+              <div className="mt-10 max-w-xl space-y-5">
+                <h1 className="text-4xl font-semibold tracking-[-0.05em] text-[var(--color-text)]">
+                  A focused login flow for a decentralized client.
+                </h1>
+                <p className="text-lg leading-8 text-[var(--color-text-secondary)]">
+                  Connect to your configured instance, keep your layout clean, and return
+                  directly to the page you were trying to reach.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 text-sm text-[var(--color-text-secondary)] sm:grid-cols-3">
+              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
+                Home-instance aware
+              </div>
+              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
+                Session refresh support
+              </div>
+              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
+                Dual monochrome themes
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 sm:p-8">
+            <div className="mb-8 lg:hidden">
+              <PufferblowBrand
+                size={56}
+                subtitle="Sign in to your home instance"
+                surfaceColor="var(--color-surface)"
+                className="flex-col items-center gap-4"
+                align="center"
+                textClassName="items-center"
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Password
-              </label>
-              <input
+            <div className="mb-8">
+              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[var(--color-text)]">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
+                Sign in with your instance address, then we’ll return you to your destination.
+              </p>
+            </div>
+
+            {error ? (
+              <div className="mb-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
+                {error}
+              </div>
+            ) : null}
+
+            {loginSuccess ? (
+              <div className="mb-5 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
+                Signed in. Redirecting now.
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <Input
+                id="username"
+                name="username"
+                autoComplete="username"
+                label="Username"
+                placeholder="Enter your username"
+                disabled={isSubmitting}
+                fullWidth
+                required
+              />
+
+              <Input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="current-password"
-                required
-                disabled={isSubmitting}
-                className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
+                label="Password"
                 placeholder="Enter your password"
+                disabled={isSubmitting}
+                fullWidth
+                required
               />
-            </div>
 
-            <div>
-              <label htmlFor="hostPort" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Home Instance
-              </label>
-              <input
+              <Input
                 id="hostPort"
                 name="hostPort"
-                type="text"
-                required
-                disabled={isSubmitting}
-                className="w-full px-4 py-3 border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] transition-colors"
+                label="Home Instance"
                 placeholder="localhost:7575, https://pb.example, or chat.example.com"
+                disabled={isSubmitting}
+                fullWidth
+                required
               />
-            </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+              <label className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
                 <input
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
                   disabled={isSubmitting}
-                  className="h-4 w-4 text-[var(--color-primary)] focus:ring-[var(--color-primary)] border-[var(--color-border)] rounded"
+                  className="h-4 w-4 rounded border border-[var(--color-border)] bg-[var(--color-background)]"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-[var(--color-text-secondary)]">
-                  Remember me
-                </label>
-              </div>
+                Remember me on this device
+              </label>
 
-              <div className="text-sm">
-                <a href="#" className="font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]">
-                  Forgot your password?
-                </a>
-              </div>
-            </div>
-
-            <div>
               <Button
                 type="submit"
                 fullWidth
@@ -211,25 +220,29 @@ export default function Login() {
               >
                 {loginSuccess ? "Redirecting..." : "Sign in"}
               </Button>
-              <p className="mt-2 text-center text-xs text-[var(--color-text-muted)]">
+
+              <p className="text-center text-xs text-[var(--color-text-muted)]">
                 {loginSuccess
                   ? "Your home instance accepted the session."
-                  : "You'll return to the page you were trying to open."}
+                  : "We preserve the page you were heading to after authentication."}
               </p>
-            </div>
+            </form>
 
-            <div className="text-center">
-              <p className="text-sm text-[var(--color-text-muted)]">
-                Don't have an account?{' '}
+            <div className="mt-8 border-t border-[var(--color-border-secondary)] pt-6 text-center text-sm text-[var(--color-text-secondary)]">
+              <p>
+                Don&apos;t have an account?{" "}
                 <Link
-                  to={buildSiblingAuthLink("/signup", new URLSearchParams(location.search).get("redirect"))}
-                  className="font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
+                  to={buildSiblingAuthLink(
+                    "/signup",
+                    new URLSearchParams(location.search).get("redirect"),
+                  )}
+                  className="text-[var(--color-text)] underline decoration-[var(--color-border)] underline-offset-4 transition-colors hover:text-[var(--color-text-secondary)]"
                 >
-                  Sign up
+                  Create one
                 </Link>
               </p>
             </div>
-          </form>
+          </section>
         </div>
       </div>
     </div>

@@ -105,6 +105,213 @@ function ControlPanelAvatar({
   );
 }
 
+const cx = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
+const controlPanelSectionClass =
+  "rounded-[1.5rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 shadow-sm";
+const controlPanelInsetClass =
+  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
+const controlPanelQuietClass =
+  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_72%,var(--color-background)_28%)] p-5";
+const controlPanelCardClass =
+  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4";
+const controlPanelMetricClass =
+  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
+const controlPanelChartCardClass =
+  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
+const controlPanelRowClass =
+  "rounded-[1rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4 transition-colors hover:border-[var(--color-border)] hover:bg-[var(--color-hover)]";
+const controlPanelInputClass =
+  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-2.5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
+const controlPanelTextAreaClass =
+  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-3 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
+const controlPanelSelectClass =
+  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-2.5 text-[var(--color-text)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
+
+const controlPanelButtonClass = (variant: "primary" | "secondary" | "ghost" | "danger" = "secondary") =>
+  cx(
+    "inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium tracking-[-0.01em] transition-colors",
+    variant === "primary" &&
+      "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]",
+    variant === "secondary" &&
+      "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)]",
+    variant === "ghost" &&
+      "border-transparent bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+    variant === "danger" &&
+      "border-[color:color-mix(in_srgb,var(--color-error)_32%,var(--color-border-secondary))] bg-[color:color-mix(in_srgb,var(--color-error)_10%,var(--color-surface-secondary))] text-[var(--color-text)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_16%,var(--color-surface-secondary))]",
+  );
+
+const controlPanelSegmentClass = (active: boolean) =>
+  cx(
+    "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+    active
+      ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+      : "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+  );
+
+const controlPanelBadgeClass = (tone: "neutral" | "success" | "warning" | "info" | "danger" = "neutral") =>
+  cx(
+    "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]",
+    tone === "neutral" &&
+      "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]",
+    tone === "success" && "pb-status-success",
+    tone === "warning" && "pb-status-warning",
+    tone === "info" && "pb-status-info",
+    tone === "danger" && "pb-status-danger",
+  );
+
+const formatCompactNumber = (value: number | null | undefined) =>
+  typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "—";
+
+const resolveCssVar = (name: string, fallback: string) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return fallback;
+  }
+
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+};
+
+const hexToRgba = (value: string, alpha: number) => {
+  const hex = value.replace("#", "").trim();
+  if (hex.length !== 3 && hex.length !== 6) {
+    return value;
+  }
+
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : hex;
+
+  const int = Number.parseInt(normalized, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getControlPanelChartPalette = () => {
+  const text = resolveCssVar("--color-text", "#fafafa");
+  const textSecondary = resolveCssVar("--color-text-secondary", "#d4d4d4");
+  const textMuted = resolveCssVar("--color-text-muted", "#737373");
+  const border = resolveCssVar("--color-border-secondary", "rgba(255,255,255,0.08)");
+  const primary = resolveCssVar("--color-primary", "#fafafa");
+  const success = resolveCssVar("--color-success", "#7ecf9f");
+  const warning = resolveCssVar("--color-warning", "#d6b36a");
+  const info = resolveCssVar("--color-info", "#86aee8");
+  const error = resolveCssVar("--color-error", "#d8837b");
+
+  return {
+    text,
+    textSecondary,
+    textMuted,
+    border,
+    primary,
+    success,
+    warning,
+    info,
+    error,
+    neutralFill: hexToRgba(primary, 0.12),
+    neutralStroke: hexToRgba(primary, 0.7),
+    successFill: hexToRgba(success, 0.18),
+    successStroke: success,
+    warningFill: hexToRgba(warning, 0.2),
+    warningStroke: warning,
+    infoFill: hexToRgba(info, 0.18),
+    infoStroke: info,
+    errorFill: hexToRgba(error, 0.16),
+    errorStroke: error,
+  };
+};
+
+const createChartOptions = (kind: "line" | "bar" | "pie") => {
+  const palette = getControlPanelChartPalette();
+
+  if (kind === "pie") {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom" as const,
+          labels: {
+            color: palette.textSecondary,
+            usePointStyle: true,
+            padding: 18,
+            boxWidth: 10,
+            boxHeight: 10,
+            font: {
+              size: 11,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index" as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: "rgba(12, 12, 12, 0.94)",
+        borderColor: palette.border,
+        borderWidth: 1,
+        titleColor: palette.text,
+        bodyColor: palette.textSecondary,
+        padding: 12,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: {
+        border: {
+          display: false,
+        },
+        ticks: {
+          color: palette.textMuted,
+          maxRotation: 0,
+          autoSkipPadding: 14,
+          font: {
+            size: 11,
+          },
+        },
+        grid: {
+          display: false,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        border: {
+          display: false,
+        },
+        ticks: {
+          color: palette.textMuted,
+          padding: 10,
+          font: {
+            size: 11,
+          },
+        },
+        grid: {
+          color: hexToRgba(resolveCssVar("--color-text", "#fafafa"), 0.08),
+          drawTicks: false,
+        },
+      },
+    },
+  };
+};
+
 export function TasksTab({
   showToast
 }: {
@@ -958,8 +1165,8 @@ export function StorageTab({
 
       {/* Delete File Confirmation Modal */}
       {deleteConfirmFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[var(--color-surface)]/95 backdrop-blur-md rounded-xl w-full max-w-md mx-auto shadow-2xl border border-[var(--color-border)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-shadow-lg)_35%,transparent)] p-4">
+          <div className="mx-auto w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-[var(--color-text)]">Delete File</h3>
@@ -974,7 +1181,7 @@ export function StorageTab({
               </div>
 
               {/* File Info */}
-              <div className="bg-[var(--color-background-secondary)] rounded-lg p-4 mb-6 border border-[var(--color-border)]">
+              <div className="mb-6 rounded-lg border border-[var(--color-border)] bg-[var(--color-background-secondary)] p-4">
                 <div className="flex items-center space-x-3 mb-3">
                   <div className="w-10 h-10 flex items-center justify-center text-lg bg-[var(--color-surface-tertiary)] rounded-lg">
                     {getFileTypeIcon(deleteConfirmFile.filename, deleteConfirmFile.type || 'unknown')}
@@ -1172,10 +1379,10 @@ export function RecentActivity() {
 
   if (loading) {
     return (
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <h2 className="text-[var(--color-text)] font-semibold mb-4">Recent Activity</h2>
-        <div className="animate-pulse space-y-3">
-          <div className="flex items-center space-x-3 p-3 bg-[var(--color-background-secondary)] rounded-lg">
+        <div className="space-y-3">
+          <div className={cx(controlPanelRowClass, "animate-pulse")}>
             <div className="w-8 h-8 bg-[var(--color-surface-tertiary)] rounded-full"></div>
             <div className="flex-1">
               <div className="h-4 bg-[var(--color-surface-tertiary)] rounded mb-1 w-24"></div>
@@ -1189,7 +1396,7 @@ export function RecentActivity() {
 
   if (error) {
     return (
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <h2 className="text-[var(--color-text)] font-semibold mb-4">Recent Activity</h2>
         <div className="flex items-center justify-center py-8">
           <div className="text-center text-[var(--color-error)]">
@@ -1204,7 +1411,7 @@ export function RecentActivity() {
   }
 
   return (
-    <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+    <div className={controlPanelSectionClass}>
       <h2 className="text-[var(--color-text)] font-semibold mb-4">Recent Activity</h2>
       {activities.length === 0 ? (
         <div className="flex items-center justify-center py-8">
@@ -1244,10 +1451,10 @@ export function RecentActivity() {
             const parsedDesc = parseActivityDescription(activity);
 
             return (
-              <div key={activity.id} className="flex items-center space-x-3 p-3 bg-[var(--color-background-secondary)] rounded-lg hover:bg-[var(--color-hover)] transition-all duration-200 cursor-pointer">
+              <div key={activity.id} className={cx(controlPanelRowClass, "flex items-center space-x-3 cursor-pointer")}>
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-lg"
-                  style={{ backgroundColor: style.color }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg"
+                  style={{ backgroundColor: `color-mix(in srgb, ${style.color} 20%, var(--color-surface))`, color: style.color }}
                 >
                   {style.icon}
                 </div>
@@ -1386,6 +1593,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         }
 
         const newChartData: typeof chartData = {};
+        const newRawStats: typeof rawStats = {};
 
         // Helper function to format chart data for Chart.js
         const formatChartData = (backendData: any, chartType: string) => {
@@ -1420,78 +1628,85 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
               data = [0];
             }
 
-            // Modern color schemes based on chart type
-            const getChartColors = (type: string) => {
-              const palettes = {
-                'Line': {
-                  borderColor: 'rgb(34, 197, 94)',
-                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                  borderWidth: 2,
-                  tension: 0.4,
-                  fill: true,
-                  pointBackgroundColor: 'rgb(34, 197, 94)',
-                  pointBorderColor: '#ffffff',
-                  pointBorderWidth: 2,
-                  pointHoverRadius: 6,
-                  pointHoverBackgroundColor: 'rgb(34, 197, 94)',
-                  pointHoverBorderColor: '#ffffff',
-                  pointHoverBorderWidth: 3,
-                },
-                'Bar': {
-                  backgroundColor: [
-                    'rgba(59, 130, 246, 0.8)',
-                    'rgba(147, 51, 234, 0.8)',
-                    'rgba(16, 185, 129, 0.8)',
-                    'rgba(245, 158, 11, 0.8)',
-                    'rgba(239, 68, 68, 0.8)',
-                  ],
-                  borderColor: [
-                    'rgb(59, 130, 246)',
-                    'rgb(147, 51, 234)',
-                    'rgb(16, 185, 129)',
-                    'rgb(245, 158, 11)',
-                    'rgb(239, 68, 68)',
-                  ],
-                  borderWidth: 0,
-                  borderRadius: 4,
-                  borderSkipped: false,
-                },
-                'Pie': {
-                  backgroundColor: [
-                    'rgba(59, 130, 246, 0.9)',
-                    'rgba(147, 51, 234, 0.9)',
-                    'rgba(16, 185, 129, 0.9)',
-                    'rgba(245, 158, 11, 0.9)',
-                    'rgba(239, 68, 68, 0.9)',
-                    'rgba(6, 182, 212, 0.9)',
-                  ],
-                  borderColor: [
-                    'rgb(59, 130, 246)',
-                    'rgb(147, 51, 234)',
-                    'rgb(16, 185, 129)',
-                    'rgb(245, 158, 11)',
-                    'rgb(239, 68, 68)',
-                    'rgb(6, 182, 212)',
-                  ],
-                  borderWidth: 1,
-                  offset: 4,
-                }
-              };
+            const palette = getControlPanelChartPalette();
+            const normalizedType = chartType.toLowerCase();
+            const chartKind =
+              normalizedType.includes("status")
+                ? "pie"
+                : normalizedType.includes("message") || normalizedType.includes("channel")
+                  ? "bar"
+                  : "line";
 
-              return palettes[type as keyof typeof palettes] || palettes.Line;
-            };
+            const chartColors =
+              chartKind === "pie"
+                ? {
+                    backgroundColor: [
+                      palette.successFill,
+                      palette.infoFill,
+                      palette.warningFill,
+                      palette.errorFill,
+                      palette.neutralFill,
+                    ],
+                    borderColor: [
+                      palette.successStroke,
+                      palette.infoStroke,
+                      palette.warningStroke,
+                      palette.errorStroke,
+                      palette.neutralStroke,
+                    ],
+                    borderWidth: 1,
+                    hoverOffset: 6,
+                  }
+                : chartKind === "bar"
+                  ? {
+                      backgroundColor: labels.map((_, index) =>
+                        [
+                          palette.neutralFill,
+                          palette.infoFill,
+                          palette.successFill,
+                          palette.warningFill,
+                          palette.errorFill,
+                        ][index % 5],
+                      ),
+                      borderColor: labels.map((_, index) =>
+                        [
+                          palette.neutralStroke,
+                          palette.infoStroke,
+                          palette.successStroke,
+                          palette.warningStroke,
+                          palette.errorStroke,
+                        ][index % 5],
+                      ),
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      borderSkipped: false,
+                      maxBarThickness: 28,
+                    }
+                  : {
+                      borderColor: normalizedType.includes("online")
+                        ? palette.successStroke
+                        : normalizedType.includes("registration")
+                          ? palette.infoStroke
+                          : palette.neutralStroke,
+                      backgroundColor: normalizedType.includes("online")
+                        ? palette.successFill
+                        : normalizedType.includes("registration")
+                          ? palette.infoFill
+                          : palette.neutralFill,
+                      borderWidth: 2,
+                      tension: 0.34,
+                      fill: true,
+                      pointRadius: 0,
+                      pointHoverRadius: 4,
+                      pointHitRadius: 18,
+                    };
 
-            const chartTypeCapitalized = chartType === 'userStatus' ? 'Pie' : (chartType === 'messageActivity' || chartType === 'channelCreation' ? 'Bar' : 'Line');
-            const colors = getChartColors(chartTypeCapitalized);
-
-            // Create proper Chart.js format with modern styling
             return {
               labels: labels,
               datasets: [{
-                label: chartType.replace(/([A-Z])/g, ' $1').toLowerCase(),
+                label: chartType,
                 data: data,
-                hoverOffset: chartType === 'Pie' ? 8 : 0,
-                ...colors
+                ...chartColors,
               }]
             };
 
@@ -1507,12 +1722,18 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         if (userRegistrationsData) {
           newChartData.userRegistrations = userRegistrationsData;
         }
+        if (userRegistrationsRes.status === 'fulfilled' && userRegistrationsRes.value.success && userRegistrationsRes.value.data?.raw_stats) {
+          newRawStats.userRegistrations = userRegistrationsRes.value.data.raw_stats;
+        }
 
         const messageActivityData = messageActivityRes.status === 'fulfilled' && messageActivityRes.value.success && messageActivityRes.value.data
           ? formatChartData(messageActivityRes.value.data.chart_data, 'Message Activity')
           : null;
         if (messageActivityData) {
           newChartData.messageActivity = messageActivityData;
+        }
+        if (messageActivityRes.status === 'fulfilled' && messageActivityRes.value.success && messageActivityRes.value.data?.raw_stats) {
+          newRawStats.messageActivity = messageActivityRes.value.data.raw_stats;
         }
 
         const onlineUsersData = onlineUsersRes.status === 'fulfilled' && onlineUsersRes.value.success && onlineUsersRes.value.data
@@ -1521,12 +1742,18 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         if (onlineUsersData) {
           newChartData.onlineUsers = onlineUsersData;
         }
+        if (onlineUsersRes.status === 'fulfilled' && onlineUsersRes.value.success && onlineUsersRes.value.data?.raw_stats) {
+          newRawStats.onlineUsers = onlineUsersRes.value.data.raw_stats;
+        }
 
         const channelCreationData = channelCreationRes.status === 'fulfilled' && channelCreationRes.value.success && channelCreationRes.value.data
           ? formatChartData(channelCreationRes.value.data.chart_data, 'Channel Creation')
           : null;
         if (channelCreationData) {
           newChartData.channelCreation = channelCreationData;
+        }
+        if (channelCreationRes.status === 'fulfilled' && channelCreationRes.value.success && channelCreationRes.value.data?.raw_stats) {
+          newRawStats.channelCreation = channelCreationRes.value.data.raw_stats;
         }
 
         const userStatusData = userStatusRes.status === 'fulfilled' && userStatusRes.value.success && userStatusRes.value.data
@@ -1535,8 +1762,12 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         if (userStatusData) {
           newChartData.userStatus = userStatusData;
         }
+        if (userStatusRes.status === 'fulfilled' && userStatusRes.value.success && userStatusRes.value.data?.raw_stats) {
+          newRawStats.userStatus = userStatusRes.value.data.raw_stats;
+        }
 
         setChartData(newChartData);
+        setRawStats(newRawStats);
 
         // Check if any requests failed and set appropriate error
         const failedRequests = [
@@ -1565,15 +1796,12 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
   // Period selector component
   const PeriodSelector = () => (
-    <div className="flex space-x-2 mb-4">
+    <div className="mb-4 flex flex-wrap gap-2">
       {(['1h', '24h', '7d', '30d', '90d', '1y'] as const).map((period) => (
         <button
           key={period}
           onClick={() => setSelectedPeriod({ period })}
-          className={`px-3 py-1 rounded text-sm transition-colors ${selectedPeriod.period === period
-              ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
-              : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-tertiary)]'
-            }`}
+          className={controlPanelSegmentClass(selectedPeriod.period === period)}
         >
           {period}
         </button>
@@ -1586,6 +1814,7 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
     version: string;
     creation_date: string | null;
     max_users: number | null;
+    is_private?: boolean;
     total_users?: number;
     server_description?: string;
     avatar_url?: string | null;
@@ -1612,565 +1841,450 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
     loadServerInfo();
   }, []);
 
+  const refreshUsage = async () => {
+    setUsageLoading(true);
+    setUsageError(null);
+
+    try {
+      const response = await getServerUsage();
+      if (response.success && response.data) {
+        setServerUsage(response.data.server_usage);
+      } else {
+        setUsageError('Failed to load server usage data');
+      }
+    } catch (err) {
+      setUsageError('Failed to load server usage data');
+      logger.api.error('Failed to refresh server usage data', err);
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  const getUsageTone = (value: number) => {
+    if (value >= 85) return 'var(--color-error)';
+    if (value >= 65) return 'var(--color-warning)';
+    if (value >= 45) return 'var(--color-info)';
+    return 'var(--color-success)';
+  };
+
+  const MetricCard = ({
+    label,
+    value,
+    detail,
+    tone = 'neutral',
+  }: {
+    label: string;
+    value: string;
+    detail?: string;
+    tone?: 'neutral' | 'success' | 'warning' | 'info';
+  }) => (
+    <div className={controlPanelMetricClass}>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">
+          {label}
+        </span>
+        <span className={controlPanelBadgeClass(tone)}>{tone === 'neutral' ? 'Live' : tone}</span>
+      </div>
+      <div className="text-3xl font-semibold tracking-[-0.04em] text-[var(--color-text)]">{value}</div>
+      {detail ? <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{detail}</p> : null}
+    </div>
+  );
+
+  const OverviewInfoCard = ({
+    title,
+    items,
+  }: {
+    title: string;
+    items: Array<{ label: string; value: string }>;
+  }) => (
+    <div className={controlPanelInsetClass}>
+      <h3 className="mb-4 text-base font-semibold tracking-[-0.02em] text-[var(--color-text)]">{title}</h3>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-3 border-b border-[var(--color-border-secondary)] pb-3 last:border-b-0 last:pb-0"
+          >
+            <span className="text-sm text-[var(--color-text-secondary)]">{item.label}</span>
+            <span className="text-sm font-medium text-[var(--color-text)]">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const UsageCard = ({
+    label,
+    value,
+    detail,
+    accent,
+  }: {
+    label: string;
+    value: number;
+    detail: string;
+    accent: string;
+  }) => (
+    <div className={controlPanelCardClass}>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">{label}</span>
+        <span className="text-sm font-medium text-[var(--color-text-secondary)]">{value}%</span>
+      </div>
+      <div className="mb-3 h-2 rounded-full bg-[var(--color-background)]">
+        <div
+          className="h-2 rounded-full transition-all duration-300"
+          style={{ width: `${Math.max(0, Math.min(value, 100))}%`, backgroundColor: accent }}
+        />
+      </div>
+      <div className="text-sm text-[var(--color-text-secondary)]">{detail}</div>
+    </div>
+  );
+
+  const ChartPanel = ({
+    title,
+    description,
+    children,
+  }: {
+    title: string;
+    description: string;
+    children: React.ReactNode;
+  }) => (
+    <div className={controlPanelChartCardClass}>
+      <div className="mb-4">
+        <h4 className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text)]">{title}</h4>
+        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{description}</p>
+      </div>
+      <div className="h-72">{children}</div>
+    </div>
+  );
+
+  const primaryDescription = serverInfo?.server_description?.trim();
+  const overviewMetrics = [
+    {
+      label: 'Online now',
+      value: formatCompactNumber(activityMetrics?.current_online ?? rawStats.onlineUsers?.currently_online),
+      detail: `${formatCompactNumber(serverOverview?.active_users ?? activityMetrics?.active_users_24h)} active over the last 24h`,
+      tone: 'success' as const,
+    },
+    {
+      label: 'Total members',
+      value: formatCompactNumber(serverOverview?.total_users ?? activityMetrics?.total_users ?? rawStats.userRegistrations?.total_users),
+      detail: `+${formatCompactNumber(rawStats.userRegistrations?.new_this_week)} joined this week`,
+      tone: 'info' as const,
+    },
+    {
+      label: 'Messages',
+      value: formatCompactNumber(serverOverview?.messages_this_period ?? rawStats.messageActivity?.messages_today),
+      detail: `${formatCompactNumber(serverOverview?.messages_last_hour ?? activityMetrics?.messages_per_hour)} in the last hour`,
+      tone: 'neutral' as const,
+    },
+    {
+      label: 'Channels',
+      value: formatCompactNumber(serverOverview?.total_channels ?? activityMetrics?.total_channels ?? rawStats.channelCreation?.total_channels),
+      detail: `${formatCompactNumber(rawStats.channelCreation?.public_channels)} public / ${formatCompactNumber(rawStats.channelCreation?.private_channels)} private`,
+      tone: 'warning' as const,
+    },
+  ];
+
+  const overviewCards = [
+    {
+      title: 'Community snapshot',
+      items: [
+        { label: 'Active users', value: formatCompactNumber(serverOverview?.active_users ?? activityMetrics?.active_users_24h) },
+        { label: 'Recently active', value: formatCompactNumber(rawStats.userRegistrations?.recently_active) },
+        { label: 'Engagement rate', value: activityMetrics?.engagement_rate != null ? `${activityMetrics.engagement_rate}%` : '—' },
+        { label: 'Messages per active user', value: activityMetrics?.messages_per_active_user != null ? `${activityMetrics.messages_per_active_user}` : '—' },
+      ],
+    },
+    {
+      title: 'Server details',
+      items: [
+        { label: 'Version', value: serverInfo?.version || '—' },
+        { label: 'Visibility', value: serverInfo?.is_private ? 'Private' : 'Public' },
+        { label: 'Created', value: serverInfo?.creation_date ? new Date(serverInfo.creation_date).toLocaleDateString() : 'Unknown' },
+        { label: 'Member cap', value: serverInfo?.max_users ? `${serverInfo.max_users.toLocaleString()} members` : 'Unlimited' },
+      ],
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Server Information Dashboard */}
-      {serverInfo && (
-        <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[var(--color-text)] font-semibold">Server Overview</h2>
-            <div className="flex items-center space-x-2 text-sm">
-              <div className="w-2 h-2 bg-[var(--color-success)] rounded-full animate-pulse"></div>
-              <span className="text-[var(--color-success)] font-medium">Online</span>
-            </div>
-          </div>
-
-          {/* Server Identity Card */}
-          <div className="bg-[var(--color-background-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-            <div className="flex items-start space-x-4">
-              {serverInfo?.avatar_url ? (
+      {serverInfo ? (
+        <section className={controlPanelSectionClass}>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-1 items-start gap-4">
+              {serverInfo.avatar_url ? (
                 <img
                   src={convertToFullStorageUrl(serverInfo.avatar_url)}
                   alt={serverInfo.server_name}
-                  className="w-16 h-16 rounded-xl border-2 border-[var(--color-border)] object-cover shadow-lg"
+                  className="h-16 w-16 rounded-[1.25rem] border border-[var(--color-border-secondary)] object-cover"
                 />
               ) : (
-                <div className="w-16 h-16 bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-primary)] rounded-xl flex items-center justify-center border-2 border-[var(--color-border)] shadow-lg">
-                  <span className="text-[var(--color-on-primary)] font-bold text-2xl">
-                    {serverInfo.server_name.charAt(0).toUpperCase()}
-                  </span>
+                <div className="flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-2xl font-semibold text-[var(--color-text)]">
+                  {serverInfo.server_name.charAt(0).toUpperCase()}
                 </div>
               )}
-              <div className="flex-1">
-                <h3 className="text-[var(--color-text)] font-bold text-xl mb-2">{serverInfo.server_name}</h3>
-                <p className="text-[var(--color-text-secondary)] mb-3">{serverInfo.server_description}</p>
-                <div className="flex items-center space-x-4 text-sm text-[var(--color-text-muted)]">
-                  <span>Version {serverInfo.version}</span>
-                  <span>•</span>
-                  <span>Created {serverInfo.creation_date ? new Date(serverInfo.creation_date).toLocaleDateString() : 'Unknown'}</span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <span className={controlPanelBadgeClass('success')}>Instance online</span>
+                  <span className={controlPanelBadgeClass('neutral')}>Version {serverInfo.version}</span>
+                  <span className={controlPanelBadgeClass('neutral')}>
+                    {serverInfo.is_private ? 'Invite only' : 'Public access'}
+                  </span>
                 </div>
+                <h2 className="text-3xl font-semibold tracking-[-0.05em] text-[var(--color-text)]">
+                  {serverInfo.server_name}
+                </h2>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+                  {primaryDescription
+                    ? bannerExpanded || primaryDescription.length <= 180
+                      ? primaryDescription
+                      : `${primaryDescription.slice(0, 180)}...`
+                    : 'Set a short description so admins can immediately understand the purpose of this instance.'}
+                </p>
+                {primaryDescription && primaryDescription.length > 180 ? (
+                  <button
+                    onClick={() => setBannerExpanded((value) => !value)}
+                    className="mt-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
+                  >
+                    {bannerExpanded ? 'Show less' : 'Read full description'}
+                  </button>
+                ) : null}
               </div>
             </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={onSettingsClick} className={controlPanelButtonClass('secondary')}>
+                Instance settings
+              </button>
+              <button onClick={refreshUsage} disabled={usageLoading} className={controlPanelButtonClass('ghost')}>
+                {usageLoading ? 'Refreshing…' : 'Refresh usage'}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        </section>
+      ) : null}
 
-      {/* Server Statistics */}
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-[var(--color-text)] font-semibold">Server Statistics</h2>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setViewMode('numbers')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${viewMode === 'numbers'
-                  ? 'bg-[var(--color-primary)] text-[var(--color-background)] shadow-lg'
-                  : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                }`}
-            >
-              Numbers
+      <section className={controlPanelSectionClass}>
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold tracking-[-0.03em] text-[var(--color-text)]">Overview</h2>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              A calmer snapshot of growth, activity, and system health for this instance.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setViewMode('numbers')} className={controlPanelSegmentClass(viewMode === 'numbers')}>
+              Summary
             </button>
-
-            <button
-              onClick={() => setViewMode('diagram')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${viewMode === 'diagram'
-                  ? 'bg-[var(--color-primary)] text-[var(--color-background)] shadow-lg'
-                  : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                }`}
-            >
-              Diagram
+            <button onClick={() => setViewMode('diagram')} className={controlPanelSegmentClass(viewMode === 'diagram')}>
+              Charts
             </button>
           </div>
         </div>
 
         {viewMode === 'numbers' ? (
           <div className="space-y-6">
-            {/* Key Metrics - Most Important First */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg text-[var(--color-text-secondary)]">Online Now</div>
-                    <div className="text-3xl font-bold text-[var(--color-text)]">
-                      {activityMetrics?.current_online?.toLocaleString() ?? rawStats.onlineUsers?.currently_online?.toLocaleString() ?? '—'}
-                    </div>
-                  </div>
-                  <svg className="w-8 h-8 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg text-[var(--color-success)]">New This Week</div>
-                    <div className="text-3xl font-bold text-[var(--color-text)]">
-                      +{rawStats.userRegistrations?.new_this_week?.toLocaleString() ?? '—'}
-                    </div>
-                  </div>
-                  <svg className="w-8 h-8 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-              </div>
-              <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg text-[var(--color-info)]">Messages Today</div>
-                    <div className="text-3xl font-bold text-[var(--color-text)]">
-                      {serverOverview?.messages_this_period?.toLocaleString() ?? rawStats.messageActivity?.messages_today?.toLocaleString() ?? '—'}
-                    </div>
-                  </div>
-                  <svg className="w-8 h-8 text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg text-[var(--color-warning)]">Total Channels</div>
-                    <div className="text-3xl font-bold text-[var(--color-text)]">
-                      {activityMetrics?.total_channels?.toLocaleString() ?? rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
-                    </div>
-                  </div>
-                  <svg className="w-8 h-8 text-[var(--color-warning)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {overviewMetrics.map((metric) => (
+                <MetricCard
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                  detail={metric.detail}
+                  tone={metric.tone}
+                />
+              ))}
             </div>
 
-            {/* Detailed Stats in Categories */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Server Overview */}
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                <h3 className="mb-3 flex items-center text-lg font-semibold text-[var(--color-text)]">
-                  <svg className="w-5 h-5 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  Server Overview
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">
-                      {rawStats.userRegistrations?.total_users?.toLocaleString() ?? '—'}
-                    </div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Total Members</div>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className={controlPanelInsetClass}>
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text)]">
+                      Resource health
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                      Live host metrics with clearer thresholds and less visual noise.
+                    </p>
                   </div>
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">
-                      {rawStats.channelCreation?.total_channels?.toLocaleString() ?? '—'}
-                    </div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Active Channels</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Activity Metrics */}
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                <h3 className="mb-3 flex items-center text-lg font-semibold text-[var(--color-text)]">
-                  <svg className="w-5 h-5 mr-2 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                  Activity Metrics
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">12</div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Messages/Hour</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">89%</div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Active Users</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Server Resources Dashboard */}
-              <div className="bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-background-secondary)] to-[var(--color-surface)] rounded-xl p-6 border border-[var(--color-border)] shadow-xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-[var(--color-text)] flex items-center">
-                    <svg className="w-6 h-6 mr-3 text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-7 7V5a2 2 0 114 0v14m0 0l-4-4m4 4l4-4" />
-                    </svg>
-                    Server Resources
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-[var(--color-success)] rounded-full animate-pulse"></div>
-                      <span className="text-xs text-[var(--color-success)] font-medium">Live</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setUsageLoading(true);
-                        setUsageError(null);
-                        // Add cache-busting timestamp to ensure fresh data
-                        getServerUsage().then(response => {
-                          if (response.success && response.data) {
-                            // Force state update with new data
-                            setServerUsage(prevState => ({ ...prevState, ...response.data!.server_usage, timestamp: Date.now() }));
-                            console.log('Updated server usage data:', response.data!.server_usage);
-                          } else {
-                            setUsageError('Failed to load server usage data');
-                          }
-                          setUsageLoading(false);
-                        }).catch((error) => {
-                          console.error('Server usage API error:', error);
-                          setUsageError('Failed to load server usage data');
-                          setUsageLoading(false);
-                        });
-                      }}
-                      disabled={usageLoading}
-                      className="bg-[var(--color-info)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-[var(--color-on-info)] px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-2 hover:shadow-lg"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span>{usageLoading ? 'Updating...' : 'Refresh'}</span>
-                    </button>
-                  </div>
+                  <span className={controlPanelBadgeClass(usageError ? 'danger' : 'info')}>
+                    {usageError ? 'Issue' : 'Live telemetry'}
+                  </span>
                 </div>
 
                 {usageLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="text-center">
-                      <svg className="mx-auto mb-3 w-8 h-8 animate-spin text-[var(--color-info)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className={controlPanelQuietClass}>
+                    <div className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+                      <svg className="h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      <p className="text-sm font-medium text-[var(--color-info)]">Scanning server resources...</p>
+                      Collecting current resource usage
                     </div>
                   </div>
                 ) : usageError ? (
-                  <div className="text-center py-6">
-                    <div className="text-center">
-                      <svg className="mx-auto mb-3 w-12 h-12 text-[var(--color-error)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-                      </svg>
-                      <h4 className="mb-2 font-medium text-[var(--color-error)]">Resource Monitoring Error</h4>
-                      <p className="text-[var(--color-text-secondary)] text-sm mb-4">{usageError}</p>
-                      <button
-                        onClick={() => {
-                          setUsageLoading(true);
-                          setUsageError(null);
-                          getServerUsage().then(response => {
-                            if (response.success && response.data) {
-                              setServerUsage(response.data.server_usage);
-                            } else {
-                              setUsageError('Failed to load server usage data');
-                            }
-                            setUsageLoading(false);
-                          }).catch(() => {
-                            setUsageError('Failed to load server usage data');
-                            setUsageLoading(false);
-                          });
-                        }}
-                        className="rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm text-[var(--color-on-error)] transition-colors hover:opacity-90"
-                      >
-                        Retry Connection
+                  <div className={cx(controlPanelQuietClass, 'pb-status-danger')}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-[var(--color-text)]">Resource monitoring unavailable</h4>
+                        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{usageError}</p>
+                      </div>
+                      <button onClick={refreshUsage} className={controlPanelButtonClass('danger')}>
+                        Retry
                       </button>
                     </div>
                   </div>
                 ) : serverUsage ? (
-                  <>
-                    {/* Main Metrics Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                      {/* CPU Usage */}
-                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-4 h-4 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                            </svg>
-                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">CPU</span>
-                          </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <UsageCard
+                        label="CPU"
+                        value={serverUsage.cpu_percent}
+                        detail="Processor utilization"
+                        accent={getUsageTone(serverUsage.cpu_percent)}
+                      />
+                      <UsageCard
+                        label="Memory"
+                        value={serverUsage.ram_percent}
+                        detail={`${serverUsage.ram_used_gb}GB of ${serverUsage.ram_total_gb}GB in use`}
+                        accent={getUsageTone(serverUsage.ram_percent)}
+                      />
+                      <UsageCard
+                        label="Storage"
+                        value={serverUsage.storage_percent}
+                        detail={`${serverUsage.storage_used_gb}GB of ${serverUsage.storage_total_gb}GB used`}
+                        accent={getUsageTone(serverUsage.storage_percent)}
+                      />
+                      <div className={controlPanelCardClass}>
+                        <div className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">
+                          Disk I/O
                         </div>
-                        <div className="text-center">
-                          <div className="mb-1 text-2xl font-bold text-[var(--color-text)]">{serverUsage.cpu_percent}%</div>
-                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
-                            <div
-                              className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] h-2 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(serverUsage.cpu_percent, 100)}%` }}
-                            />
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[var(--color-text-secondary)]">Read</span>
+                            <span className="text-sm font-medium text-[var(--color-text)]">{serverUsage.disk_read_mb_per_sec} MB/s</span>
                           </div>
-                          <div className="text-xs text-[var(--color-text-muted)]">Utilization</div>
-                        </div>
-                      </div>
-
-                      {/* Memory Usage */}
-                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-4 h-4 text-[var(--color-success)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-7 7V5a2 2 0 114 0v14m0 0l-4-4m4 4l4-4" />
-                            </svg>
-                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Memory</span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-[var(--color-text-secondary)]">Write</span>
+                            <span className="text-sm font-medium text-[var(--color-text)]">{serverUsage.disk_write_mb_per_sec} MB/s</span>
                           </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="mb-1 text-2xl font-bold text-[var(--color-text)]">{serverUsage.ram_percent}%</div>
-                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
-                            <div
-                              className="h-2 rounded-full bg-gradient-to-r from-[var(--color-success)] to-[color:color-mix(in_srgb,var(--color-success)_82%,var(--color-background))] transition-all duration-500"
-                              style={{ width: `${Math.min(serverUsage.ram_percent, 100)}%` }}
-                            />
+                          <div className="border-t border-[var(--color-border-secondary)] pt-3 text-sm text-[var(--color-text-secondary)]">
+                            Uptime {serverUsage.uptime_formatted}
                           </div>
-                          <div className="text-xs text-[var(--color-text-muted)]">{serverUsage.ram_used_gb}GB / {serverUsage.ram_total_gb}GB</div>
-                        </div>
-                      </div>
-
-                      {/* Storage Usage */}
-                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-                            </svg>
-                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Storage</span>
-                          </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="mb-1 text-2xl font-bold text-[var(--color-text)]">{serverUsage.storage_percent}%</div>
-                          <div className="w-full bg-[var(--color-surface-secondary)] rounded-full h-2 mb-2">
-                            <div
-                              className="bg-gradient-to-r from-purple-500 to-purple-600 h-2 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(serverUsage.storage_percent, 100)}%` }}
-                            />
-                          </div>
-                          <div className="text-xs text-[var(--color-text-muted)]">{serverUsage.storage_used_gb}GB / {serverUsage.storage_total_gb}GB</div>
-                        </div>
-                      </div>
-
-                      {/* Disk I/O */}
-                      <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m-6 0v10M6 20h12v-4a2 2 0 00-2-2H8a2 2 0 00-2 2v4z" />
-                            </svg>
-                            <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase tracking-wide">Disk I/O</span>
-                          </div>
-                        </div>
-                        <div className="text-center space-y-1">
-                          <div className="text-xs text-cyan-400 font-medium">{serverUsage.disk_read_mb_per_sec}MB/s Read</div>
-                          <div className="text-xs text-orange-400 font-medium">{serverUsage.disk_write_mb_per_sec}MB/s Write</div>
-                          <div className="text-xs text-[var(--color-text-muted)] mt-2">IO Throughput</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* System Status Bar */}
-                    <div className="bg-[var(--color-surface)] rounded-lg p-4 border border-[var(--color-border)]">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 bg-[var(--color-success)] rounded-full animate-pulse"></div>
-                            <span className="text-sm font-medium text-[var(--color-success)]">System Online</span>
-                          </div>
-                          <div className="h-4 w-px bg-[var(--color-surface-tertiary)]"></div>
-                          <span className="text-sm text-[var(--color-text-secondary)]">Uptime:</span>
-                          <span className="text-sm font-semibold text-[var(--color-text)]">{serverUsage.uptime_formatted}</span>
+                    <div className={controlPanelQuietClass}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={controlPanelBadgeClass('success')}>System online</span>
+                          <span className="text-sm text-[var(--color-text-secondary)]">
+                            Last updated {new Date(serverUsage.timestamp * 1000).toLocaleTimeString()}
+                          </span>
                         </div>
-
-                        {/* Last Updated */}
-                        <div className="flex items-center space-x-2 text-xs text-[var(--color-text-muted)]">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span>Updated {new Date(serverUsage.timestamp * 1000).toLocaleTimeString()}</span>
-                        </div>
+                        <span className="text-sm text-[var(--color-text-secondary)]">
+                          Messages/hour {activityMetrics?.messages_per_hour ?? '—'} and {activityMetrics?.channel_utilization ?? '—'}% channel utilization
+                        </span>
                       </div>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="text-center py-4 text-[var(--color-text-secondary)] text-sm">
-                    No usage data available
+                  <div className={controlPanelQuietClass}>
+                    <p className="text-sm text-[var(--color-text-secondary)]">No usage data is available yet.</p>
                   </div>
                 )}
               </div>
 
-              {/* Peak Performance */}
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                <h3 className="mb-3 flex items-center text-lg font-semibold text-[var(--color-text)]">
-                  <svg className="w-5 h-5 mr-2 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Peak Performance
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">127</div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Peak Online</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl font-bold text-[var(--color-text)]">367</div>
-                    <div className="text-xs text-[var(--color-text-secondary)]">Msgs 24H</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Growth Stats */}
-            <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-              <h3 className="mb-3 flex items-center text-lg font-semibold text-[var(--color-text)]">
-                <svg className="w-5 h-5 mr-2 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                Growth Insights
-              </h3>
-              <div className="text-center">
-                <div className="mb-1 text-2xl font-bold text-[var(--color-text)]">15</div>
-                <div className="text-sm text-[var(--color-text-secondary)]">New Channels Created This Month</div>
+              <div className="grid grid-cols-1 gap-6">
+                {overviewCards.map((card) => (
+                  <OverviewInfoCard key={card.title} title={card.title} items={card.items} />
+                ))}
               </div>
             </div>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Time Period Selector */}
             <PeriodSelector />
 
             {loading ? (
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-primary)] rounded-full flex items-center justify-center animate-spin">
-                    <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold text-[var(--color-text)]">Loading Charts</h3>
-                  <p className="text-[var(--color-text-secondary)]">Fetching chart data...</p>
+              <div className={controlPanelQuietClass}>
+                <div className="flex min-h-56 flex-col items-center justify-center text-center">
+                  <svg className="mb-3 h-5 w-5 animate-spin text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <h3 className="text-base font-semibold text-[var(--color-text)]">Loading chart data</h3>
+                  <p className="mt-2 text-sm text-[var(--color-text-secondary)]">Fetching recent instance metrics.</p>
                 </div>
               </div>
             ) : error ? (
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)]">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold text-[var(--color-text)]">Error Loading Charts</h3>
-                  <p className="text-[var(--color-text-secondary)]">{error}</p>
+              <div className={cx(controlPanelQuietClass, 'pb-status-danger')}>
+                <div className="flex min-h-56 flex-col items-center justify-center text-center">
+                  <h3 className="text-base font-semibold text-[var(--color-text)]">Charts unavailable</h3>
+                  <p className="mt-2 max-w-md text-sm text-[var(--color-text-secondary)]">{error}</p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* Chart Grid */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {/* User Registrations Chart */}
-                  {chartData.userRegistrations && (
-                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                      <h4 className="mb-3 text-md font-semibold text-[var(--color-text)]">User Registrations</h4>
-                      <Line
-                        data={chartData.userRegistrations}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: true, labels: { color: 'white' } },
-                          },
-                          scales: {
-                            x: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                            y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                {chartData.userRegistrations ? (
+                  <ChartPanel
+                    title="User registrations"
+                    description="New account creation across the selected period."
+                  >
+                    <Line data={chartData.userRegistrations} options={createChartOptions('line')} />
+                  </ChartPanel>
+                ) : null}
 
-                  {/* Message Activity Chart */}
-                  {chartData.messageActivity && (
-                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                      <h4 className="mb-3 text-md font-semibold text-[var(--color-text)]">Message Activity</h4>
-                      <Bar
-                        data={chartData.messageActivity}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: true, labels: { color: 'white' } },
-                          },
-                          scales: {
-                            x: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                            y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
+                {chartData.messageActivity ? (
+                  <ChartPanel
+                    title="Message activity"
+                    description="Volume of messages sent during the selected period."
+                  >
+                    <Bar data={chartData.messageActivity} options={createChartOptions('bar')} />
+                  </ChartPanel>
+                ) : null}
 
-                  {/* Online Users Chart */}
-                  {chartData.onlineUsers && (
-                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                      <h4 className="mb-3 text-md font-semibold text-[var(--color-text)]">Online Users</h4>
-                      <Line
-                        data={chartData.onlineUsers}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: true, labels: { color: 'white' } },
-                          },
-                          scales: {
-                            x: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                            y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
+                {chartData.onlineUsers ? (
+                  <ChartPanel
+                    title="Online users"
+                    description="Observed online presence snapshots over time."
+                  >
+                    <Line data={chartData.onlineUsers} options={createChartOptions('line')} />
+                  </ChartPanel>
+                ) : null}
 
-                  {/* Channel Creation Chart */}
-                  {chartData.channelCreation && (
-                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                      <h4 className="mb-3 text-md font-semibold text-[var(--color-text)]">Channel Creations</h4>
-                      <Bar
-                        data={chartData.channelCreation}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: true, labels: { color: 'white' } },
-                          },
-                          scales: {
-                            x: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                            y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
+                {chartData.channelCreation ? (
+                  <ChartPanel
+                    title="Channel creation"
+                    description="How quickly the server structure is growing."
+                  >
+                    <Bar data={chartData.channelCreation} options={createChartOptions('bar')} />
+                  </ChartPanel>
+                ) : null}
 
-                  {/* User Status Chart */}
-                  {chartData.userStatus && (
-                    <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-                      <h4 className="mb-3 text-md font-semibold text-[var(--color-text)]">User Status Distribution</h4>
-                      <Pie
-                        data={chartData.userStatus}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { display: true, labels: { color: 'white' } },
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
+                {chartData.userStatus ? (
+                  <ChartPanel
+                    title="Presence distribution"
+                    description="Current split between online, away, and offline users."
+                  >
+                    <Pie data={chartData.userStatus} options={createChartOptions('pie')} />
+                  </ChartPanel>
+                ) : null}
 
-                {Object.keys(chartData).length === 0 && !loading && (
-                  <div className="bg-[var(--color-surface-secondary)] rounded-lg p-6 h-64 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-surface-tertiary)] rounded-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                      </div>
-                      <h3 className="mb-2 text-lg font-semibold text-[var(--color-text)]">No Chart Data Available</h3>
-                      <p className="text-[var(--color-text-secondary)]">Chart data is not currently available from the server.</p>
+                {Object.keys(chartData).length === 0 && !loading ? (
+                  <div className={controlPanelQuietClass}>
+                    <div className="flex min-h-56 flex-col items-center justify-center text-center">
+                      <h3 className="text-base font-semibold text-[var(--color-text)]">No chart data yet</h3>
+                      <p className="mt-2 max-w-md text-sm text-[var(--color-text-secondary)]">
+                        The server has not provided chart data for the selected window.
+                      </p>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>
         )}
-      </div>
+      </section>
 
       <RecentActivity />
 
@@ -2199,10 +2313,10 @@ export function MembersTab({
   if (!users || users.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+        <div className={controlPanelSectionClass}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Members</h2>
-            <button className="bg-[var(--color-surface-tertiary)] text-[var(--color-text)] px-4 py-2 rounded-lg cursor-not-allowed">
+            <button className={cx(controlPanelButtonClass('secondary'), "cursor-not-allowed opacity-60")}>
               Invite Member
             </button>
           </div>
@@ -2352,13 +2466,13 @@ export function MembersTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Members</h2>
           <div className="flex items-center space-x-4">
             <button
               onClick={onOpenRolesTab}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+              className={controlPanelButtonClass('secondary')}
             >
               Open Roles
             </button>
@@ -2367,9 +2481,9 @@ export function MembersTab({
               placeholder="Search members..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+              className={controlPanelInputClass}
             />
-            <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors">
+            <button className={controlPanelButtonClass('primary')}>
               Invite Member
             </button>
           </div>
@@ -2383,7 +2497,7 @@ export function MembersTab({
           ).map((user) => (
             <div
               key={user.user_id}
-              className="flex items-center px-4 py-3 hover:bg-[var(--color-surface-secondary)] rounded-lg transition-colors cursor-pointer"
+              className={cx(controlPanelRowClass, "flex items-center px-4 py-3 cursor-pointer")}
             >
               {/* User info on the left */}
               <div className="flex items-center space-x-3 flex-1">
@@ -2391,7 +2505,7 @@ export function MembersTab({
                   <ControlPanelAvatar
                     username={user.username}
                     avatarUrl={user.avatar_url || user.avatar}
-                    className="h-10 w-10 rounded-full border-2 border-[var(--color-border-secondary)] shadow-md"
+                    className="h-10 w-10 rounded-full border border-[var(--color-border-secondary)]"
                   />
                   <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--color-surface)] shadow-sm ${user.status === 'online' ? 'bg-[var(--color-success)]' :
                       user.status === 'idle' ? 'bg-[var(--color-warning)]' :
@@ -2429,7 +2543,7 @@ export function MembersTab({
       {/* User Menu Dropdown */}
       {userMenuOpen && selectedUserMenu && (
         <div
-          className="fixed z-50 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg py-1 w-48"
+          className="fixed z-50 w-48 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] py-1 shadow-lg"
           style={{ left: userMenuPosition.x, top: userMenuPosition.y }}
         >
           <button
@@ -2526,12 +2640,12 @@ export function ChannelsTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Channels</h2>
           <button
             onClick={onOpenChannelModal}
-            className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors"
+            className={controlPanelButtonClass('primary')}
           >
             Create Channel
           </button>
@@ -2540,7 +2654,7 @@ export function ChannelsTab({
         {hasChannels ? (
           <div className="space-y-3">
             {channels.map((channel) => (
-              <div key={channel.channel_id} className="flex items-center justify-between p-4 bg-[var(--color-surface-secondary)] rounded-lg">
+              <div key={channel.channel_id} className={cx(controlPanelRowClass, "flex items-center justify-between p-4")}>
                 <div className="flex items-center space-x-3">
                   <span className="text-[var(--color-text-secondary)]">#</span>
                   <span className="font-medium text-[var(--color-text)]">{channel.channel_name}</span>
@@ -3024,7 +3138,7 @@ export function SettingsTab({
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+        <div className={controlPanelSectionClass}>
           <div className="animate-pulse space-y-6">
             <div className="h-6 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
             <div className="space-y-4">
@@ -3040,7 +3154,7 @@ export function SettingsTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <h2 className="mb-6 text-lg font-medium text-[var(--color-text)]">Server Settings</h2>
 
         {error && (
@@ -3062,7 +3176,7 @@ export function SettingsTab({
                 type="text"
                 value={serverInfo.server_name}
                 onChange={(e) => setServerInfo({ ...serverInfo, server_name: e.target.value })}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className={controlPanelInputClass}
                 disabled={saving}
               />
             </div>
@@ -3075,7 +3189,7 @@ export function SettingsTab({
                 value={serverInfo.server_description}
                 onChange={(e) => setServerInfo({ ...serverInfo, server_description: e.target.value })}
                 rows={3}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className={controlPanelTextAreaClass}
                 disabled={saving}
               />
             </div>
@@ -3107,7 +3221,7 @@ export function SettingsTab({
                 min="100"
                 max="10000"
                 placeholder="Default (4000)"
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className={controlPanelInputClass}
                 disabled={saving}
               />
             </div>
@@ -3447,7 +3561,7 @@ export function SettingsTab({
                     <select
                       value={getRuntimeString('RTC_DEFAULT_QUALITY_PROFILE', 'balanced')}
                       onChange={(e) => setRuntimeConfig({ ...runtimeConfig, RTC_DEFAULT_QUALITY_PROFILE: e.target.value })}
-                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                      className={controlPanelSelectClass}
                       disabled={saving}
                     >
                       <option value="low">Low</option>
@@ -3464,7 +3578,7 @@ export function SettingsTab({
                       type="number"
                       value={getRuntimeNumber('RTC_AUDIO_SAMPLE_RATE_HZ', 48000)}
                       onChange={(e) => setRuntimeConfig({ ...runtimeConfig, RTC_AUDIO_SAMPLE_RATE_HZ: parseInt(e.target.value, 10) || 48000 })}
-                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                      className={controlPanelInputClass}
                       disabled={saving}
                     />
                   </div>
@@ -3529,7 +3643,7 @@ export function SettingsTab({
                           type="number"
                           value={getRuntimeNumber(`RTC_AUDIO_BITRATE_${profile}_KBPS`, profile === 'LOW' ? 24 : profile === 'BALANCED' ? 48 : 64)}
                           onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [`RTC_AUDIO_BITRATE_${profile}_KBPS`]: parseInt(e.target.value, 10) || 0 })}
-                          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                          className={controlPanelInputClass}
                           disabled={saving}
                         />
                       </div>
@@ -3541,7 +3655,7 @@ export function SettingsTab({
                           type="number"
                           value={getRuntimeNumber(`RTC_VIDEO_BITRATE_${profile}_KBPS`, profile === 'LOW' ? 800 : profile === 'BALANCED' ? 1500 : 2500)}
                           onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [`RTC_VIDEO_BITRATE_${profile}_KBPS`]: parseInt(e.target.value, 10) || 0 })}
-                          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                          className={controlPanelInputClass}
                           disabled={saving}
                         />
                       </div>
@@ -3550,7 +3664,7 @@ export function SettingsTab({
                           type="number"
                           value={getRuntimeNumber(`RTC_VIDEO_WIDTH_${profile}`, profile === 'LOW' ? 640 : profile === 'BALANCED' ? 1280 : 1920)}
                           onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [`RTC_VIDEO_WIDTH_${profile}`]: parseInt(e.target.value, 10) || 0 })}
-                          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                          className={controlPanelInputClass}
                           disabled={saving}
                           aria-label={`${profile.toLowerCase()} video width`}
                         />
@@ -3558,7 +3672,7 @@ export function SettingsTab({
                           type="number"
                           value={getRuntimeNumber(`RTC_VIDEO_HEIGHT_${profile}`, profile === 'LOW' ? 360 : profile === 'BALANCED' ? 720 : 1080)}
                           onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [`RTC_VIDEO_HEIGHT_${profile}`]: parseInt(e.target.value, 10) || 0 })}
-                          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                          className={controlPanelInputClass}
                           disabled={saving}
                           aria-label={`${profile.toLowerCase()} video height`}
                         />
@@ -3566,7 +3680,7 @@ export function SettingsTab({
                           type="number"
                           value={getRuntimeNumber(`RTC_VIDEO_FPS_${profile}`, profile === 'LOW' ? 15 : profile === 'BALANCED' ? 30 : 60)}
                           onChange={(e) => setRuntimeConfig({ ...runtimeConfig, [`RTC_VIDEO_FPS_${profile}`]: parseInt(e.target.value, 10) || 0 })}
-                          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                          className={controlPanelInputClass}
                           disabled={saving}
                           aria-label={`${profile.toLowerCase()} video fps`}
                         />
@@ -4357,7 +4471,7 @@ export function LogsTab({
   return (
     <div className="space-y-6">
       {/* Logs Header */}
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-[var(--color-text)]">Server Logs</h2>
@@ -4370,7 +4484,7 @@ export function LogsTab({
             <button
               onClick={loadLogs}
               disabled={loading}
-              className={`bg-[var(--color-primary)] hover:opacity-90 disabled:bg-[var(--color-surface)] disabled:text-[var(--color-text-secondary)] text-[var(--color-background)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 border border-transparent hover:border-[var(--color-primary-dark)]`}
+              className={cx(controlPanelButtonClass('primary'), "disabled:opacity-60")}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -4389,7 +4503,7 @@ export function LogsTab({
               placeholder="Search logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[var(--color-surface-secondary)] text-[var(--color-text)] px-4 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+              className={controlPanelInputClass}
             />
           </div>
 
@@ -4399,7 +4513,7 @@ export function LogsTab({
             <select
               value={logLevel}
               onChange={(e) => setLogLevel(e.target.value)}
-              className="bg-[var(--color-surface-secondary)] text-[var(--color-text)] px-3 py-2 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+              className={controlPanelSelectClass}
             >
               <option value="all">All</option>
               <option value="error">Errors</option>
@@ -4428,7 +4542,7 @@ export function LogsTab({
           <div className="flex space-x-2">
             <button
               onClick={downloadLogs}
-              className="bg-[var(--color-success)] hover:opacity-90 text-[var(--color-text)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm border border-transparent hover:border-[var(--color-success-dark)]"
+              className={controlPanelButtonClass('secondary')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -4437,7 +4551,7 @@ export function LogsTab({
             </button>
             <button
               onClick={clearLogs}
-              className="bg-[var(--color-error)] hover:opacity-90 text-[var(--color-background)] px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm border border-transparent hover:border-[var(--color-error-dark)]"
+              className={controlPanelButtonClass('danger')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -4470,7 +4584,7 @@ export function LogsTab({
           </div>
         ) : (
           /* Logs Display */
-          <div className="bg-[var(--color-background-secondary)] rounded-lg border border-[var(--color-border)]">
+          <div className={controlPanelInsetClass}>
             <div className="p-4 border-b border-[var(--color-border)]">
               <h3 className="font-medium text-[var(--color-text)]">
                 Server Logs
@@ -4481,7 +4595,7 @@ export function LogsTab({
                 )}
               </h3>
             </div>
-            <div className="p-4 max-h-96 overflow-y-auto font-mono text-sm bg-[var(--color-background-tertiary)]">
+            <div className="max-h-96 overflow-y-auto rounded-[1rem] bg-[var(--color-background)] p-4 font-mono text-sm">
               {filteredLogs.length === 0 ? (
                 <div className="text-center text-[var(--color-text-secondary)] py-8">
                   {logs.length === 0 ? (
@@ -4514,7 +4628,7 @@ export function LogsTab({
 
         {/* Information Panel */}
         <div
-          className="mt-6 rounded-lg border p-4"
+          className="mt-6 rounded-[1.25rem] border p-4"
           style={{
             background: 'linear-gradient(to right, color-mix(in srgb, var(--color-primary) 18%, transparent), color-mix(in srgb, var(--color-accent) 12%, transparent))',
             borderColor: 'color-mix(in srgb, var(--color-primary) 30%, transparent)',
@@ -4699,32 +4813,23 @@ export function ModerationTab({
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <div className="flex items-center space-x-4 mb-6">
             <button
               onClick={() => setActiveSubTab('reports')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'reports'
-                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-              }`}
+              className={controlPanelSegmentClass(activeSubTab === 'reports')}
           >
             Reports ({mockReportedMessages.filter(r => r.status === 'pending').length})
           </button>
             <button
               onClick={() => setActiveSubTab('users')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'users'
-                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-              }`}
+              className={controlPanelSegmentClass(activeSubTab === 'users')}
           >
             Reported Users
           </button>
               <button
                 onClick={() => setActiveSubTab('messages')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeSubTab === 'messages'
-                ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-              }`}
+                className={controlPanelSegmentClass(activeSubTab === 'messages')}
           >
             Message Queue
           </button>
@@ -4740,7 +4845,7 @@ export function ModerationTab({
                 placeholder="Search reports..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-64 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className={cx(controlPanelInputClass, "w-64")}
               />
             </div>
 
@@ -4752,7 +4857,7 @@ export function ModerationTab({
                   report.reportedBy.toLowerCase().includes(searchTerm.toLowerCase())
                 )
                 .map((report) => (
-                  <div key={report.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
+                  <div key={report.id} className={controlPanelRowClass}>
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
@@ -4783,7 +4888,7 @@ export function ModerationTab({
                           </span>
                         </div>
                         <div
-                          className="bg-[var(--color-surface)] rounded p-3 mb-2 cursor-pointer hover:bg-[var(--color-surface-secondary)] transition-colors duration-200"
+                          className="mb-2 cursor-pointer rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 transition-colors duration-200 hover:bg-[var(--color-hover)]"
                           onPointerDown={() => handleMessagePointerDown(report.messageId)}
                           onPointerUp={handleMessagePointerUp}
                           onPointerLeave={handleMessagePointerLeave}
@@ -4803,24 +4908,19 @@ export function ModerationTab({
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleResolveReport(report.id, 'delete')}
-                        className="rounded px-3 py-1 text-sm text-[var(--color-on-error)] transition-colors"
-                        style={{ backgroundColor: 'var(--color-error)' }}
+                        className={controlPanelButtonClass('danger')}
                       >
                         Delete Message
                       </button>
                       <button
                         onClick={() => handleResolveReport(report.id, 'warn')}
-                        className="rounded border px-3 py-1 text-sm text-[var(--color-on-warning)] transition-colors"
-                        style={{
-                          backgroundColor: 'var(--color-warning)',
-                          borderColor: 'color-mix(in srgb, var(--color-warning) 55%, transparent)',
-                        }}
+                        className={controlPanelButtonClass('secondary')}
                       >
                         Warn User
                       </button>
                       <button
                         onClick={() => handleResolveReport(report.id, 'dismiss')}
-                        className="rounded bg-[var(--color-surface-tertiary)] px-3 py-1 text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                        className={controlPanelButtonClass('ghost')}
                       >
                         Dismiss
                       </button>
@@ -4840,7 +4940,7 @@ export function ModerationTab({
                 placeholder="Search users..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-64 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-2 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+                className={cx(controlPanelInputClass, "w-64")}
               />
             </div>
 
@@ -4852,7 +4952,7 @@ export function ModerationTab({
                   user.reason.toLowerCase().includes(searchTerm.toLowerCase())
                 )
                 .map((user) => (
-                  <div key={user.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
+                  <div key={user.id} className={controlPanelRowClass}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <ControlPanelAvatar
@@ -4869,25 +4969,19 @@ export function ModerationTab({
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleUserAction(user.id, 'warn')}
-                          className="rounded border px-3 py-1 text-sm text-[var(--color-on-warning)] transition-colors"
-                          style={{
-                            backgroundColor: 'var(--color-warning)',
-                            borderColor: 'color-mix(in srgb, var(--color-warning) 55%, transparent)',
-                          }}
+                          className={controlPanelButtonClass('secondary')}
                         >
                           Warn
                         </button>
                         <button
                           onClick={() => handleUserAction(user.id, 'timeout')}
-                          className="rounded px-3 py-1 text-sm text-[var(--color-on-info)] transition-colors"
-                          style={{ backgroundColor: 'var(--color-info)' }}
+                          className={controlPanelButtonClass('secondary')}
                         >
                           Timeout
                         </button>
                         <button
                           onClick={() => handleUserAction(user.id, 'ban')}
-                          className="rounded px-3 py-1 text-sm text-[var(--color-on-error)] transition-colors"
-                          style={{ backgroundColor: 'var(--color-error)' }}
+                          className={controlPanelButtonClass('danger')}
                         >
                           Ban
                         </button>
@@ -4919,8 +5013,8 @@ export function ModerationTab({
 
       {/* Message Selection Modal Overlay */}
       {selectedMessageId && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-shadow-lg)_45%,transparent)] p-4 backdrop-blur-sm">
-          <div className="bg-[var(--color-surface)] rounded-xl w-full max-w-md mx-auto shadow-2xl border border-[var(--color-border)] transform scale-105">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-shadow-lg)_38%,transparent)] p-4">
+          <div className="mx-auto w-full max-w-md rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)]">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-[var(--color-text)]">Message Options</h3>
@@ -4993,9 +5087,3 @@ export function ModerationTab({
     </div>
   );
 }
-
-
-
-
-
-

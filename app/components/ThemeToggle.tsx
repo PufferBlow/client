@@ -6,7 +6,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="inline-flex h-6 w-11 items-center rounded-full border pb-border bg-[var(--color-surface)] px-1 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+      className="inline-flex h-7 w-12 items-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-1 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
     >
       <span
@@ -24,7 +24,7 @@ export function ThemeToggleWithIcon() {
   return (
     <button
       onClick={toggleTheme}
-      className="flex h-8 w-8 items-center justify-center rounded-md border pb-border bg-[var(--color-surface)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+      className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
     >
       {theme === "light" ? (
@@ -49,4 +49,3 @@ export function ThemeToggleWithIcon() {
     </button>
   );
 }
-

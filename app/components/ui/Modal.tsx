@@ -53,7 +53,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title || "Dialog"}
-        className={`pb-modal relative w-full ${widthClassName} overflow-hidden rounded-xl`}
+        className={`pb-modal relative w-full ${widthClassName} overflow-hidden rounded-2xl`}
       >
         {(title || description) && (
           <div className="border-b pb-border px-5 py-4">
@@ -71,4 +71,3 @@ export function Modal({
     </div>
   );
 }
-

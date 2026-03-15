@@ -53,13 +53,7 @@ function presenceDot(status: string): string {
 export default function HomeDashboardPreview() {
   return (
     <div className="relative max-w-6xl mx-auto">
-      <div className="absolute -top-4 -left-4 w-8 h-8 bg-[var(--color-primary)] rounded-full opacity-60 animate-bounce" />
-      <div
-        className="absolute -bottom-6 -right-6 w-6 h-6 bg-[var(--color-accent)] rounded-full opacity-60 animate-bounce"
-        style={{ animationDelay: "0.8s" }}
-      />
-
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] shadow-2xl overflow-hidden">
+      <div className="overflow-hidden rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] shadow-xl">
         <div className="h-10 bg-[var(--color-surface-secondary)] border-b border-[var(--color-border)] flex items-center px-4">
           <div className="flex space-x-2">
             <div className="w-3 h-3 rounded-full bg-[var(--color-error)]" />
@@ -268,5 +262,4 @@ export default function HomeDashboardPreview() {
     </div>
   );
 }
-
 

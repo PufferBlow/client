@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
 import { useState, useEffect, type ReactNode } from "react";
 import {
   BarChart3,
@@ -24,6 +24,7 @@ import {
   type InstancePrivilege,
   type InstanceRole,
 } from "../../services/system";
+import { getAuthTokenForRequests } from "../../services/authSession";
 import { logger } from "../../utils/logger";
 import type { Channel } from "../../models";
 import { useToast } from "../../components/Toast";
@@ -58,7 +59,11 @@ type ControlPanelTabId =
 
 export default function ControlPanel() {
   const showToast = useToast();
-  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUserProfile();
+  const {
+    data: currentUser,
+    isLoading: isCurrentUserLoading,
+    error: currentUserError,
+  } = useCurrentUserProfile();
   const [activeTab, setActiveTab] = useState<ControlPanelTabId>('overview');
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -133,10 +138,13 @@ export default function ControlPanel() {
   ].filter(Boolean) as ControlPanelTab[];
 
   const tabs = [...dashboardTabs, ...managementTabs, ...configurationTabs, ...securityTabs];
+  const hasSessionToken = Boolean(getAuthTokenForRequests() || getAuthTokenFromCookies());
+  const resolveControlPanelAuthToken = (authTokenOverride?: string) =>
+    authTokenOverride || getAuthTokenForRequests() || getAuthTokenFromCookies() || '';
 
   // Fetch channels and users for control panel
   const fetchControlPanelData = async (authTokenOverride?: string) => {
-      const authToken = authTokenOverride || getAuthTokenFromCookies() || '';
+      const authToken = resolveControlPanelAuthToken(authTokenOverride);
       setControlPanelAuthToken(authToken);
 
       if (!authToken) {
@@ -226,15 +234,22 @@ export default function ControlPanel() {
     };
 
   useEffect(() => {
-    if (isCurrentUserLoading || !currentUser) {
+    if (isCurrentUserLoading) {
       return;
     }
+
+    if (!currentUser) {
+      setIsLoading(false);
+      return;
+    }
+
     void fetchControlPanelData();
   }, [
     canViewChannels,
     canViewMembers,
     canViewRoles,
     currentUser,
+    currentUserError,
     isCurrentUserLoading,
   ]);
 
@@ -255,7 +270,7 @@ export default function ControlPanel() {
     });
 
     try {
-      const authToken = getAuthTokenFromCookies() || '';
+      const authToken = resolveControlPanelAuthToken();
       logger.ui.debug("Control panel channel creation auth state", { hasAuthToken: Boolean(authToken) });
 
       if (!authToken) {
@@ -326,6 +341,37 @@ export default function ControlPanel() {
       logger.ui.error("Unexpected error creating channel from control panel", { error, channelData });
     }
   };
+
+  if (!isCurrentUserLoading && !hasSessionToken) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isCurrentUserLoading && currentUserError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6">
+        <div className="w-full max-w-xl rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
+          <h1 className="text-2xl font-semibold text-[var(--color-text)]">
+            Control Panel Unavailable
+          </h1>
+          <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
+            We could not load the current user profile required for the control panel.
+          </p>
+          <pre className="mt-4 overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-xs text-[var(--color-text-secondary)]">
+            {currentUserError instanceof Error ? currentUserError.message : "Unknown profile error"}
+          </pre>
+          <div className="mt-6 flex justify-end gap-3">
+            <Link to="/dashboard">
+              <Button variant="ghost">Back to Dashboard</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isCurrentUserLoading && !currentUser) {
+    return <Navigate to="/login" replace />;
+  }
 
   // Show skeleton loading state
   if (isLoading) {
@@ -625,7 +671,7 @@ export default function ControlPanel() {
             <img
               src={file.url}
               alt={file.filename}
-              className="max-w-full max-h-96 object-contain rounded-lg shadow-lg"
+              className="max-w-full max-h-96 rounded-lg border border-[var(--color-border)] object-contain"
             />
           </div>
         );
@@ -635,7 +681,7 @@ export default function ControlPanel() {
             <video
               src={file.url}
               controls
-              className="max-w-full max-h-96 rounded-lg shadow-lg"
+              className="max-w-full max-h-96 rounded-lg border border-[var(--color-border)]"
               preload="metadata"
             />
           </div>
@@ -655,7 +701,7 @@ export default function ControlPanel() {
           <div className="flex justify-center">
             <iframe
               src={file.url}
-              className="w-full h-96 border rounded-lg shadow-lg"
+              className="h-96 w-full rounded-lg border border-[var(--color-border)]"
               title={file.filename}
             />
           </div>
@@ -703,7 +749,7 @@ export default function ControlPanel() {
         isOpen={isOpen}
         onClose={onClose}
         title={file.filename}
-        description={`${formatFileSize(file.size)} � ${file.type} � Uploaded ${new Date(file.uploaded_at).toLocaleDateString()} by ${file.uploader}`}
+        description={`${formatFileSize(file.size)} | ${file.type} | Uploaded ${new Date(file.uploaded_at).toLocaleDateString()} by ${file.uploader}`}
         widthClassName="max-w-4xl"
         footer={
           <div className="flex justify-end gap-2">
@@ -724,9 +770,9 @@ export default function ControlPanel() {
   if (!isCurrentUserLoading && currentUser && tabs.length === 0) {
     return (
       <div className="min-h-screen bg-[var(--color-background)] flex items-center justify-center px-6">
-        <div className="w-full max-w-xl bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 shadow-xl">
+        <div className="w-full max-w-xl rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-[var(--color-surface-secondary)] flex items-center justify-center text-[var(--color-warning)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)]">
               <Lock className="w-6 h-6" />
             </div>
             <div>
@@ -749,19 +795,18 @@ export default function ControlPanel() {
 
   return (
     <>
-      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
-        {/* Nord-themed Sidebar */}
-        <div className="w-64 bg-[var(--color-background-secondary)]/80 backdrop-blur-xl border-r border-[var(--color-border)]/50 flex flex-col shadow-2xl">
+      <div className="relative flex h-screen overflow-hidden bg-[var(--color-background)] font-sans select-none">
+        <div className="flex w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]">
           {/* Server Branding Header */}
           <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center font-bold text-[var(--color-background)]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] font-semibold text-[var(--color-text)]">
                 P
               </div>
               <span className="text-[var(--color-text)] font-semibold text-sm">Server Control Panel</span>
             </div>
             <div className="ml-auto">
-              <span className="bg-[var(--color-error)] text-[var(--color-on-error)] text-xs px-1.5 py-0.5 rounded-full font-bold">HOST</span>
+              <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">Host</span>
             </div>
           </div>
 
@@ -777,18 +822,15 @@ export default function ControlPanel() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                    className={`mb-1 flex w-full items-center space-x-3 rounded-lg border px-3 py-2 text-left transition-colors duration-200 ${activeTab === tab.id
+                        ? 'border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text)]'
+                        : 'border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]'
                       }`}
                   >
-                    <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                    <div className={`${activeTab === tab.id ? 'text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'} transition-colors`}>
                       {tab.icon}
                     </div>
                     <span className="font-medium text-sm">{tab.label}</span>
-                    {activeTab === tab.id && (
-                      <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                    )}
                   </button>
                 ))}
               </div>
@@ -803,18 +845,15 @@ export default function ControlPanel() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                      className={`mb-1 flex w-full items-center space-x-3 rounded-lg border px-3 py-2 text-left transition-colors duration-200 ${activeTab === tab.id
+                          ? 'border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text)]'
+                          : 'border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]'
                         }`}
                     >
-                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'} transition-colors`}>
                         {tab.icon}
                       </div>
                       <span className="font-medium text-sm">{tab.label}</span>
-                      {activeTab === tab.id && (
-                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                      )}
                     </button>
                   ))}
                 </div>
@@ -830,18 +869,15 @@ export default function ControlPanel() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                      className={`mb-1 flex w-full items-center space-x-3 rounded-lg border px-3 py-2 text-left transition-colors duration-200 ${activeTab === tab.id
+                          ? 'border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text)]'
+                          : 'border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]'
                         }`}
                     >
-                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'} transition-colors`}>
                         {tab.icon}
                       </div>
                       <span className="font-medium text-sm">{tab.label}</span>
-                      {activeTab === tab.id && (
-                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                      )}
                     </button>
                   ))}
                 </div>
@@ -857,18 +893,15 @@ export default function ControlPanel() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
+                      className={`mb-1 flex w-full items-center space-x-3 rounded-lg border px-3 py-2 text-left transition-colors duration-200 ${activeTab === tab.id
+                          ? 'border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text)]'
+                          : 'border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]'
                         }`}
                     >
-                      <div className={`${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''} transition-colors`}>
+                      <div className={`${activeTab === tab.id ? 'text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'} transition-colors`}>
                         {tab.icon}
                       </div>
                       <span className="font-medium text-sm">{tab.label}</span>
-                      {activeTab === tab.id && (
-                        <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                      )}
                     </button>
                   ))}
                 </div>
@@ -879,7 +912,7 @@ export default function ControlPanel() {
           {/* Back to Dashboard Button */}
           <Link
             to="/dashboard"
-            className="m-2 p-2 hover:bg-[var(--color-hover)] rounded-lg transition-all duration-200 flex items-center space-x-3 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer"
+            className="m-2 flex items-center space-x-3 rounded-lg border border-transparent p-2 text-[var(--color-text-secondary)] transition-colors duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
             title="Back to Dashboard"
           >
             <div className="w-8 h-8 flex items-center justify-center ml-3">
@@ -892,7 +925,7 @@ export default function ControlPanel() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-[var(--color-background)]/80 backdrop-blur-xl overflow-hidden shadow-2xl border-l border-[var(--color-border)]/50">
+        <div className="flex-1 flex flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-background)]">
           {/* Header */}
           <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
             <div className="flex items-center space-x-4">
@@ -901,7 +934,7 @@ export default function ControlPanel() {
               </h1>
             </div>
             <div className="ml-auto">
-              <span className="bg-[var(--color-error)] text-[var(--color-background)] text-xs px-2 py-1 rounded-full font-bold">HOST</span>
+              <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">Host</span>
             </div>
           </div>
 
@@ -961,8 +994,6 @@ export default function ControlPanel() {
     </>
   );
 }
-
-
 
 
 

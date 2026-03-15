@@ -776,10 +776,10 @@ export default function Settings() {
     return (
       <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
-          <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
+          <div className="rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8">
             <div className="mb-6">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-background)]">
+                <svg className="w-8 h-8 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
@@ -789,7 +789,7 @@ export default function Settings() {
               </p>
               <Link
                 to="/dashboard"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary)] px-6 py-3 font-semibold text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
               >
                 Go to Dashboard
               </Link>
@@ -805,10 +805,10 @@ export default function Settings() {
     return (
       <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
-          <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
+          <div className="rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8">
             <div className="mb-6">
-              <div className="w-16 h-16 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-[var(--color-on-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-background)]">
+                <svg className="w-8 h-8 text-[var(--color-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -818,7 +818,7 @@ export default function Settings() {
               </p>
               <Link
                 to="/dashboard"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary)] px-6 py-3 font-semibold text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
               >
                 Go to Dashboard
               </Link>
@@ -2670,7 +2670,6 @@ export default function Settings() {
     </>
   );
 }
-
 
 
 

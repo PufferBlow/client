@@ -93,11 +93,11 @@ export const Card: React.FC<CardProps> = ({
   className = '',
   ...props
 }) => {
-  const baseClasses = 'bg-[var(--color-surface)] rounded-lg border transition-all duration-200';
+  const baseClasses = 'bg-[var(--color-surface)] rounded-xl border transition-colors duration-150';
 
   const variantClasses = {
-    default: 'border-[var(--color-border)] shadow-sm',
-    elevated: 'border-[var(--color-border)] shadow-lg',
+    default: 'border-[var(--color-border-secondary)] shadow-sm',
+    elevated: 'border-[var(--color-border-secondary)] shadow-md',
     outlined: 'border-2 border-[var(--color-border)] shadow-none',
     filled: 'border-0 bg-[var(--color-surface-secondary)] shadow-inner',
   };
@@ -110,7 +110,7 @@ export const Card: React.FC<CardProps> = ({
     xl: 'p-8',
   };
 
-  const hoverClasses = hoverable ? 'hover:shadow-lg hover:-translate-y-1 cursor-pointer' : '';
+  const hoverClasses = hoverable ? 'hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)] cursor-pointer' : '';
   const widthClass = fullWidth ? 'w-full' : '';
 
   const cardClasses = [

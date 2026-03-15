@@ -21,11 +21,11 @@ interface ContextMenuProps {
 const toneClassMap: Record<ContextMenuTone, string> = {
   default: "text-[var(--color-text)] hover:bg-[var(--color-hover)]",
   danger:
-    "text-[var(--color-error)] hover:bg-[var(--color-error)]/10 border-l border-[var(--color-error)]/40",
+    "text-[var(--color-text)] hover:bg-[var(--color-hover)] border-l border-[var(--color-border)]",
   warning:
-    "text-[var(--color-warning)] hover:bg-[var(--color-warning)]/10 border-l border-[var(--color-warning)]/40",
+    "text-[var(--color-text)] hover:bg-[var(--color-hover)] border-l border-[var(--color-border-secondary)]",
   success:
-    "text-[var(--color-success)] hover:bg-[var(--color-success)]/10 border-l border-[var(--color-success)]/40",
+    "text-[var(--color-text)] hover:bg-[var(--color-hover)] border-l border-[var(--color-border-secondary)]",
 };
 
 /**
@@ -83,7 +83,7 @@ export function ContextMenu({
       <button className="fixed inset-0 z-40" onClick={onClose} aria-label="Close menu backdrop" />
       <div
         ref={menuRef}
-        className="pb-menu fixed z-50 max-h-96 overflow-y-auto rounded-lg py-1"
+        className="pb-menu fixed z-50 max-h-96 overflow-y-auto rounded-xl py-1"
         style={{ left: safePosition.x, top: safePosition.y, minWidth }}
       >
         {items.map((item) => (
@@ -103,4 +103,3 @@ export function ContextMenu({
     </>
   );
 }
-

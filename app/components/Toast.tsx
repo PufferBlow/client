@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 
 export type ToastTone = "success" | "warning" | "error";
 export type ToastCategory = "destructive" | "system" | "validation" | "info";
@@ -25,7 +25,7 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | null>(null);
 
 interface ToastProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 const NOISY_PATTERNS = [
@@ -117,10 +117,24 @@ export function ToastProvider({ children }: ToastProviderProps) {
 
   const toneClass =
     currentToast?.tone === "error"
-      ? "border-[var(--color-error)]/70 text-[var(--color-text)]"
+      ? "pb-toast-error"
       : currentToast?.tone === "warning"
-        ? "border-[var(--color-warning)]/70 text-[var(--color-text)]"
-        : "border-[var(--color-success)]/70 text-[var(--color-text)]";
+        ? "pb-toast-warning"
+        : "pb-toast-success";
+
+  const toneLabelClass =
+    currentToast?.tone === "error"
+      ? "pb-toast-label-error"
+      : currentToast?.tone === "warning"
+        ? "pb-toast-label-warning"
+        : "pb-toast-label-success";
+
+  const toneDotClass =
+    currentToast?.tone === "error"
+      ? "pb-toast-dot-error"
+      : currentToast?.tone === "warning"
+        ? "pb-toast-dot-warning"
+        : "pb-toast-dot-success";
 
   const contextValue = { showToast };
 
@@ -130,13 +144,16 @@ export function ToastProvider({ children }: ToastProviderProps) {
       {currentToast?.isOpen ? (
         <div className="animate-slide-in-right fixed right-4 top-4 z-[9999] max-w-sm">
           <div
-            className={`rounded-lg border-l-4 border bg-[var(--color-surface)] px-4 py-3 shadow-xl ${toneClass}`}
+            className={`rounded-xl border px-4 py-3 shadow-lg ${toneClass}`}
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
-                {currentToast.tone}
+              <div className={`pb-toast-dot ${toneDotClass}`} />
+              <div className="min-w-0 flex-1">
+                <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneLabelClass}`}>
+                  {currentToast.tone}
+                </div>
+                <p className="mt-1 text-sm leading-relaxed">{currentToast.message}</p>
               </div>
-              <p className="flex-1 text-sm leading-relaxed">{currentToast.message}</p>
               <button
                 onClick={() => setCurrentToast(null)}
                 className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"

@@ -22,17 +22,17 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "border pb-border bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]",
+    "border border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]",
   secondary:
-    "border pb-border bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
+    "border pb-border bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-secondary)]",
   ghost:
     "border border-transparent bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
   danger:
-    "border border-[var(--color-error)]/50 bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[var(--color-error)]/90",
+    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
   warning:
-    "border border-[var(--color-warning)]/50 bg-[var(--color-warning)] text-[var(--color-on-warning)] hover:bg-[var(--color-warning)]/90",
+    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
   success:
-    "border border-[var(--color-success)]/50 bg-[var(--color-success)] text-[var(--color-on-success)] hover:bg-[var(--color-success)]/90",
+    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -57,7 +57,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const classes = [
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] disabled:opacity-50 disabled:cursor-not-allowed",
+    "inline-flex items-center justify-center gap-2 rounded-xl font-medium tracking-[-0.01em] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:ring-offset-2 focus:ring-offset-[var(--color-background)] disabled:opacity-50 disabled:cursor-not-allowed",
     variantClasses[variant],
     sizeClasses[size],
     fullWidth ? "w-full" : "",
@@ -93,4 +93,3 @@ export const Button: React.FC<ButtonProps> = ({
 };
 
 export default Button;
-

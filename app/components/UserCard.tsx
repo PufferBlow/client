@@ -117,15 +117,15 @@ export function UserCard({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-[var(--color-success)] shadow-[0_0_16px_color-mix(in_srgb,var(--color-success)_45%,transparent)]';
+        return 'pb-presence-dot pb-presence-online';
       case 'offline':
-        return 'bg-[var(--color-text-muted)] shadow-[0_0_16px_color-mix(in_srgb,var(--color-text-muted)_35%,transparent)]';
+        return 'pb-presence-dot pb-presence-offline';
       case 'dnd':
-        return 'bg-[var(--color-error)] shadow-[0_0_16px_color-mix(in_srgb,var(--color-error)_45%,transparent)]';
+        return 'pb-presence-dot pb-presence-dnd';
       case 'idle':
-        return 'bg-[var(--color-warning)] shadow-[0_0_16px_color-mix(in_srgb,var(--color-warning)_45%,transparent)]';
+        return 'pb-presence-dot pb-presence-idle';
       default:
-        return 'bg-[var(--color-text-muted)] shadow-[0_0_16px_color-mix(in_srgb,var(--color-text-muted)_35%,transparent)]';
+        return 'pb-presence-dot pb-presence-offline';
     }
   };
 

@@ -96,14 +96,14 @@ export function UserPanel({
 
   const statusDotClass =
     status === 'online'
-      ? 'bg-[var(--color-success)]'
+      ? 'pb-presence-dot pb-presence-online'
       : status === 'idle'
-        ? 'bg-[var(--color-warning)]'
+        ? 'pb-presence-dot pb-presence-idle'
         : status === 'afk'
-          ? 'bg-[var(--color-info)]'
+          ? 'pb-presence-dot pb-presence-away'
         : status === 'dnd'
-          ? 'bg-[var(--color-error)]'
-          : 'bg-[var(--color-text-muted)]';
+          ? 'pb-presence-dot pb-presence-dnd'
+          : 'pb-presence-dot pb-presence-offline';
 
   return (
     <div ref={panelRef} className={`w-full ${className}`}>
@@ -151,7 +151,7 @@ export function UserPanel({
                   {username.charAt(0)}
                 </div>
               )}
-              <div className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-[var(--color-surface)] ${statusDotClass}`} />
+              <div className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 ${statusDotClass}`} />
             </div>
 
             <div className="min-w-0">
@@ -167,7 +167,7 @@ export function UserPanel({
               title="Set status"
               aria-label="Set status"
             >
-              <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} />
+              <span className={`h-2.5 w-2.5 ${statusDotClass}`} />
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
 
@@ -186,7 +186,7 @@ export function UserPanel({
                       }}
                       className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-hover)] ${status === option.value ? 'bg-[var(--color-surface-secondary)] text-[var(--color-text)]' : 'text-[var(--color-text-secondary)]'}`}
                     >
-                      <span className={`h-2.5 w-2.5 rounded-full ${option.toneClass}`} />
+                      <span className={`h-2.5 w-2.5 pb-presence-dot ${option.toneClass}`} />
                       <span>{option.label}</span>
                     </button>
                   ))}

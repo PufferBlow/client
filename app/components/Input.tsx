@@ -116,12 +116,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 }, ref) => {
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
 
-  const baseClasses = 'block w-full transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseClasses = 'block w-full transition-colors duration-150 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantClasses = {
-    default: 'border border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
-    filled: 'border-0 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:bg-[var(--color-surface)]',
-    outlined: 'border-2 border-[var(--color-border)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
+    default: 'border border-[var(--color-border-secondary)] rounded-xl focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
+    filled: 'border border-transparent rounded-xl focus:ring-2 focus:ring-[var(--color-focus)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:bg-[var(--color-surface)]',
+    outlined: 'border border-[var(--color-border)] rounded-xl focus:ring-2 focus:ring-[var(--color-focus)] focus:border-[var(--color-text-secondary)] bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)]',
   };
 
   const sizeClasses = {
@@ -130,7 +130,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     lg: 'px-4 py-3 text-lg',
   };
 
-  const errorClasses = error ? 'border-[var(--color-error)] focus:ring-[var(--color-error)] focus:border-[var(--color-error)]' : '';
+  const errorClasses = error ? 'border-[var(--color-border)] focus:ring-[var(--color-focus)]' : '';
   const widthClass = fullWidth ? 'w-full' : '';
 
   const inputClasses = [

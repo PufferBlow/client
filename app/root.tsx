@@ -48,7 +48,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Color+Emoji&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Color+Emoji&display=swap",
   },
 ];
 
@@ -61,7 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body>
+      <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)] antialiased">
         <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
         <ScrollRestoration />
         <Scripts />
@@ -160,14 +160,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   return (
     <ThemeProvider>
-      <main className="min-h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-[var(--color-surface)] rounded-2xl shadow-2xl p-8 border border-[var(--color-border)]">
+      <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8">
             <div className="mb-6">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] shadow-[0_18px_45px_rgba(0,0,0,0.35)]">
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-background)]">
                 <PufferblowMark
                   size={44}
-                  surfaceColor="var(--color-surface-secondary)"
+                  surfaceColor="var(--color-background)"
                 />
               </div>
               <h1 className="text-6xl font-bold text-[var(--color-text)] mb-2">{message}</h1>
@@ -177,13 +177,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
             <div className="space-y-4">
               <Link
                 to="/"
-                className="inline-block w-full bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] hover:from-[var(--color-primary-hover)] hover:to-[var(--color-accent-hover)] text-[var(--color-on-primary)] px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="inline-block w-full rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary)] px-6 py-3 font-semibold text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
               >
                 Go Home
               </Link>
               <Link
                 to="/dashboard"
-                className="inline-block w-full border-2 border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-text)] px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="inline-block w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-6 py-3 font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
               >
                 Go to Dashboard
               </Link>
@@ -194,7 +194,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
                 <summary className="cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-text)] font-medium mb-2">
                   Error Details (Development)
                 </summary>
-                <pre className="w-full p-4 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] overflow-x-auto text-sm font-mono">
+                <pre className="w-full overflow-x-auto rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] p-4 text-sm text-[var(--color-text)] font-mono">
                   <code>{stack}</code>
                 </pre>
               </details>
