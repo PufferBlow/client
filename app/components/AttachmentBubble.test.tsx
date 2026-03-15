@@ -9,9 +9,7 @@ vi.mock("../utils/downloadFile", () => ({
 }));
 
 vi.mock("./VideoPlayer", () => ({
-  VideoPlayer: ({ filename }: { filename?: string }) => (
-    <div data-testid="video-player">{filename || "video"}</div>
-  ),
+  VideoPlayer: () => <div data-testid="video-player">video</div>,
 }));
 
 describe("AttachmentBubble download actions", () => {
@@ -55,6 +53,30 @@ describe("AttachmentBubble download actions", () => {
     const downloadButton = screen.getByRole("button", { name: "Download video.mp4" });
     expect(downloadButton.className).toContain("group-hover:opacity-100");
     expect(downloadButton.className).toContain("group-focus-within:opacity-100");
+  });
+
+  it("does not render visible media filename overlays for images or videos", () => {
+    const { rerender } = render(
+      <AttachmentBubble
+        url="http://localhost:7575/storage/image.png"
+        filename="image.png"
+        type="image/png"
+        size={2048}
+      />,
+    );
+
+    expect(screen.queryByText("image.png")).not.toBeInTheDocument();
+
+    rerender(
+      <AttachmentBubble
+        url="http://localhost:7575/storage/video.mp4"
+        filename="video.mp4"
+        type="video/mp4"
+        size={4096}
+      />,
+    );
+
+    expect(screen.queryByText("video.mp4")).not.toBeInTheDocument();
   });
 
   it("uses blob helper for audio and generic file downloads", async () => {

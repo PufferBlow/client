@@ -19,6 +19,11 @@ type UseDashboardDataOptions = {
   showToast: ShowToast;
 };
 
+const isManualPresenceStatus = (
+  status: unknown,
+): status is "dnd" | "afk" | "offline" =>
+  status === "dnd" || status === "afk" || status === "offline";
+
 export function useDashboardData({ currentUser, navigate, location, showToast }: UseDashboardDataOptions) {
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
 
@@ -113,6 +118,8 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   const readMessageIdsRef = useRef<Set<string>>(new Set());
   const lastActivityAtRef = useRef<number>(Date.now());
   const presenceUpdateInFlightRef = useRef(false);
+  const previousProfileUserIdRef = useRef<string | null>(currentUser?.user_id ?? null);
+  const previousProfileStatusRef = useRef<unknown>(currentUser?.status ?? null);
 
   const calculateTooltipPosition = useCallback(
     (anchor: HTMLElement, source: "userpanel" | "members" | "messages") => {
@@ -188,6 +195,27 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   useEffect(() => {
     currentUserIdRef.current = currentUser?.user_id ?? null;
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.user_id) {
+      previousProfileUserIdRef.current = null;
+      previousProfileStatusRef.current = null;
+      setManualPresenceLock(null);
+      return;
+    }
+
+    const userChanged = previousProfileUserIdRef.current !== currentUser.user_id;
+    const statusChanged = previousProfileStatusRef.current !== currentUser.status;
+    if (!userChanged && !statusChanged) {
+      return;
+    }
+
+    previousProfileUserIdRef.current = currentUser.user_id;
+    previousProfileStatusRef.current = currentUser.status;
+    setManualPresenceLock(
+      isManualPresenceStatus(currentUser.status) ? currentUser.status : null,
+    );
+  }, [currentUser?.status, currentUser?.user_id]);
 
   useEffect(() => {
     webSocketConnectionRef.current = webSocketConnection;
@@ -321,6 +349,19 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     },
     [applyPresenceUpdate, currentUser, currentUserLiveStatus, showToast],
   );
+
+  useEffect(() => {
+    if (
+      !currentUser ||
+      !manualPresenceLock ||
+      currentUserLiveStatus === manualPresenceLock ||
+      presenceUpdateInFlightRef.current
+    ) {
+      return;
+    }
+
+    void updatePresenceStatus(manualPresenceLock, { silent: true });
+  }, [currentUser, currentUserLiveStatus, manualPresenceLock, updatePresenceStatus]);
 
   useEffect(() => {
     if (!currentUser || manualPresenceLock) {

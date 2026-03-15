@@ -61,8 +61,8 @@ export function ControlPanelContent({
     }
   };
 
-  return (
-    <div className="flex-1 overflow-y-auto bg-[var(--color-background)] p-6">
+  const activeTabContent = (
+    <>
       {activeTab === "overview" && <OverviewTab onSettingsClick={openConfigurationTab} />}
       {activeTab === "moderation" && <ModerationTab showToast={showToast} />}
       {activeTab === "members" && (
@@ -105,6 +105,16 @@ export function ControlPanelContent({
       )}
       {activeTab === "security" && <SecurityTab />}
       {activeTab === "blocked-ips" && <BlockedIPsTab showToast={showToast} />}
+    </>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--color-background)] p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex min-h-full flex-col [&>*]:min-h-full [&>*]:flex-1">
+          {activeTabContent}
+        </div>
+      </div>
     </div>
   );
 }

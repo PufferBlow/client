@@ -277,7 +277,7 @@ export default function ControlPanelPage() {
           configurationTabs={configurationTabs}
           securityTabs={securityTabs}
         />
-        <div className="flex flex-1 flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-background)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-background)]">
           <ControlPanelHeader activeLabel={tabs.find((tab) => tab.id === activeTab)?.label || "Control Panel"} />
           <ControlPanelContent
             activeTab={activeTab}

@@ -10,7 +10,6 @@ interface VideoPlayerProps {
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   src,
-  filename,
   className = '',
   onError,
   autoPlay = false,
@@ -511,15 +510,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Filename Overlay */}
-      {filename && (
-        <div className="absolute left-0 right-0 top-0 bg-[var(--color-surface)]/85 p-3">
-          <p className="truncate text-sm font-medium text-[var(--color-text)]" title={filename}>
-            {filename}
-          </p>
-        </div>
-      )}
     </div>
   );
 };

@@ -410,17 +410,6 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             </div>
           )}
 
-          {/* Hover overlay */}
-          <div className="pointer-events-none absolute inset-0 bg-[var(--color-surface)]/0 opacity-0 transition-all duration-200 group-hover:bg-[var(--color-surface)]/45 group-hover:opacity-100" />
-
-          {/* Filename overlay */}
-          {filename && (
-            <div className="absolute bottom-0 left-0 right-0 bg-[var(--color-surface)]/85 p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <p className="truncate text-sm font-medium text-[var(--color-text)] drop-shadow-lg" title={filename}>
-                {filename}
-              </p>
-            </div>
-          )}
         </div>
       );
     }

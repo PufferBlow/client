@@ -1694,58 +1694,62 @@ export default function Dashboard() {
   if (!currentUser) {
     return (
       <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
-        <div className="w-16 bg-[var(--color-surface)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent animate-pulse">
-          <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
+        <div className="flex h-full shrink-0 flex-col gap-2">
+          <div className="flex min-h-0 flex-1 gap-2">
+            <div className="w-16 bg-[var(--color-surface)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent animate-pulse">
+              <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="w-12 h-12 rounded-2xl bg-[var(--color-surface-secondary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
-              <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
-            </div>
-          ))}
-
-          <AddServerButton
-            disabled
-            title="Additional home instances are not available in this build"
-            ariaLabel="Additional home instances are not available in this build"
-          />
-        </div>
-
-        <div className="w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-[var(--color-surface)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden animate-pulse">
-          <div className="relative">
-            <div className="px-4 py-3 border-b border-[var(--color-border)]">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="h-5 bg-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
-                  <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="w-12 h-12 rounded-2xl bg-[var(--color-surface-secondary)] shadow-lg border border-[var(--color-border)] flex items-center justify-center group">
+                  <div className="w-8 h-8 rounded bg-[var(--color-surface-tertiary)] opacity-60"></div>
                 </div>
-                <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
-              </div>
+              ))}
+
+              <AddServerButton
+                disabled
+                title="Additional home instances are not available in this build"
+                ariaLabel="Additional home instances are not available in this build"
+              />
             </div>
-          </div>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-2 py-4">
-              <div className="flex items-center px-2 mb-1">
-                <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-                <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
+            <div className="w-72 lg:w-80 min-w-[16rem] max-w-[22rem] bg-[var(--color-surface)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden animate-pulse">
+              <div className="relative">
+                <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="h-5 bg-[var(--color-surface-tertiary)] rounded mb-1 w-32"></div>
+                      <div className="h-3 bg-[var(--color-surface-tertiary)] rounded w-48"></div>
+                    </div>
+                    <div className="w-8 h-8 bg-[var(--color-surface-secondary)] rounded-lg"></div>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-0.5">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-[var(--color-surface-tertiary)] cursor-pointer group transition-colors">
-                    <div className="w-2 h-2 bg-[var(--color-surface-secondary)] rounded-full mr-2 flex-shrink-0"></div>
-                    <div className="flex-1">
-                      <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
-                    </div>
-                    {i % 5 === 0 && (
-                      <svg className="w-4 h-4 text-[var(--color-text-muted)] ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    )}
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-2 py-4">
+                  <div className="flex items-center px-2 mb-1">
+                    <svg className="w-3 h-3 text-[var(--color-text-secondary)] mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <div className="h-3 bg-[var(--color-surface-secondary)] rounded w-16"></div>
                   </div>
-                ))}
+
+                  <div className="space-y-0.5">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div key={i} className="flex items-center px-2 py-1.5 rounded hover:bg-[var(--color-surface-tertiary)] cursor-pointer group transition-colors">
+                        <div className="w-2 h-2 bg-[var(--color-surface-secondary)] rounded-full mr-2 flex-shrink-0"></div>
+                        <div className="flex-1">
+                          <div className={`h-3 bg-gradient-to-r from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] rounded ${i % 3 === 0 ? 'w-20' : i % 4 === 0 ? 'w-28' : 'w-16'}`}></div>
+                        </div>
+                        {i % 5 === 0 && (
+                          <svg className="w-4 h-4 text-[var(--color-text-muted)] ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1755,7 +1759,7 @@ export default function Dashboard() {
             avatar="/pufferblow-art-pixel-32x32.png"
             status="offline"
             onClick={() => { }}
-            className="opacity-60"
+            className="w-full opacity-60"
           />
         </div>
 
@@ -1882,9 +1886,9 @@ export default function Dashboard() {
   return (
     <div className="h-screen overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
       {/* Left Sidebar Container */}
-      <div className="flex flex-col gap-0 h-full shrink-0">
+      <div className="flex h-full shrink-0 flex-col gap-2">
         {/* Server and Channel Sidebars Row */}
-        <div className="flex flex-1 gap-2 min-h-0">
+        <div className="flex min-h-0 flex-1 gap-2">
           {/* Server Sidebar */}
           <ServerRail>
             <div className="flex flex-col items-center py-2 space-y-2">
@@ -2255,9 +2259,11 @@ export default function Dashboard() {
                 </>
               )}
             </div>
-        {/* Full-width UserPanel as direct child of left sidebar container */}
+      </ChannelPanel>
+        </div>
+
         {currentUser && (
-          <div className="w-full rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
+          <div className="w-full">
             <UserPanel
               username={currentUser.username || ''}
               avatar={currentUser.avatar || ''}
@@ -2277,9 +2283,6 @@ export default function Dashboard() {
             />
           </div>
         )}
-
-      </ChannelPanel>
-        </div>
       </div>
 
       {/* Main Chat Area */}
