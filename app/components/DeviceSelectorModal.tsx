@@ -61,7 +61,6 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
     // TODO: Actually set the selected devices for audio
     console.log('Selected mic:', selectedMic);
     console.log('Selected headphones:', selectedHeadphones);
-    showToast('Audio devices updated successfully!', 'success');
     onClose();
   };
 

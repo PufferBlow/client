@@ -558,27 +558,31 @@ body {
 
 /* Markdown code block syntax colors */
 html.dark {
-  --pb-code-text: #f5f5dc;
-  --pb-code-comment: #bfb79f;
-  --pb-code-keyword: #f1edd1;
-  --pb-code-string: #ece4c6;
-  --pb-code-number: #e8dcbb;
-  --pb-code-function: #e3d3af;
-  --pb-code-type: #f1edd1;
-  --pb-code-attribute: #ece4c6;
-  --pb-code-operator: #e3d3af;
+  --pb-code-text: #e8e3d5;
+  --pb-code-comment: #6b6660;
+  --pb-code-keyword: #c8a8e0;
+  --pb-code-string: #98c498;
+  --pb-code-number: #d4a86c;
+  --pb-code-function: #88b8d4;
+  --pb-code-type: #d4a890;
+  --pb-code-attribute: #a8b8d0;
+  --pb-code-operator: #c8c0b0;
 }
 
 html:not(.dark) {
-  --pb-code-text: #0e0d0d;
-  --pb-code-comment: #6d6662;
-  --pb-code-keyword: #1c1919;
-  --pb-code-string: #2a2626;
-  --pb-code-number: #383232;
-  --pb-code-function: #1c1919;
-  --pb-code-type: #2a2626;
-  --pb-code-attribute: #383232;
-  --pb-code-operator: #2a2626;
+  --pb-code-text: #1a1714;
+  --pb-code-comment: #7a7165;
+  --pb-code-keyword: #6040a0;
+  --pb-code-string: #2d6a2d;
+  --pb-code-number: #a05010;
+  --pb-code-function: #1050b0;
+  --pb-code-type: #804020;
+  --pb-code-attribute: #205080;
+  --pb-code-operator: #404040;
+}
+
+.pb-markdown {
+  font-family: "Nunito", ui-sans-serif, system-ui, sans-serif;
 }
 
 .pb-markdown .hljs {

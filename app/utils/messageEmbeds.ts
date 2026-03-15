@@ -4,6 +4,10 @@ export interface EmbedFrameConfig {
   allow?: string;
   sandbox?: string;
   aspectRatio?: "video" | "wide" | "card" | "audio";
+  /** Max pixel width for the embed card. Defaults to full message width if omitted. */
+  maxWidth?: number;
+  /** Fixed pixel height. When set, overrides aspectRatio-based height. */
+  fixedHeight?: number;
 }
 
 export interface MessageEmbedPreview {
@@ -71,6 +75,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
         sandbox: "allow-scripts allow-same-origin allow-presentation allow-popups",
         aspectRatio: "video",
+        maxWidth: 480,
       },
     };
   }
@@ -86,6 +91,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           allow: "autoplay; fullscreen; picture-in-picture",
           sandbox: "allow-scripts allow-same-origin allow-presentation allow-popups",
           aspectRatio: "video",
+          maxWidth: 480,
         },
       };
     }
@@ -94,6 +100,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
   if (host === "open.spotify.com") {
     const [resource, resourceId] = parsed.pathname.split("/").filter(Boolean);
     if (resource && resourceId) {
+      const isTrack = resource === "track" || resource === "episode";
       return {
         provider: "Spotify",
         iframe: {
@@ -101,7 +108,8 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           title: "Spotify preview",
           allow: "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture",
           sandbox: "allow-scripts allow-same-origin allow-popups",
-          aspectRatio: "card",
+          maxWidth: 352,
+          fixedHeight: isTrack ? 152 : 352,
         },
       };
     }
@@ -121,7 +129,8 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           src: embedUrl.toString(),
           title: "Reddit preview",
           sandbox: "allow-scripts allow-same-origin allow-popups",
-          aspectRatio: "card",
+          maxWidth: 540,
+          fixedHeight: 320,
         },
       };
     }
@@ -131,11 +140,11 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
     const embedUrl = new URL("https://w.soundcloud.com/player/");
     embedUrl.searchParams.set("url", parsed.toString());
     embedUrl.searchParams.set("auto_play", "false");
-    embedUrl.searchParams.set("hide_related", "false");
-    embedUrl.searchParams.set("show_comments", "true");
+    embedUrl.searchParams.set("hide_related", "true");
+    embedUrl.searchParams.set("show_comments", "false");
     embedUrl.searchParams.set("show_user", "true");
     embedUrl.searchParams.set("show_reposts", "false");
-    embedUrl.searchParams.set("visual", "true");
+    embedUrl.searchParams.set("visual", "false");
 
     return {
       provider: "SoundCloud",
@@ -144,7 +153,8 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
         title: "SoundCloud preview",
         allow: "autoplay",
         sandbox: "allow-scripts allow-same-origin allow-popups",
-        aspectRatio: "card",
+        maxWidth: 400,
+        fixedHeight: 166,
       },
     };
   }
@@ -158,7 +168,8 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
         title: "TikTok preview",
         allow: "autoplay; encrypted-media; fullscreen; picture-in-picture",
         sandbox: "allow-scripts allow-same-origin allow-popups",
-        aspectRatio: "wide",
+        maxWidth: 325,
+        fixedHeight: 735,
       },
     };
   }
@@ -176,6 +187,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           allow: "autoplay; fullscreen; picture-in-picture",
           sandbox: "allow-scripts allow-same-origin allow-popups",
           aspectRatio: "video",
+          maxWidth: 480,
         },
       };
     }
@@ -192,6 +204,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
           allow: "clipboard-write",
           sandbox: "allow-scripts allow-same-origin allow-popups",
           aspectRatio: "wide",
+          maxWidth: 580,
         },
       };
     }
@@ -209,6 +222,7 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
         title: "Figma preview",
         sandbox: "allow-scripts allow-same-origin allow-popups",
         aspectRatio: "wide",
+        maxWidth: 580,
       },
     };
   }

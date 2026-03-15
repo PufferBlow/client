@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageAttachment } from '../models/Message';
 import { VideoPlayer } from './VideoPlayer';
 import { MediaLightbox } from './MediaLightbox';
@@ -62,7 +62,12 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   const [waveformBars, setWaveformBars] = useState<number[]>(
     () => buildFallbackWaveform(`${filename || ''}-${url}`),
   );
+  const [isGifHovered, setIsGifHovered] = useState(false);
+  const [gifAutoPlayDone, setGifAutoPlayDone] = useState(false);
+  const [gifCanvasReady, setGifCanvasReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const gifCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const gifHiddenImgRef = useRef<HTMLImageElement | null>(null);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -132,6 +137,29 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   const isImageAttachment = resolvedType.startsWith('image/') || IMAGE_EXTENSIONS.includes(resolvedExtension);
   const isVideoAttachment = resolvedType.startsWith('video/') || VIDEO_EXTENSIONS.includes(resolvedExtension);
   const isAudioAttachment = resolvedType.startsWith('audio/') || AUDIO_EXTENSIONS.includes(resolvedExtension);
+  const isGif = resolvedExtension === 'gif' || resolvedType === 'image/gif';
+
+  // Capture first GIF frame onto canvas for static preview
+  const captureGifFrame = useCallback(() => {
+    const img = gifHiddenImgRef.current;
+    const canvas = gifCanvasRef.current;
+    if (!img || !canvas || !isGif) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    ctx.drawImage(img, 0, 0);
+    setGifCanvasReady(true);
+  }, [isGif]);
+
+  // Auto-play GIF once on mount, then show static frame
+  useEffect(() => {
+    if (!isGif) return;
+    const timer = setTimeout(() => {
+      setGifAutoPlayDone(true);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isGif]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -296,10 +324,14 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     const isVideo = isVideoAttachment;
 
     if (isImage) {
+      const showAnimated = isGif && (isGifHovered || !gifAutoPlayDone);
+
       return (
         <div
           className={`relative group cursor-pointer overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] transition-all duration-200 hover:border-[var(--color-border-secondary)] ${className}`}
           onClick={onClick}
+          onMouseEnter={() => isGif && setIsGifHovered(true)}
+          onMouseLeave={() => isGif && setIsGifHovered(false)}
         >
           <button
             type="button"
@@ -324,21 +356,61 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             </div>
           )}
 
-          <img
-            src={resolvedUrl}
-            alt={filename || 'Attachment'}
-            className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${
-              imageLoading ? 'opacity-0' : 'opacity-100'
-            }`}
-            onLoad={() => setImageLoading(false)}
-            onError={() => {
-              setImageLoading(false);
-              setImageError(true);
-            }}
-            loading="lazy"
-          />
+          {isGif ? (
+            <>
+              {/* Hidden img used only to capture first GIF frame onto canvas */}
+              <img
+                ref={gifHiddenImgRef}
+                src={resolvedUrl}
+                alt=""
+                aria-hidden="true"
+                style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+                crossOrigin="anonymous"
+                onLoad={() => {
+                  setImageLoading(false);
+                  captureGifFrame();
+                }}
+                onError={() => { setImageLoading(false); setImageError(true); }}
+              />
+              {/* Canvas: static first frame (always in DOM so ref works, hidden when animating) */}
+              <canvas
+                ref={gifCanvasRef}
+                className="w-full h-auto max-h-96 object-contain"
+                style={{ display: gifCanvasReady && !showAnimated ? 'block' : 'none' }}
+              />
+              {/* Animated GIF: shown when hovered or auto-playing */}
+              <img
+                src={resolvedUrl}
+                alt={filename || 'Attachment'}
+                className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+                style={{ display: gifCanvasReady && !showAnimated ? 'none' : 'block' }}
+                loading="lazy"
+              />
+            </>
+          ) : (
+            <img
+              src={resolvedUrl}
+              alt={filename || 'Attachment'}
+              className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${
+                imageLoading ? 'opacity-0' : 'opacity-100'
+              }`}
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageLoading(false);
+                setImageError(true);
+              }}
+              loading="lazy"
+            />
+          )}
 
-          {/* Hover overlay (no magnifier icon) */}
+          {/* GIF badge shown when paused */}
+          {isGif && gifAutoPlayDone && !isGifHovered && (
+            <div className="pointer-events-none absolute bottom-2 left-2 z-10">
+              <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">GIF</span>
+            </div>
+          )}
+
+          {/* Hover overlay */}
           <div className="pointer-events-none absolute inset-0 bg-[var(--color-surface)]/0 opacity-0 transition-all duration-200 group-hover:bg-[var(--color-surface)]/45 group-hover:opacity-100" />
 
           {/* Filename overlay */}

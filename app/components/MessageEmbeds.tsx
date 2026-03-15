@@ -32,19 +32,37 @@ export function MessageEmbeds({ content, className = "" }: MessageEmbedsProps) {
         <div
           key={embed.normalizedUrl}
           className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_88%,transparent)] shadow-sm"
+          style={embed.iframe?.maxWidth ? { maxWidth: embed.iframe.maxWidth } : undefined}
         >
           {embed.iframe ? (
-            <div className={`${getFrameClassName(embed.iframe.aspectRatio)} w-full bg-[var(--color-surface)]`}>
-              <iframe
-                src={embed.iframe.src}
-                title={embed.iframe.title}
-                loading="lazy"
-                allow={embed.iframe.allow}
-                sandbox={embed.iframe.sandbox}
-                referrerPolicy="strict-origin-when-cross-origin"
-                className="h-full w-full border-0"
-              />
-            </div>
+            embed.iframe.fixedHeight ? (
+              <div
+                className="w-full bg-[var(--color-surface)]"
+                style={{ height: embed.iframe.fixedHeight }}
+              >
+                <iframe
+                  src={embed.iframe.src}
+                  title={embed.iframe.title}
+                  loading="lazy"
+                  allow={embed.iframe.allow}
+                  sandbox={embed.iframe.sandbox}
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  className="h-full w-full border-0"
+                />
+              </div>
+            ) : (
+              <div className={`${getFrameClassName(embed.iframe.aspectRatio)} w-full bg-[var(--color-surface)]`}>
+                <iframe
+                  src={embed.iframe.src}
+                  title={embed.iframe.title}
+                  loading="lazy"
+                  allow={embed.iframe.allow}
+                  sandbox={embed.iframe.sandbox}
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  className="h-full w-full border-0"
+                />
+              </div>
+            )
           ) : null}
 
           <div className="flex items-start justify-between gap-3 px-4 py-3">

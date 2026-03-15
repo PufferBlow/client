@@ -31,7 +31,19 @@ export default defineConfig(() => {
         clientPort: 5173,
       },
       warmup: {
-        clientFiles: ["./app/root.tsx", "./app/app.css"],
+        clientFiles: [
+          "./app/root.tsx",
+          "./app/app.css",
+          "./app/routes/home.tsx",
+          "./app/routes/login.tsx",
+          "./app/routes/signup.tsx",
+          "./app/routes/dashboard.tsx",
+          "./app/routes/settings.tsx",
+          "./app/routes/control-panel.tsx",
+          "./app/components/pages/DashboardPage.tsx",
+          "./app/components/pages/SettingsPage.tsx",
+          "./app/components/pages/ControlPanelPage.tsx",
+        ],
       },
       // Don't proxy API requests - let the client make direct requests to the server
       // using the host:port stored in cookies for decentralized infrastructure

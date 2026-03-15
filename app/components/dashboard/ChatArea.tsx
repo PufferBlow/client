@@ -624,7 +624,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                       {/* Role badges */}
                       {firstMessage.sender_roles?.includes("owner") && (
-                        <span className="pb-status-success rounded border px-1.5 py-0.5 text-xs font-medium">OWNER</span>
+                        <span className="pb-status-info rounded border px-1.5 py-0.5 text-xs font-medium">Server Owner</span>
                       )}
                       {firstMessage.sender_roles?.includes("admin") && (
                         <span className="pb-status-danger rounded border px-1.5 py-0.5 text-xs font-medium">ADMIN</span>

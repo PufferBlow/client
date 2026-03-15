@@ -1,21 +1,24 @@
 import { Link } from "react-router";
-import { useTheme, themePresets, type AppearanceConfig } from "../../components/ThemeProvider";
+import { useTheme, themePresets } from "../../components/ThemeProvider";
 import { useState, useEffect } from "react";
 import { FileUploadInput } from "../../components/FileUploadInput";
 import { UserCard } from "../../components/UserCard";
 import { CroppableImage } from "../../components/CroppableImage";
-import { ModernSlider, ModernToggle, AudioTestButton, AudioLevelMeter, SpectrumAnalyzer, DeviceCard } from "../../components/AudioControls";
-import { Notice } from "../../components/ui/Notice";
+import { ModernSlider, ModernToggle } from "../../components/AudioControls";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/Button";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../../services/user";
 import { normalizeInstance, resolveInstance } from "../../services/instance";
 import { useQueryClient } from '@tanstack/react-query';
-import { User, Palette, Volume2, Server, Shield, ArrowLeft } from 'lucide-react';
-import { logger } from '../../utils/logger';
+import { User, Palette, Volume2, Server, Shield } from 'lucide-react';
+import { SettingsHeader } from "../settings/SettingsHeader";
+import { SettingsSidebar } from "../settings/SettingsSidebar";
+import type { SettingsTab, SettingsTabId } from "../settings/types";
+import { useSettingsAudio } from "../settings/useSettingsAudio";
+import { useSettingsProfile } from "../settings/useSettingsProfile";
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'audio' | 'server' | 'security'>('profile');
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
 
   // React Query hooks - must be called before any early returns
   const queryClient = useQueryClient();
@@ -28,113 +31,94 @@ export default function Settings() {
   const updatePasswordMutation = useUpdatePassword();
   const resetAuthTokenMutation = useResetAuthToken();
   const { logout } = useLogout();
-  const { setTheme, appearanceConfig, setAppearanceConfig, exportConfig, importConfig, resetToPreset } = useTheme();
-
-  // Get current theme from localStorage
-  const getCurrentTheme = () => {
-    if (typeof window === 'undefined') return 'dark'; // SSR fallback
-    const savedTheme = localStorage.getItem('pufferblow-theme');
-    if (!savedTheme || savedTheme === 'system') {
-      return 'system';
-    }
-    return savedTheme;
-  };
-  const currentTheme = getCurrentTheme();
-
-  // Local state - must be called before any conditional returns
-  const [userStatus, setUserStatus] = useState<'online' | 'offline' | 'idle' | 'afk' | 'dnd'>('online');
-  const [userBio, setUserBio] = useState('');
-  const [bioInputValue, setBioInputValue] = useState('');
-  const [hasBioChanged, setHasBioChanged] = useState(false);
-  const [isDndModeEnabled, setIsDndModeEnabled] = useState(false);
+  const { appearanceConfig, setAppearanceConfig, exportConfig, importConfig, resetToPreset } = useTheme();
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-  const [newUsername, setNewUsername] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [newHostPort, setNewHostPort] = useState('');
-  const [micVolume, setMicVolume] = useState(80);
-  const [speakerVolume, setSpeakerVolume] = useState(80);
-  const [isTestingMicrophone, setIsTestingMicrophone] = useState(false);
-  const [isTestingSpeakers, setIsTestingSpeakers] = useState(false);
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
-  const [gainNode, setGainNode] = useState<GainNode | null>(null);
-  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
 
-  // Image cropping state
-  const [isCroppingModalOpen, setIsCroppingModalOpen] = useState(false);
-  const [croppingImageType, setCroppingImageType] = useState<'avatar' | 'banner' | null>(null);
-  const [croppingImageSrc, setCroppingImageSrc] = useState<string | null>(null);
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const {
+    userStatus,
+    setUserStatus,
+    userBio,
+    bioInputValue,
+    setBioInputValue,
+    hasBioChanged,
+    setHasBioChanged,
+    newUsername,
+    setNewUsername,
+    bannerPreview,
+    bannerFile,
+    isProfileModalOpen,
+    setIsProfileModalOpen,
+    isCroppingModalOpen,
+    croppingImageType,
+    croppingImageSrc,
+    hasProfileChanges,
+    handleAvatarFileSubmit,
+    handleAvatarUrlSubmit,
+    handleBannerFileSubmit,
+    handleBannerUrlSubmit,
+    handleCroppedImage,
+    handleCroppingCancel,
+    resetProfileForm,
+    saveProfileChanges,
+  } = useSettingsProfile({
+    currentUser,
+    queryClient,
+    updateUsernameMutation,
+    updateStatusMutation,
+    updateBioMutation,
+    updateAvatarMutation,
+    updateBannerMutation,
+    setMessage,
+  });
 
-  // Audio Settings State
-  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
-  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedInputDevice, setSelectedInputDevice] = useState<string>('');
-  const [selectedOutputDevice, setSelectedOutputDevice] = useState<string>('');
-  const [inputLevel, setInputLevel] = useState<number>(0);
-  const [sensitivity, setSensitivity] = useState<number>(-50);
-  const [voiceActivityMode, setVoiceActivityMode] = useState<'voice' | 'ptt'>('voice');
-  const [pttKey, setPttKey] = useState<string>('Alt');
-  const [noiseSuppression, setNoiseSuppression] = useState<boolean>(true);
-  const [echoCancellation, setEchoCancellation] = useState<boolean>(true);
-  const [autoGainControl, setAutoGainControl] = useState<boolean>(true);
-  const [audioQuality, setAudioQuality] = useState<'good' | 'better' | 'best'>('better');
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordingAnimation, setRecordingAnimation] = useState<boolean>(false);
-  const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
-  const [webAudioContext, setWebAudioContext] = useState<AudioContext | null>(null);
-  const [isListening, setIsListening] = useState<boolean>(false);
-  const [frequencyData, setFrequencyData] = useState<Uint8Array>(new Uint8Array(0));
-  const [currentStream, setCurrentStream] = useState<MediaStream | null>(null);
-  const [inputGainNode, setInputGainNode] = useState<GainNode | null>(null);
-  const [outputGainNode, setOutputGainNode] = useState<GainNode | null>(null);
-  const [activeAudioContext, setActiveAudioContext] = useState<AudioContext | null>(null);
-  const [isPTTActive, setIsPTTActive] = useState<boolean>(false);
-
-  // Load initial data and set loading to false
-  useEffect(() => {
-    const loadData = async () => {
-      if (currentUser) {
-        if (currentUser.status) {
-          setUserStatus(currentUser.status as 'online' | 'offline' | 'idle' | 'afk' | 'dnd');
-        }
-        setUserBio(currentUser.about || '');
-        setBioInputValue(currentUser.about || '');
-      }
-      if (typeof window !== 'undefined') {
-        const savedDefaultStatus = localStorage.getItem('pufferblow-default-status') as 'online' | 'offline' | 'idle' | 'afk' | 'dnd' || 'online';
-        setIsDndModeEnabled(savedDefaultStatus === 'dnd');
-
-        // Load audio settings
-        const savedAudioSettings = localStorage.getItem('pufferblow-audio-settings');
-        if (savedAudioSettings) {
-          try {
-            const audioSettings = JSON.parse(savedAudioSettings);
-            setSelectedInputDevice(audioSettings.selectedInputDevice || '');
-            setSelectedOutputDevice(audioSettings.selectedOutputDevice || '');
-            setMicVolume(audioSettings.micVolume || 80);
-            setSpeakerVolume(audioSettings.speakerVolume || 80);
-            setSensitivity(audioSettings.sensitivity || -50);
-            setVoiceActivityMode(audioSettings.voiceActivityMode || 'voice');
-            setPttKey(audioSettings.pttKey || 'Alt');
-            setNoiseSuppression(audioSettings.noiseSuppression ?? true);
-            setEchoCancellation(audioSettings.echoCancellation ?? true);
-            setAutoGainControl(audioSettings.autoGainControl ?? true);
-            setAudioQuality(audioSettings.audioQuality || 'better');
-          } catch (error) {
-            logger.ui.warn('Failed to load saved audio settings', { error: error instanceof Error ? error.message : String(error) });
-          }
-        }
-      }
-    };
-    loadData();
-  }, [currentUser]);
+  const {
+    micVolume,
+    setMicVolume,
+    speakerVolume,
+    setSpeakerVolume,
+    isTestingMicrophone,
+    setIsTestingMicrophone,
+    isTestingSpeakers,
+    setIsTestingSpeakers,
+    inputDevices,
+    outputDevices,
+    selectedInputDevice,
+    setSelectedInputDevice,
+    selectedOutputDevice,
+    setSelectedOutputDevice,
+    inputLevel,
+    voiceActivityMode,
+    setVoiceActivityMode,
+    pttKey,
+    setPttKey,
+    noiseSuppression,
+    setNoiseSuppression,
+    echoCancellation,
+    setEchoCancellation,
+    autoGainControl,
+    setAutoGainControl,
+    audioQuality,
+    setAudioQuality,
+    isListening,
+    frequencyData,
+    startMicrophoneTest,
+    stopMicrophoneTest,
+    startSpeakerTest,
+    stopSpeakerTest,
+    refreshInputDevices,
+    startListening,
+    stopListening,
+  } = useSettingsAudio({
+    currentUser,
+    setMessage,
+  });
 
   // Set initial active tab based on URL hash
   useEffect(() => {
@@ -144,39 +128,6 @@ export default function Settings() {
     }
   }, []);
 
-  // Save audio settings to localStorage whenever they change
-  useEffect(() => {
-    const audioSettings = {
-      selectedInputDevice,
-      selectedOutputDevice,
-      micVolume,
-      speakerVolume,
-      sensitivity,
-      voiceActivityMode,
-      pttKey,
-      noiseSuppression,
-      echoCancellation,
-      autoGainControl,
-      audioQuality
-    };
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pufferblow-audio-settings', JSON.stringify(audioSettings));
-    }
-  }, [
-    selectedInputDevice,
-    selectedOutputDevice,
-    micVolume,
-    speakerVolume,
-    sensitivity,
-    voiceActivityMode,
-    pttKey,
-    noiseSuppression,
-    echoCancellation,
-    autoGainControl,
-    audioQuality
-  ]);
-
   // Auto-hide messages after 5 seconds
   useEffect(() => {
     if (message) {
@@ -185,204 +136,7 @@ export default function Settings() {
     }
   }, [message]);
 
-  // Create audio context when needed
-  const createAudioContext = (): AudioContext | null => {
-    if (activeAudioContext && activeAudioContext.state !== 'closed') {
-      return activeAudioContext;
-    }
-
-    try {
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
-      setActiveAudioContext(context);
-      return context;
-    } catch (error) {
-      logger.ui.error('Failed to create audio context', { error: error instanceof Error ? error.message : String(error) });
-      setMessage({ type: 'error', text: 'Failed to initialize audio system' });
-      return null;
-    }
-  };
-
-  // Get audio constraints based on current settings
-  const getAudioConstraints = () => {
-    const constraints: MediaTrackConstraints = {
-      sampleRate: audioQuality === 'good' ? 44100 : audioQuality === 'better' ? 48000 : 96000,
-      sampleSize: audioQuality === 'good' ? 16 : audioQuality === 'better' ? 16 : 24,
-      channelCount: 1, // Mono for communication
-      echoCancellation: echoCancellation,
-      noiseSuppression: noiseSuppression,
-      autoGainControl: autoGainControl
-    };
-
-    if (selectedInputDevice) {
-      constraints.deviceId = selectedInputDevice;
-    }
-
-    return constraints;
-  };
-
-  // Create gain nodes for volume control
-  const createGainNodes = (context: AudioContext) => {
-    const inputGain = context.createGain();
-    const outputGain = context.createGain();
-
-    // Apply volume settings
-    inputGain.gain.setValueAtTime(micVolume / 100, context.currentTime);
-    outputGain.gain.setValueAtTime(speakerVolume / 100, context.currentTime);
-
-    setInputGainNode(inputGain);
-    setOutputGainNode(outputGain);
-
-    return { inputGain, outputGain };
-  };
-
-  // Setup audio routing for monitoring
-  const setupAudioRouting = async (stream: MediaStream) => {
-    const context = createAudioContext();
-    if (!context) return null;
-
-    const { inputGain } = createGainNodes(context);
-
-    // Create nodes
-    const source = context.createMediaStreamSource(stream);
-    const analyser = context.createAnalyser();
-
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.8;
-
-    setAudioAnalyser(analyser);
-
-    // Setup routing: source -> input gain -> analyser
-    source.connect(inputGain);
-    inputGain.connect(analyser);
-
-    return { source, analyser };
-  };
-
-  // Push-to-Talk keyboard handlers
-  useEffect(() => {
-    if (voiceActivityMode !== 'ptt' || !pttKey) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === pttKey.toLowerCase() && !isPTTActive) {
-        setIsPTTActive(true);
-        setMessage({ type: 'success', text: 'PTT activated - audio transmission enabled' });
-        event.preventDefault();
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === pttKey.toLowerCase() && isPTTActive) {
-        setIsPTTActive(false);
-        setMessage({ type: 'success', text: 'PTT released - audio transmission disabled' });
-        event.preventDefault();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [voiceActivityMode, pttKey, isPTTActive]);
-
-  // Update volume levels when sliders change
-  useEffect(() => {
-    if (inputGainNode) {
-      inputGainNode.gain.setValueAtTime(micVolume / 100, activeAudioContext?.currentTime || 0);
-    }
-  }, [micVolume, inputGainNode, activeAudioContext]);
-
-  useEffect(() => {
-    if (outputGainNode) {
-      outputGainNode.gain.setValueAtTime(speakerVolume / 100, activeAudioContext?.currentTime || 0);
-    }
-  }, [speakerVolume, outputGainNode, activeAudioContext]);
-
   const hostPort = getHostPortFromStorage() || '';
-
-  const handleUsernameSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUsername.trim() || updateUsernameMutation.isPending) return;
-
-    // Optimistic update
-    const originalData = currentUser;
-    if (currentUser) {
-      // Temporarily update the query cache
-      queryClient.setQueryData(['user', 'profile', 'current'], {
-        ...currentUser,
-        username: newUsername.trim()
-      });
-    }
-
-    try {
-      await updateUsernameMutation.mutateAsync(newUsername);
-      setMessage({ type: 'success', text: 'Username updated successfully!' });
-      setNewUsername('');
-    } catch (error) {
-      // Revert on error
-      if (originalData) {
-        queryClient.setQueryData(['user', 'profile', 'current'], originalData);
-      }
-      setMessage({ type: 'error', text: 'Failed to update username' });
-    }
-  };
-
-  const handleStatusSubmit = async () => {
-    if (updateStatusMutation.isPending) return;
-
-    // Optimistic update
-    const originalStatus = currentUser?.status;
-    if (currentUser) {
-      queryClient.setQueryData(['user', 'profile', 'current'], {
-        ...currentUser,
-        status: userStatus
-      });
-    }
-
-    try {
-      await updateStatusMutation.mutateAsync(userStatus);
-      setMessage({ type: 'success', text: 'Status updated successfully!' });
-    } catch (error) {
-      // Revert on error
-      if (currentUser && originalStatus) {
-        queryClient.setQueryData(['user', 'profile', 'current'], {
-          ...currentUser,
-          status: originalStatus
-        });
-      }
-      setMessage({ type: 'error', text: 'Failed to update status' });
-    }
-  };
-
-  const handleBioChange = async () => {
-    if (updateBioMutation.isPending || !hasBioChanged) return;
-
-    // Optimistic update
-    const originalBio = currentUser?.about;
-    if (currentUser) {
-      queryClient.setQueryData(['user', 'profile', 'current'], {
-        ...currentUser,
-        about: bioInputValue
-      });
-    }
-
-    try {
-      await updateBioMutation.mutateAsync(bioInputValue);
-      setMessage({ type: 'success', text: 'Bio updated successfully!' });
-      setHasBioChanged(false);
-    } catch (error) {
-      // Revert on error
-      if (currentUser && originalBio !== undefined) {
-        queryClient.setQueryData(['user', 'profile', 'current'], {
-          ...currentUser,
-          about: originalBio
-        });
-      }
-      setMessage({ type: 'error', text: 'Failed to update bio' });
-    }
-  };
 
   const handlePasswordSubmit = async () => {
     if (!currentPassword || !newPassword || newPassword !== confirmPassword) return;
@@ -404,116 +158,6 @@ export default function Settings() {
     setShowResetModal(false);
   };
 
-  const isGifFile = (file: File): boolean => {
-    if (file.type.toLowerCase() === 'image/gif') {
-      return true;
-    }
-    return /\.gif$/i.test(file.name);
-  };
-
-  const handleAvatarFileSubmit = async (file: File) => {
-    if (!file) return;
-
-    // Preserve GIF animation by uploading original file without canvas cropping.
-    if (isGifFile(file)) {
-      try {
-        await updateAvatarMutation.mutateAsync(file);
-        setMessage({ type: 'success', text: 'Animated GIF avatar updated successfully!' });
-      } catch (error) {
-        setMessage({ type: 'error', text: 'Failed to update avatar' });
-      }
-      return;
-    }
-
-    // Store the file and open cropping modal
-    setSelectedImageFile(file);
-    setCroppingImageType('avatar');
-    setCroppingImageSrc(URL.createObjectURL(file));
-    setIsCroppingModalOpen(true);
-  };
-
-  const handleAvatarUrlSubmit = async (url: string) => {
-    if (!url.trim() || updateAvatarMutation.isPending) return;
-    try {
-      await updateAvatarMutation.mutateAsync(url);
-      setMessage({ type: 'success', text: 'Avatar updated successfully!' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to update avatar' });
-    }
-  };
-
-  const handleBannerFileSubmit = async (file: File) => {
-    if (!file) return;
-
-    // Preserve GIF animation by keeping original file and skipping JPEG crop conversion.
-    if (isGifFile(file)) {
-      setBannerFile(file);
-      setBannerPreview(URL.createObjectURL(file));
-      setMessage({
-        type: 'success',
-        text: 'Animated GIF banner selected. Click Save Changes to apply it.',
-      });
-      return;
-    }
-
-    // Store the file and open cropping modal
-    setSelectedImageFile(file);
-    setCroppingImageType('banner');
-    setCroppingImageSrc(URL.createObjectURL(file));
-    setIsCroppingModalOpen(true);
-  };
-
-  const handleBannerUrlSubmit = async (url: string) => {
-    if (!url.trim() || updateBannerMutation.isPending) return;
-
-    // Set preview immediately for URL inputs
-    setBannerPreview(url.trim());
-  };
-
-  // Handle cropped image (converted from blob to file)
-  const handleCroppedImage = async (croppedBlob: Blob) => {
-    if (!croppingImageType) return;
-
-    // Convert blob to File object
-    const file = new File([croppedBlob], `${croppingImageType}.jpg`, {
-      type: 'image/jpeg',
-      lastModified: Date.now()
-    });
-
-    if (croppingImageType === 'avatar') {
-      try {
-        await updateAvatarMutation.mutateAsync(file);
-        setMessage({ type: 'success', text: 'Avatar updated successfully!' });
-      } catch (error) {
-        setMessage({ type: 'error', text: 'Failed to update avatar' });
-      }
-    } else if (croppingImageType === 'banner') {
-      try {
-        setBannerFile(file);
-        // Create object URL for immediate preview
-        const objectUrl = URL.createObjectURL(file);
-        setBannerPreview(objectUrl);
-
-        setMessage({ type: 'success', text: 'Banner updated successfully!' });
-      } catch (error) {
-        setMessage({ type: 'error', text: 'Failed to update banner' });
-      }
-    }
-
-    // Close modal and clean up
-    setIsCroppingModalOpen(false);
-    setCroppingImageSrc(null);
-    setSelectedImageFile(null);
-    setCroppingImageType(null);
-  };
-
-  const handleCroppingCancel = () => {
-    setIsCroppingModalOpen(false);
-    setCroppingImageSrc(null);
-    setSelectedImageFile(null);
-    setCroppingImageType(null);
-  };
-
   const handleHostPortSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHostPort.trim()) return;
@@ -530,189 +174,7 @@ export default function Settings() {
     setNewHostPort('');
   };
 
-  // Audio testing functions
-  const startMicrophoneTest = async () => {
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setMessage({ type: 'error', text: 'Microphone access is not supported in this browser.' });
-        return;
-      }
-
-      // Stop any existing test first
-      if (currentStream) {
-        stopMicrophoneTest();
-      }
-
-      // Get microphone access with current constraints
-      const constraints = getAudioConstraints();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
-      setCurrentStream(stream);
-      setMicrophoneStream(stream);
-
-      // Setup audio routing
-      await setupAudioRouting(stream);
-
-      // Start real-time analysis
-      startAudioAnalysis();
-
-      setMessage({ type: 'success', text: 'Microphone test started with current audio settings.' });
-    } catch (error) {
-      setIsTestingMicrophone(false);
-      setMessage({ type: 'error', text: 'Failed to start microphone test. Check permissions and device availability.' });
-      logger.ui.error('Microphone test error', { error: error instanceof Error ? error.message : String(error) });
-    }
-  };
-
-  const stopMicrophoneTest = () => {
-    if (currentStream) {
-      currentStream.getTracks().forEach((track: MediaStreamTrack) => {
-        track.stop();
-      });
-      setCurrentStream(null);
-    }
-
-    // Clean up audio context and routing
-    if (activeAudioContext && activeAudioContext.state !== 'closed') {
-      activeAudioContext.close();
-      setActiveAudioContext(null);
-      setAudioAnalyser(null);
-      setInputGainNode(null);
-      setOutputGainNode(null);
-    }
-
-    // Reset visualization data
-    setFrequencyData(new Uint8Array(32));
-    setInputLevel(0);
-    setMicVolume(80); // Reset to default
-
-    setIsTestingMicrophone(false);
-    if (microphoneStream) {
-      setMicrophoneStream(null);
-    }
-    setMessage({ type: 'success', text: 'Microphone test stopped.' });
-  };
-
-  const startSpeakerTest = async () => {
-    try {
-      const context = createAudioContext();
-      if (!context) {
-        setMessage({ type: 'error', text: 'Failed to initialize audio system.' });
-        return;
-      }
-
-      const { outputGain } = createGainNodes(context);
-
-      // Create oscillator for test tone
-      const oscillator = context.createOscillator();
-      oscillator.connect(outputGain);
-
-      // Also connect to audio destination for output
-      outputGain.connect(context.destination);
-
-      oscillator.frequency.setValueAtTime(1000, context.currentTime); // 1kHz test tone
-      oscillator.type = 'sine';
-
-      // Start the tone
-      oscillator.start();
-
-      // Store reference for cleanup
-      setAudioContext(context as any);
-
-      // Stop after 3 seconds
-      setTimeout(() => {
-        try {
-          oscillator.stop();
-          if (context.state !== 'closed') {
-            context.close();
-          }
-          setAudioContext(null);
-          setOutputGainNode(null);
-        } catch (error) {
-          logger.ui.warn('Speaker test cleanup warning', { error: error instanceof Error ? error.message : String(error) });
-        }
-        setIsTestingSpeakers(false);
-        setMessage({ type: 'success', text: 'Speaker test completed.' });
-      }, 3000);
-
-      setMessage({ type: 'success', text: 'Playing test tone for 3 seconds...' });
-    } catch (error) {
-      setIsTestingSpeakers(false);
-      setMessage({ type: 'error', text: 'Failed to start speaker test. Check output device and permissions.' });
-      logger.ui.error('Speaker test error', { error: error instanceof Error ? error.message : String(error) });
-    }
-  };
-
-  const stopSpeakerTest = () => {
-    if (audioContext) {
-      try {
-        if (audioContext.state === 'running') {
-          // Try to stop any oscillators connected to the context
-          audioContext.close();
-        }
-      } catch (error) {
-        logger.ui.warn('Speaker test stop warning', { error: error instanceof Error ? error.message : String(error) });
-      }
-      setAudioContext(null);
-    }
-
-    if (outputGainNode) {
-      try {
-        outputGainNode.gain.exponentialRampToValueAtTime(0.01, activeAudioContext?.currentTime || 0);
-      } catch (error) {
-        logger.ui.warn('Output gain ramp warning', { error: error instanceof Error ? error.message : String(error) });
-      }
-      setOutputGainNode(null);
-    }
-
-    if (activeAudioContext && activeAudioContext !== audioContext) {
-      try {
-        activeAudioContext.close();
-        setActiveAudioContext(null);
-      } catch (error) {
-        logger.ui.warn('Active context cleanup warning', { error: error instanceof Error ? error.message : String(error) });
-      }
-    }
-
-    setIsTestingSpeakers(false);
-    setMessage({ type: 'success', text: 'Speaker test stopped.' });
-  };
-
-  // Real-time audio analysis function
-  const startAudioAnalysis = () => {
-    if (!audioAnalyser) {
-      logger.ui.warn('Audio analyser not available for analysis');
-      return;
-    }
-
-    const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
-
-    const updateAnalysis = () => {
-      if (!audioAnalyser || !isTestingMicrophone) return;
-
-      try {
-        audioAnalyser.getByteFrequencyData(dataArray);
-
-        // Calculate average input level
-        const avgLevel = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setInputLevel(avgLevel / 255);
-
-        // Update frequency data for visualization
-        setFrequencyData(new Uint8Array([...dataArray]));
-
-        // Continue analysis loop
-        if (isTestingMicrophone) {
-          requestAnimationFrame(updateAnalysis);
-        }
-      } catch (error) {
-        logger.ui.warn('Audio analysis error', { error: error instanceof Error ? error.message : String(error) });
-      }
-    };
-
-    updateAnalysis();
-  };
-
   // Handle loading timeout - prevent infinite loading and redirect to dashboard
-  const [loadingTimeout, setLoadingTimeout] = useState(false);
   useEffect(() => {
     if (userLoading) {
       const timer = setTimeout(() => {
@@ -829,7 +291,7 @@ export default function Settings() {
     );
   }
 
-  const tabs = [
+  const tabs: SettingsTab[] = [
     { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-6 h-6" /> },
     { id: 'audio', label: 'Audio', icon: <Volume2 className="w-6 h-6" /> },
@@ -837,99 +299,18 @@ export default function Settings() {
     { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
 
-  const resolvedCurrentStatus: 'online' | 'offline' | 'idle' | 'afk' | 'dnd' =
-    (currentUser?.status as 'online' | 'offline' | 'idle' | 'afk' | 'dnd') || 'online';
-  const hasUsernameChanged = Boolean(newUsername.trim()) && newUsername.trim() !== (currentUser?.username || '');
-  const hasBannerChanged = Boolean(bannerFile || bannerPreview) && bannerPreview !== currentUser?.banner_url;
-  const hasProfileChanges = hasUsernameChanged || hasBannerChanged || hasBioChanged || userStatus !== resolvedCurrentStatus;
-
   return (
     <>
       <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
-        {/* Nord-themed Sidebar */}
-        <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
-          {/* User Settings Header */}
-          <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 text-[var(--color-background)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <span className="text-[var(--color-text)] font-semibold text-sm">User Settings</span>
-            </div>
-            <div className="ml-auto">
-              <span className="bg-[var(--color-error)] text-[var(--color-background)] text-xs px-1.5 py-0.5 rounded-full font-bold">USER</span>
-            </div>
-          </div>
-
-          {/* Navigation Section */}
-          <div className="flex-1 overflow-y-auto py-3">
-            <div className="px-2">
-              {/* Settings Section */}
-              <div className="mb-6">
-                <div className="px-4 py-2 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                  Account Settings
-                </div>
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full px-3 py-2 mb-1 rounded-md flex items-center space-x-3 transition-all duration-200 cursor-pointer text-left ${activeTab === tab.id
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]'
-                      }`}
-                  >
-                    <div className={`transition-colors ${activeTab === tab.id ? 'text-[var(--color-primary)]' : ''}`}>
-                      {tab.icon}
-                    </div>
-                    <span className="font-medium text-sm">{tab.label}</span>
-                    {activeTab === tab.id && (
-                      <div className="ml-auto w-1 h-6 bg-[var(--color-primary)] rounded-full"></div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Back to Dashboard Button */}
-          <Link
-            to="/dashboard"
-            className="m-2 p-2 hover:bg-[var(--color-hover)] rounded-lg transition-all duration-200 flex items-center space-x-3 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer"
-            title="Back to Dashboard"
-          >
-            <div className="w-8 h-8 flex items-center justify-center ml-3">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </div>
-            <span className="font-medium text-sm">Back to Dashboard</span>
-          </Link>
-        </div>
+        <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col bg-[var(--color-background)] overflow-hidden">
-          {/* Header */}
-          <div className="h-12 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center px-6 flex-shrink-0">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-[var(--color-text)] font-semibold text-base">
-                {tabs.find(tab => tab.id === activeTab)?.label}
-              </h1>
-
-              {/* Inline Notice */}
-              {message && (
-                <div className="ml-auto">
-                  <Notice
-                    tone={message.type === "success" ? "success" : "error"}
-                    message={message.text}
-                    onClose={() => setMessage(null)}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
+          <SettingsHeader
+            title={tabs.find((tab) => tab.id === activeTab)?.label || "Settings"}
+            message={message}
+            onDismissMessage={() => setMessage(null)}
+          />
 
           {/* Content Area */}
           <div className="flex-1 p-6 overflow-y-auto bg-[var(--color-background)]">
@@ -1133,15 +514,7 @@ export default function Settings() {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() => {
-                          setNewUsername('');
-                          setBioInputValue(currentUser?.about || '');
-                          setUserBio(currentUser?.about || '');
-                          setUserStatus(resolvedCurrentStatus);
-                          setHasBioChanged(false);
-                          setBannerFile(null);
-                          setBannerPreview(null);
-                        }}
+                        onClick={resetProfileForm}
                         disabled={!hasProfileChanges}
                       >
                         Reset
@@ -1150,33 +523,8 @@ export default function Settings() {
                       <Button
                         type="button"
                         variant="primary"
-                        onClick={async () => {
-                          if (hasUsernameChanged && !updateUsernameMutation.isPending) {
-                            await handleUsernameSubmit({ preventDefault: () => {} } as React.FormEvent);
-                          }
-
-                          if (hasBannerChanged) {
-                            try {
-                              if (bannerFile) {
-                                await updateBannerMutation.mutateAsync(bannerFile);
-                              } else if (bannerPreview && !bannerPreview.startsWith('blob:')) {
-                                await updateBannerMutation.mutateAsync(bannerPreview);
-                              }
-                              setMessage({ type: 'success', text: 'Banner updated successfully!' });
-                              setBannerPreview(null);
-                              setBannerFile(null);
-                            } catch (error) {
-                              setMessage({ type: 'error', text: 'Failed to update banner' });
-                            }
-                          }
-
-                          if (hasBioChanged && !updateBioMutation.isPending) {
-                            await handleBioChange();
-                          }
-
-                          if (userStatus !== resolvedCurrentStatus && !updateStatusMutation.isPending) {
-                            await handleStatusSubmit();
-                          }
+                        onClick={() => {
+                          void saveProfileChanges();
                         }}
                         disabled={
                           updateUsernameMutation.isPending ||
@@ -1952,15 +1300,8 @@ export default function Settings() {
                         </div>
                         <div>
                           <button
-                            onClick={async () => {
-                              try {
-                                const devices = await navigator.mediaDevices.enumerateDevices();
-                                const audioInputs = devices.filter(device => device.kind === 'audioinput');
-                                setInputDevices(audioInputs);
-                                setMessage({ type: 'success', text: `Found ${audioInputs.length} audio input devices` });
-                              } catch (error) {
-                                setMessage({ type: 'error', text: 'Failed to enumerate audio devices' });
-                              }
+                            onClick={() => {
+                              void refreshInputDevices();
                             }}
                             className="w-full px-4 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] rounded-lg font-medium transition-colors text-sm flex items-center justify-center space-x-2"
                           >
@@ -2307,53 +1648,11 @@ export default function Settings() {
                     {/* Test Controls */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <button
-                        onClick={async () => {
+                        onClick={() => {
                           if (isListening) {
-                            setIsListening(false);
-                            if (webAudioContext) {
-                              webAudioContext.close();
-                              setWebAudioContext(null);
-                              setAudioAnalyser(null);
-                            }
-                            setFrequencyData(new Uint8Array(32));
+                            stopListening();
                           } else {
-                            try {
-                              const context = new AudioContext();
-                              setWebAudioContext(context);
-
-                              const analyser = context.createAnalyser();
-                              analyser.fftSize = 64;
-                              setAudioAnalyser(analyser);
-
-                              const stream = await navigator.mediaDevices.getUserMedia({
-                                audio: {
-                                  echoCancellation: echoCancellation,
-                                  noiseSuppression: noiseSuppression,
-                                  autoGainControl: autoGainControl
-                                }
-                              });
-
-                              const source = context.createMediaStreamSource(stream);
-                              source.connect(analyser);
-
-                              setIsListening(true);
-
-                              const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                              const updateSpectrum = () => {
-                                if (analyser && isListening) {
-                                  analyser.getByteFrequencyData(dataArray);
-                                  const avgLevel = dataArray.reduce((a, b) => a + b) / dataArray.length;
-                                  setInputLevel(avgLevel / 255);
-                                  setFrequencyData(new Uint8Array([...dataArray]));
-                                  requestAnimationFrame(updateSpectrum);
-                                }
-                              };
-                              updateSpectrum();
-
-                              setMessage({ type: 'success', text: 'Listening to microphone... Check the audio levels above.' });
-                            } catch (error) {
-                              setMessage({ type: 'error', text: 'Failed to start microphone monitoring' });
-                            }
+                            void startListening();
                           }
                         }}
                         className={`py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
@@ -2670,8 +1969,3 @@ export default function Settings() {
     </>
   );
 }
-
-
-
-
-

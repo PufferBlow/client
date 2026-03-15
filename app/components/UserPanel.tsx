@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useToast } from '../components/Toast';
+import { Link } from 'react-router';
 import { Mic, MicOff, Headphones, Settings, X, Volume2, ChevronDown } from 'lucide-react';
 
 interface UserPanelProps {
@@ -8,7 +8,6 @@ interface UserPanelProps {
   status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline';
   onClick?: (event: React.MouseEvent) => void;
   onDeviceSelectorClick?: () => void;
-  onSettingsClick?: () => void;
   onStatusChange?: (status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline') => void;
   className?: string;
   voiceChannel?: {
@@ -24,12 +23,10 @@ export function UserPanel({
   status,
   onClick,
   onDeviceSelectorClick,
-  onSettingsClick,
   onStatusChange,
   className = "",
   voiceChannel
 }: UserPanelProps) {
-  const showToast = useToast();
   const panelRef = useRef<HTMLDivElement>(null);
 
   const [isMuted, setIsMuted] = useState(true);
@@ -55,7 +52,6 @@ export function UserPanel({
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
-    showToast(isMuted ? 'Microphone unmuted' : 'Microphone muted', 'success');
   };
 
   const toggleDeafen = () => {
@@ -64,7 +60,6 @@ export function UserPanel({
     if (newDeafened) {
       setIsMuted(true);
     }
-    showToast(newDeafened ? 'Speakers/headphones muted' : 'Speakers/headphones unmuted', 'success');
   };
 
   const getStatusText = (status: string) => {
@@ -219,13 +214,14 @@ export function UserPanel({
               <Volume2 className="h-4 w-4" />
             </button>
 
-            <button
-              onClick={() => onSettingsClick?.()}
-              className="pb-icon-btn h-8 w-8 rounded-md text-[var(--color-text-secondary)]"
+            <Link
+              to="/settings"
+              prefetch="intent"
+              className="pb-icon-btn h-8 w-8 rounded-md text-[var(--color-text-secondary)] flex items-center justify-center"
               title="Settings"
             >
               <Settings className="h-4 w-4" />
-            </button>
+            </Link>
           </div>
         </div>
       </div>

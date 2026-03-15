@@ -1,0 +1,1 @@
+export { BlockedIPsTab } from "../ControlPanelTabs";

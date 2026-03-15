@@ -122,19 +122,12 @@ export function ToastProvider({ children }: ToastProviderProps) {
         ? "pb-toast-warning"
         : "pb-toast-success";
 
-  const toneLabelClass =
+  const toneIconClass =
     currentToast?.tone === "error"
       ? "pb-toast-label-error"
       : currentToast?.tone === "warning"
         ? "pb-toast-label-warning"
         : "pb-toast-label-success";
-
-  const toneDotClass =
-    currentToast?.tone === "error"
-      ? "pb-toast-dot-error"
-      : currentToast?.tone === "warning"
-        ? "pb-toast-dot-warning"
-        : "pb-toast-dot-success";
 
   const contextValue = { showToast };
 
@@ -142,21 +135,28 @@ export function ToastProvider({ children }: ToastProviderProps) {
     <ToastContext.Provider value={contextValue}>
       {children}
       {currentToast?.isOpen ? (
-        <div className="animate-slide-in-right fixed right-4 top-4 z-[9999] max-w-sm">
-          <div
-            className={`rounded-xl border px-4 py-3 shadow-lg ${toneClass}`}
-          >
+        <div className="animate-slide-in-right fixed bottom-4 right-4 z-[9999] max-w-sm min-w-64">
+          <div className={`rounded-xl border px-4 py-3 shadow-xl ${toneClass}`}>
             <div className="flex items-start gap-3">
-              <div className={`pb-toast-dot ${toneDotClass}`} />
-              <div className="min-w-0 flex-1">
-                <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${toneLabelClass}`}>
-                  {currentToast.tone}
-                </div>
-                <p className="mt-1 text-sm leading-relaxed">{currentToast.message}</p>
+              <div className={`mt-0.5 flex-shrink-0 ${toneIconClass}`}>
+                {currentToast.tone === "success" ? (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : currentToast.tone === "warning" ? (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
               </div>
+              <p className="min-w-0 flex-1 text-sm leading-relaxed">{currentToast.message}</p>
               <button
                 onClick={() => setCurrentToast(null)}
-                className="text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                className="mt-0.5 flex-shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                 aria-label="Close"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

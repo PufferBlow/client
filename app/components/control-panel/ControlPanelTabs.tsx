@@ -3233,48 +3233,43 @@ export function SettingsTab({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Server Avatar */}
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
+              <div className="space-y-3">
+                <h4 className="font-medium text-[var(--color-text)]">Server Avatar</h4>
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-shrink-0">
                     {serverInfo.avatar_url ? (
-                      <img
-                        src={convertToFullStorageUrl(serverInfo.avatar_url)}
-                        alt="Server Avatar"
-                        className="w-20 h-20 rounded-xl border-2 border-[var(--color-border)] object-cover"
-                      />
+                      <>
+                        <img
+                          src={convertToFullStorageUrl(serverInfo.avatar_url)}
+                          alt="Server Avatar"
+                          className="h-20 w-20 rounded-2xl border-2 border-[var(--color-border)] object-cover"
+                        />
+                        <button
+                          onClick={() => setServerInfo({ ...serverInfo, avatar_url: null })}
+                          className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)] text-xs font-bold transition-opacity hover:opacity-90"
+                          disabled={saving}
+                          title="Remove avatar"
+                        >
+                          ×
+                        </button>
+                      </>
                     ) : (
-                      <div className="w-20 h-20 bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-primary)] rounded-xl flex items-center justify-center border-2 border-[var(--color-border)] shadow-lg">
-                        <span className="text-[var(--color-on-primary)] font-bold text-2xl">
-                          {serverInfo.server_name.charAt(0).toUpperCase()}
-                        </span>
+                      <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-[var(--color-border)] bg-[var(--color-primary)] text-2xl font-bold text-[var(--color-on-primary)]">
+                        {serverInfo.server_name.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <button
-                      onClick={() => setServerInfo({ ...serverInfo, avatar_url: null })}
-                      className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)] text-xs font-bold transition-opacity hover:opacity-90"
-                      disabled={saving}
-                    >
-                      ×
-                    </button>
                   </div>
-                  <div className="flex-1">
-                    <h4 className="mb-1 font-medium text-[var(--color-text)]">Server Avatar</h4>
-                    <p className="text-[var(--color-text-secondary)] text-sm mb-2">Upload a static image or animated GIF</p>
+                  <div>
+                    <p className="mb-2 text-sm text-[var(--color-text-secondary)]">Supports PNG, JPEG, GIF, WebP. Recommended 128×128 px.</p>
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          // Show local preview first
                           const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            setServerInfo({ ...serverInfo, avatar_url: result });
-                          };
+                          reader.onload = (ev) => setServerInfo({ ...serverInfo, avatar_url: ev.target?.result as string });
                           reader.readAsDataURL(file);
-
-                          // Then upload to server
                           await handleAvatarUpload(file);
                         }
                       }}
@@ -3284,76 +3279,73 @@ export function SettingsTab({
                     />
                     <label
                       htmlFor="avatar-upload"
-                      className="cursor-pointer inline-flex items-center space-x-2 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm text-[var(--color-on-primary)] transition-colors hover:opacity-90"
+                      className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-sm font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                       </svg>
-                      <span>Upload Avatar</span>
+                      Upload Avatar
                     </label>
                   </div>
                 </div>
               </div>
 
               {/* Server Banner */}
-              <div className="space-y-4">
-                <div className="flex flex-col space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-1">
-                      <h4 className="mb-1 font-medium text-[var(--color-text)]">Server Banner</h4>
-                      <p className="text-[var(--color-text-secondary)] text-sm mb-2">Upload a banner image or GIF for the server header</p>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            // Show local preview first
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              const result = event.target?.result as string;
-                              setServerInfo({ ...serverInfo, banner_url: result });
-                            };
-                            reader.readAsDataURL(file);
+              <div className="space-y-3">
+                <h4 className="font-medium text-[var(--color-text)]">Server Banner</h4>
 
-                            // Then upload to server
-                            await handleBannerUpload(file);
-                          }
-                        }}
-                        disabled={saving}
-                        className="hidden"
-                        id="banner-upload"
-                      />
-                      <label
-                        htmlFor="banner-upload"
-                        className="cursor-pointer inline-flex items-center space-x-2 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm text-[var(--color-on-primary)] transition-colors hover:opacity-90"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <span>Upload Banner</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Banner Preview */}
-                  {serverInfo.banner_url && (
-                    <div className="relative group">
+                {/* Preview — always shown */}
+                <div className="relative overflow-hidden rounded-xl border border-[var(--color-border)]">
+                  {serverInfo.banner_url ? (
+                    <>
                       <img
                         src={convertToFullStorageUrl(serverInfo.banner_url)}
                         alt="Server Banner"
-                        className="w-full h-24 object-cover rounded-lg border border-[var(--color-border)]"
-                        style={{ aspectRatio: '16/2' }}
+                        className="h-28 w-full object-cover"
                       />
                       <button
                         onClick={() => setServerInfo({ ...serverInfo, banner_url: null })}
-                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-error)] text-xs font-bold opacity-75 transition-opacity group-hover:opacity-100 hover:opacity-90"
+                        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white text-sm font-bold backdrop-blur-sm transition-opacity hover:bg-black/80"
                         disabled={saving}
+                        title="Remove banner"
                       >
                         ×
                       </button>
+                    </>
+                  ) : (
+                    <div className="flex h-28 w-full items-center justify-center bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)]">
+                      <span className="text-xs text-[var(--color-text-muted)]">No banner set — gradient color shown in sidebar</span>
                     </div>
                   )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setServerInfo({ ...serverInfo, banner_url: ev.target?.result as string });
+                        reader.readAsDataURL(file);
+                        await handleBannerUpload(file);
+                      }
+                    }}
+                    disabled={saving}
+                    className="hidden"
+                    id="banner-upload"
+                  />
+                  <label
+                    htmlFor="banner-upload"
+                    className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-sm font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload Banner
+                  </label>
+                  <p className="text-sm text-[var(--color-text-secondary)]">Recommended 1200×300 px. Supports GIF.</p>
                 </div>
               </div>
             </div>

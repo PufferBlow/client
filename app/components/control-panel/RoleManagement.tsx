@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../Button";
 import type { ShowToast } from "../Toast";
 import { Modal } from "../ui/Modal";
-import { createFallbackAvatarUrl } from "../../services/user";
+import { convertToFullStorageUrl } from "../../services/apiClient";
 import {
   createInstanceRole,
   deleteInstanceRole,
@@ -17,6 +17,7 @@ type MemberRecord = {
   user_id: string;
   username: string;
   roles_ids: string[];
+  avatar_url?: string | null;
 };
 
 type RoleCatalogModalProps = {
@@ -634,11 +635,17 @@ export function RolesTab({
               className="flex flex-col gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="flex items-center gap-3">
-                <img
-                  src={createFallbackAvatarUrl(user.username)}
-                  alt={user.username}
-                  className="h-10 w-10 rounded-full border-2 border-[var(--color-border-secondary)] shadow-md"
-                />
+                {user.avatar_url ? (
+                  <img
+                    src={convertToFullStorageUrl(user.avatar_url)}
+                    alt={user.username}
+                    className="h-10 w-10 rounded-full border border-[var(--color-border-secondary)] object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]">
+                    {user.username.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <div className="font-medium text-[var(--color-text)]">{user.username}</div>
                   <RoleBadgeList roleIds={user.roles_ids} roles={roles} />

@@ -22,7 +22,6 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { validateMessageInput } from "../../utils/markdown";
 import { logger } from "../../utils/logger";
-import { usePersistedUIState } from "../../utils/uiStatePersistence";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
 import { getMessageReadHistory, loadMessages, markMessageAsRead, sendMessage } from "../../services/message";
@@ -35,564 +34,165 @@ import { buildAuthRedirectPath } from "../../utils/authRedirect";
 import type { Channel } from "../../models";
 import type { Message } from "../../models";
 import type { User } from "../../models";
+import { ChannelPanel } from "../dashboard-page/ChannelPanel";
+import { DashboardOverlays } from "../dashboard-page/DashboardOverlays";
+import { MembersPanel } from "../dashboard-page/MembersPanel";
+import { MessagePane } from "../dashboard-page/MessagePane";
+import { ServerRail } from "../dashboard-page/ServerRail";
+import type { DisplayUser } from "../dashboard-page/types";
+import { getAttachmentCategory, normalizeExtensions } from "../dashboard-page/types";
+import { useDashboardComposer } from "../dashboard-page/useDashboardComposer";
+import { useDashboardData } from "../dashboard-page/useDashboardData";
 
-interface DisplayUser {
-  id: string;
-  username: string;
-  avatar?: string;
-  banner?: string;
-  accentColor?: string;
-  bannerColor?: string;
-  customStatus?: string;
-  externalLinks?: { platform: string; url: string }[];
-  status: 'online' | 'idle' | 'afk' | 'offline' | 'dnd';
-  bio?: string;
-  joinedAt: string;
-  originServer?: string;
-  roles: string[];
-  activity?: {
-    type: 'playing' | 'listening' | 'watching' | 'streaming';
-    name: string;
-    details?: string;
-  };
-  mutualServers?: number;
-  mutualFriends?: number;
-  badges?: string[];
+/** Deterministic hue (0–359) derived from a server name string. */
+function getServerHue(name?: string | null): number {
+  if (!name) return 220;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = name.charCodeAt(i) + ((h << 5) - h);
+  }
+  return Math.abs(h) % 360;
 }
-
-interface ComposerAttachmentPreview {
-  file: File;
-  kind: 'image' | 'video' | 'file';
-  url?: string;
-}
-
-type UploadCategory = 'image' | 'video' | 'audio' | 'file';
-
-const normalizeExtensions = (extensions?: string[] | null): string[] =>
-  (extensions ?? [])
-    .map((extension) => extension.trim().toLowerCase().replace(/^\./, ''))
-    .filter(Boolean);
-
-const getAttachmentCategory = (file: File, policy: {
-  imageExtensions: string[];
-  videoExtensions: string[];
-  audioExtensions: string[];
-}): UploadCategory => {
-  const extension = file.name.split('.').pop()?.toLowerCase().replace(/^\./, '') || '';
-
-  if (policy.imageExtensions.includes(extension) || file.type.startsWith('image/')) {
-    return 'image';
-  }
-  if (policy.videoExtensions.includes(extension) || file.type.startsWith('video/')) {
-    return 'video';
-  }
-  if (policy.audioExtensions.includes(extension) || file.type.startsWith('audio/')) {
-    return 'audio';
-  }
-  return 'file';
-};
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const showToast = useToast();
+  const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
-  const loginRedirectPath = buildAuthRedirectPath(
-    location.pathname,
-    location.search,
-    location.hash,
-  );
-
-  // Client-side authentication check
-  useEffect(() => {
-    const authToken = getAuthTokenFromCookies();
-    if (!authToken) {
-      navigate(loginRedirectPath, { replace: true });
-    }
-  }, [loginRedirectPath, navigate]);
-
-  // UI persistence hook
   const {
-    selectedChannelId: persistedChannelId,
-    setSelectedChannel: persistSelectedChannel,
+    persistedChannelId,
+    persistSelectedChannel,
     setMessageDraft,
     getMessageDraft,
     clearMessageDraft,
-  } = usePersistedUIState(currentUser?.user_id);
-
-  // Modal states
-  const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
-  const [deviceSelectorModalOpen, setDeviceSelectorModalOpen] = useState(false);
-
-  // User card tooltip state
-  const [userCardTooltipUser, setUserCardTooltipUser] = useState<DisplayUser | null>(null);
-  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
-  const [tooltipSource, setTooltipSource] = useState<'userpanel' | 'members' | 'messages'>('messages');
-
-  // Tooltip anchoring and position state
-  const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-
-  const calculateTooltipPosition = useCallback((
-    anchor: HTMLElement,
-    source: 'userpanel' | 'members' | 'messages'
-  ) => {
-    const rect = anchor.getBoundingClientRect();
-    const spacing = 10;
-    const viewportPadding = 16;
-    const tooltipWidth = popperElement?.offsetWidth ?? 352;
-    const tooltipHeight = popperElement?.offsetHeight ?? 420;
-    const maxLeft = window.innerWidth - tooltipWidth - viewportPadding;
-    const maxTop = window.innerHeight - tooltipHeight - viewportPadding;
-
-    if (source === 'userpanel') {
-      const left = Math.min(maxLeft, Math.max(viewportPadding, rect.left));
-      const preferBottomTop = rect.bottom + spacing;
-      const top = preferBottomTop + tooltipHeight <= window.innerHeight - viewportPadding
-        ? preferBottomTop
-        : Math.max(viewportPadding, rect.top - tooltipHeight - spacing);
-      return { top, left };
-    }
-
-    const centeredLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2);
-    const left = Math.min(maxLeft, Math.max(viewportPadding, centeredLeft));
-    const preferTop = rect.top - tooltipHeight - spacing;
-    const top = preferTop >= viewportPadding
-      ? preferTop
-      : Math.min(maxTop, rect.bottom + spacing);
-    return { top, left };
-  }, [popperElement]);
-
-  // Keep tooltip aligned on scroll/resize and after content/size changes.
-  useEffect(() => {
-    if (!isTooltipOpen || !referenceElement) {
-      return;
-    }
-
-    const updatePosition = () => {
-      setTooltipPosition(calculateTooltipPosition(referenceElement, tooltipSource));
-    };
-
-    updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [isTooltipOpen, referenceElement, tooltipSource, userCardTooltipUser, calculateTooltipPosition]);
-
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [messageContextMenu, setMessageContextMenu] = useState<{
-    isOpen: boolean;
-    position: { x: number; y: number };
-    customCopyLinkLabel?: string;
-    customReportLabel?: string;
-    onCopyLink?: () => void;
-    onReport?: () => void;
-  }>({ isOpen: false, position: { x: 0, y: 0 } });
-  const [currentMenuMessageId, setCurrentMenuMessageId] = useState<string | null>(null);
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-  const [membersListVisible, setMembersListVisible] = useState(false);
-  const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({ isOpen: false, position: { x: 0, y: 0 } });
-  const [selectedContextUser, setSelectedContextUser] = useState<{
-    userId: string;
-    username: string;
-    anchorElement: HTMLElement | null;
-    source: 'userpanel' | 'members' | 'messages';
-  } | null>(null);
-  const [channelContextMenu, setChannelContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number }; channel: Channel | null }>({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
-  const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ isOpen: boolean; channel: Channel | null; isDeleting?: boolean }>({ isOpen: false, channel: null, isDeleting: false });
-  const [reportModal, setReportModal] = useState<{
-    isOpen: boolean;
-    targetType: 'message' | 'user';
-    messages: string[];
-    targetUserId?: string;
-    targetUsername?: string;
-  }>({ isOpen: false, targetType: 'message', messages: [] });
-  const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
-  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
-  const [serverInfoError, setServerInfoError] = useState<string | null>(null);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [channelsError, setChannelsError] = useState<string | null>(null);
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [users, setUsers] = useState<ListUsersResponse['users']>([]);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [webSocketConnection, setWebSocketConnection] = useState<GlobalWebSocket | null>(null);
-  const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
-  const [unreadCountsByChannel, setUnreadCountsByChannel] = useState<Record<string, number>>({});
-  const [manualPresenceLock, setManualPresenceLock] = useState<'dnd' | 'afk' | 'offline' | null>(null);
-  const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
-  const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
-    typeof window !== 'undefined' && 'Notification' in window
-      ? Notification.permission
-      : 'unsupported',
-  );
-  const webSocketConnectionRef = useRef<GlobalWebSocket | null>(null);
-  const notificationMenuRef = useRef<HTMLDivElement>(null);
-  const unreadDividerRef = useRef<HTMLDivElement | null>(null);
-  const selectedChannelIdRef = useRef<string | null>(null);
-  const currentUserIdRef = useRef<string | null>(currentUser?.user_id ?? null);
-  const seenRealtimeMessageIdsRef = useRef<Set<string>>(new Set());
-  const readMessageIdsRef = useRef<Set<string>>(new Set());
-  const lastActivityAtRef = useRef<number>(Date.now());
-  const presenceUpdateInFlightRef = useRef(false);
-
-  const usersById = useMemo(() => {
-    const map = new Map<string, ListUsersResponse['users'][number]>();
-    users.forEach((user) => {
-      map.set(user.user_id, user);
-    });
-    return map;
-  }, [users]);
-
-  const currentUserLiveStatus = useMemo(() => {
-    if (!currentUser) {
-      return 'offline' as const;
-    }
-
-    const liveStatus = usersById.get(currentUser.user_id)?.status ?? currentUser.status;
-    if (
-      liveStatus === 'online' ||
-      liveStatus === 'idle' ||
-      liveStatus === 'afk' ||
-      liveStatus === 'dnd'
-    ) {
-      return liveStatus;
-    }
-    return 'offline' as const;
-  }, [currentUser, usersById]);
-
-  useEffect(() => {
-    selectedChannelIdRef.current = selectedChannel?.channel_id ?? null;
-  }, [selectedChannel]);
-
-  useEffect(() => {
-    currentUserIdRef.current = currentUser?.user_id ?? null;
-  }, [currentUser]);
-
-  useEffect(() => {
-    webSocketConnectionRef.current = webSocketConnection;
-  }, [webSocketConnection]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      setBrowserNotificationPermission('unsupported');
-      return;
-    }
-
-    setBrowserNotificationPermission(Notification.permission);
-  }, [notificationMenuOpen]);
-
-  const groupedMessages = useMemo(() => {
-    if (messages.length === 0) {
-      return [] as Message[][];
-    }
-
-    const groups: Message[][] = [];
-    let currentGroup: Message[] = [];
-
-    messages.forEach((message, index) => {
-      const messageTime = new Date(message.sent_at);
-
-      if (currentGroup.length === 0) {
-        currentGroup = [message];
-      } else {
-        const prevMessageTime = new Date(currentGroup[currentGroup.length - 1].sent_at);
-        const timeDiff = (messageTime.getTime() - prevMessageTime.getTime()) / 1000;
-        if (message.sender_user_id === currentGroup[0].sender_user_id && timeDiff <= 30) {
-          currentGroup.push(message);
-        } else {
-          groups.push(currentGroup);
-          currentGroup = [message];
-        }
-      }
-
-      if (index === messages.length - 1) {
-        groups.push(currentGroup);
-      }
-    });
-
-    return groups;
-  }, [messages]);
-
-  const getMessageById = useCallback(
-    (messageId: string | null) =>
-      messageId ? messages.find((message) => message.message_id === messageId) ?? null : null,
-    [messages],
-  );
-
-  const buildReplyMessage = useCallback((messageBody: string, target: Message | null) => {
-    if (!target) {
-      return messageBody;
-    }
-
-    const author = target.username || usersById.get(target.sender_user_id)?.username || "Unknown User";
-    const excerpt = (target.message || "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join(" ")
-      .slice(0, 140);
-    const quotedLines = excerpt ? `> ${excerpt.replace(/\n/g, "\n> ")}\n\n` : "";
-    return `> Replying to @${author}\n${quotedLines}${messageBody}`.trim();
-  }, [usersById]);
-
-  const addReadMessageIds = useCallback((messageIds: string[]) => {
-    if (messageIds.length === 0) {
-      return;
-    }
-
-    setReadMessageIds((prev) => {
-      const next = new Set(prev);
-      messageIds.forEach((messageId) => next.add(messageId));
-      readMessageIdsRef.current = next;
-      return next;
-    });
-  }, []);
-
-  const applyReadHistorySnapshot = useCallback(
-    (messageIds: string[], unreadCounts: Record<string, number>) => {
-      const snapshot = new Set(messageIds);
-      readMessageIdsRef.current = snapshot;
-      setReadMessageIds(snapshot);
-      setUnreadCountsByChannel(unreadCounts);
-    },
-    [],
-  );
-
-  const markChannelNotificationsRead = useCallback((channelId: string) => {
-    setNotifications((prev) =>
-      prev.filter((notification) => notification.channelId !== channelId),
-    );
-  }, []);
-
-  const applyPresenceUpdate = useCallback((userId: string, status: DisplayUser['status']) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user.user_id === userId
-          ? {
-              ...user,
-              status,
-            }
-          : user,
-      ),
-    );
-
-    setMessages((prevMessages) =>
-      prevMessages.map((message) =>
-        message.sender_user_id === userId
-          ? {
-              ...message,
-              sender_status: status,
-            }
-          : message,
-      ),
-    );
-  }, []);
-
-  const updatePresenceStatus = useCallback(
-    async (
-      status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
-      options?: {
-        silent?: boolean;
-        lockMode?: 'preserve' | 'set' | 'clear';
-      },
-    ) => {
-      if (!currentUser || currentUserLiveStatus === status || presenceUpdateInFlightRef.current) {
-        return;
-      }
-
-      const previousStatus =
-        currentUserLiveStatus === 'online' ||
-        currentUserLiveStatus === 'idle' ||
-        currentUserLiveStatus === 'afk' ||
-        currentUserLiveStatus === 'dnd'
-          ? currentUserLiveStatus
-          : 'offline';
-
-      presenceUpdateInFlightRef.current = true;
-      applyPresenceUpdate(currentUser.user_id, status);
-
-      try {
-        const sentViaWebSocket =
-          webSocketConnectionRef.current?.sendPresenceUpdate(status) ?? false;
-
-        if (!sentViaWebSocket) {
-          const authToken = getAuthTokenFromCookies() || '';
-          if (!authToken) {
-            throw new Error('No authentication token');
-          }
-
-          const response = await updateUserStatus({
-            auth_token: authToken,
-            status,
-          });
-
-          if (!response.success) {
-            throw new Error(response.error || 'Failed to update status');
-          }
-        }
-
-        if (options?.lockMode === 'set') {
-          setManualPresenceLock(
-            status === 'dnd' || status === 'afk' || status === 'offline'
-              ? status
-              : null,
-          );
-        } else if (options?.lockMode === 'clear') {
-          setManualPresenceLock(null);
-        }
-
-        if (!options?.silent) {
-          showToast({
-            message: `Status updated to ${status === 'dnd' ? 'Do Not Disturb' : status}.`,
-            tone: 'success',
-            category: 'system',
-          });
-        }
-      } catch (error) {
-        applyPresenceUpdate(currentUser.user_id, previousStatus);
-        if (!options?.silent) {
-          showToast({
-            message: `Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            tone: 'error',
-            category: 'system',
-          });
-        }
-      } finally {
-        presenceUpdateInFlightRef.current = false;
-      }
-    },
-    [applyPresenceUpdate, currentUser, currentUserLiveStatus, showToast],
-  );
-
-  useEffect(() => {
-    if (!currentUser || manualPresenceLock) {
-      return;
-    }
-
-    const markActivity = () => {
-      lastActivityAtRef.current = Date.now();
-      if (currentUserLiveStatus === 'idle') {
-        void updatePresenceStatus('online', {
-          silent: true,
-          lockMode: 'clear',
-        });
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        markActivity();
-      }
-    };
-
-    const events: Array<keyof WindowEventMap> = [
-      'mousemove',
-      'mousedown',
-      'keydown',
-      'touchstart',
-      'focus',
-    ];
-
-    events.forEach((eventName) => {
-      window.addEventListener(eventName, markActivity, { passive: true });
-    });
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    const interval = window.setInterval(() => {
-      const idleForMs = Date.now() - lastActivityAtRef.current;
-      const idleThresholdMs = 5 * 60 * 1000;
-      if (idleForMs >= idleThresholdMs && currentUserLiveStatus === 'online') {
-        void updatePresenceStatus('idle', {
-          silent: true,
-          lockMode: 'clear',
-        });
-      }
-    }, 30_000);
-
-    return () => {
-      events.forEach((eventName) => {
-        window.removeEventListener(eventName, markActivity);
-      });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.clearInterval(interval);
-    };
-  }, [currentUser, currentUserLiveStatus, manualPresenceLock, updatePresenceStatus]);
-
-  const markMessagesRead = useCallback(
-    async (channelId: string, messageIds: string[]) => {
-      const uniqueMessageIds = [...new Set(messageIds)].filter(
-        (messageId) => !readMessageIdsRef.current.has(messageId),
-      );
-
-      if (uniqueMessageIds.length === 0) {
-        return;
-      }
-
-      addReadMessageIds(uniqueMessageIds);
-      markChannelNotificationsRead(channelId);
-      setUnreadCountsByChannel((prev) => {
-        const next = { ...prev };
-        delete next[channelId];
-        return next;
-      });
-
-      const authToken = getAuthTokenFromCookies() || '';
-      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
-      if (!authToken || !hostPort) {
-        return;
-      }
-
-      uniqueMessageIds.forEach((messageId) => {
-        webSocketConnectionRef.current?.sendReadConfirmation(messageId, channelId);
-      });
-
-      await Promise.allSettled(
-        uniqueMessageIds.map((messageId) =>
-          markMessageAsRead(hostPort, channelId, messageId, authToken),
-        ),
-      );
-    },
-    [addReadMessageIds, markChannelNotificationsRead],
-  );
-
-  // Voice channel state management
-  const [currentVoiceChannel, setCurrentVoiceChannel] = useState<{
-    channelId: string;
-    channelName: string;
-    participants: number;
-  } | null>(null);
-  const [messageInput, setMessageInput] = useState(() => {
-    // Initialize with persisted draft if we have a selected channel
-    if (persistedChannelId) {
-      return getMessageDraft(persistedChannelId);
-    }
-    return '';
+    channelCreationModalOpen,
+    setChannelCreationModalOpen,
+    deviceSelectorModalOpen,
+    setDeviceSelectorModalOpen,
+    userCardTooltipUser,
+    setUserCardTooltipUser,
+    isTooltipOpen,
+    setIsTooltipOpen,
+    tooltipSource,
+    setTooltipSource,
+    referenceElement,
+    setReferenceElement,
+    setPopperElement,
+    tooltipPosition,
+    setTooltipPosition,
+    calculateTooltipPosition,
+    searchModalOpen,
+    setSearchModalOpen,
+    messageContextMenu,
+    setMessageContextMenu,
+    currentMenuMessageId,
+    setCurrentMenuMessageId,
+    hoveredMessageId,
+    setHoveredMessageId,
+    membersListVisible,
+    setMembersListVisible,
+    userContextMenu,
+    setUserContextMenu,
+    selectedContextUser,
+    setSelectedContextUser,
+    channelContextMenu,
+    setChannelContextMenu,
+    channelDeleteConfirm,
+    setChannelDeleteConfirm,
+    reportModal,
+    setReportModal,
+    serverDropdownOpen,
+    setServerDropdownOpen,
+    serverInfo,
+    setServerInfo,
+    serverInfoError,
+    setServerInfoError,
+    channels,
+    setChannels,
+    channelsError,
+    setChannelsError,
+    selectedChannel,
+    setSelectedChannel,
+    messages,
+    setMessages,
+    users,
+    setUsers,
+    usersError,
+    setUsersError,
+    webSocketConnection,
+    setWebSocketConnection,
+    notificationMenuOpen,
+    setNotificationMenuOpen,
+    notifications,
+    setNotifications,
+    readMessageIds,
+    unreadCountsByChannel,
+    setUnreadCountsByChannel,
+    unreadMarker,
+    setUnreadMarker,
+    browserNotificationPermission,
+    setBrowserNotificationPermission,
+    webSocketConnectionRef,
+    notificationMenuRef,
+    unreadDividerRef,
+    selectedChannelIdRef,
+    currentUserIdRef,
+    seenRealtimeMessageIdsRef,
+    readMessageIdsRef,
+    usersById,
+    currentUserLiveStatus,
+    groupedMessages,
+    getMessageById,
+    buildReplyMessage,
+    applyReadHistorySnapshot,
+    markChannelNotificationsRead,
+    applyPresenceUpdate,
+    updatePresenceStatus,
+    markMessagesRead,
+  } = useDashboardData({
+    currentUser,
+    navigate,
+    location,
+    showToast,
   });
-  const [messageAttachments, setMessageAttachments] = useState<File[]>([]);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+  const {
+    currentVoiceChannel,
+    setCurrentVoiceChannel,
+    messageInput,
+    setMessageInput,
+    messageAttachments,
+    setMessageAttachments,
+    isSendingMessage,
+    setIsSendingMessage,
+    replyTarget,
+    setReplyTarget,
+    isEmojiPickerOpen,
+    setIsEmojiPickerOpen,
+    dashboardRef,
+    messageInputBarRef,
+    messageInputRef,
+    fileInputRef,
+    messagesContainerRef,
+    serverDropdownRef,
+    uploadPolicy,
+    composerAttachmentPreviews,
+    composerAttachmentSummary,
+    cancelPendingDraftPersistence,
+    flushPendingDraftPersistence,
+    scheduleDraftPersistence,
+    resizeMessageComposer,
+  } = useDashboardComposer({
+    persistedChannelId,
+    getMessageDraft,
+    setMessageDraft,
+    clearMessageDraft,
+    serverInfo,
+    normalizeExtensions,
+  });
   const canDeleteChannels = hasResolvedPrivilege(currentUser, "delete_channels");
   const canTimeoutUsers = hasResolvedPrivilege(currentUser, "mute_users");
   const canBanUsers = hasResolvedPrivilege(currentUser, "ban_users");
-
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const dashboardRef = useRef<HTMLDivElement>(null);
-  const messageInputBarRef = useRef<HTMLDivElement>(null);
-  const messageInputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const serverDropdownRef = useRef<HTMLDivElement>(null);
-  const cachedTextareaHeightRef = useRef(24);
-  const draftPersistTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingDraftRef = useRef<{ channelId: string; message: string } | null>(null);
   const currentUserPrivileges = currentUser?.resolved_privileges || [];
   const canCreateInvite =
     currentUser?.is_admin ||
@@ -604,146 +204,6 @@ export default function Dashboard() {
     currentUserPrivileges.includes("manage_server_settings");
   const canDeleteServer =
     currentUser?.is_owner || currentUserPrivileges.includes("manage_server_settings");
-
-  const uploadPolicy = useMemo(() => {
-    const imageExtensions = normalizeExtensions(serverInfo?.allowed_image_types);
-    const videoExtensions = normalizeExtensions(serverInfo?.allowed_video_types);
-    const audioExtensions = normalizeExtensions(serverInfo?.allowed_audio_types);
-    const fileExtensions = normalizeExtensions(serverInfo?.allowed_file_types);
-    const allExtensions = [
-      ...imageExtensions,
-      ...videoExtensions,
-      ...audioExtensions,
-      ...fileExtensions,
-    ];
-
-    return {
-      maxMessageLength: serverInfo?.max_message_length ?? null,
-      maxTotalAttachmentSizeMb: serverInfo?.max_total_attachment_size ?? null,
-      maxSizesByCategory: {
-        image: serverInfo?.max_image_size ?? null,
-        video: serverInfo?.max_video_size ?? null,
-        audio: serverInfo?.max_audio_size ?? null,
-        file: serverInfo?.max_file_size ?? null,
-      },
-      imageExtensions,
-      videoExtensions,
-      audioExtensions,
-      fileExtensions,
-      allExtensions,
-      acceptAttribute:
-        allExtensions.length > 0
-          ? allExtensions.map((extension) => `.${extension}`).join(',')
-          : undefined,
-    };
-  }, [serverInfo]);
-
-  const composerAttachmentPreviews = useMemo<ComposerAttachmentPreview[]>(
-    () =>
-      messageAttachments.map((file) => ({
-        file,
-        kind: file.type.startsWith('image/')
-          ? 'image'
-          : file.type.startsWith('video/')
-            ? 'video'
-            : 'file',
-        url:
-          file.type.startsWith('image/') || file.type.startsWith('video/')
-            ? URL.createObjectURL(file)
-            : undefined,
-      })),
-    [messageAttachments],
-  );
-
-  const composerAttachmentSummary = useMemo(() => {
-    const totalBytes = messageAttachments.reduce((sum, file) => sum + file.size, 0);
-    return {
-      count: messageAttachments.length,
-      formattedSize:
-        totalBytes >= 1024 * 1024
-          ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
-          : `${Math.max(1, Math.round(totalBytes / 1024))} KB`,
-    };
-  }, [messageAttachments]);
-
-  const persistDraftForChannel = useCallback((channelId: string, message: string) => {
-    const normalizedMessage = message.trim().length === 0 ? '' : message;
-
-    if (normalizedMessage) {
-      setMessageDraft(channelId, message);
-    } else {
-      clearMessageDraft(channelId);
-    }
-
-    pendingDraftRef.current = null;
-  }, [clearMessageDraft, setMessageDraft]);
-
-  const cancelPendingDraftPersistence = useCallback(() => {
-    if (draftPersistTimeoutRef.current) {
-      clearTimeout(draftPersistTimeoutRef.current);
-      draftPersistTimeoutRef.current = null;
-    }
-
-    pendingDraftRef.current = null;
-  }, []);
-
-  const flushPendingDraftPersistence = useCallback(() => {
-    if (draftPersistTimeoutRef.current) {
-      clearTimeout(draftPersistTimeoutRef.current);
-      draftPersistTimeoutRef.current = null;
-    }
-
-    if (pendingDraftRef.current) {
-      persistDraftForChannel(pendingDraftRef.current.channelId, pendingDraftRef.current.message);
-    }
-  }, [persistDraftForChannel]);
-
-  const scheduleDraftPersistence = useCallback((channelId: string, message: string) => {
-    pendingDraftRef.current = { channelId, message };
-
-    if (draftPersistTimeoutRef.current) {
-      clearTimeout(draftPersistTimeoutRef.current);
-    }
-
-    draftPersistTimeoutRef.current = setTimeout(() => {
-      if (!pendingDraftRef.current) {
-        return;
-      }
-
-      persistDraftForChannel(pendingDraftRef.current.channelId, pendingDraftRef.current.message);
-      draftPersistTimeoutRef.current = null;
-    }, 250);
-  }, [persistDraftForChannel]);
-
-  const resizeMessageComposer = useCallback(() => {
-    const textarea = messageInputRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    const minHeight = 24;
-    const maxHeight = 200;
-
-    requestAnimationFrame(() => {
-      textarea.style.height = 'auto';
-
-      const scrollHeight = textarea.scrollHeight;
-      const boundedHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
-      const shouldScroll = scrollHeight > maxHeight;
-
-      if (
-        Math.abs(boundedHeight - cachedTextareaHeightRef.current) <= 1 &&
-        textarea.style.overflowY === (shouldScroll ? 'auto' : 'hidden')
-      ) {
-        textarea.style.height = `${boundedHeight}px`;
-        return;
-      }
-
-      textarea.style.overflowY = shouldScroll ? 'auto' : 'hidden';
-      textarea.style.height = `${boundedHeight}px`;
-      cachedTextareaHeightRef.current = boundedHeight;
-    });
-  }, []);
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -1070,7 +530,7 @@ export default function Dashboard() {
         showToast({
           message: `Channel #${channelData.name} created successfully.`,
           tone: "success",
-          category: "destructive",
+          category: "system",
         });
 
         // Refresh channels list
@@ -1123,20 +583,62 @@ export default function Dashboard() {
   };
 
   const handleSearch = async (query: string) => {
-    // Mock search results
-    return [
-      { id: "1", type: "message" as const, title: "Alice", subtitle: "#general", content: `Message containing "${query}"`, timestamp: new Date().toISOString() },
-      { id: "2", type: "user" as const, title: "Bob", subtitle: "Online" },
-      { id: "3", type: "channel" as const, title: "#random", subtitle: "Text Channel" },
-    ].filter(result =>
-      result.title.toLowerCase().includes(query.toLowerCase()) ||
-      result.content?.toLowerCase().includes(query.toLowerCase())
-    );
+    const q = query.toLowerCase();
+    const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string }> = [];
+
+    // Search messages
+    for (const message of messages) {
+      if (message.message?.toLowerCase().includes(q)) {
+        const channel = channels.find(c => c.channel_id === message.channel_id);
+        const sender = usersById.get(message.sender_user_id);
+        results.push({
+          id: message.message_id,
+          type: "message",
+          title: sender?.username || message.username || "Unknown User",
+          subtitle: channel ? `#${channel.channel_name}` : undefined,
+          content: message.message,
+          timestamp: message.sent_at,
+        });
+      }
+    }
+
+    // Search users
+    for (const user of users) {
+      if (user.username?.toLowerCase().includes(q)) {
+        results.push({
+          id: user.user_id,
+          type: "user",
+          title: user.username,
+          subtitle: user.status === 'online' ? 'Online' : user.status === 'idle' ? 'Idle' : user.status === 'dnd' ? 'Do Not Disturb' : 'Offline',
+        });
+      }
+    }
+
+    // Search channels
+    for (const channel of channels) {
+      if (channel.channel_name?.toLowerCase().includes(q)) {
+        results.push({
+          id: channel.channel_id,
+          type: "channel",
+          title: `#${channel.channel_name}`,
+          subtitle: channel.channel_type === 'voice' ? 'Voice Channel' : 'Text Channel',
+        });
+      }
+    }
+
+    return results.slice(0, 25);
   };
 
   const handleSelectSearchResult = (result: any) => {
     logger.ui.debug("Selected dashboard search result", { resultType: result?.type, resultId: result?.id });
-    // TODO: Navigate to result
+    setSearchModalOpen(false);
+    if (result?.type === 'channel') {
+      const channel = channels.find(c => c.channel_id === result.id);
+      if (channel) void handleChannelSelect(channel);
+    } else if (result?.type === 'message') {
+      const channel = channels.find(c => messages.some(m => m.message_id === result.id && m.channel_id === c.channel_id));
+      if (channel) void handleChannelSelect(channel);
+    }
   };
 
   const handleInviteActionUnavailable = () => {
@@ -1642,7 +1144,6 @@ export default function Dashboard() {
   const handleStatusChange = async (
     status: 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
   ) => {
-    lastActivityAtRef.current = Date.now();
     await updatePresenceStatus(status, {
       silent: false,
       lockMode:
@@ -2385,8 +1886,9 @@ export default function Dashboard() {
         {/* Server and Channel Sidebars Row */}
         <div className="flex flex-1 gap-2 min-h-0">
           {/* Server Sidebar */}
-          <div className="w-16 shrink-0 bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col items-center py-2 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
-            <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
+          <ServerRail>
+            <div className="flex flex-col items-center py-2 space-y-2">
+              <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
             {/* Current Server */}
             {serverInfo && (
@@ -2406,42 +1908,58 @@ export default function Dashboard() {
               </div>
             )}
 
-            <AddServerButton
-              disabled
-              title="Additional home instances are not available in this build"
-              ariaLabel="Additional home instances are not available in this build"
-            />
-          </div>
+              <AddServerButton
+                disabled
+                title="Additional home instances are not available in this build"
+                ariaLabel="Additional home instances are not available in this build"
+              />
+            </div>
+          </ServerRail>
 
           {/* Channel Sidebar */}
-          <div className="w-72 lg:w-80 shrink-0 min-w-[16rem] max-w-[22rem] bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col overflow-hidden">
-            {/* Modern Server Header */}
+          <ChannelPanel>
+            {/* Server Header */}
             <div className="relative">
-              {/* Server Banner */}
-              {serverInfo?.banner_url && (
-                <div className="relative h-20 w-full rounded-t-2xl overflow-hidden">
+              {/* Banner */}
+              {serverInfo?.banner_url ? (
+                <div className="h-28 w-full overflow-hidden rounded-t-2xl">
                   <img
                     src={serverInfo.banner_url}
                     alt={`${serverInfo.server_name} banner`}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[color:color-mix(in_srgb,var(--color-background)_80%,transparent)] via-[color:color-mix(in_srgb,var(--color-background)_34%,transparent)] to-transparent"></div>
                 </div>
+              ) : (
+                <div
+                  className="h-14 rounded-t-2xl"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${getServerHue(serverInfo?.server_name)}, 52%, 26%) 0%, hsl(${(getServerHue(serverInfo?.server_name) + 35) % 360}, 38%, 16%) 100%)`,
+                  }}
+                />
               )}
 
-              {/* Server Info Section */}
-              <div className={`px-4 py-3 ${serverInfo?.banner_url ? 'relative' : 'border-b border-[var(--color-border)]'}`}>
-                <div className="flex items-center justify-between">
-                  {/* Server Info */}
-                  <div className="min-w-0 flex-1">
-                    <h1 className="text-[var(--color-text)] font-bold text-base truncate" title={serverInfo?.server_name || 'Loading...'}>
-                      {serverInfo?.server_name || 'Loading...'}
-                    </h1>
-                    <p className="text-[var(--color-text-secondary)] text-xs truncate">{serverInfo?.server_description}</p>
+              {/* Avatar + Dropdown Row */}
+              <div className="px-3 pb-2">
+                <div className="flex items-end justify-between">
+                  {/* Server Avatar */}
+                  <div className="-mt-6 flex-shrink-0">
+                    {serverInfo?.avatar_url ? (
+                      <img
+                        src={serverInfo.avatar_url}
+                        alt={serverInfo?.server_name || 'Server'}
+                        className="h-12 w-12 rounded-2xl border-2 border-[var(--color-background)] object-cover shadow-lg"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-[var(--color-background)] bg-[var(--color-primary)] shadow-lg">
+                        <span className="text-lg font-bold text-[var(--color-on-primary)]">
+                          {serverInfo?.server_name?.charAt(0)?.toUpperCase() || '?'}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Server Dropdown */}
-                  <div className="relative" ref={serverDropdownRef}>
+                  <div className="relative mb-1" ref={serverDropdownRef}>
                     <button
                       onClick={() => setServerDropdownOpen(!serverDropdownOpen)}
                       className={`pb-focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
@@ -2521,6 +2039,7 @@ export default function Dashboard() {
 
                         <Link
                           to="/control-panel"
+                          prefetch="intent"
                           onClick={(e) => {
                             if (!canAccessControlPanel) {
                               e.preventDefault();
@@ -2586,7 +2105,18 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+
+                {/* Server Name + Description */}
+                <div className="mt-2">
+                  <h1 className="truncate font-bold text-base text-[var(--color-text)]" title={serverInfo?.server_name || 'Loading...'}>
+                    {serverInfo?.server_name || 'Loading...'}
+                  </h1>
+                  {serverInfo?.server_description && (
+                    <p className="text-xs text-[var(--color-text-secondary)] line-clamp-2">{serverInfo.server_description}</p>
+                  )}
+                </div>
               </div>
+              <div className="border-b border-[var(--color-border)]" />
             </div>
 
             {/* Channel List */}
@@ -2725,9 +2255,6 @@ export default function Dashboard() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-
         {/* Full-width UserPanel as direct child of left sidebar container */}
         {currentUser && (
           <div className="w-full rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface-secondary)]">
@@ -2735,7 +2262,6 @@ export default function Dashboard() {
               username={currentUser.username || ''}
               avatar={currentUser.avatar || ''}
               status={currentUserLiveStatus}
-              onSettingsClick={() => navigate('/settings')}
               onDeviceSelectorClick={() => setDeviceSelectorModalOpen(true)}
               onStatusChange={handleStatusChange}
               onClick={(e) => handleUserClick(currentUser.user_id, currentUser.username, e, 'userpanel')}
@@ -2751,10 +2277,13 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+      </ChannelPanel>
+        </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 min-w-0 flex flex-col bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden">
+      <MessagePane>
         {/* Channel Header */}
         <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]/70">
           <div className="flex items-center">
@@ -2856,8 +2385,8 @@ export default function Dashboard() {
                   messageUser = {
                     id: foundUser.user_id,
                     username: foundUser.username,
-                    avatar: foundUser.username ? createFallbackAvatarUrl(foundUser.username) : undefined,
-                    banner: undefined, // Could be extended from API later
+                    avatar: foundUser.avatar_url ? createFullUrl(foundUser.avatar_url) || createFallbackAvatarUrl(foundUser.username) : createFallbackAvatarUrl(foundUser.username),
+                    banner: undefined,
                     accentColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
                     bannerColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
                     customStatus: foundUserRoleNames[0] || 'Active Member',
@@ -2871,7 +2400,7 @@ export default function Dashboard() {
                     )
                       ? foundUser.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline'
                       : 'offline',
-                    bio: `Member of ${serverInfo?.server_name || 'Pufferblow Home Instance'} since ${new Date(foundUser.created_at).getFullYear()}. Passionate about decentralized technology.`,
+                    bio: undefined,
                     joinedAt: foundUser.created_at,
                     originServer: serverInfo?.server_name || 'Pufferblow Home Instance',
                     roles: foundUserRoleNames,
@@ -2955,7 +2484,7 @@ export default function Dashboard() {
                         </span>
                         {/* Role badges using injected data */}
                         {firstMessage.sender_roles?.includes("owner") || firstMessage.sender_roles?.includes("Owner") ? (
-                          <span className="pb-status-success border text-xs px-1.5 py-0.5 rounded font-medium">OWNER</span>
+                          <span className="pb-status-info border text-xs px-1.5 py-0.5 rounded font-medium">Server Owner</span>
                         ) : firstMessage.sender_roles?.includes("admin") || firstMessage.sender_roles?.includes("Admin") ? (
                           <span className="pb-status-danger border text-xs px-1.5 py-0.5 rounded font-medium">ADMIN</span>
                         ) : firstMessage.sender_roles?.includes("moderator") || firstMessage.sender_roles?.includes("Moderator") ? (
@@ -3174,7 +2703,7 @@ export default function Dashboard() {
                 aria-label="Add emoji"
               >
                 <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.586a1 1 0 01.707.293l.707.707A1 1 0 0012.414 11H13m-3 3.5a.5.5 0 11-1 0 .5.5 0 011 0zM16 7a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </button>
 
@@ -3223,10 +2752,11 @@ export default function Dashboard() {
             onGifSelect={handleGifSelect}
           />
         </div>
-      </div>
+
+      </MessagePane>
 
       {/* Member List */}
-      <div className={`max-xl:hidden transition-all duration-300 ease-in-out ${membersListVisible ? 'w-72 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+      <MembersPanel isVisible={membersListVisible}>
         <div className="w-72 h-full bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col">
           {/* Header with close button */}
           <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)]">
@@ -3323,11 +2853,12 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </div>
+      </MembersPanel>
 
 
 
       {/* Modals */}
+      <DashboardOverlays>
       <ChannelCreationModal
         isOpen={channelCreationModalOpen}
         onClose={() => setChannelCreationModalOpen(false)}
@@ -3561,14 +3092,10 @@ export default function Dashboard() {
             status={userCardTooltipUser.status === 'online' ? 'active' :
               userCardTooltipUser.status === 'idle' || userCardTooltipUser.status === 'afk' ? 'idle' :
                 userCardTooltipUser.status === 'dnd' ? 'dnd' : 'offline'}
-            activity={userCardTooltipUser.activity || {
-              type: Math.random() > 0.5 ? 'listening' : 'playing',
-              name: Math.random() > 0.5 ? 'Spotify' : 'Visual Studio Code',
-              details: Math.random() > 0.5 ? 'Symphony No. 9 in D minor, Op. 125' : 'Working on pufferblow-client'
-            }}
-            mutualServers={userCardTooltipUser.mutualServers || Math.floor(Math.random() * 15) + 1}
-            mutualFriends={userCardTooltipUser.mutualFriends || Math.floor(Math.random() * 25) + 1}
-            badges={userCardTooltipUser.badges || ['Developer', 'Early Supporter'].slice(0, Math.floor(Math.random() * 3))}
+            activity={userCardTooltipUser.activity}
+            mutualServers={userCardTooltipUser.mutualServers}
+            mutualFriends={userCardTooltipUser.mutualFriends}
+            badges={userCardTooltipUser.badges || []}
             customStatus={userCardTooltipUser.customStatus}
             accentColor={userCardTooltipUser.accentColor || 'var(--color-accent)'}
             bannerColor={userCardTooltipUser.bannerColor}
@@ -3586,6 +3113,7 @@ export default function Dashboard() {
         isOpen={deviceSelectorModalOpen}
         onClose={() => setDeviceSelectorModalOpen(false)}
       />
+      </DashboardOverlays>
     </div>
   );
 }
