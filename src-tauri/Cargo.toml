@@ -1,17 +1,32 @@
 [package]
-name = "pufferblow-client"
-version = "1.0.0"
-description = "Pufferblow Tauri Desktop App"
-authors = ["Pufferblow"]
+name = "pufferblow"
+version = "0.1.0"
+description = "Pufferblow desktop client"
+authors = []
 edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "pufferblow_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-stronghold = "2"
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2", features = [] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+keyring = "2"
 
-[features]
-default = []
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

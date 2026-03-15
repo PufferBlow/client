@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="400" height="400" fill="none">
+
+  <!--
+    Concept: a circle (community, wholeness) with 8 spines radiating outward
+    through it — like a node in a network, or a pufferfish mid-inflate.
+    The spines don't stop at the circle edge; they pass through it,
+    suggesting signal, broadcast, federation. The intersections where
+    each line crosses the circle rim are the "spikes".
+    All strokes, no fills. One weight. One color.
+  -->
+
+  <!-- The 8 radiating lines — passing clean through the circle -->
+  <!-- Each line goes from well inside to well outside, bisected by the rim -->
+
+  <!-- 0° — horizontal right -->
+  <line x1="18" y1="50" x2="82" y2="50"
+        stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- 45° — diagonal top-right -->
+  <line x1="27" y1="27" x2="73" y2="73"
+        stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- 90° — vertical -->
+  <line x1="50" y1="18" x2="50" y2="82"
+        stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- 135° — diagonal top-left -->
+  <line x1="73" y1="27" x2="27" y2="73"
+        stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- The circle — sits on top of lines, punching gaps at intersections -->
+  <!-- Trick: draw circle in background color to erase line interiors,
+       then draw circle stroke on top -->
+
+  <!-- Background knockout — fills the circle interior to hide inner line segments -->
+  <circle cx="50" cy="50" r="21" fill="#0a0a0a"/>
+
+  <!-- Circle stroke -->
+  <circle cx="50" cy="50" r="21"
+          stroke="white" stroke-width="3.2"/>
+
+  <!-- Small center dot — the node, the origin -->
+  <circle cx="50" cy="50" r="3.2" fill="white"/>
+
+</svg>

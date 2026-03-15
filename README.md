@@ -49,7 +49,8 @@ npm run dev
 
 ### Available Scripts
 
-- `npm run dev` - Start development server
+- `npm run dev` - Start the browser development server on `0.0.0.0:5173`
+- `npm run start` - Preview the production build on `0.0.0.0:4173`
 - `npm run build` - Build for production
 - `npm run desktop:dev` - Run desktop app in Tauri dev mode
 - `npm run desktop:build` - Build desktop app for the current OS
