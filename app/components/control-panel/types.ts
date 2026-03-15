@@ -23,7 +23,8 @@ export type ControlPanelTabId =
   | "settings"
   | "storage"
   | "security"
-  | "blocked-ips";
+  | "blocked-ips"
+  | "instance-ping";
 
 export type ControlPanelTab = {
   id: ControlPanelTabId;

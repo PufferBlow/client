@@ -21,6 +21,8 @@ import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { validateMessageInput } from "../../utils/markdown";
+import { extractMentionQuery, insertMentionAtCursor, parseMentions } from "../../utils/mentions";
+import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
@@ -190,6 +192,44 @@ export default function Dashboard() {
     serverInfo,
     normalizeExtensions,
   });
+  // @mention autocomplete state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionSelectedIdx, setMentionSelectedIdx] = useState(0);
+  const mentionDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredMentionUsers = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return users
+      .filter((u) => u.username.toLowerCase().startsWith(q) && u.user_id !== currentUser?.user_id)
+      .slice(0, 8);
+  }, [mentionQuery, users, currentUser?.user_id]);
+
+  const allUsernamesLower = useMemo(
+    () => new Set(users.map((u) => u.username.toLowerCase())),
+    [users],
+  );
+
+  const applyMentionSelection = useCallback(
+    (username: string) => {
+      const textarea = messageInputRef.current;
+      if (!textarea) return;
+      const { newValue, newCursor } = insertMentionAtCursor(
+        messageInput,
+        textarea.selectionStart ?? messageInput.length,
+        username,
+      );
+      setMessageInput(newValue);
+      setMentionQuery(null);
+      setMentionSelectedIdx(0);
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(newCursor, newCursor);
+      });
+    },
+    [messageInput, messageInputRef, setMessageInput],
+  );
+
   const canDeleteChannels = hasResolvedPrivilege(currentUser, "delete_channels");
   const canTimeoutUsers = hasResolvedPrivilege(currentUser, "mute_users");
   const canBanUsers = hasResolvedPrivilege(currentUser, "ban_users");

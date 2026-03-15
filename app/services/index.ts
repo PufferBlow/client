@@ -147,6 +147,28 @@ export type {
   RefreshSessionResult
 } from './authSession';
 
+// Ping services
+export {
+  sendPing,
+  pingInstance,
+  ackPing,
+  getPingHistory,
+  getPendingPings,
+  getPingStats,
+  dismissPing,
+  isPingExpired,
+  pingStatusLabel,
+} from './ping';
+export type {
+  SendPingRequest,
+  InstancePingRequest,
+  SendPingResponse,
+  AckPingResponse,
+  PingHistoryResponse,
+  PingPendingResponse,
+  PingStatsResponse,
+} from '../models/Ping';
+
 // ActivityPub and federated DM services
 export {
   resolveActorHandle,

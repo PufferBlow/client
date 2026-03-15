@@ -5,6 +5,7 @@ import type { ListUsersResponse } from "../../services/user";
 import type { ShowToast } from "../Toast";
 import { RolesTab } from "./RoleManagement";
 import { BlockedIPsTab } from "./tabs/BlockedIPsTab";
+import { InstancePingTab } from "./tabs/InstancePingTab";
 import { ChannelsTab } from "./tabs/ChannelsTab";
 import { LogsTab } from "./tabs/LogsTab";
 import { MembersTab } from "./tabs/MembersTab";
@@ -105,6 +106,7 @@ export function ControlPanelContent({
       )}
       {activeTab === "security" && <SecurityTab />}
       {activeTab === "blocked-ips" && <BlockedIPsTab showToast={showToast} />}
+      {activeTab === "instance-ping" && <InstancePingTab showToast={showToast} />}
     </>
   );
 

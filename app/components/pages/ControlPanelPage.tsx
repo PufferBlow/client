@@ -9,6 +9,7 @@ import {
   Hash,
   KeyRound,
   Lock,
+  PlugZap,
   Settings,
   Shield,
   Users,
@@ -64,6 +65,7 @@ export default function ControlPanelPage() {
   const canViewSecurity = hasResolvedPrivilege(currentUser, "manage_server_settings");
   const canViewBlockedIps = hasResolvedPrivilege(currentUser, "manage_blocked_ips");
   const canViewLogs = hasResolvedPrivilege(currentUser, "view_audit_logs");
+  const canViewInstancePing = hasResolvedPrivilege(currentUser, "view_server_stats");
 
   const {
     isLoading,
@@ -107,6 +109,7 @@ export default function ControlPanelPage() {
     canViewSecurity ? { id: "security", label: "Security", icon: <Lock className="h-6 w-6" /> } : null,
     canViewBlockedIps ? { id: "blocked-ips", label: "Blocked IPs", icon: <CircleX className="h-6 w-6" /> } : null,
     canViewLogs ? { id: "logs", label: "Logs", icon: <FileText className="h-6 w-6" /> } : null,
+    canViewInstancePing ? { id: "instance-ping", label: "Instance Ping", icon: <PlugZap className="h-6 w-6" /> } : null,
   ].filter(Boolean) as ControlPanelTab[];
 
   const tabs = [...dashboardTabs, ...managementTabs, ...configurationTabs, ...securityTabs];

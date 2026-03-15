@@ -7,6 +7,46 @@ import rehypeHighlight from 'rehype-highlight';
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** Set of lowercase usernames to highlight as @mentions. */
+  mentionedUsernames?: ReadonlySet<string>;
+}
+
+/** Split a text string on @username tokens and return mixed text/mention JSX. */
+function renderMentions(text: string, mentionedUsernames: ReadonlySet<string>): React.ReactNode {
+  const parts = text.split(/(@[\w.-]+)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => {
+    if (part.startsWith('@') && mentionedUsernames.has(part.slice(1).toLowerCase())) {
+      return (
+        <span
+          key={i}
+          className="mention rounded bg-[var(--color-primary)]/15 px-0.5 font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/25"
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
+/** Recursively process React children, highlighting @mentions in string nodes. */
+function processChildren(
+  children: React.ReactNode,
+  mentionedUsernames: ReadonlySet<string>,
+): React.ReactNode {
+  return React.Children.map(children, (child) => {
+    if (typeof child === 'string') return renderMentions(child, mentionedUsernames);
+    if (React.isValidElement(child)) {
+      const el = child as React.ReactElement<{ children?: React.ReactNode }>;
+      if (el.props.children) {
+        return React.cloneElement(el, {
+          children: processChildren(el.props.children, mentionedUsernames),
+        } as Partial<typeof el.props>);
+      }
+    }
+    return child;
+  });
 }
 
 function extractTextContent(node: React.ReactNode): string {
@@ -26,7 +66,7 @@ function extractTextContent(node: React.ReactNode): string {
   return '';
 }
 
-export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className = "", mentionedUsernames }: MarkdownRendererProps) {
   const CodeBlock = ({
     className,
     children,
@@ -86,6 +126,14 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
+          // Paragraphs — highlight @mentions inside text nodes
+          p: ({ children }) => (
+            <p>
+              {mentionedUsernames && mentionedUsernames.size > 0
+                ? processChildren(children, mentionedUsernames)
+                : children}
+            </p>
+          ),
           // Custom link component to open links in new tab safely
           a: ({ href, children }) => {
             const isInternal = href?.startsWith('#');

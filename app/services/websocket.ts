@@ -64,12 +64,43 @@ export interface WebSocketErrorMessage extends WebSocketBaseMessage {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Ping real-time events
+// ---------------------------------------------------------------------------
+
+export interface WebSocketPingReceivedMessage extends WebSocketBaseMessage {
+  type: 'ping_received';
+  ping_id: string;
+  receiver_ping_id?: string;
+  sender_id?: string;
+  sender_actor_uri?: string;
+  sender_username?: string;
+  ping_type: 'local' | 'federated' | 'instance';
+  message?: string | null;
+  sent_at: string;
+  expires_at: string;
+  original_activity_uri?: string;
+}
+
+export interface WebSocketPingAckedMessage extends WebSocketBaseMessage {
+  type: 'ping_acked';
+  ping_id: string;
+  sender_ping_id?: string;
+  acker_user_id?: string;
+  acker_actor_uri?: string;
+  latency_ms: number;
+  acked_at: string;
+  federated?: boolean;
+}
+
 export type WebSocketMessage =
   | WebSocketChatMessage
   | WebSocketPresenceMessage
   | WebSocketChannelMembershipMessage
   | WebSocketReadConfirmationMessage
-  | WebSocketErrorMessage;
+  | WebSocketErrorMessage
+  | WebSocketPingReceivedMessage
+  | WebSocketPingAckedMessage;
 
 export const isChatWebSocketMessage = (
   message: WebSocketMessage
