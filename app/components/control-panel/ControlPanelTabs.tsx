@@ -27,7 +27,8 @@ import {
   type RuntimeConfig,
 } from "../../services/system";
 import { convertToFullStorageUrl, listBlockedIPs, blockIP, unblockIP, createApiClient } from "../../services/apiClient";
-import { banUser, timeoutUser } from "../../services/moderation";
+import { banUser, timeoutUser, fetchReports, resolveReport, type Report } from "../../services/moderation";
+import { getBackgroundTaskStatuses, runBackgroundTask, toggleBackgroundTask, getBackupConfig, updateBackupConfig } from "../../services/backgroundTasks";
 import { logger } from "../../utils/logger";
 import type { Channel } from "../../models";
 import {
@@ -317,214 +318,401 @@ export function TasksTab({
 }: {
   showToast: ShowToast;
 }) {
-  const [tasks, setTasks] = useState([
-    {
-      id: '1',
-      name: 'Daily Backup',
-      description: 'Automatically backup the database every day at midnight',
-      script: 'backup.py',
-      isEnabled: true,
-      isManual: false,
-      lastRun: '2024-01-16T02:00:00Z',
-      schedule: 'Daily at 00:00',
-      status: 'running'
-    },
-    {
-      id: '2',
-      name: 'User Activity Report',
-      description: 'Generate weekly user activity statistics',
-      script: 'user_reports.py',
-      isEnabled: true,
-      isManual: true,
-      lastRun: '2024-01-14T09:30:00Z',
-      schedule: 'On Demand',
-      status: 'idle'
-    },
-    {
-      id: '3',
-      name: 'Database Cleanup',
-      description: 'Remove old logs and temporary files',
-      script: 'cleanup.py',
-      isEnabled: false,
-      isManual: false,
-      lastRun: '2024-01-10T23:00:00Z',
-      schedule: 'Weekly on Sunday',
-      status: 'disabled'
-    },
-    {
-      id: '4',
-      name: 'Spam Detection Training',
-      description: 'Update AI spam detection models with new data',
-      script: 'spam_train.py',
-      isEnabled: true,
-      isManual: true,
-      lastRun: '2024-01-15T18:15:00Z',
-      schedule: 'On Demand',
-      status: 'idle'
+  const [tasks, setTasks] = useState<Record<string, import('../../services/backgroundTasks').TaskInfo>>({});
+  const [loading, setLoading] = useState(false);
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [showBackupConfig, setShowBackupConfig] = useState(false);
+  const [backupConfig, setBackupConfig] = useState<import('../../services/backgroundTasks').BackupConfig>({
+    enabled: false,
+    mode: 'file',
+    path: '',
+    mirror_dsn: null,
+    schedule_hours: 24,
+    max_files: 7,
+  });
+  const [backupConfigLoading, setBackupConfigLoading] = useState(false);
+  const [savingBackup, setSavingBackup] = useState(false);
+
+  const loadTasks = async () => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setLoading(true);
+    try {
+      const result = await getBackgroundTaskStatuses(authToken);
+      if (result.success && result.data) {
+        setTasks(result.data.tasks as Record<string, import('../../services/backgroundTasks').TaskInfo>);
+      }
+    } finally {
+      setLoading(false);
     }
-  ]);
-
-  const handleToggleTask = (taskId: string) => {
-    setTasks(prev => prev.map(task =>
-      task.id === taskId
-        ? { ...task, isEnabled: !task.isEnabled, status: task.isEnabled ? 'disabled' : 'idle' }
-        : task
-    ));
   };
 
-  const handleRunTask = (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: 'running' } : t
-    ));
-
-    // Simulate running the task
-    setTimeout(() => {
-      setTasks(prev => prev.map(t =>
-        t.id === taskId
-          ? { ...t, status: 'completed', lastRun: new Date().toISOString() }
-          : t
-      ));
-    }, 3000);
+  const loadBackupConfig = async () => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setBackupConfigLoading(true);
+    try {
+      const result = await getBackupConfig(authToken);
+      if (result.success && result.data) {
+        setBackupConfig(result.data.config);
+      }
+    } finally {
+      setBackupConfigLoading(false);
+    }
   };
 
-  const statusColors = {
-    idle: 'text-[var(--color-text-secondary)]',
-    running: 'text-[var(--color-success)]',
-    completed: 'text-[var(--color-primary)]',
-    disabled: 'text-[var(--color-error)]',
-    error: 'text-[var(--color-error)]'
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  useEffect(() => {
+    if (showBackupConfig) loadBackupConfig();
+  }, [showBackupConfig]);
+
+  // Poll while any task is running
+  useEffect(() => {
+    const hasRunning = Object.values(tasks).some(t => t.running);
+    if (!hasRunning) return;
+    const timer = setInterval(loadTasks, 3000);
+    return () => clearInterval(timer);
+  }, [tasks]);
+
+  const handleRunTask = async (taskId: string) => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setRunningTaskId(taskId);
+    try {
+      const result = await runBackgroundTask(taskId, authToken);
+      if (result.success) {
+        showToast({ message: `Task started successfully.`, tone: 'success', category: 'info' });
+        await loadTasks();
+      } else {
+        showToast({ message: result.error ?? 'Failed to run task', tone: 'error', category: 'info' });
+      }
+    } finally {
+      setRunningTaskId(null);
+    }
   };
 
-  const statusIcons = {
-    idle: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    running: (
-      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-    ),
-    completed: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    disabled: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    ),
-    error: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    )
+  const handleToggleTask = async (taskId: string, currentEnabled: boolean) => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    const newEnabled = !currentEnabled;
+    // Optimistic update
+    setTasks(prev => ({
+      ...prev,
+      [taskId]: { ...prev[taskId], enabled: newEnabled },
+    }));
+    try {
+      const result = await toggleBackgroundTask(taskId, newEnabled, authToken);
+      if (!result.success) {
+        // Revert
+        setTasks(prev => ({
+          ...prev,
+          [taskId]: { ...prev[taskId], enabled: currentEnabled },
+        }));
+        showToast({ message: result.error ?? 'Failed to toggle task', tone: 'error', category: 'info' });
+      }
+    } catch {
+      setTasks(prev => ({
+        ...prev,
+        [taskId]: { ...prev[taskId], enabled: currentEnabled },
+      }));
+    }
   };
+
+  const handleSaveBackupConfig = async () => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setSavingBackup(true);
+    try {
+      const result = await updateBackupConfig({
+        auth_token: authToken,
+        enabled: backupConfig.enabled,
+        mode: backupConfig.mode,
+        path: backupConfig.path || undefined,
+        mirror_dsn: backupConfig.mirror_dsn || undefined,
+        schedule_hours: backupConfig.schedule_hours,
+        max_files: backupConfig.max_files,
+      });
+      if (result.success) {
+        showToast({ message: 'Backup configuration saved.', tone: 'success', category: 'info' });
+        await loadTasks();
+      } else {
+        showToast({ message: result.error ?? 'Failed to save backup config', tone: 'error', category: 'info' });
+      }
+    } finally {
+      setSavingBackup(false);
+    }
+  };
+
+  const statusColor = (task: import('../../services/backgroundTasks').TaskInfo) => {
+    if (task.running) return 'text-[var(--color-success)]';
+    if (!task.enabled) return 'text-[var(--color-text-muted)]';
+    if (task.last_error && task.errors > 0) return 'text-[var(--color-error)]';
+    return 'text-[var(--color-text-secondary)]';
+  };
+
+  const statusLabel = (task: import('../../services/backgroundTasks').TaskInfo) => {
+    if (task.running) return 'running';
+    if (!task.enabled) return 'disabled';
+    if (task.last_error && task.errors > 0 && task.runs > 0 && task.errors === task.runs) return 'error';
+    return 'idle';
+  };
+
+  const taskEntries = Object.entries(tasks);
 
   return (
     <div className="space-y-6">
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className={controlPanelSectionClass}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-medium text-[var(--color-text)]">Automated Tasks</h2>
-          <button className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg transition-colors">
-            Add New Task
-          </button>
+          <h2 className="text-lg font-medium text-[var(--color-text)]">Background Tasks</h2>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowBackupConfig(v => !v)}
+              className={controlPanelButtonClass(showBackupConfig ? 'primary' : 'secondary')}
+            >
+              Backup Config
+            </button>
+            <button
+              onClick={loadTasks}
+              disabled={loading}
+              className={controlPanelButtonClass('ghost')}
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          {tasks.map((task) => (
-            <div key={task.id} className="bg-[var(--color-surface-secondary)] rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h3 className="text-lg font-medium text-[var(--color-text)]">{task.name}</h3>
-                    <span className={`flex items-center space-x-1 text-sm ${statusColors[task.status as keyof typeof statusColors]}`}>
-                      {statusIcons[task.status as keyof typeof statusIcons]}
-                      <span>{task.status}</span>
-                    </span>
-                    {task.isManual ? (
-                      <span className="px-2 py-1 rounded text-xs bg-[var(--color-primary)] text-[var(--color-on-primary)]">Manual</span>
-                    ) : (
-                      <span className="rounded px-2 py-1 text-xs bg-[var(--color-success)] text-[var(--color-on-success)]">Scheduled</span>
-                    )}
+        {/* Backup Config Panel */}
+        {showBackupConfig && (
+          <div className="mb-6 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5">
+            <h3 className="text-base font-semibold text-[var(--color-text)] mb-4">Database Backup Configuration</h3>
+            {backupConfigLoading ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>
+            ) : (
+              <div className="space-y-4">
+                {/* Enable toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-[var(--color-text)]">Enable Backups</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">Automatically back up the database on schedule</div>
                   </div>
-                  <p className="text-[var(--color-text-secondary)] text-sm mb-2">{task.description}</p>
-                  <div className="flex items-center space-x-4 text-xs text-[var(--color-text-muted)]">
-                    <span>Script: {task.script}</span>
-                    <span>Schedule: {task.schedule}</span>
-                    <span>Last Run: {new Date(task.lastRun).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={task.isEnabled}
-                      onChange={() => handleToggleTask(task.id)}
-                      className="rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-                    />
-                    <span className="text-sm text-[var(--color-text)]">Enabled</span>
+                  <label className="flex items-center cursor-pointer">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={backupConfig.enabled}
+                        onChange={e => setBackupConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                      />
+                      <div className={`w-11 h-6 rounded-full transition-colors ${backupConfig.enabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)]'}`} />
+                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${backupConfig.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
                   </label>
                 </div>
 
-                <div className="flex space-x-2">
-                  {task.isManual && task.isEnabled && (
+                {/* Mode */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Backup Mode</label>
+                  <div className="flex space-x-2">
                     <button
-                      onClick={() => handleRunTask(task.id)}
-                      disabled={task.status === 'running'}
-                      className="flex items-center space-x-1 rounded px-3 py-1 text-sm transition-colors disabled:bg-[var(--color-surface-tertiary)] disabled:text-[var(--color-text-muted)]"
-                      style={{ backgroundColor: 'var(--color-success)', color: 'var(--color-on-success)' }}
+                      onClick={() => setBackupConfig(prev => ({ ...prev, mode: 'file' }))}
+                      className={`px-4 py-2 rounded text-sm font-medium transition-colors ${backupConfig.mode === 'file' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]'}`}
                     >
-                      {task.status === 'running' ? (
-                        <>
-                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          <span>Running...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span>Run Now</span>
-                        </>
-                      )}
+                      File Dump
                     </button>
-                  )}
-                  <button className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                    </svg>
+                    <button
+                      onClick={() => setBackupConfig(prev => ({ ...prev, mode: 'mirror' }))}
+                      className={`px-4 py-2 rounded text-sm font-medium transition-colors ${backupConfig.mode === 'mirror' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]'}`}
+                    >
+                      Mirror DB
+                    </button>
+                  </div>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                    {backupConfig.mode === 'file'
+                      ? 'Creates a pg_dump (.dump) file on the server filesystem.'
+                      : 'Pipes pg_dump directly into a secondary PostgreSQL instance.'}
+                  </p>
+                </div>
+
+                {/* Mode-specific fields */}
+                {backupConfig.mode === 'file' ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Backup Directory</label>
+                      <input
+                        type="text"
+                        value={backupConfig.path}
+                        onChange={e => setBackupConfig(prev => ({ ...prev, path: e.target.value }))}
+                        placeholder="~/.pufferblow/backups"
+                        className={controlPanelInputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Max backup files to keep</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={backupConfig.max_files}
+                        onChange={e => setBackupConfig(prev => ({ ...prev, max_files: parseInt(e.target.value, 10) || 7 }))}
+                        className={cx(controlPanelInputClass, 'w-24')}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Mirror Database DSN</label>
+                    <input
+                      type="text"
+                      value={backupConfig.mirror_dsn ?? ''}
+                      onChange={e => setBackupConfig(prev => ({ ...prev, mirror_dsn: e.target.value || null }))}
+                      placeholder="postgresql://user:pass@host:5432/dbname"
+                      className={controlPanelInputClass}
+                    />
+                  </div>
+                )}
+
+                {/* Schedule */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-1">Schedule (hours between backups)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={168}
+                    value={backupConfig.schedule_hours}
+                    onChange={e => setBackupConfig(prev => ({ ...prev, schedule_hours: parseInt(e.target.value, 10) || 24 }))}
+                    className={cx(controlPanelInputClass, 'w-24')}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleSaveBackupConfig}
+                    disabled={savingBackup}
+                    className={controlPanelButtonClass('primary')}
+                  >
+                    {savingBackup ? 'Saving…' : 'Save Backup Config'}
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </div>
+        )}
 
-        <div
-          className="mt-6 rounded-lg border p-4"
-          style={{
-            background: 'linear-gradient(to right, color-mix(in srgb, var(--color-primary) 18%, transparent), color-mix(in srgb, var(--color-accent) 12%, transparent))',
-            borderColor: 'color-mix(in srgb, var(--color-primary) 30%, transparent)',
-          }}
-        >
-          <h3 className="mb-2 text-lg font-medium text-[var(--color-text)]">About Automated Tasks</h3>
-          <p className="text-[var(--color-text-secondary)] text-sm">
-            Tasks are Python scripts that run scheduled operations for server maintenance, reporting, or automation.
-            You can enable/disable automatic execution or run tasks manually. Scripts should be placed in the server's
-            tasks directory and follow the established API conventions.
-          </p>
-        </div>
+        {/* Task list */}
+        {loading && taskEntries.length === 0 ? (
+          <div className="text-center text-[var(--color-text-secondary)] py-8">Loading tasks…</div>
+        ) : taskEntries.length === 0 ? (
+          <div className="text-center text-[var(--color-text-secondary)] py-8">No background tasks registered.</div>
+        ) : (
+          <div className="space-y-3">
+            {taskEntries.map(([taskId, task]) => {
+              const isRunning = task.running || runningTaskId === taskId;
+              const label = isRunning ? 'running' : statusLabel(task);
+              const isDatabaseBackup = taskId === 'database_backup';
+
+              return (
+                <div key={taskId} className={controlPanelRowClass}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-3 mb-1 flex-wrap gap-y-1">
+                        <h3 className="text-base font-medium text-[var(--color-text)]">{task.name}</h3>
+                        <span className={`flex items-center space-x-1 text-xs ${isRunning ? 'text-[var(--color-success)]' : !task.enabled ? 'text-[var(--color-text-muted)]' : label === 'error' ? 'text-[var(--color-error)]' : 'text-[var(--color-text-secondary)]'}`}>
+                          {isRunning ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          ) : label === 'error' ? (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                          <span>{label}</span>
+                        </span>
+                        <span className="rounded px-2 py-0.5 text-xs bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]">
+                          {task.schedule_label}
+                        </span>
+                        {isDatabaseBackup && (
+                          <span className="rounded px-2 py-0.5 text-xs bg-[color:color-mix(in_srgb,var(--color-primary)_20%,transparent)] text-[var(--color-primary)]">
+                            Backup
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-[var(--color-text-secondary)] mb-2">{task.description}</p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-text-muted)]">
+                        <span>Runs: {task.runs}</span>
+                        {task.errors > 0 && <span className="text-[var(--color-error)]">Errors: {task.errors}</span>}
+                        {task.last_run && <span>Last: {new Date(task.last_run).toLocaleString()}</span>}
+                        {task.next_run && task.enabled && !isRunning && (
+                          <span>Next: {new Date(task.next_run).toLocaleString()}</span>
+                        )}
+                        {task.total_runtime > 0 && (
+                          <span>Avg: {(task.total_runtime / Math.max(task.runs, 1)).toFixed(1)}s</span>
+                        )}
+                      </div>
+                      {task.last_error && (
+                        <div className="mt-1 text-xs text-[var(--color-error)] truncate max-w-md" title={task.last_error}>
+                          Last error: {task.last_error}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <div
+                        className="relative inline-block w-10 h-5 cursor-pointer"
+                        onClick={() => handleToggleTask(taskId, task.enabled)}
+                      >
+                        <div className={`w-10 h-5 rounded-full transition-colors ${task.enabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)]'}`} />
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${task.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </div>
+                      <span className="text-sm text-[var(--color-text)]">{task.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </label>
+
+                    <div className="flex space-x-2">
+                      {isDatabaseBackup && (
+                        <button
+                          onClick={() => setShowBackupConfig(v => !v)}
+                          className={controlPanelButtonClass('ghost')}
+                        >
+                          Configure
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRunTask(taskId)}
+                        disabled={isRunning || !task.enabled}
+                        className={`flex items-center space-x-1 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRunning ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-muted)]' : 'bg-[var(--color-success)] text-[var(--color-on-success)] hover:opacity-90'}`}
+                      >
+                        {isRunning ? (
+                          <>
+                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Running…</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span>Run Now</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2823,6 +3011,7 @@ export function SettingsTab({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'general' | 'appearance' | 'files' | 'runtime'>('general');
 
   // Load server info and runtime config on component mount
   useEffect(() => {
@@ -3163,8 +3352,14 @@ export function SettingsTab({
           </div>
         )}
 
-        <div className="space-y-6">
-          {/* Basic Server Information */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <button className={controlPanelSegmentClass(activeSettingsSubTab === 'general')} onClick={() => setActiveSettingsSubTab('general')}>General</button>
+            <button className={controlPanelSegmentClass(activeSettingsSubTab === 'appearance')} onClick={() => setActiveSettingsSubTab('appearance')}>Appearance</button>
+            <button className={controlPanelSegmentClass(activeSettingsSubTab === 'files')} onClick={() => setActiveSettingsSubTab('files')}>File Uploads</button>
+            <button className={controlPanelSegmentClass(activeSettingsSubTab === 'runtime')} onClick={() => setActiveSettingsSubTab('runtime')}>Runtime</button>
+          </div>
+          {activeSettingsSubTab === 'general' && (
           <div className="space-y-4">
             <h3 className="text-md font-medium text-[var(--color-text)]">Basic Information</h3>
 
@@ -3226,8 +3421,8 @@ export function SettingsTab({
               />
             </div>
           </div>
-
-          {/* Server Appearance */}
+          )}
+          {activeSettingsSubTab === 'appearance' && (
           <div className="space-y-4">
             <h3 className="text-md font-medium text-[var(--color-text)]">Server Appearance</h3>
 
@@ -3366,8 +3561,8 @@ export function SettingsTab({
               </div>
             </div>
           </div>
-
-          {/* File Upload Restrictions */}
+          )}
+          {activeSettingsSubTab === 'files' && (
           <div className="space-y-4">
             <h3 className="text-md font-medium text-[var(--color-text)]">File Upload Restrictions</h3>
 
@@ -3535,9 +3730,8 @@ export function SettingsTab({
               </div>
             </div>
           </div>
-
-          {/* Runtime Configuration */}
-          {Object.keys(runtimeConfig).length > 0 && (
+          )}
+          {activeSettingsSubTab === 'runtime' && Object.keys(runtimeConfig).length > 0 && (
             <div className="space-y-4">
               <div className="space-y-4">
                 <h3 className="text-md font-medium text-[var(--color-text)]">Voice & Streaming Quality</h3>
@@ -4645,39 +4839,12 @@ export function ModerationTab({
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'reports' | 'users' | 'messages'>('reports');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedReport, setSelectedReport] = useState<any>(null);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+  const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
+  const [selectedMessageReportId, setSelectedMessageReportId] = useState<string | null>(null);
   const [touchTimeout, setTouchTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  // Long-press message selection handlers
-  const handleMessagePointerDown = (messageId: string) => {
-    const timeout = setTimeout(() => {
-      setSelectedMessageId(messageId);
-      // Add haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 500); // 500ms for long-press
-    setTouchTimeout(timeout);
-  };
-
-  const handleMessagePointerUp = () => {
-    if (touchTimeout) {
-      clearTimeout(touchTimeout);
-      setTouchTimeout(null);
-    }
-  };
-
-  const handleMessagePointerLeave = () => {
-    if (touchTimeout) {
-      clearTimeout(touchTimeout);
-      setTouchTimeout(null);
-    }
-  };
-
-  const clearMessageSelection = () => {
-    setSelectedMessageId(null);
-  };
   const [userProfileModal, setUserProfileModal] = useState<{
     isOpen: boolean;
     user: any;
@@ -4685,244 +4852,258 @@ export function ModerationTab({
     triggerRect?: DOMRect | null;
   }>({ isOpen: false, user: null });
 
-  // Mock reported messages data
-  const mockReportedMessages = [
-    {
-      id: '1',
-      messageId: 'msg_12345',
-      messageContent: 'This is a reported message with inappropriate content',
-      senderUser: 'EvilUser123',
-      senderId: 'user_s01',
-      reportedBy: 'Alice',
-      reporterId: 'user_001',
-      category: 'Nudity or Sexual Content',
-      description: 'This message contains inappropriate content',
-      reportedAt: '2024-01-15T10:30:00Z',
-      status: 'pending'
-    },
-    {
-      id: '2',
-      messageId: 'msg_12346',
-      messageContent: 'Another reported message',
-      senderUser: 'ToxicPlayer',
-      senderId: 'user_s02',
-      reportedBy: 'Bob',
-      reporterId: 'user_002',
-      category: 'Harassment or Bullying',
-      description: 'User is being harassed',
-      reportedAt: '2024-01-14T14:22:00Z',
-      status: 'pending'
-    },
-    {
-      id: '3',
-      messageId: 'msg_12347',
-      messageContent: 'Spam message example',
-      senderUser: 'SpammerBot',
-      senderId: 'user_s03',
-      reportedBy: 'Charlie',
-      reporterId: 'user_003',
-      category: 'Spam or Solicitation',
-      description: 'This appears to be spam',
-      reportedAt: '2024-01-13T09:15:00Z',
-      status: 'resolved'
-    }
-  ];
+  const messageReports = reports.filter(r => r.type === 'message_report');
+  const userReports = reports.filter(r => r.type === 'user_report');
 
-  // Mock reported users data
-  const mockReportedUsers = [
-    {
-      id: '1',
-      userId: 'user_123',
-      username: 'BadUser',
-      avatar_url: null,
-      reportedBy: 'Alice',
-      reportCount: 5,
-      lastReport: '2024-01-15T10:30:00Z',
-      status: 'active',
-      reason: 'Multiple harassment reports'
+  // Group user reports by target user for the "Reported Users" tab
+  const reportedUsersMap = userReports.reduce<Record<string, { userId: string; username: string; reportCount: number; lastReport: string; categories: string[] }>>((acc, r) => {
+    const id = r.target_user?.id ?? 'unknown';
+    if (!acc[id]) {
+      acc[id] = { userId: id, username: r.target_user?.username ?? 'Unknown', reportCount: 0, lastReport: r.reported_at, categories: [] };
     }
-  ];
+    acc[id].reportCount += 1;
+    if (r.reported_at > acc[id].lastReport) acc[id].lastReport = r.reported_at;
+    if (r.category && !acc[id].categories.includes(r.category)) acc[id].categories.push(r.category);
+    return acc;
+  }, {});
+  const reportedUsers = Object.values(reportedUsersMap);
 
-  const handleResolveReport = (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
-    clearMessageSelection();
-    showToast({
-      message: `Report ${action === 'delete' ? 'deleted message' :
-        action === 'warn' ? 'sent warning' :
-          action === 'ban' ? 'banned user' : 'dismissed'} successfully.`,
-      tone: 'success',
-      category: 'destructive',
-    });
+  const loadReports = async () => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setReportsLoading(true);
+    setReportsError(null);
+    try {
+      const result = await fetchReports({ auth_token: authToken, limit: 200 });
+      if (result.success && result.data) {
+        setReports(result.data.reports);
+      } else {
+        setReportsError(result.error ?? 'Failed to load reports');
+      }
+    } catch {
+      setReportsError('Failed to load reports');
+    } finally {
+      setReportsLoading(false);
+    }
   };
 
-  const handleUserAction = (userId: string, action: 'warn' | 'ban' | 'timeout' | 'clear') => {
-    showToast({
-      message: `User ${action === 'warn' ? 'warned' :
-        action === 'ban' ? 'banned' :
-          action === 'timeout' ? 'timed out' : 'cleared reports'} successfully.`,
-      tone: 'success',
-      category: 'destructive',
-    });
+  useEffect(() => {
+    loadReports();
+  }, []);
+
+  const handleResolveReport = async (reportId: string, action: 'delete' | 'warn' | 'ban' | 'dismiss') => {
+    setSelectedMessageReportId(null);
+    if (touchTimeout) { clearTimeout(touchTimeout); setTouchTimeout(null); }
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    setResolvingReportId(reportId);
+    try {
+      const result = await resolveReport(reportId, { auth_token: authToken, action });
+      if (result.success) {
+        setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: 'resolved' as const } : r));
+        showToast({
+          message: `Report ${action === 'delete' ? 'deleted message' : action === 'warn' ? 'sent warning' : action === 'ban' ? 'banned user' : 'dismissed'} successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
+      } else {
+        showToast({ message: result.error ?? 'Failed to resolve report', tone: 'error', category: 'destructive' });
+      }
+    } finally {
+      setResolvingReportId(null);
+    }
   };
 
-  const handleOpenUserProfile = (report: any, userType: 'sender' | 'reporter', event: React.MouseEvent) => {
+  const handleUserAction = async (userId: string, action: 'timeout' | 'ban') => {
+    const authToken = getAuthTokenFromCookies();
+    if (!authToken) return;
+    try {
+      if (action === 'ban') {
+        const result = await banUser(userId, { auth_token: authToken });
+        if (result.success) {
+          showToast({ message: 'User banned successfully.', tone: 'success', category: 'destructive' });
+        } else {
+          showToast({ message: result.error ?? 'Failed to ban user', tone: 'error', category: 'destructive' });
+        }
+      } else {
+        const result = await timeoutUser(userId, { auth_token: authToken, duration_minutes: 60 });
+        if (result.success) {
+          showToast({ message: 'User timed out for 60 minutes.', tone: 'success', category: 'destructive' });
+        } else {
+          showToast({ message: result.error ?? 'Failed to timeout user', tone: 'error', category: 'destructive' });
+        }
+      }
+    } catch {
+      showToast({ message: 'Action failed', tone: 'error', category: 'destructive' });
+    }
+  };
+
+  const handleOpenUserProfile = (userId: string, username: string, event: React.MouseEvent) => {
     event.stopPropagation();
     const target = event.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
-
-    const userId = userType === 'sender' ? report.senderId : report.reporterId;
-    const username = userType === 'sender' ? report.senderUser : report.reportedBy;
-
-    // Mock user data for display
-    const user = {
-      id: userId,
-      username: username,
-      avatar: null,
-      avatar_url: report.avatar_url || report[`${userType}AvatarUrl`] || null,
-      status: 'online' as const, // Mock status
-      bio: `${username} is ${userType === 'sender' ? 'the sender of this reported message' : 'the user who reported this message'}`,
-      joinedAt: '2023-01-15', // Mock join date
-      roles: userType === 'reporter' ? ['Member'] : ['Member'] // Mock roles
-    };
-
-    // Position the modal relative to the clicked username
-    const position = {
-      x: rect.left + window.scrollX,
-      y: rect.bottom + window.scrollY + 5
-    };
-
     setUserProfileModal({
       isOpen: true,
-      user,
-      position,
-      triggerRect: rect
+      user: { id: userId, username, avatar: null, avatar_url: null, status: 'offline' as const },
+      position: { x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 5 },
+      triggerRect: rect,
     });
   };
 
-  const handleCloseUserProfile = () => {
-    setUserProfileModal({ isOpen: false, user: null });
+  const handleMessagePointerDown = (reportId: string) => {
+    const timeout = setTimeout(() => {
+      setSelectedMessageReportId(reportId);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500);
+    setTouchTimeout(timeout);
   };
+
+  const handleMessagePointerUp = () => {
+    if (touchTimeout) { clearTimeout(touchTimeout); setTouchTimeout(null); }
+  };
+
+  const pendingCount = messageReports.filter(r => r.status === 'pending').length;
 
   return (
     <div className="space-y-6">
-      {/* Sub-tabs */}
       <div className={controlPanelSectionClass}>
         <div className="flex items-center space-x-4 mb-6">
-            <button
-              onClick={() => setActiveSubTab('reports')}
-              className={controlPanelSegmentClass(activeSubTab === 'reports')}
-          >
-            Reports ({mockReportedMessages.filter(r => r.status === 'pending').length})
+          <button onClick={() => setActiveSubTab('reports')} className={controlPanelSegmentClass(activeSubTab === 'reports')}>
+            Reports {pendingCount > 0 && `(${pendingCount})`}
           </button>
-            <button
-              onClick={() => setActiveSubTab('users')}
-              className={controlPanelSegmentClass(activeSubTab === 'users')}
-          >
-            Reported Users
+          <button onClick={() => setActiveSubTab('users')} className={controlPanelSegmentClass(activeSubTab === 'users')}>
+            Reported Users {reportedUsers.length > 0 && `(${reportedUsers.length})`}
           </button>
-              <button
-                onClick={() => setActiveSubTab('messages')}
-                className={controlPanelSegmentClass(activeSubTab === 'messages')}
-          >
+          <button onClick={() => setActiveSubTab('messages')} className={controlPanelSegmentClass(activeSubTab === 'messages')}>
             Message Queue
           </button>
         </div>
 
-        {/* Content based on active sub-tab */}
+        {/* Reports sub-tab */}
         {activeSubTab === 'reports' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-[var(--color-text)]">Reported Messages & Users</h2>
-              <input
-                type="text"
-                placeholder="Search reports..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={cx(controlPanelInputClass, "w-64")}
-              />
+              <h2 className="text-lg font-medium text-[var(--color-text)]">Reported Messages</h2>
+              <div className="flex items-center space-x-2">
+                <button onClick={loadReports} disabled={reportsLoading} className={controlPanelButtonClass('ghost')}>
+                  {reportsLoading ? 'Loading…' : 'Refresh'}
+                </button>
+                <input
+                  type="text"
+                  placeholder="Search reports..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={cx(controlPanelInputClass, "w-64")}
+                />
+              </div>
             </div>
 
-            <div className="space-y-4">
-              {mockReportedMessages
-                .filter(report =>
-                  searchTerm === '' ||
-                  report.messageContent.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  report.reportedBy.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map((report) => (
-                  <div key={report.id} className={controlPanelRowClass}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-medium text-[var(--color-error)]">Message by</span>
-                            <span
-                              onClick={(e) => handleOpenUserProfile(report, 'sender', e)}
-                              className="cursor-pointer text-sm font-medium text-[var(--color-error)] transition-colors hover:text-[color:color-mix(in_srgb,var(--color-error)_80%,white)] hover:underline"
-                              title={`View ${report.senderUser}'s profile`}
-                            >
-                              {report.senderUser}
-                            </span>
-                            <span className="text-[var(--color-text-secondary)]">•</span>
+            {reportsLoading && (
+              <div className="text-center text-[var(--color-text-secondary)] py-8">Loading reports…</div>
+            )}
+            {reportsError && !reportsLoading && (
+              <div className="text-center text-[var(--color-error)] py-8">{reportsError}</div>
+            )}
+            {!reportsLoading && !reportsError && (
+              <div className="space-y-4">
+                {messageReports
+                  .filter(report =>
+                    searchTerm === '' ||
+                    report.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.reporter?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.sender?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.description ?? '').toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((report) => (
+                    <div key={report.id} className={controlPanelRowClass}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2 flex-wrap gap-y-1">
+                            {report.sender && (
+                              <>
+                                <span className="text-sm font-medium text-[var(--color-error)]">Message by</span>
+                                <span
+                                  onClick={(e) => handleOpenUserProfile(report.sender!.id, report.sender!.username, e)}
+                                  className="cursor-pointer text-sm font-medium text-[var(--color-error)] hover:underline"
+                                >
+                                  {report.sender.username}
+                                </span>
+                                <span className="text-[var(--color-text-secondary)]">•</span>
+                              </>
+                            )}
                             <span className="text-[var(--color-text-secondary)] text-sm">Reported by</span>
-                            <span
-                              onClick={(e) => handleOpenUserProfile(report, 'reporter', e)}
-                              className="text-[var(--color-text-secondary)] text-sm hover:text-[var(--color-text)] cursor-pointer transition-colors hover:underline"
-                              title={`View ${report.reportedBy}'s profile`}
-                            >
-                              {report.reportedBy}
+                            {report.reporter ? (
+                              <span
+                                onClick={(e) => handleOpenUserProfile(report.reporter!.id, report.reporter!.username, e)}
+                                className="text-[var(--color-text-secondary)] text-sm hover:text-[var(--color-text)] cursor-pointer hover:underline"
+                              >
+                                {report.reporter.username}
+                              </span>
+                            ) : (
+                              <span className="text-[var(--color-text-secondary)] text-sm">Unknown</span>
+                            )}
+                            <span className={`rounded px-2 py-1 text-xs font-medium ${report.status === 'pending' ? 'bg-[var(--color-warning)] text-[var(--color-on-warning)]' : 'bg-[var(--color-success)] text-[var(--color-on-success)]'}`}>
+                              {report.status}
                             </span>
                           </div>
-                          <span className={`rounded px-2 py-1 text-xs font-medium ${report.status === 'pending'
-                              ? 'bg-[var(--color-warning)] text-[var(--color-on-warning)]'
-                              : 'bg-[var(--color-success)] text-[var(--color-on-success)]'
-                            }`}>
-                            {report.status}
-                          </span>
-                        </div>
-                        <div
-                          className="mb-2 cursor-pointer rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 transition-colors duration-200 hover:bg-[var(--color-hover)]"
-                          onPointerDown={() => handleMessagePointerDown(report.messageId)}
-                          onPointerUp={handleMessagePointerUp}
-                          onPointerLeave={handleMessagePointerLeave}
-                        >
-                          <p className="text-sm text-[var(--color-text)]">{report.messageContent}</p>
-                        </div>
-                        <div className="text-xs text-[var(--color-text-secondary)]">
-                          {report.category} • {new Date(report.reportedAt).toLocaleString()}
-                        </div>
-                        {report.description && (
-                          <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                            "{report.description}"
+
+                          {/* Message IDs */}
+                          <div
+                            className="mb-2 cursor-pointer rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 transition-colors duration-200 hover:bg-[var(--color-hover)]"
+                            onPointerDown={() => handleMessagePointerDown(report.id)}
+                            onPointerUp={handleMessagePointerUp}
+                            onPointerLeave={handleMessagePointerUp}
+                          >
+                            <p className="text-xs text-[var(--color-text-muted)]">
+                              {(report.message_ids ?? []).length} message{(report.message_ids ?? []).length !== 1 ? 's' : ''} reported
+                              {report.channel_ids && report.channel_ids.length > 0 && ` in ${report.channel_ids.length} channel${report.channel_ids.length !== 1 ? 's' : ''}`}
+                            </p>
                           </div>
-                        )}
+
+                          <div className="text-xs text-[var(--color-text-secondary)]">
+                            {report.category} • {new Date(report.reported_at).toLocaleString()}
+                          </div>
+                          {report.description && (
+                            <div className="text-xs text-[var(--color-text-muted)] mt-1">"{report.description}"</div>
+                          )}
+                        </div>
                       </div>
+                      {report.status === 'pending' && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'delete')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('danger')}
+                          >
+                            Delete Message
+                          </button>
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'warn')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('secondary')}
+                          >
+                            Warn User
+                          </button>
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'dismiss')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('ghost')}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleResolveReport(report.id, 'delete')}
-                        className={controlPanelButtonClass('danger')}
-                      >
-                        Delete Message
-                      </button>
-                      <button
-                        onClick={() => handleResolveReport(report.id, 'warn')}
-                        className={controlPanelButtonClass('secondary')}
-                      >
-                        Warn User
-                      </button>
-                      <button
-                        onClick={() => handleResolveReport(report.id, 'dismiss')}
-                        className={controlPanelButtonClass('ghost')}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
+                  ))}
+                {messageReports.length === 0 && (
+                  <div className="text-center text-[var(--color-text-secondary)] py-8">No message reports</div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Reported Users sub-tab */}
         {activeSubTab === 'users' && (
           <div>
             <div className="flex items-center justify-between mb-6">
@@ -4936,55 +5117,58 @@ export function ModerationTab({
               />
             </div>
 
-            <div className="space-y-4">
-              {mockReportedUsers
-                .filter(user =>
-                  searchTerm === '' ||
-                  user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  user.reason.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map((user) => (
-                  <div key={user.id} className={controlPanelRowClass}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <ControlPanelAvatar
-                          username={user.username}
-                          avatarUrl={user.avatar_url}
-                          className="h-10 w-10 rounded-full"
-                        />
-                        <div>
-                          <div className="font-medium text-[var(--color-text)]">{user.username}</div>
-                          <div className="text-[var(--color-text-secondary)] text-sm">{user.reportCount} reports</div>
-                          <div className="text-[var(--color-text-muted)] text-xs">{user.reason}</div>
+            {reportsLoading && (
+              <div className="text-center text-[var(--color-text-secondary)] py-8">Loading…</div>
+            )}
+            {!reportsLoading && (
+              <div className="space-y-4">
+                {reportedUsers
+                  .filter(user =>
+                    searchTerm === '' ||
+                    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    user.categories.some(c => c.toLowerCase().includes(searchTerm.toLowerCase()))
+                  )
+                  .map((user) => (
+                    <div key={user.userId} className={controlPanelRowClass}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <ControlPanelAvatar
+                            username={user.username}
+                            avatarUrl={null}
+                            className="h-10 w-10 rounded-full"
+                          />
+                          <div>
+                            <div className="font-medium text-[var(--color-text)]">{user.username}</div>
+                            <div className="text-[var(--color-text-secondary)] text-sm">{user.reportCount} report{user.reportCount !== 1 ? 's' : ''}</div>
+                            <div className="text-[var(--color-text-muted)] text-xs">{user.categories.join(', ')}</div>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleUserAction(user.userId, 'timeout')}
+                            className={controlPanelButtonClass('secondary')}
+                          >
+                            Timeout
+                          </button>
+                          <button
+                            onClick={() => handleUserAction(user.userId, 'ban')}
+                            className={controlPanelButtonClass('danger')}
+                          >
+                            Ban
+                          </button>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleUserAction(user.id, 'warn')}
-                          className={controlPanelButtonClass('secondary')}
-                        >
-                          Warn
-                        </button>
-                        <button
-                          onClick={() => handleUserAction(user.id, 'timeout')}
-                          className={controlPanelButtonClass('secondary')}
-                        >
-                          Timeout
-                        </button>
-                        <button
-                          onClick={() => handleUserAction(user.id, 'ban')}
-                          className={controlPanelButtonClass('danger')}
-                        >
-                          Ban
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                ))}
-            </div>
+                  ))}
+                {reportedUsers.length === 0 && (
+                  <div className="text-center text-[var(--color-text-secondary)] py-8">No reported users</div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Message Queue sub-tab */}
         {activeSubTab === 'messages' && (
           <div>
             <h2 className="mb-6 text-lg font-medium text-[var(--color-text)]">Message Moderation Queue</h2>
@@ -5003,75 +5187,69 @@ export function ModerationTab({
         )}
       </div>
 
-      {/* Message Selection Modal Overlay */}
-      {selectedMessageId && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-shadow-lg)_38%,transparent)] p-4">
-          <div className="mx-auto w-full max-w-md rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)]">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-[var(--color-text)]">Message Options</h3>
-                <button
-                  onClick={clearMessageSelection}
-                  className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4 mb-4">
-                <p className="text-sm text-[var(--color-text)]">
-                  {mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.messageContent}
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => handleResolveReport(
-                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
-                    'delete'
-                  )}
-                  className="rounded px-4 py-2 text-sm font-medium text-[var(--color-on-error)] transition-colors"
-                  style={{ backgroundColor: 'var(--color-error)' }}
-                >
-                  Delete Message
-                </button>
-                <button
-                  onClick={() => handleResolveReport(
-                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
-                    'warn'
-                  )}
-                  className="rounded border px-4 py-2 text-sm font-medium text-[var(--color-on-warning)] transition-colors"
-                  style={{
-                    backgroundColor: 'var(--color-warning)',
-                    borderColor: 'color-mix(in srgb, var(--color-warning) 55%, transparent)',
-                  }}
-                >
-                  Warn User
-                </button>
-                <button
-                  onClick={() => handleResolveReport(
-                    mockReportedMessages.find(msg => msg.messageId === selectedMessageId)?.id || '',
-                    'dismiss'
-                  )}
-                  className="rounded bg-[var(--color-surface-tertiary)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
-                >
-                  Dismiss
-                </button>
+      {/* Long-press message report modal */}
+      {selectedMessageReportId && (() => {
+        const report = messageReports.find(r => r.id === selectedMessageReportId);
+        if (!report) return null;
+        return (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-[color:color-mix(in_srgb,var(--color-shadow-lg)_38%,transparent)] p-4">
+            <div className="mx-auto w-full max-w-md rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)]">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-[var(--color-text)]">Report Options</h3>
+                  <button
+                    onClick={() => setSelectedMessageReportId(null)}
+                    className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="bg-[var(--color-surface-secondary)] rounded-lg p-4 mb-4">
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    {(report.message_ids ?? []).length} message{(report.message_ids ?? []).length !== 1 ? 's' : ''} — {report.category}
+                  </p>
+                  {report.description && <p className="text-xs text-[var(--color-text-secondary)] mt-1">"{report.description}"</p>}
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => handleResolveReport(report.id, 'delete')}
+                    disabled={resolvingReportId === report.id}
+                    className="rounded px-4 py-2 text-sm font-medium text-[var(--color-on-error)] transition-colors"
+                    style={{ backgroundColor: 'var(--color-error)' }}
+                  >
+                    Delete Message
+                  </button>
+                  <button
+                    onClick={() => handleResolveReport(report.id, 'warn')}
+                    disabled={resolvingReportId === report.id}
+                    className="rounded border px-4 py-2 text-sm font-medium text-[var(--color-on-warning)] transition-colors"
+                    style={{ backgroundColor: 'var(--color-warning)', borderColor: 'color-mix(in srgb, var(--color-warning) 55%, transparent)' }}
+                  >
+                    Warn User
+                  </button>
+                  <button
+                    onClick={() => handleResolveReport(report.id, 'dismiss')}
+                    disabled={resolvingReportId === report.id}
+                    className="rounded bg-[var(--color-surface-tertiary)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* User Profile Modal */}
       {userProfileModal.isOpen && (
         <UserProfileModal
           isOpen={true}
-          onClose={handleCloseUserProfile}
+          onClose={() => setUserProfileModal({ isOpen: false, user: null })}
           user={userProfileModal.user}
-          currentUserId="user_current_admin" // Mock current admin user ID
+          currentUserId=""
           position={userProfileModal.position}
           triggerRect={userProfileModal.triggerRect}
         />

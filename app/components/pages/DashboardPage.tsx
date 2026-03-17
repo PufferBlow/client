@@ -6,6 +6,7 @@ import { UserContextMenu } from "../../components/UserContextMenu";
 import { SearchModal } from "../../components/SearchModal";
 import { EmojiPicker } from "../../components/EmojiPicker";
 import { VoiceChannel } from "../../components/VoiceChannel";
+import { VoiceCallUI } from "../../components/VoiceCallUI";
 import { UserPanel } from "../../components/UserPanel";
 import { DeviceSelectorModal } from "../../components/DeviceSelectorModal";
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
@@ -161,6 +162,8 @@ export default function Dashboard() {
   const {
     currentVoiceChannel,
     setCurrentVoiceChannel,
+    voiceSessionActions,
+    setVoiceSessionActions,
     messageInput,
     setMessageInput,
     messageAttachments,
@@ -504,7 +507,8 @@ export default function Dashboard() {
       fetchServerInfoData(authToken),
       fetchReadHistoryData(authToken),
     ]);
-  }, [currentUser]);
+    void updatePresenceStatus("online");
+  }, [currentUser, updatePresenceStatus]);
 
   // Initialize from persisted state after channels are loaded
   useEffect(() => {
@@ -2227,46 +2231,17 @@ export default function Dashboard() {
                       <span className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">Channels</span>
                     </div>
 
-                    <div className="space-y-2">
-                      {channels.map(channel => {
-                        // Render voice channels with VoiceChannel component
-                        if (channel.channel_type === 'voice') {
-                          return (
-                            <VoiceChannel
-                              key={channel.channel_id}
-                              channelId={channel.channel_id}
-                              channelName={channel.channel_name}
-                              isConnected={currentVoiceChannel?.channelId === channel.channel_id}
-                              mediaQuality={serverInfo?.rtc_media_quality ?? null}
-                              onToggleConnection={() => {
-                                // Intentionally lightweight; source of truth comes from onConnectionStateChange.
-                              }}
-                              onConnectionStateChange={({ connected, channelId, channelName, participants }) => {
-                                if (connected) {
-                                  setCurrentVoiceChannel({
-                                    channelId,
-                                    channelName,
-                                    participants,
-                                  });
-                                  return;
-                                }
+                    {(() => {
+                      const textChannels = channels.filter(c => c.channel_type !== 'voice');
+                      const voiceChannels = channels.filter(c => c.channel_type === 'voice');
 
-                                setCurrentVoiceChannel((prev) =>
-                                  prev?.channelId === channelId ? null : prev
-                                );
-                              }}
-                            />
-                          );
-                        }
-
-                        // Render text channels normally
+                      const renderTextChannel = (channel: typeof channels[number]) => {
                         const hasDraft = getMessageDraft(channel.channel_id).trim().length > 0;
                         const unreadCount = unreadCountsByChannel[channel.channel_id] || 0;
                         return (
                           <div
                             key={channel.channel_id}
-                            className={`flex items-center px-2 py-1 rounded-md hover:bg-[var(--color-hover)] cursor-pointer ${selectedChannel?.channel_id === channel.channel_id ? 'bg-[var(--color-active)] text-[var(--color-text)]' : ''
-                              }`}
+                            className={`flex items-center px-2 py-1 rounded-md hover:bg-[var(--color-hover)] cursor-pointer ${selectedChannel?.channel_id === channel.channel_id ? 'bg-[var(--color-active)] text-[var(--color-text)]' : ''}`}
                             onClick={() => handleChannelSelect(channel)}
                             onContextMenu={(e) => handleChannelContextMenu(e, channel)}
                           >
@@ -2293,8 +2268,47 @@ export default function Dashboard() {
                             </div>
                           </div>
                         );
-                      })}
-                    </div>
+                      };
+
+                      return (
+                        <>
+                          {textChannels.length > 0 && (
+                            <div className="space-y-0.5">
+                              {textChannels.map(renderTextChannel)}
+                            </div>
+                          )}
+                          {voiceChannels.length > 0 && (
+                            <div className="mt-3">
+                              <div className="px-2 mb-1">
+                                <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">Voice Channels</span>
+                              </div>
+                              <div className="space-y-0.5">
+                                {voiceChannels.map(channel => (
+                                  <VoiceChannel
+                                    key={channel.channel_id}
+                                    channelId={channel.channel_id}
+                                    channelName={channel.channel_name}
+                                    isConnected={currentVoiceChannel?.channelId === channel.channel_id}
+                                    isSelected={selectedChannel?.channel_id === channel.channel_id}
+                                    onSelect={() => handleChannelSelect(channel)}
+                                    mediaQuality={serverInfo?.rtc_media_quality ?? null}
+                                    onToggleConnection={() => {}}
+                                    onConnectionStateChange={({ connected, channelId, channelName, participants }) => {
+                                      if (connected) {
+                                        setCurrentVoiceChannel({ channelId, channelName, participants: participants.length });
+                                        return;
+                                      }
+                                      setCurrentVoiceChannel((prev) => prev?.channelId === channelId ? null : prev);
+                                    }}
+                                    onVoiceSessionReady={(session) => { setVoiceSessionActions(session); }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </>
               )}
@@ -2397,6 +2411,16 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {/* Voice Call UI - shown when in an active voice call for this channel */}
+        {selectedChannel?.channel_type === 'voice' && currentVoiceChannel?.channelId === selectedChannel?.channel_id && voiceSessionActions && (
+          <VoiceCallUI
+            channelName={selectedChannel.channel_name}
+            session={voiceSessionActions}
+            currentUserId={currentUser?.user_id}
+            currentUsername={currentUser?.username ?? undefined}
+          />
+        )}
 
         {/* Messages Area */}
         <div
