@@ -29,10 +29,10 @@ export interface VoiceChannelJoinResponse {
 
 export interface VoiceChannelStatusResponse {
   status_code: number;
-  session_id: string;
+  session_id: string | null;
   channel_id: string;
-  is_active: boolean;
-  quality_profile: 'low' | 'balanced' | 'high';
+  is_active?: boolean;
+  quality_profile?: 'low' | 'balanced' | 'high';
   participants: Array<{
     user_id: string;
     username?: string;
@@ -41,6 +41,7 @@ export interface VoiceChannelStatusResponse {
     is_deafened: boolean;
     is_speaking: boolean;
     joined_at?: string;
+    connected_at?: string;
     disconnected_at?: string;
   }>;
   participant_count: number;
@@ -144,6 +145,16 @@ export const getVoiceChannelStatus = async (
 
   const apiClient = createApiClient();
   return apiClient.get(`/api/v2/voice/sessions/${sessionId}`, {
+    auth_token: authToken,
+  });
+};
+
+export const getVoiceChannelParticipants = async (
+  channelId: string,
+  authToken: string,
+): Promise<ApiResponse<VoiceChannelStatusResponse>> => {
+  const apiClient = createApiClient();
+  return apiClient.get(`/api/v2/voice/channels/${channelId}/participants`, {
     auth_token: authToken,
   });
 };

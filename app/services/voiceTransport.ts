@@ -70,6 +70,13 @@ export class VoiceTransport {
   private activeQualityProfile: 'low' | 'balanced' | 'high' = 'balanced';
   private mediaQuality: RTCMediaQuality | null = null;
 
+  // Per-user volume: userId → preferred volume 0..1
+  private userVolumePrefs = new Map<string, number>();
+  // FIFO queue: userIds waiting for a track to be assigned
+  private pendingTrackQueue: string[] = [];
+  // userId → HTMLAudioElement mapping (populated as tracks arrive)
+  private userAudioMap = new Map<string, HTMLAudioElement>();
+
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
   }
@@ -205,6 +212,18 @@ export class VoiceTransport {
 
       audio.srcObject = stream;
       audio.muted = this.isDeafened;
+
+      // Associate with a userId from the pending queue (FIFO)
+      if (this.pendingTrackQueue.length > 0) {
+        const userId = this.pendingTrackQueue.shift()!;
+        this.userAudioMap.set(userId, audio);
+        // Apply stored volume preference
+        const vol = this.userVolumePrefs.get(userId);
+        if (vol !== undefined) {
+          audio.volume = vol;
+        }
+      }
+
       void audio.play().catch(() => undefined);
     };
 
@@ -273,8 +292,11 @@ export class VoiceTransport {
       case 'joined': {
         const participants = msg.participants ?? [];
         this.participants.clear();
+        this.pendingTrackQueue = [];
         for (const participant of participants) {
           this.participants.set(participant.user_id, participant);
+          // Queue existing participants for track assignment
+          this.pendingTrackQueue.push(participant.user_id);
         }
         this.emitParticipants();
         break;
@@ -291,6 +313,10 @@ export class VoiceTransport {
             is_speaking: Boolean(msg.payload?.is_speaking ?? current?.is_speaking ?? false),
             connected_at: String(msg.payload?.connected_at ?? current?.connected_at ?? ''),
           });
+          // Queue for track assignment
+          if (!this.userAudioMap.has(userId)) {
+            this.pendingTrackQueue.push(userId);
+          }
           this.emitParticipants();
         }
         break;
@@ -299,6 +325,8 @@ export class VoiceTransport {
         const userId = String(msg.payload?.user_id ?? '');
         if (userId) {
           this.participants.delete(userId);
+          this.userAudioMap.delete(userId);
+          this.pendingTrackQueue = this.pendingTrackQueue.filter(id => id !== userId);
           this.emitParticipants();
         }
         break;
@@ -404,6 +432,21 @@ export class VoiceTransport {
     return this.isDeafened;
   }
 
+  /** Set playback volume for a specific remote participant (0 = silent, 1 = full). */
+  setUserVolume(userId: string, volume: number): void {
+    const clamped = Math.max(0, Math.min(1, volume));
+    this.userVolumePrefs.set(userId, clamped);
+    const audio = this.userAudioMap.get(userId);
+    if (audio) {
+      audio.volume = clamped;
+    }
+  }
+
+  /** Get current volume for a user (defaults to 1 if not set). */
+  getUserVolume(userId: string): number {
+    return this.userVolumePrefs.get(userId) ?? 1;
+  }
+
   async disconnect(): Promise<void> {
     if (this.ws) {
       try {
@@ -430,6 +473,9 @@ export class VoiceTransport {
       audio.srcObject = null;
     }
     this.remoteAudioEls.clear();
+    this.userAudioMap.clear();
+    this.pendingTrackQueue = [];
+    this.userVolumePrefs.clear();
     this.mediaQuality = null;
     this.activeQualityProfile = 'balanced';
 
@@ -442,4 +488,3 @@ export class VoiceTransport {
 export const createVoiceTransport = (
   callbacks: VoiceTransportCallbacks = {}
 ): VoiceTransport => new VoiceTransport(callbacks);
-

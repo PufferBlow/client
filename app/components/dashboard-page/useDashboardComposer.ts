@@ -24,6 +24,7 @@ export function useDashboardComposer({
     channelName: string;
     participants: number;
   } | null>(null);
+  const [voiceSessionActions, setVoiceSessionActions] = useState<import('../VoiceChannel').VoiceSessionActions | null>(null);
   const [messageInput, setMessageInput] = useState(() => {
     if (persistedChannelId) {
       return getMessageDraft(persistedChannelId);
@@ -177,6 +178,8 @@ export function useDashboardComposer({
   return {
     currentVoiceChannel,
     setCurrentVoiceChannel,
+    voiceSessionActions,
+    setVoiceSessionActions,
     messageInput,
     setMessageInput,
     messageAttachments,
