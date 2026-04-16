@@ -45,7 +45,7 @@
     "@tauri-apps/plugin-updater": "^2.0.0",
     "chart.js": "^4.5.1",
     "consola": "^3.4.2",
-    "dompurify": "^3.2.7",
+    "dompurify": "^3.4.0",
     "isbot": "^5.1.31",
     "loglevel": "^1.9.2",
     "lucide-react": "^0.548.0",
