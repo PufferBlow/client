@@ -53,7 +53,6 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
 }) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const [headDetectedMimeType, setHeadDetectedMimeType] = useState<string | null>(null);
   const [audioError, setAudioError] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
@@ -133,7 +132,7 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     () => extractExtension(filename || '') || extractExtension(resolvedUrl),
     [filename, resolvedUrl],
   );
-  const resolvedType = headDetectedMimeType || inferredType;
+  const resolvedType = inferredType;
   const isImageAttachment = resolvedType.startsWith('image/') || IMAGE_EXTENSIONS.includes(resolvedExtension);
   const isVideoAttachment = resolvedType.startsWith('video/') || VIDEO_EXTENSIONS.includes(resolvedExtension);
   const isAudioAttachment = resolvedType.startsWith('audio/') || AUDIO_EXTENSIONS.includes(resolvedExtension);
@@ -160,42 +159,6 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     }, 4000);
     return () => clearTimeout(timer);
   }, [isGif]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    const isAmbiguousMime =
-      !inferredType ||
-      inferredType === 'application/octet-stream' ||
-      inferredType === 'binary/octet-stream';
-
-    if (!isAmbiguousMime || resolvedExtension || !resolvedUrl) {
-      setHeadDetectedMimeType(null);
-      return;
-    }
-
-    const probeMimeType = async () => {
-      try {
-        const response = await fetch(resolvedUrl, { method: 'HEAD' });
-        const contentType = response.headers
-          .get('content-type')
-          ?.split(';')[0]
-          ?.trim()
-          .toLowerCase();
-        if (!isCancelled && contentType) {
-          setHeadDetectedMimeType(contentType);
-        }
-      } catch {
-        if (!isCancelled) {
-          setHeadDetectedMimeType(null);
-        }
-      }
-    };
-
-    probeMimeType();
-    return () => {
-      isCancelled = true;
-    };
-  }, [inferredType, resolvedExtension, resolvedUrl]);
 
   useEffect(() => {
     if (!isAudioAttachment || !resolvedUrl) {
@@ -589,6 +552,19 @@ interface AttachmentGridProps {
   className?: string;
 }
 
+const isMediaAttachment = (attachment: MessageAttachment): boolean => {
+  const ext = attachment.filename
+    ? (attachment.filename.split('?')[0]?.split('.').pop()?.toLowerCase() || '')
+    : (attachment.url?.split('?')[0]?.split('/').pop()?.split('.').pop()?.toLowerCase() || '');
+  const type = (attachment.type || '').toLowerCase();
+  return (
+    type.startsWith('image/') ||
+    type.startsWith('video/') ||
+    IMAGE_EXTENSIONS.includes(ext) ||
+    VIDEO_EXTENSIONS.includes(ext)
+  );
+};
+
 export const AttachmentGrid: React.FC<AttachmentGridProps> = ({
   attachments,
   className = ''
@@ -596,51 +572,53 @@ export const AttachmentGrid: React.FC<AttachmentGridProps> = ({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   if (!attachments || attachments.length === 0) return null;
 
-  const getGridClasses = () => {
-    const count = attachments.length;
+  // Split into media (image/video) vs non-media (documents, audio, files)
+  const mediaAttachments = attachments.filter(isMediaAttachment);
+  const otherAttachments = attachments.filter((a) => !isMediaAttachment(a));
 
-    if (count === 1) {
-      // Single attachment - large
-      return 'grid-cols-1 max-w-md';
-    } else if (count === 2) {
-      // Two attachments - side by side
-      return 'grid-cols-2 gap-2 max-w-lg';
-    } else if (count === 3) {
-      // Three attachments - 1 large, 2 small below
-      return 'grid-cols-2 gap-2 max-w-lg';
-    } else {
-      // Four or more - grid
-      return 'grid-cols-2 gap-2 max-w-2xl';
-    }
+  const getMediaGridClasses = (count: number) => {
+    if (count === 1) return 'grid-cols-1 max-w-md';
+    if (count === 2) return 'grid-cols-2 gap-2 max-w-lg';
+    if (count === 3) return 'grid-cols-2 gap-2 max-w-lg';
+    return 'grid-cols-2 gap-2 max-w-2xl';
   };
 
-  const getItemClasses = (index: number, total: number) => {
-    if (total === 1) {
-      // Single item - full size
-      return 'col-span-1';
-    } else if (total === 3 && index === 0) {
-      // First of three - spans full width
-      return 'col-span-2';
-    } else {
-      // Other items - normal size
-      return '';
-    }
+  const getMediaItemClasses = (index: number, total: number) => {
+    if (total === 3 && index === 0) return 'col-span-2';
+    return '';
   };
+
+  // Build a lookup from original attachment to lightbox index (media only)
+  const mediaLightboxIndices = new Map(mediaAttachments.map((a, i) => [a, i]));
 
   return (
-    <div className={`mt-3 grid ${getGridClasses()} ${className}`}>
-      {attachments.map((attachment, index) => (
+    <div className={`mt-3 flex flex-col gap-2 ${className}`}>
+      {/* Media grid */}
+      {mediaAttachments.length > 0 && (
+        <div className={`grid ${getMediaGridClasses(mediaAttachments.length)}`}>
+          {mediaAttachments.map((attachment, index) => (
+            <AttachmentBubble
+              key={`media-${index}`}
+              {...attachment}
+              onClick={() => setLightboxIndex(index)}
+              className={getMediaItemClasses(index, mediaAttachments.length)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Non-media list (documents, audio, files) */}
+      {otherAttachments.map((attachment, index) => (
         <AttachmentBubble
-          key={index}
+          key={`other-${index}`}
           {...attachment}
-          onClick={() => setLightboxIndex(index)}
-          className={getItemClasses(index, attachments.length)}
+          onClick={() => setLightboxIndex(mediaLightboxIndices.get(attachment) ?? null)}
         />
       ))}
 
       {lightboxIndex !== null && (
         <MediaLightbox
-          attachments={attachments}
+          attachments={mediaAttachments}
           currentIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onChangeIndex={setLightboxIndex}
