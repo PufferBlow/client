@@ -32,6 +32,7 @@ import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../
 import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
 import { listUsers, type ListUsersResponse } from "../../services/user";
 import { getServerInfo, type ServerInfo } from "../../services/system";
+import { convertToFullStorageUrl } from "../../services/apiClient";
 import { resolveStoredInstance } from "../../services/instance";
 import { buildAuthRedirectPath } from "../../utils/authRedirect";
 import type { Channel } from "../../models";
@@ -132,6 +133,7 @@ export default function Dashboard() {
     readMessageIds,
     unreadCountsByChannel,
     setUnreadCountsByChannel,
+    manualPresenceLock,
     unreadMarker,
     setUnreadMarker,
     browserNotificationPermission,
@@ -317,7 +319,12 @@ export default function Dashboard() {
 
       const response = await getServerInfo();
       if (response.success && response.data && response.data.server_info) {
-        setServerInfo(response.data.server_info);
+        const info = response.data.server_info;
+        setServerInfo({
+          ...info,
+          avatar_url: info.avatar_url ? convertToFullStorageUrl(info.avatar_url) : info.avatar_url,
+          banner_url: info.banner_url ? convertToFullStorageUrl(info.banner_url) : info.banner_url,
+        });
         setServerInfoError(null);
         logger.ui.info("Server info fetched successfully");
       } else {
@@ -507,7 +514,11 @@ export default function Dashboard() {
       fetchServerInfoData(authToken),
       fetchReadHistoryData(authToken),
     ]);
-    void updatePresenceStatus("online");
+    // Don't override a manual presence lock (DND/AFK) already set in the DB.
+    // manualPresenceLock state hasn't committed yet at this point, so check currentUser.status directly.
+    if (currentUser.status !== 'dnd' && currentUser.status !== 'afk') {
+      void updatePresenceStatus("online");
+    }
   }, [currentUser, updatePresenceStatus]);
 
   // Initialize from persisted state after channels are loaded
@@ -1089,6 +1100,9 @@ export default function Dashboard() {
               });
             }
           });
+          if (manualPresenceLock) {
+            wsConnection.setStatusOnConnect(manualPresenceLock);
+          }
           wsConnection.connect();
           setWebSocketConnection(wsConnection);
         }

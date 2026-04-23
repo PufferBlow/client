@@ -189,11 +189,14 @@ export const normalizeChatWebSocketMessage = (
   attachments: normalizeWebSocketAttachments(message.attachments),
 });
 
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+
 export interface WebSocketCallbacks {
   onMessage?: (message: WebSocketMessage) => void;
   onConnected?: () => void;
   onDisconnected?: (reason: string) => void;
   onError?: (error: Event) => void;
+  onStateChange?: (state: ConnectionState) => void;
 }
 
 export class GlobalWebSocket {
@@ -206,11 +209,51 @@ export class GlobalWebSocket {
   private hostPort: string;
   private isDestroyed = false;
   private beforeUnloadHandler: (() => void) | null = null;
+  private connectionState: ConnectionState = 'idle';
+  private statusOnConnect: PresenceStatus | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(authToken: string, hostPort: string, callbacks: WebSocketCallbacks = {}) {
     this.authToken = authToken;
     this.hostPort = hostPort;
     this.callbacks = callbacks;
+  }
+
+  setStatusOnConnect(status: PresenceStatus | null): void {
+    this.statusOnConnect = status;
+  }
+
+  private setConnectionState(state: ConnectionState): void {
+    this.connectionState = state;
+    this.callbacks.onStateChange?.(state);
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState !== WebSocket.OPEN) return;
+      try {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+      } catch {
+        // ignore send errors; onclose will handle reconnect
+      }
+      this.heartbeatTimeout = setTimeout(() => {
+        websocketLogger.warn('Heartbeat timeout — closing stale WebSocket connection');
+        this.ws?.close();
+      }, 10_000);
+    }, 30_000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval !== null) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.heartbeatTimeout !== null) {
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = null;
+    }
   }
 
   private getWebSocketUrl(): string {
@@ -224,12 +267,15 @@ export class GlobalWebSocket {
       return;
     }
 
+    this.setConnectionState('connecting');
+
     try {
       this.ws = new WebSocket(this.getWebSocketUrl());
       this.setupEventHandlers();
       this.registerBeforeUnloadHandler();
     } catch (error) {
       websocketLogger.error('Failed to create global WebSocket connection', error);
+      this.setConnectionState('disconnected');
       this.callbacks.onError?.(error as Event);
     }
   }
@@ -240,12 +286,26 @@ export class GlobalWebSocket {
     this.ws.onopen = (event) => {
       websocketLogger.info('Global WebSocket connected', event);
       this.reconnectAttempts = 0;
+      this.setConnectionState('connected');
+      this.startHeartbeat();
+      if (this.statusOnConnect) {
+        this.sendPresenceUpdate(this.statusOnConnect);
+      }
       this.callbacks.onConnected?.();
     };
 
     this.ws.onmessage = (event) => {
       try {
-        const message: WebSocketMessage = JSON.parse(event.data);
+        const raw = JSON.parse(event.data);
+        if (raw?.type === 'pong') {
+          // Clear heartbeat timeout — connection is alive
+          if (this.heartbeatTimeout !== null) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+          }
+          return;
+        }
+        const message: WebSocketMessage = raw;
         websocketLogger.debug('Global WebSocket message received', message);
         this.callbacks.onMessage?.(message);
       } catch (error) {
@@ -255,8 +315,11 @@ export class GlobalWebSocket {
 
     this.ws.onclose = (event) => {
       websocketLogger.info('Global WebSocket disconnected', event);
+      this.stopHeartbeat();
       if (!this.isDestroyed && event.code !== 1000) { // 1000 = normal closure
         this.scheduleReconnect();
+      } else {
+        this.setConnectionState('disconnected');
       }
       this.callbacks.onDisconnected?.(event.reason || 'Connection closed');
     };
@@ -270,9 +333,11 @@ export class GlobalWebSocket {
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       websocketLogger.error('Max reconnect attempts reached for global WebSocket');
+      this.setConnectionState('disconnected');
       return;
     }
 
+    this.setConnectionState('reconnecting');
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
     websocketLogger.info(`Scheduling global WebSocket reconnect in ${delay}ms`);
 
@@ -284,11 +349,13 @@ export class GlobalWebSocket {
 
   disconnect(): void {
     this.isDestroyed = true;
+    this.stopHeartbeat();
     this.unregisterBeforeUnloadHandler();
     if (this.ws) {
       this.ws.close(1000, 'Global WebSocket component unmounted');
       this.ws = null;
     }
+    this.setConnectionState('disconnected');
   }
 
   private registerBeforeUnloadHandler(): void {

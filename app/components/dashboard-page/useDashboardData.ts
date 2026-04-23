@@ -118,6 +118,12 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   const readMessageIdsRef = useRef<Set<string>>(new Set());
   const lastActivityAtRef = useRef<number>(Date.now());
   const presenceUpdateInFlightRef = useRef(false);
+  const currentUserLiveStatusRef = useRef<string>("offline");
+  type PresenceUpdater = (
+    status: "online" | "idle" | "afk" | "dnd" | "offline",
+    options?: { silent?: boolean; lockMode?: "preserve" | "set" | "clear" },
+  ) => Promise<void>;
+  const updatePresenceStatusRef = useRef<PresenceUpdater | null>(null);
   const previousProfileUserIdRef = useRef<string | null>(currentUser?.user_id ?? null);
   const previousProfileStatusRef = useRef<unknown>(currentUser?.status ?? null);
 
@@ -327,13 +333,6 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
           setManualPresenceLock(null);
         }
 
-        if (!options?.silent) {
-          showToast({
-            message: `Status updated to ${status === "dnd" ? "Do Not Disturb" : status}.`,
-            tone: "success",
-            category: "system",
-          });
-        }
       } catch (error) {
         applyPresenceUpdate(currentUser.user_id, previousStatus);
         if (!options?.silent) {
@@ -350,6 +349,16 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     [applyPresenceUpdate, currentUser, currentUserLiveStatus, showToast],
   );
 
+  // Keep refs in sync so the idle effect can read current values without being in its dep array.
+  useEffect(() => {
+    currentUserLiveStatusRef.current = currentUserLiveStatus;
+  }, [currentUserLiveStatus]);
+
+  useEffect(() => {
+    updatePresenceStatusRef.current = updatePresenceStatus;
+  }, [updatePresenceStatus]);
+
+  // Restore manual presence lock if an external broadcast flips the status away from it.
   useEffect(() => {
     if (
       !currentUser ||
@@ -363,15 +372,22 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     void updatePresenceStatus(manualPresenceLock, { silent: true });
   }, [currentUser, currentUserLiveStatus, manualPresenceLock, updatePresenceStatus]);
 
+  // Idle detection — stable effect that only re-mounts when the user or DND lock changes.
+  // Uses refs for live status and updater so no stale closures, no unnecessary teardowns.
+  const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  const IDLE_CHECK_INTERVAL_MS = 20_000;   // check every 20 seconds
+
   useEffect(() => {
     if (!currentUser || manualPresenceLock) {
       return;
     }
 
+    lastActivityAtRef.current = Date.now();
+
     const markActivity = () => {
       lastActivityAtRef.current = Date.now();
-      if (currentUserLiveStatus === "idle") {
-        void updatePresenceStatus("online", { silent: true, lockMode: "clear" });
+      if (currentUserLiveStatusRef.current === "idle") {
+        void updatePresenceStatusRef.current?.("online", { silent: true, lockMode: "clear" });
       }
     };
 
@@ -381,25 +397,27 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
       }
     };
 
-    const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "touchstart", "focus"];
-    events.forEach((eventName) => {
-      window.addEventListener(eventName, markActivity, { passive: true });
-    });
+    const activityEvents: Array<keyof WindowEventMap> = [
+      "mousemove", "mousedown", "keydown", "touchstart", "scroll", "focus",
+    ];
+    activityEvents.forEach((evt) => window.addEventListener(evt, markActivity, { passive: true }));
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const interval = window.setInterval(() => {
       const idleForMs = Date.now() - lastActivityAtRef.current;
-      if (idleForMs >= 5 * 60 * 1000 && currentUserLiveStatus === "online") {
-        void updatePresenceStatus("idle", { silent: true, lockMode: "clear" });
+      const status = currentUserLiveStatusRef.current;
+      if (idleForMs >= IDLE_THRESHOLD_MS && status === "online") {
+        void updatePresenceStatusRef.current?.("idle", { silent: true, lockMode: "clear" });
       }
-    }, 30_000);
+    }, IDLE_CHECK_INTERVAL_MS);
 
     return () => {
-      events.forEach((eventName) => window.removeEventListener(eventName, markActivity));
+      activityEvents.forEach((evt) => window.removeEventListener(evt, markActivity));
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(interval);
     };
-  }, [currentUser, currentUserLiveStatus, manualPresenceLock, updatePresenceStatus]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.user_id, manualPresenceLock]);
 
   const markMessagesRead = useCallback(
     async (channelId: string, messageIds: string[]) => {

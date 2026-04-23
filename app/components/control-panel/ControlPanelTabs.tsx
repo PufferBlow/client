@@ -3105,22 +3105,12 @@ export function SettingsTab({
     }
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('directory', 'avatars');
-
-      const apiClient = createApiClient();
-      const response = await apiClient.post<{
-        status_code: number;
-        message: string;
-        url: string;
-        is_duplicate: boolean;
-      }>(`/api/v1/storage/upload?auth_token=${encodeURIComponent(authToken)}`, formData);
+      const response = await uploadServerAvatar(authToken, file);
 
       if (response.success && response.data) {
-        const fullAvatarUrl = convertToFullStorageUrl(response.data.url);
+        const fullAvatarUrl = convertToFullStorageUrl(response.data.avatar_url);
         setServerInfo(prev => ({ ...prev, avatar_url: fullAvatarUrl }));
-        setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null); // Update original to avoid "unsaved changes"
+        setOriginalServerInfo(prev => prev ? { ...prev, avatar_url: fullAvatarUrl } : null);
         logger.ui.info('Server avatar updated successfully', response.data);
       } else {
         setError('Failed to upload avatar');
@@ -3141,16 +3131,12 @@ export function SettingsTab({
     }
 
     try {
-      const formData = new FormData();
-      formData.append('auth_token', authToken);
-      formData.append('banner', file);
+      const response = await uploadServerBanner(authToken, file);
 
-      const apiClient = createApiClient();
-      const response = await apiClient.post('/api/v1/system/upload-banner', formData);
-
-      if (response.success) {
-        setServerInfo(prev => ({ ...prev, banner_url: (response.data as any)?.banner_url }));
-        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: (response.data as any)?.banner_url } : null); // Update original to avoid "unsaved changes"
+      if (response.success && response.data) {
+        const fullBannerUrl = convertToFullStorageUrl(response.data.banner_url);
+        setServerInfo(prev => ({ ...prev, banner_url: fullBannerUrl }));
+        setOriginalServerInfo(prev => prev ? { ...prev, banner_url: fullBannerUrl } : null);
         logger.ui.info('Server banner updated successfully', response.data);
       } else {
         setError('Failed to upload banner');

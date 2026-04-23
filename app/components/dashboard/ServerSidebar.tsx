@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { AddServerButton } from './AddServerButton';
+import { convertToFullStorageUrl } from '../../services/apiClient';
 
 /**
  * Server information structure
@@ -127,7 +128,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
         <div className="flex items-center space-x-2">
           {serverInfo?.avatar_url ? (
             <img
-              src={serverInfo.avatar_url}
+              src={convertToFullStorageUrl(serverInfo.avatar_url)}
               alt={`${serverInfo.server_name} avatar`}
               className="w-8 h-8 rounded-full object-cover"
             />
