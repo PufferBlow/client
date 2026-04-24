@@ -1,178 +1,175 @@
-# Pufferblow UI
+<div align="center">
 
-A modern, decentralized messaging platform built with React Router v7, featuring Discord-like functionality with enhanced privacy and security.
+<img src="./public/pufferblow-logo.svg" width="120" alt="Pufferblow logo" />
 
-## Features
+# Pufferblow Client
 
-- 🎨 **Modern UI**: Discord-inspired interface with dark theme
-- 🔐 **Secure Authentication**: Cookie-based authentication with server-side rendering support
-- 🌐 **Decentralized**: Built for distributed messaging networks
-- 📱 **Responsive**: Works seamlessly on desktop and mobile
-- ⚡ **Fast**: Optimized with Vite and React Router v7
-- 🧪 **Well Tested**: Comprehensive test suite with Vitest
-- 🚀 **Deploy Ready**: Automated deployment to GitHub Pages
+**The official desktop and web client for Pufferblow.**
+
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+[![Node](https://img.shields.io/badge/node-20%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Electron](https://img.shields.io/badge/Electron-36-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/PufferBlow/client/deploy.yml?branch=main&style=flat-square&label=CI)](https://github.com/PufferBlow/client/actions)
+[![GitHub Stars](https://img.shields.io/github/stars/PufferBlow/client?style=flat-square&color=yellow)](https://github.com/PufferBlow/client/stargazers)
+
+</div>
+
+---
+
+## Overview
+
+The Pufferblow client is a cross-platform desktop application and progressive web app built with [React Router v7](https://reactrouter.com/), [Tailwind CSS v4](https://tailwindcss.com/), and [Electron](https://www.electronjs.org/). It connects to any self-hosted Pufferblow instance.
+
+**Desktop app** (Electron) — native window, system tray, auto-update support, available for Windows and Linux.
+
+**Web app** — runs directly in the browser by pointing to a Pufferblow instance.
+
+---
+
+## Download
+
+Pre-built installers are attached to each [GitHub Release](https://github.com/PufferBlow/client/releases):
+
+| Platform | File |
+|---|---|
+| Windows (installer) | `pufferblow-client-windows-x64-setup.exe` |
+| Windows (MSI) | `pufferblow-client-windows-x64.msi` |
+| Linux (AppImage) | `pufferblow-client-linux-x86_64.AppImage` |
+| Linux (deb) | `pufferblow-client_*.deb` |
+| Linux (rpm) | `pufferblow-client-*.rpm` |
+
+---
 
 ## Tech Stack
 
-- **Frontend**: React 19, React Router v7, TypeScript
-- **Styling**: Tailwind CSS v4
-- **Build Tool**: Vite
-- **Testing**: Vitest, Testing Library
-- **Deployment**: GitHub Pages with GitHub Actions
+| Layer | Library |
+|---|---|
+| UI framework | React 19 + React Router v7 |
+| Styling | Tailwind CSS v4 |
+| Desktop shell | Electron 36 |
+| Build | Vite 7 + tsup |
+| Packaging | electron-builder |
+| Testing | Vitest + Testing Library |
+| Language | TypeScript 5 |
 
-## Getting Started
+---
+
+## Development Setup
 
 ### Prerequisites
 
-- Node.js 20+
-- npm or yarn
+- Node.js 20 or later
+- npm 10 or later
 
-### Installation
+### Install dependencies
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/pufferblow-client.git
-cd pufferblow-client
-```
-
-2. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Start the development server:
+### Run as a web app
+
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:5173](http://localhost:5173) in your browser.
+Opens at `http://localhost:5173`.
 
-### Available Scripts
+### Run as a desktop app
 
-- `npm run dev` - Start the browser development server on `0.0.0.0:5173`
-- `npm run start` - Preview the production build on `0.0.0.0:4173`
-- `npm run build` - Build for production
-- `npm run desktop:dev` - Run desktop app in Tauri dev mode
-- `npm run desktop:build` - Build desktop app for the current OS
-- `npm run desktop:build:windows` - Build Windows bundles (`.msi`, `.exe`)
-- `npm run desktop:build:linux` - Build Linux bundles (`.AppImage`, `.deb`, `.rpm`)
-- `npm run desktop:build:macos` - Build macOS bundles (`.dmg`, `.app.tar.gz`)
-- `npm run preview` - Preview production build locally
-- `npm run test` - Run tests in watch mode
-- `npm run test:run` - Run tests once
-- `npm run test:ui` - Run tests with UI
-- `npm run typecheck` - Run TypeScript type checking
-
-### Tauri Desktop Setup
-
-1. Install Rust toolchain (`rustup`) and platform prerequisites from the Tauri docs.
-2. Install OS prerequisites:
-   - Linux: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`
-   - macOS: Xcode Command Line Tools
-   - Windows: MSVC Build Tools
-3. Install frontend dependencies:
-```bash
-npm install
-```
-4. Start desktop dev:
 ```bash
 npm run desktop:dev
 ```
-5. Build desktop binaries:
-```bash
-npm run desktop:build
-```
 
-### Release Artifacts
+This command runs three processes concurrently:
 
-The desktop release workflow (`.github/workflows/desktop-release.yml`) builds and publishes stable filenames for direct downloads:
+1. Vite dev server at `127.0.0.1:5173`
+2. tsup watching and compiling `electron/` to `dist-electron/`
+3. Electron loading the dev server once it is ready
 
-- `pufferblow-client-windows-x64.msi`
-- `pufferblow-client-windows-x64-setup.exe`
-- `pufferblow-client-linux-x86_64.AppImage`
-- `pufferblow-client-macos-universal.dmg`
+---
+
+## Available Scripts
+
+| Script | Description |
+|---|---|
+| `npm run dev` | Start the web dev server |
+| `npm run build` | Build the web app |
+| `npm run desktop:dev` | Start the desktop app in dev mode |
+| `npm run desktop:build` | Build the desktop app for the current OS |
+| `npm run desktop:build:windows` | Build Windows installers (NSIS + MSI) |
+| `npm run desktop:build:linux` | Build Linux packages (AppImage + deb + rpm) |
+| `npm run desktop:build:macos` | Build macOS packages (dmg + zip) |
+| `npm run typecheck` | Run TypeScript type checking |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Format code with Prettier |
+| `npm run test:run` | Run the test suite once |
+| `npm run test` | Run tests in watch mode |
+| `npm run test:ui` | Run tests with the Vitest UI |
+
+---
 
 ## Project Structure
 
 ```
-pufferblow-client/
+client/
 ├── app/
-│   ├── components/          # Reusable UI components
-│   ├── models/             # TypeScript data models
-│   ├── routes/             # Route components and actions
-│   ├── services/           # API service functions
-│   ├── test/               # Test utilities
-│   └── utils/              # Utility functions
-├── .github/
-│   └── workflows/          # GitHub Actions workflows
-├── public/                 # Static assets
-└── build/                  # Build output (generated)
+│   ├── components/       UI components (chat, control panel, layout…)
+│   ├── routes/           React Router route modules
+│   ├── services/         API service layer
+│   ├── models/           TypeScript data models
+│   └── utils/            Shared utility functions
+├── electron/
+│   ├── main.ts           Electron main process
+│   ├── preload.ts        Context bridge (renderer ↔ main)
+│   └── tray.ts           System tray integration
+├── resources/
+│   └── icons/            App icons for all platforms
+├── public/               Static assets
+├── electron-builder.yml  electron-builder packaging config
+└── .github/workflows/    CI/CD pipelines
 ```
 
-## Deployment
+---
 
-### GitHub Pages
+## Building Production Installers
 
-The project includes automated deployment to GitHub Pages:
-
-1. **Enable GitHub Pages** in your repository settings:
-   - Go to Settings → Pages
-   - Select "GitHub Actions" as source
-
-2. **Push to main branch**:
-   - The workflow will automatically build and deploy
-   - Your site will be available at `https://yourusername.github.io/repository-name`
-
-### Manual Deployment
-
-To deploy manually:
+### Windows
 
 ```bash
-# Build the application
-npm run build
-
-# Preview locally
-npm run preview
-
-# Deploy the build/client folder to your hosting service
+npm run desktop:build:windows
 ```
 
-## Environment Variables
+Output in `release/`: NSIS setup `.exe` and `.msi`.
 
-Create a `.env` file in the root directory:
-
-```env
-# Add your environment variables here
-# Example:
-# VITE_API_BASE_URL=https://api.example.com
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -am 'Add some feature'`
-4. Push to the branch: `git push origin feature/your-feature`
-5. Submit a pull request
-
-## Testing
-
-The project includes comprehensive tests:
+### Linux
 
 ```bash
-# Run all tests
-npm run test:run
-
-# Run tests with coverage
-npm run test:run -- --coverage
-
-# Run tests in watch mode
-npm run test
-
-# Run tests with UI
-npm run test:ui
+npm run desktop:build:linux
 ```
+
+Output in `release/`: `.AppImage`, `.deb`, and `.rpm`.
+
+> On Linux you may need `rpm` and `libfuse2` installed for RPM and AppImage support:
+> ```bash
+> sudo apt-get install rpm libfuse2
+> ```
+
+---
+
+## CI/CD
+
+Two GitHub Actions workflows are included:
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `deploy.yml` | Push / PR to `main` | Lint, test, build, deploy to GitHub Pages |
+| `desktop-release.yml` | GitHub Release published | Build and attach Windows + Linux installers to the release |
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Released under the [GNU General Public License v3.0](LICENSE).
