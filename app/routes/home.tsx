@@ -6,9 +6,9 @@ import HomeDashboardPreview from "../components/home/HomeDashboardPreview";
 import { PufferblowBrand } from "../components/PufferblowBrand";
 
 const heroFacts = [
-  "Federated server model",
-  "Private instance ownership",
-  "Realtime channels and voice",
+  "Self-hosted & open source",
+  "End-to-end encrypted",
+  "Federated via ActivityPub",
 ];
 
 const steps = [
@@ -27,12 +27,12 @@ const steps = [
 ];
 
 const features = [
-  "Decentralized home instances",
-  "Discord-like channels and roles",
-  "Voice-ready architecture",
-  "Open source hosting path",
-  "Desktop and web access",
-  "Minimal grayscale theming",
+  "Self-hosted on your own server",
+  "End-to-end encrypted messages",
+  "Federation via ActivityPub",
+  "Role-based access control",
+  "Voice channels via WebRTC",
+  "Desktop and web client",
 ];
 
 function isAuthenticatedFromCookies(): boolean {
@@ -52,11 +52,11 @@ function isAuthenticatedFromCookies(): boolean {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Pufferblow - Decentralized Messaging" },
+    { title: "Pufferblow - Self-Hosted Community Platform" },
     {
       name: "description",
       content:
-        "Calm, decentralized messaging with familiar channels, private server ownership, and a cleaner client experience.",
+        "Self-hosted, open-source community platform with end-to-end encrypted messaging, ActivityPub federation, voice channels, and role-based access control.",
     },
   ];
 }
@@ -75,7 +75,7 @@ export default function Home() {
           <Link to="/" className="pb-focus-ring rounded-xl">
             <PufferblowBrand
               size={44}
-              subtitle="Decentralized Messaging"
+              subtitle="Self-Hosted Community Platform"
               surfaceColor="var(--color-background)"
               titleClassName="text-2xl md:text-3xl"
               subtitleClassName="text-[10px] md:text-[11px]"
@@ -131,16 +131,16 @@ export default function Home() {
           <div className="mx-auto grid max-w-7xl gap-14 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:px-8 lg:py-24">
             <div className="space-y-8">
               <div className="inline-flex items-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-[var(--color-text-tertiary)]">
-                Built around calmer communication
+                Open source · Self-hosted · Federated
               </div>
 
               <div className="space-y-5">
                 <h1 className="max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-[var(--color-text)] sm:text-6xl lg:text-7xl">
-                  Messaging that feels familiar, without the visual noise.
+                  Your community, on a server you own and control.
                 </h1>
                 <p className="max-w-2xl text-lg leading-8 text-[var(--color-text-secondary)] sm:text-xl">
-                  Pufferblow gives communities a decentralized home instance model with channels,
-                  roles, voice, and a client designed to stay readable for long sessions.
+                  Pufferblow is a self-hosted, open-source community platform with encrypted messaging,
+                  ActivityPub federation, voice channels, and a client built to stay readable.
                 </p>
               </div>
 
@@ -175,7 +175,7 @@ export default function Home() {
               <PufferblowBrand
                 size={84}
                 align="center"
-                subtitle="Channels, people, and federation"
+                subtitle="Encrypted · Federated · Open Source"
                 surfaceColor="var(--color-surface)"
                 className="mb-8 flex-col gap-5"
                 textClassName="items-center"
@@ -294,7 +294,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-10 sm:px-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
           <PufferblowBrand
             size={36}
-            subtitle="Decentralized Messaging"
+            subtitle="Self-Hosted Community Platform"
             surfaceColor="var(--color-background)"
             titleClassName="text-2xl"
             subtitleClassName="text-[10px]"

@@ -1,7 +1,7 @@
 {
   "name": "pufferblow",
   "version": "1.0.0",
-  "description": "PufferBlow Desktop App",
+  "description": "Official desktop and web client for Pufferblow — built with React, React Router v7, and Electron.",
   "homepage": "./",
   "private": true,
   "main": "dist-electron/main.js",
