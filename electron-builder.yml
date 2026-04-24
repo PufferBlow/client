@@ -1,0 +1,48 @@
+appId: space.pufferblow.client
+productName: Pufferblow
+copyright: Pufferblow contributors
+buildVersion: "1.0.0"
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist-electron/**
+  - build/client/**
+  - resources/icons/**
+  - package.json
+
+win:
+  icon: resources/icons/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: msi
+      arch: [x64]
+  nsis:
+    oneClick: false
+    perMachine: true
+    allowToChangeInstallationDirectory: true
+
+linux:
+  icon: resources/icons/icon.png
+  category: Network
+  target:
+    - AppImage
+    - deb
+    - rpm
+
+mac:
+  icon: resources/icons/icon.icns
+  category: public.app-category.social-networking
+  minimumSystemVersion: "10.15"
+  identity: null
+  target:
+    - dmg
+    - zip
+
+publish:
+  provider: generic
+  url: https://releases.pufferblow.space
+  channel: latest
