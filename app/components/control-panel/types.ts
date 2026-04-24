@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type StorageFile = {
   id: string;
   filename: string;
-  path: string;
+  subdirectory: string;
   size: number;
   type: string;
   uploaded_at: string;

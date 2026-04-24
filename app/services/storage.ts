@@ -2,11 +2,15 @@ import type { ApiResponse } from './apiClient';
 import { createApiClient } from './apiClient';
 
 export interface StorageFile {
+  id: string;
   filename: string;
   url: string;
   size: number;
   uploaded_at: string;
-  content_type: string;
+  type: string;
+  subdirectory: string;
+  uploader: string;
+  is_orphaned: boolean;
 }
 
 export interface StorageFileInfo extends StorageFile {
