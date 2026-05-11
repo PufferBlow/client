@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Button from "../components/Button";
 import Input from "../components/Input";
 import { PufferblowBrand } from "../components/PufferblowBrand";
+import { Notice } from "../components/ui/Notice";
 import { normalizeInstance, resolveInstance } from "../services/instance";
 import { login, handleAuthentication } from "../services/user";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
@@ -120,14 +121,14 @@ export default function Login() {
           </div>
 
           {error ? (
-            <div className="mb-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
-              {error}
+            <div className="mb-5">
+              <Notice tone="error" message={error} />
             </div>
           ) : null}
 
           {loginSuccess ? (
-            <div className="mb-5 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
-              Signed in. Redirecting now.
+            <div className="mb-5">
+              <Notice tone="success" message="Signed in. Redirecting now." />
             </div>
           ) : null}
 
