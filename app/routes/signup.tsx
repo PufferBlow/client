@@ -110,166 +110,130 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,460px)]">
-          <section className="hidden rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8 lg:flex lg:flex-col lg:justify-between">
-            <div>
-              <PufferblowBrand
-                size={72}
-                subtitle="Create an account on your instance"
-                surfaceColor="var(--color-surface)"
-                className="flex-col items-start gap-5"
-                titleClassName="text-5xl"
-                subtitleClassName="text-[11px]"
-              />
-              <div className="mt-10 max-w-xl space-y-5">
-                <h1 className="text-4xl font-semibold tracking-[-0.05em] text-[var(--color-text)]">
-                  Start with a quieter interface and your own home instance.
-                </h1>
-                <p className="text-lg leading-8 text-[var(--color-text-secondary)]">
-                  Create your account, save your instance address once, and move straight into
-                  channels, members, and settings that stay visually calm.
-                </p>
-              </div>
+      <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-10 sm:px-6 lg:px-8">
+        <section className="w-full rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 sm:p-8">
+          <div className="mb-8">
+            <PufferblowBrand
+              size={56}
+              subtitle="Create an account on your instance"
+              surfaceColor="var(--color-surface)"
+              className="flex-col items-center gap-4"
+              align="center"
+              textClassName="items-center"
+            />
+          </div>
+
+          <div className="mb-8">
+            <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[var(--color-text)]">
+              Create account
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
+              Sign up on your home instance and we’ll sign you in immediately after setup.
+            </p>
+          </div>
+
+          {error ? (
+            <div className="mb-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
+              {error}
             </div>
+          ) : null}
 
-            <div className="grid gap-3 text-sm text-[var(--color-text-secondary)] sm:grid-cols-3">
-              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
-                Immediate sign-in after signup
-              </div>
-              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
-                Shared theme presets
-              </div>
-              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-4">
-                Instance-aware account flow
-              </div>
+          {signupSuccess ? (
+            <div className="mb-5 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
+              Account created. Redirecting now.
             </div>
-          </section>
+          ) : null}
 
-          <section className="rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 sm:p-8">
-            <div className="mb-8 lg:hidden">
-              <PufferblowBrand
-                size={56}
-                subtitle="Create an account on your instance"
-                surfaceColor="var(--color-surface)"
-                className="flex-col items-center gap-4"
-                align="center"
-                textClassName="items-center"
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <Input
+              id="username"
+              name="username"
+              autoComplete="username"
+              label="Username"
+              placeholder="Choose a username"
+              disabled={isSubmitting}
+              fullWidth
+              required
+            />
 
-            <div className="mb-8">
-              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[var(--color-text)]">
-                Create account
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-                Sign up on your home instance and we’ll sign you in immediately after setup.
-              </p>
-            </div>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              label="Password"
+              helperText="Use at least 8 characters."
+              placeholder="Create a password"
+              disabled={isSubmitting}
+              fullWidth
+              required
+            />
 
-            {error ? (
-              <div className="mb-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
-                {error}
-              </div>
-            ) : null}
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              label="Confirm password"
+              placeholder="Repeat your password"
+              disabled={isSubmitting}
+              fullWidth
+              required
+            />
 
-            {signupSuccess ? (
-              <div className="mb-5 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-background)] px-4 py-3 text-sm text-[var(--color-text)]">
-                Account created. Redirecting now.
-              </div>
-            ) : null}
+            <Input
+              id="hostPort"
+              name="hostPort"
+              label="Home Instance"
+              placeholder="localhost:7575, https://pb.example, or chat.example.com"
+              disabled={isSubmitting}
+              fullWidth
+              required
+            />
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <Input
-                id="username"
-                name="username"
-                autoComplete="username"
-                label="Username"
-                placeholder="Choose a username"
+            <label className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+              <input
+                id="remember-me"
+                name="remember-me"
+                type="checkbox"
                 disabled={isSubmitting}
-                fullWidth
-                required
+                className="h-4 w-4 rounded border border-[var(--color-border)] bg-[var(--color-background)]"
               />
+              Remember this session on this device
+            </label>
 
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                label="Password"
-                helperText="Use at least 8 characters."
-                placeholder="Create a password"
-                disabled={isSubmitting}
-                fullWidth
-                required
-              />
+            <Button
+              type="submit"
+              fullWidth
+              size="lg"
+              loading={isLoading}
+              disabled={signupSuccess}
+            >
+              {signupSuccess ? "Redirecting..." : "Create account"}
+            </Button>
 
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                label="Confirm password"
-                placeholder="Repeat your password"
-                disabled={isSubmitting}
-                fullWidth
-                required
-              />
+            <p className="text-center text-xs text-[var(--color-text-muted)]">
+              {signupSuccess
+                ? "Your account is ready on this home instance."
+                : "You’ll be signed in automatically once the account is created."}
+            </p>
+          </form>
 
-              <Input
-                id="hostPort"
-                name="hostPort"
-                label="Home Instance"
-                placeholder="localhost:7575, https://pb.example, or chat.example.com"
-                disabled={isSubmitting}
-                fullWidth
-                required
-              />
-
-              <label className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  disabled={isSubmitting}
-                  className="h-4 w-4 rounded border border-[var(--color-border)] bg-[var(--color-background)]"
-                />
-                Remember this session on this device
-              </label>
-
-              <Button
-                type="submit"
-                fullWidth
-                size="lg"
-                loading={isLoading}
-                disabled={signupSuccess}
+          <div className="mt-8 border-t border-[var(--color-border-secondary)] pt-6 text-center text-sm text-[var(--color-text-secondary)]">
+            <p>
+              Already have an account?{" "}
+              <Link
+                to={buildSiblingAuthLink(
+                  "/login",
+                  new URLSearchParams(location.search).get("redirect"),
+                )}
+                className="text-[var(--color-text)] underline decoration-[var(--color-border)] underline-offset-4 transition-colors hover:text-[var(--color-text-secondary)]"
               >
-                {signupSuccess ? "Redirecting..." : "Create account"}
-              </Button>
-
-              <p className="text-center text-xs text-[var(--color-text-muted)]">
-                {signupSuccess
-                  ? "Your account is ready on this home instance."
-                  : "You’ll be signed in automatically once the account is created."}
-              </p>
-            </form>
-
-            <div className="mt-8 border-t border-[var(--color-border-secondary)] pt-6 text-center text-sm text-[var(--color-text-secondary)]">
-              <p>
-                Already have an account?{" "}
-                <Link
-                  to={buildSiblingAuthLink(
-                    "/login",
-                    new URLSearchParams(location.search).get("redirect"),
-                  )}
-                  className="text-[var(--color-text)] underline decoration-[var(--color-border)] underline-offset-4 transition-colors hover:text-[var(--color-text-secondary)]"
-                >
-                  Sign in
-                </Link>
-              </p>
-            </div>
-          </section>
-        </div>
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </section>
       </div>
     </div>
   );
