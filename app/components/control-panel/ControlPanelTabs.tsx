@@ -51,6 +51,7 @@ import {
   RoleBadgeList,
 } from "./RoleManagement";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Notice } from "../ui/Notice";
 import { renderFileTypeIcon } from "../../utils/fileTypeMeta";
 
 ChartJS.register(
@@ -3135,8 +3136,8 @@ export function SettingsTab({
         <h2 className="mb-6 text-lg font-medium text-[var(--color-text)]">Server Settings</h2>
 
         {error && (
-          <div className="mb-4 rounded border p-3 text-sm text-[var(--color-error)]" style={{ backgroundColor: 'color-mix(in srgb, var(--color-error) 12%, transparent)', borderColor: 'color-mix(in srgb, var(--color-error) 35%, transparent)' }}>
-            {error}
+          <div className="mb-4">
+            <Notice tone="error" message={error} />
           </div>
         )}
 
@@ -4790,7 +4791,9 @@ export function ModerationTab({
               <div className="text-center text-[var(--color-text-secondary)] py-8">Loading reports…</div>
             )}
             {reportsError && !reportsLoading && (
-              <div className="text-center text-[var(--color-error)] py-8">{reportsError}</div>
+              <div className="py-4">
+                <Notice tone="error" message={reportsError} />
+              </div>
             )}
             {!reportsLoading && !reportsError && (
               <div className="space-y-4">
