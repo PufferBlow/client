@@ -62,9 +62,13 @@ const StatusBadge = ({ status }: { status: string }) => (
 
 const DirectionIcon = ({ isSender }: { isSender: boolean }) =>
   isSender ? (
-    <Send size={12} className="shrink-0 text-[var(--color-info)]" title="Sent" />
+    <span title="Sent" className="inline-flex">
+      <Send size={12} className="shrink-0 text-[var(--color-info)]" aria-label="Sent" />
+    </span>
   ) : (
-    <Bell size={12} className="shrink-0 text-[var(--color-warning)]" title="Received" />
+    <span title="Received" className="inline-flex">
+      <Bell size={12} className="shrink-0 text-[var(--color-warning)]" aria-label="Received" />
+    </span>
   );
 
 function PingRow({

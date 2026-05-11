@@ -58,9 +58,6 @@ export {
   getBackgroundTaskStatuses,
   runBackgroundTask
 } from './backgroundTasks';
-export type {
-  BackgroundTask
-} from './backgroundTasks';
 
 // System Statistics & Charts
 export {
