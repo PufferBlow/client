@@ -11,9 +11,31 @@ interface Device {
 interface DeviceSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Called after the user clicks Apply and the new device selections have been
+   * persisted. Useful for parent components that want to re-route live audio
+   * (e.g. call `setSinkId` on currently-playing `<audio>` elements). Other
+   * subscribers can listen for the global `pufferblow:audio-devices-changed`
+   * event instead.
+   */
+  onApply?: (selection: { inputDeviceId: string; outputDeviceId: string }) => void;
 }
 
-export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProps) {
+/**
+ * Shape of the audio-settings blob persisted at `pufferblow-audio-settings`.
+ * Kept partial because the settings page writes additional fields beyond
+ * device IDs; this modal only owns the two device selections.
+ */
+interface PersistedAudioSettings {
+  selectedInputDevice?: string;
+  selectedOutputDevice?: string;
+  [key: string]: unknown;
+}
+
+const AUDIO_SETTINGS_STORAGE_KEY = 'pufferblow-audio-settings';
+const AUDIO_DEVICES_CHANGED_EVENT = 'pufferblow:audio-devices-changed';
+
+export function DeviceSelectorModal({ isOpen, onClose, onApply }: DeviceSelectorModalProps) {
   const showToast = useToast();
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedMic, setSelectedMic] = useState<string>('');
@@ -23,6 +45,27 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
   useEffect(() => {
     if (isOpen) {
       handleGetDevices();
+    }
+  }, [isOpen]);
+
+  /**
+   * Hydrate selections from persisted settings whenever the modal opens, so the
+   * UI matches the device IDs that will actually be used by the next audio
+   * session. Falls back to the system defaults computed in `handleGetDevices`.
+   */
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as PersistedAudioSettings;
+      if (stored.selectedInputDevice) setSelectedMic(stored.selectedInputDevice);
+      if (stored.selectedOutputDevice) setSelectedHeadphones(stored.selectedOutputDevice);
+    } catch (error) {
+      // Corrupt JSON shouldn't break the modal; we just fall back to defaults.
+      console.warn('DeviceSelectorModal: failed to read persisted audio settings', error);
     }
   }, [isOpen]);
 
@@ -57,10 +100,43 @@ export function DeviceSelectorModal({ isOpen, onClose }: DeviceSelectorModalProp
   const mics = devices.filter(d => d.kind === 'audioinput');
   const headphones = devices.filter(d => d.kind === 'audiooutput');
 
+  /**
+   * Persist the selected device IDs into the shared audio-settings blob and
+   * broadcast a `pufferblow:audio-devices-changed` event so live components
+   * (call audio elements, the settings page, etc.) can re-route output and
+   * pick up the new input device on the next `getUserMedia` call.
+   *
+   * Storage and event surface match the contract already used by
+   * `useSettingsAudio`, so the two UIs stay consistent.
+   */
   const handleApply = () => {
-    // TODO: Actually set the selected devices for audio
-    console.log('Selected mic:', selectedMic);
-    console.log('Selected headphones:', selectedHeadphones);
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+        const previous: PersistedAudioSettings = raw ? JSON.parse(raw) : {};
+        const next: PersistedAudioSettings = {
+          ...previous,
+          selectedInputDevice: selectedMic,
+          selectedOutputDevice: selectedHeadphones,
+        };
+        window.localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+        window.dispatchEvent(
+          new CustomEvent(AUDIO_DEVICES_CHANGED_EVENT, {
+            detail: {
+              inputDeviceId: selectedMic,
+              outputDeviceId: selectedHeadphones,
+            },
+          }),
+        );
+      } catch (error) {
+        console.error('DeviceSelectorModal: failed to persist audio device selection', error);
+        showToast('Could not save audio device selection.', 'error');
+        return;
+      }
+    }
+
+    onApply?.({ inputDeviceId: selectedMic, outputDeviceId: selectedHeadphones });
+    showToast('Audio devices updated.', 'success');
     onClose();
   };
 
