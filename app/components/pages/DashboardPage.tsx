@@ -1682,11 +1682,82 @@ export default function Dashboard() {
     logger.ui.debug("Emoji added to message", { emoji });
   };
 
-  const handleGifSelect = (gif: { url: string; title: string }) => {
-    // For now, just log the GIF selection - in a real app you'd send this to the message
+  /**
+   * Send the selected GIF as a one-click message. We post the GIF URL wrapped
+   * in markdown image syntax so ReactMarkdown renders it inline in the
+   * message stream without any additional renderer plumbing. The picker is
+   * closed before the network call so the UI feels responsive even if the
+   * send is slow; failures surface via toast.
+   */
+  const handleGifSelect = async (gif: { url: string; title: string }) => {
     logger.ui.info("GIF selected", { gifUrl: gif.url, gifTitle: gif.title });
     setIsEmojiPickerOpen(false);
-    // TODO: Implement GIF sending functionality
+
+    if (!selectedChannel) {
+      showToast({
+        message: "Pick a channel before sending a GIF.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+
+    const authToken = getAuthTokenFromCookies() || "";
+    if (!authToken) {
+      showToast({
+        message: "You don't appear to be signed in — can't send the GIF.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    const resolvedInstance =
+      resolveStoredInstance(getHostPortFromStorage()) ??
+      resolveStoredInstance(getHostPortFromCookies());
+    if (!resolvedInstance) {
+      showToast({
+        message: "No home instance configured. Connect to an instance first.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    // Markdown image: ReactMarkdown's default `img` element renders the GIF
+    // inline. Sanitize the alt text so a stray `]` can't break the syntax.
+    const safeTitle = (gif.title || "GIF").replace(/[\[\]]/g, "");
+    const content = `![${safeTitle}](${gif.url})`;
+
+    try {
+      const response = await sendMessage(
+        resolvedInstance.raw,
+        selectedChannel.channel_id,
+        { content, sentAt: new Date().toISOString() },
+        authToken,
+      );
+
+      if (!response.success) {
+        showToast({
+          message: `Failed to send GIF: ${response.error || "Unknown error"}`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+
+      const createdMessage = response.data?.message_data;
+      if (createdMessage) {
+        appendUniqueMessage(createdMessage);
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error sending GIF", { error });
+      showToast({
+        message: "An unexpected error occurred while sending the GIF.",
+        tone: "error",
+        category: "system",
+      });
+    }
   };
 
   const handleUserClick = async (userId: string, username: string, event: React.MouseEvent, tooltipSource?: 'userpanel' | 'members' | 'messages') => {
