@@ -28,6 +28,8 @@ import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
 import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
+import { rememberAccount } from "../../services/accounts";
+import { AccountSwitcher } from "../../components/AccountSwitcher";
 import type { MessageReaction } from "../../models/Message";
 import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
 import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
@@ -256,6 +258,31 @@ export default function Dashboard() {
   // `currentMenuMessageId` alone for this because that ID lingers after the
   // context menu closes and the picker is also opened from the input toolbar.
   const [reactionTargetMessageId, setReactionTargetMessageId] = useState<string | null>(null);
+
+  // Remember the active identity in the multi-account registry whenever we
+  // have a fresh (currentUser, authToken, hostPort) triple. `rememberAccount`
+  // is idempotent on `${hostPort}::${userId}`, so this no-ops for return
+  // visits and refreshes username/avatar/token on every sign-in.
+  useEffect(() => {
+    if (!currentUser?.user_id) return;
+    const authToken = getAuthTokenFromCookies();
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+    try {
+      rememberAccount({
+        hostPort,
+        userId: currentUser.user_id,
+        username: currentUser.username || "",
+        authToken,
+        avatarUrl: currentUser.avatar || null,
+        status: currentUserLiveStatus,
+      });
+    } catch (error) {
+      logger.ui.warn("Failed to record account in switcher registry", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [currentUser?.user_id, currentUser?.username, currentUser?.avatar, currentUserLiveStatus]);
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -2587,7 +2614,14 @@ export default function Dashboard() {
         </div>
 
         {currentUser && (
-          <div className="w-full">
+          <div className="w-full space-y-2">
+            <AccountSwitcher
+              currentDisplay={{
+                username: currentUser.username,
+                avatarUrl: currentUser.avatar,
+                hostPort: getHostPortFromStorage() || getHostPortFromCookies() || undefined,
+              }}
+            />
             <UserPanel
               username={currentUser.username || ''}
               avatar={currentUser.avatar || ''}
