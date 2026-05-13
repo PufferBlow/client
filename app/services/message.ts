@@ -177,6 +177,48 @@ export const removeReaction = async (
   );
 };
 
+/**
+ * Server-side response shape for the channel /search endpoint.
+ */
+export interface ChannelSearchResponse {
+  status_code: number;
+  messages: Message[];
+  query: string;
+  scanned: number;
+  truncated_scan: boolean;
+}
+
+/**
+ * Search a channel for messages containing the given substring (case-
+ * insensitive). The server decrypts and scans up to `scan_limit` recent
+ * messages and returns up to `limit` matches, newest first. `truncated_scan`
+ * is true when the channel has more history than the scan window covers.
+ */
+export const searchChannelMessages = async (
+  hostPort: string,
+  channelId: string,
+  query: string,
+  authToken: string,
+  options: { limit?: number; scanLimit?: number } = {},
+): Promise<ApiResponse<ChannelSearchResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  const params: Record<string, string> = {
+    auth_token: authToken,
+    q: query,
+  };
+  if (options.limit !== undefined) params.limit = String(options.limit);
+  if (options.scanLimit !== undefined) params.scan_limit = String(options.scanLimit);
+
+  return apiClient.get<ChannelSearchResponse>(
+    `/api/v1/channels/${channelId}/search`,
+    params,
+  );
+};
+
+/**
+ * @deprecated Kept for older callers; the global dashboard search still calls
+ * this. New code should use `searchChannelMessages` against a specific channel.
+ */
 export const searchMessages = async (_hostPort: string, _query: string, _authToken: string): Promise<ApiResponse<SearchResult[]>> => {
   return unsupportedMessageOperation<SearchResult[]>('Message search');
 };

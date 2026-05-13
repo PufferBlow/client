@@ -10,6 +10,12 @@ interface SearchResult {
   content?: string;
   timestamp?: string;
   avatar?: string;
+  /**
+   * Channel containing this result. Required for message-type results so the
+   * selection handler can jump to the right channel — including hits that
+   * came from the server-side scan and aren't in the local message cache.
+   */
+  channel_id?: string;
 }
 
 interface SearchModalProps {

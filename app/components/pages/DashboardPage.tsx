@@ -27,7 +27,7 @@ import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
-import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, sendMessage } from "../../services/message";
+import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
 import type { MessageReaction } from "../../models/Message";
 import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
 import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
@@ -646,9 +646,13 @@ export default function Dashboard() {
 
   const handleSearch = async (query: string) => {
     const q = query.toLowerCase();
-    const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string }> = [];
+    const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string; channel_id?: string }> = [];
 
-    // Search messages
+    // Track message IDs already emitted so the server-side hits don't
+    // duplicate the locally-cached matches.
+    const seenMessageIds = new Set<string>();
+
+    // Search messages that are already loaded in memory (cheap, instant).
     for (const message of messages) {
       if (message.message?.toLowerCase().includes(q)) {
         const channel = channels.find(c => c.channel_id === message.channel_id);
@@ -660,6 +664,61 @@ export default function Dashboard() {
           subtitle: channel ? `#${channel.channel_name}` : undefined,
           content: message.message,
           timestamp: message.sent_at,
+          channel_id: message.channel_id || undefined,
+        });
+        seenMessageIds.add(message.message_id);
+      }
+    }
+
+    // Hit the server's scan-capped search for the currently-selected channel.
+    // This picks up matches outside the locally-cached page. Skip when the
+    // query is too short for the server (min 2 chars) or when no channel is
+    // active. Failures are non-fatal — local results still display.
+    const authToken = getAuthTokenFromCookies() || '';
+    const resolvedInstance =
+      resolveStoredInstance(getHostPortFromStorage()) ??
+      resolveStoredInstance(getHostPortFromCookies());
+    if (
+      selectedChannel &&
+      authToken &&
+      resolvedInstance &&
+      query.trim().length >= 2
+    ) {
+      try {
+        const response = await searchChannelMessages(
+          resolvedInstance.raw,
+          selectedChannel.channel_id,
+          query.trim(),
+          authToken,
+        );
+        if (response.success && response.data?.messages) {
+          for (const message of response.data.messages) {
+            if (seenMessageIds.has(message.message_id)) continue;
+            // Server-side hits all belong to the channel we searched against.
+            const resultChannelId = message.channel_id || selectedChannel.channel_id;
+            const channel = channels.find(c => c.channel_id === resultChannelId);
+            const sender = usersById.get(message.sender_user_id);
+            results.push({
+              id: message.message_id,
+              type: "message",
+              title: sender?.username || message.username || "Unknown User",
+              subtitle: channel ? `#${channel.channel_name}` : undefined,
+              content: message.message,
+              timestamp: message.sent_at,
+              channel_id: resultChannelId,
+            });
+            seenMessageIds.add(message.message_id);
+          }
+        } else if (!response.success) {
+          logger.network.warn("Server-side channel search failed", {
+            channelId: selectedChannel.channel_id,
+            error: response.error,
+          });
+        }
+      } catch (error) {
+        logger.network.warn("Server-side channel search threw", {
+          channelId: selectedChannel.channel_id,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -698,7 +757,13 @@ export default function Dashboard() {
       const channel = channels.find(c => c.channel_id === result.id);
       if (channel) void handleChannelSelect(channel);
     } else if (result?.type === 'message') {
-      const channel = channels.find(c => messages.some(m => m.message_id === result.id && m.channel_id === c.channel_id));
+      // Prefer the channel_id the result was tagged with — this catches
+      // server-side hits whose message isn't yet in the local cache. Fall
+      // back to scanning loaded messages for backward compatibility.
+      const channelId =
+        result.channel_id ||
+        channels.find(c => messages.some(m => m.message_id === result.id && m.channel_id === c.channel_id))?.channel_id;
+      const channel = channelId ? channels.find(c => c.channel_id === channelId) : undefined;
       if (channel) void handleChannelSelect(channel);
     }
   };
