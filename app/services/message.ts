@@ -1,6 +1,6 @@
 import type { ApiResponse } from './apiClient';
 import { createApiClient } from './apiClient';
-import type { Message } from '../models';
+import type { Message, MessageReaction } from '../models';
 
 export interface Attachment {
   id: string;
@@ -10,10 +10,18 @@ export interface Attachment {
   type: string;
 }
 
-export interface Reaction {
+export type Reaction = MessageReaction;
+
+export interface ReactionMutationResponse {
+  status_code: number;
+  message_id: string;
+  channel_id: string;
   emoji: string;
-  count: number;
-  userIds: string[];
+  reactions: MessageReaction[];
+  /** Set when add was a no-op (user already reacted with this emoji). */
+  already_present?: boolean;
+  /** Set when remove was a no-op (user hadn't reacted with this emoji). */
+  already_absent?: boolean;
 }
 
 export interface SendMessageRequest {
@@ -136,12 +144,37 @@ export const deleteMessage = async (
   });
 };
 
-export const addReaction = async (_hostPort: string, _messageId: string, _emoji: string, _authToken: string): Promise<ApiResponse<void>> => {
-  return unsupportedMessageOperation<void>('Message reactions');
+export const addReaction = async (
+  hostPort: string,
+  channelId: string,
+  messageId: string,
+  emoji: string,
+  authToken: string,
+): Promise<ApiResponse<ReactionMutationResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  // FastAPI route takes auth_token + emoji as query params; assemble them into
+  // the URL because `apiClient.post` doesn't accept a params object.
+  const query = new URLSearchParams({ auth_token: authToken, emoji }).toString();
+  return apiClient.post<ReactionMutationResponse>(
+    `/api/v1/channels/${channelId}/messages/${messageId}/reactions?${query}`,
+  );
 };
 
-export const removeReaction = async (_hostPort: string, _messageId: string, _emoji: string, _authToken: string): Promise<ApiResponse<void>> => {
-  return unsupportedMessageOperation<void>('Message reactions');
+export const removeReaction = async (
+  hostPort: string,
+  channelId: string,
+  messageId: string,
+  emoji: string,
+  authToken: string,
+): Promise<ApiResponse<ReactionMutationResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.delete<ReactionMutationResponse>(
+    `/api/v1/channels/${channelId}/messages/${messageId}/reactions`,
+    {
+      auth_token: authToken,
+      emoji,
+    },
+  );
 };
 
 export const searchMessages = async (_hostPort: string, _query: string, _authToken: string): Promise<ApiResponse<SearchResult[]>> => {

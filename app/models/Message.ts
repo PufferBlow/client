@@ -14,6 +14,18 @@ export interface MessageAttachment {
   size: number | null;
 }
 
+/** Aggregated reactions to a message, grouped by emoji. */
+export interface MessageReaction {
+  /** The emoji (1-32 chars; may be multi-codepoint, e.g. skin tone or flag) */
+  emoji: string;
+  /** Number of distinct users who applied this emoji */
+  count: number;
+  /** Whether the viewer is one of the users who applied this emoji */
+  viewer_reacted: boolean;
+  /** Full list of users who applied this emoji (newest API: present, older: empty) */
+  user_ids?: string[];
+}
+
 export interface Message {
   /** Unique identifier for the message */
   message_id: string;
@@ -62,4 +74,7 @@ export interface Message {
 
   /** List of detailed attachment objects (optional) */
   attachments?: MessageAttachment[];
+
+  /** Aggregated reactions to this message (one entry per distinct emoji) */
+  reactions?: MessageReaction[];
 }

@@ -27,7 +27,8 @@ import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
-import { getMessageReadHistory, loadMessages, markMessageAsRead, sendMessage } from "../../services/message";
+import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, sendMessage } from "../../services/message";
+import type { MessageReaction } from "../../models/Message";
 import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
 import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
 import { listUsers, type ListUsersResponse } from "../../services/user";
@@ -249,6 +250,12 @@ export default function Dashboard() {
     currentUserPrivileges.includes("manage_server_settings");
   const canDeleteServer =
     currentUser?.is_owner || currentUserPrivileges.includes("manage_server_settings");
+
+  // Tracks whether the emoji picker is currently aimed at the message input
+  // (default) or at adding a reaction to a specific message. We can't reuse
+  // `currentMenuMessageId` alone for this because that ID lingers after the
+  // context menu closes and the picker is also opened from the input toolbar.
+  const [reactionTargetMessageId, setReactionTargetMessageId] = useState<string | null>(null);
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -727,9 +734,72 @@ export default function Dashboard() {
     });
   };
 
+  /**
+   * Apply a specific emoji as a reaction to a message. Optimistically updates
+   * the local reactions state so the pill appears instantly, then reconciles
+   * with the server's authoritative summary in the response. Removing a
+   * reaction the viewer already applied is the same call path (toggle).
+   */
+  const applyReactionToMessage = useCallback(
+    async (messageId: string, emoji: string) => {
+      const authToken = getAuthTokenFromCookies() || '';
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+
+      if (!authToken || !hostPort) {
+        showToast({
+          message: "Couldn't add reaction — you don't appear to be signed in.",
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+
+      const targetMessage = getMessageById(messageId);
+      if (!targetMessage || !targetMessage.channel_id) {
+        showToast({
+          message: "Couldn't add reaction — message is no longer available.",
+          tone: "error",
+          category: "validation",
+        });
+        return;
+      }
+
+      const channelId = targetMessage.channel_id;
+      const viewerAlreadyReacted = (targetMessage.reactions || []).some(
+        (entry) => entry.emoji === emoji && entry.viewer_reacted,
+      );
+
+      const response = viewerAlreadyReacted
+        ? await removeReaction(hostPort, channelId, messageId, emoji, authToken)
+        : await addReaction(hostPort, channelId, messageId, emoji, authToken);
+
+      if (!response.success) {
+        showToast({
+          message: `Failed to update reaction: ${response.error || 'Unknown error'}`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+
+      const nextReactions: MessageReaction[] = response.data?.reactions || [];
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === messageId ? { ...m, reactions: nextReactions } : m,
+        ),
+      );
+      logger.ui.debug("Reaction mutation applied", {
+        messageId,
+        emoji,
+        toggleDirection: viewerAlreadyReacted ? "remove" : "add",
+      });
+    },
+    [getMessageById, setMessages, showToast],
+  );
+
   const handleMessageReact = (messageId: string) => {
     logger.ui.debug("Reaction action selected", { messageId });
-    // TODO: Implement reaction functionality
+    setReactionTargetMessageId(messageId);
   };
 
   const handleMessageReport = (messageId: string | null) => {
@@ -993,6 +1063,45 @@ export default function Dashboard() {
                 )
               ) {
                 applyPresenceUpdate(message.user_id, message.status);
+                return;
+              }
+
+              // Reaction add/remove broadcasts: every viewer gets the same
+              // payload, so we compute their own `viewer_reacted` locally
+              // against the user_ids list rather than relying on the server.
+              const reactionEvent = (message as { event?: string }).event;
+              if (
+                reactionEvent === "message_reaction_added" ||
+                reactionEvent === "message_reaction_removed"
+              ) {
+                const payload = message as unknown as {
+                  message_id?: string;
+                  channel_id?: string;
+                  reactions?: Array<{
+                    emoji: string;
+                    count: number;
+                    user_ids?: string[];
+                  }>;
+                };
+                if (!payload.message_id || !payload.reactions) {
+                  return;
+                }
+                const viewerId = currentUserIdRef.current;
+                const nextReactions: MessageReaction[] = payload.reactions.map(
+                  (entry) => ({
+                    emoji: entry.emoji,
+                    count: entry.count,
+                    viewer_reacted: Boolean(viewerId && (entry.user_ids || []).includes(viewerId)),
+                    user_ids: entry.user_ids,
+                  }),
+                );
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.message_id === payload.message_id
+                      ? { ...m, reactions: nextReactions }
+                      : m,
+                  ),
+                );
                 return;
               }
 
@@ -1557,6 +1666,17 @@ export default function Dashboard() {
   };
 
   const handleEmojiSelect = (emoji: string) => {
+    // Picker has two roles: insertion into the message input, or applying a
+    // reaction to a specific message. The reaction target is set just before
+    // the picker is opened from the message context menu (see onReact below).
+    if (reactionTargetMessageId) {
+      const targetId = reactionTargetMessageId;
+      setReactionTargetMessageId(null);
+      setIsEmojiPickerOpen(false);
+      void applyReactionToMessage(targetId, emoji);
+      return;
+    }
+
     setMessageInput(prev => prev + emoji);
     setIsEmojiPickerOpen(false);
     logger.ui.debug("Emoji added to message", { emoji });
@@ -2583,6 +2703,31 @@ export default function Dashboard() {
                             {message.attachments && message.attachments.length > 0 && (
                               <AttachmentGrid attachments={message.attachments} />
                             )}
+
+                            {/* Reaction pills — clicking a pill toggles the viewer's reaction. */}
+                            {message.reactions && message.reactions.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {message.reactions.map((reaction) => (
+                                  <button
+                                    key={reaction.emoji}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void applyReactionToMessage(message.message_id, reaction.emoji);
+                                    }}
+                                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                                      reaction.viewer_reacted
+                                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                                        : "border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+                                    }`}
+                                    aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.viewer_reacted ? ", you reacted" : ""}`}
+                                  >
+                                    <span>{reaction.emoji}</span>
+                                    <span>{reaction.count}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -2828,7 +2973,13 @@ export default function Dashboard() {
           {/* Emoji Picker */}
           <EmojiPicker
             isOpen={isEmojiPickerOpen}
-            onClose={() => setIsEmojiPickerOpen(false)}
+            onClose={() => {
+              setIsEmojiPickerOpen(false);
+              // If the user dismissed the picker without choosing an emoji we
+              // must drop the reaction intent, otherwise the next message-input
+              // emoji selection would accidentally fire a reaction.
+              setReactionTargetMessageId(null);
+            }}
             onEmojiSelect={handleEmojiSelect}
             onGifSelect={handleGifSelect}
           />
@@ -2959,7 +3110,9 @@ export default function Dashboard() {
         onClose={() => setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
         onReply={() => handleMessageReply(currentMenuMessageId)}
         onReact={() => {
-          // Open emoji picker for reactions
+          // Open emoji picker aimed at the message under the context menu.
+          // The picker shares the same component with the message-input flow,
+          // so we mark the intent here via `reactionTargetMessageId`.
           const rect = { left: messageContextMenu.position.x, top: messageContextMenu.position.y, right: messageContextMenu.position.x, bottom: messageContextMenu.position.y };
           const pickerWidth = 320;
           const pickerHeight = 400;
@@ -2982,6 +3135,9 @@ export default function Dashboard() {
             y = gap;
           }
 
+          if (currentMenuMessageId) {
+            setReactionTargetMessageId(currentMenuMessageId);
+          }
           setIsEmojiPickerOpen(true);
           setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } }); // Close context menu
         }}
