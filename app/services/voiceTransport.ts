@@ -3,6 +3,56 @@ import type { RTCMediaQuality } from './system';
 
 const voiceLogger = logger.network;
 
+// Persistence key shared with DeviceSelectorModal / useSettingsAudio.
+// Read on connect (and on every device-change event) so the user's mic +
+// headphones picks actually route audio.
+const AUDIO_SETTINGS_STORAGE_KEY = 'pufferblow-audio-settings';
+const AUDIO_DEVICES_CHANGED_EVENT = 'pufferblow:audio-devices-changed';
+
+interface PersistedAudioSelections {
+  inputDeviceId: string | null;
+  outputDeviceId: string | null;
+}
+
+/**
+ * Read the persisted audio-device selections from localStorage. Returns
+ * (null, null) outside the browser, when storage is empty, or when the
+ * payload is malformed. Tolerates schema drift (the settings page writes
+ * additional fields beyond these two device IDs).
+ */
+function readAudioDeviceSelections(): PersistedAudioSelections {
+  if (typeof window === 'undefined') return { inputDeviceId: null, outputDeviceId: null };
+  try {
+    const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+    if (!raw) return { inputDeviceId: null, outputDeviceId: null };
+    const parsed = JSON.parse(raw) as {
+      selectedInputDevice?: string;
+      selectedOutputDevice?: string;
+    };
+    return {
+      inputDeviceId: parsed.selectedInputDevice?.trim() || null,
+      outputDeviceId: parsed.selectedOutputDevice?.trim() || null,
+    };
+  } catch {
+    return { inputDeviceId: null, outputDeviceId: null };
+  }
+}
+
+/**
+ * HTMLAudioElement.setSinkId is Chromium-only at time of writing and not
+ * yet on the static lib.dom.d.ts. The check at the call site protects
+ * Firefox / Safari from a TypeError; this helper just types it.
+ */
+type AudioElementWithSinkId = HTMLAudioElement & {
+  setSinkId?: (sinkId: string) => Promise<void>;
+};
+
+const AUDIO_DEVICE_CHANGE_PAYLOAD_KEY = 'detail';
+interface AudioDeviceChangeDetail {
+  inputDeviceId?: string;
+  outputDeviceId?: string;
+}
+
 export type VoiceTransportState =
   | 'idle'
   | 'connecting'
@@ -76,6 +126,15 @@ export class VoiceTransport {
   private pendingTrackQueue: string[] = [];
   // userId → HTMLAudioElement mapping (populated as tracks arrive)
   private userAudioMap = new Map<string, HTMLAudioElement>();
+  // Active audio device selections (mirrored from localStorage on connect
+  // and updated by the device-change listener). Held here so we don't
+  // have to re-read storage on every remote-track event.
+  private currentInputDeviceId: string | null = null;
+  private currentOutputDeviceId: string | null = null;
+  // Unsubscribe handle for the window-level device-change listener.
+  // Cleared on disconnect so re-connecting the transport doesn't stack
+  // subscriptions.
+  private deviceChangeUnsub: (() => void) | null = null;
 
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
@@ -129,18 +188,142 @@ export class VoiceTransport {
     if (this.localStream) return;
 
     const audioSettings = this.mediaQuality?.audio;
+    const { inputDeviceId, outputDeviceId } = readAudioDeviceSelections();
+    this.currentInputDeviceId = inputDeviceId;
+    this.currentOutputDeviceId = outputDeviceId;
+
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: audioSettings?.sample_rate_hz,
+      channelCount: audioSettings?.stereo_enabled
+        ? Math.max(audioSettings.channels, 2)
+        : audioSettings?.channels,
+    };
+    // Honor the mic picked in DeviceSelectorModal / settings. Without this
+    // the browser silently uses the system default and the device picker
+    // becomes a lie.
+    if (inputDeviceId) {
+      audioConstraints.deviceId = { exact: inputDeviceId };
+    }
+
     this.localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: audioSettings?.sample_rate_hz,
-        channelCount: audioSettings?.stereo_enabled
-          ? Math.max(audioSettings.channels, 2)
-          : audioSettings?.channels,
-      },
+      audio: audioConstraints,
       video: false,
     });
+  }
+
+  /**
+   * Apply the persisted output deviceId to a freshly-created remote audio
+   * element. Silently skipped when the browser doesn't expose setSinkId
+   * (Firefox, Safari pre-17) — those ship with system-default-only behavior.
+   */
+  private async applyOutputSinkId(audio: HTMLAudioElement): Promise<void> {
+    const sinkId = this.currentOutputDeviceId;
+    if (!sinkId) return;
+    const sinkable = audio as AudioElementWithSinkId;
+    if (typeof sinkable.setSinkId !== 'function') return;
+    try {
+      await sinkable.setSinkId(sinkId);
+    } catch (error) {
+      voiceLogger.warn('voiceTransport: setSinkId failed', {
+        sinkId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Wire up the `pufferblow:audio-devices-changed` event so a user who
+   * changes their mic/headphones mid-call sees audio re-route without
+   * having to leave + rejoin. No-op outside the browser.
+   *
+   * Stores the disposer on `this` so disconnect() can remove the listener
+   * when the call ends — otherwise navigating between channels would
+   * stack up multiple subscriptions on the same VoiceTransport.
+   */
+  private wireDeviceChangeListener(): void {
+    if (typeof window === 'undefined') return;
+    if (this.deviceChangeUnsub) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<AudioDeviceChangeDetail>)[
+        AUDIO_DEVICE_CHANGE_PAYLOAD_KEY
+      ];
+      void this.handleDeviceChange(detail);
+    };
+    window.addEventListener(AUDIO_DEVICES_CHANGED_EVENT, handler);
+    this.deviceChangeUnsub = () => {
+      window.removeEventListener(AUDIO_DEVICES_CHANGED_EVENT, handler);
+    };
+  }
+
+  /**
+   * Live device-swap path. For input changes we re-acquire the mic with
+   * the new deviceId and `replaceTrack` on every active sender so the
+   * peer keeps its connection — no need for an SDP renegotiation. For
+   * output changes we walk every cached audio element and re-apply
+   * `setSinkId`. Failures bubble through onError but don't tear down the
+   * call.
+   */
+  private async handleDeviceChange(
+    detail: AudioDeviceChangeDetail | undefined,
+  ): Promise<void> {
+    const persisted = readAudioDeviceSelections();
+    const nextInput = detail?.inputDeviceId ?? persisted.inputDeviceId;
+    const nextOutput = detail?.outputDeviceId ?? persisted.outputDeviceId;
+
+    if (nextOutput && nextOutput !== this.currentOutputDeviceId) {
+      this.currentOutputDeviceId = nextOutput;
+      await Promise.all(
+        Array.from(this.remoteAudioEls.values()).map((audio) =>
+          this.applyOutputSinkId(audio),
+        ),
+      );
+    }
+
+    if (nextInput && nextInput !== this.currentInputDeviceId && this.pc) {
+      this.currentInputDeviceId = nextInput;
+      try {
+        const audioSettings = this.mediaQuality?.audio;
+        const constraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: audioSettings?.sample_rate_hz,
+          channelCount: audioSettings?.stereo_enabled
+            ? Math.max(audioSettings.channels, 2)
+            : audioSettings?.channels,
+          deviceId: { exact: nextInput },
+        };
+        const nextStream = await navigator.mediaDevices.getUserMedia({
+          audio: constraints,
+          video: false,
+        });
+        const nextTrack = nextStream.getAudioTracks()[0];
+        if (!nextTrack) return;
+        // Inherit the current mute state so swapping mid-call doesn't
+        // accidentally unmute the user.
+        nextTrack.enabled = !this.isMuted;
+        const previousStream = this.localStream;
+        this.localStream = nextStream;
+        await Promise.all(
+          this.pc
+            .getSenders()
+            .filter((sender) => sender.track?.kind === 'audio')
+            .map((sender) => sender.replaceTrack(nextTrack)),
+        );
+        if (previousStream) {
+          for (const track of previousStream.getTracks()) {
+            track.stop();
+          }
+        }
+      } catch (error) {
+        this.emitError(
+          `Failed to switch microphone: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 
   private async applyAudioSenderQuality(pc: RTCPeerConnection): Promise<void> {
@@ -204,6 +387,7 @@ export class VoiceTransport {
 
       const trackId = event.track.id;
       let audio = this.remoteAudioEls.get(trackId);
+      const createdNow = !audio;
       if (!audio) {
         audio = document.createElement('audio');
         audio.autoplay = true;
@@ -212,6 +396,14 @@ export class VoiceTransport {
 
       audio.srcObject = stream;
       audio.muted = this.isDeafened;
+
+      // Route output to the headphones the user picked in
+      // DeviceSelectorModal. Only call setSinkId on first creation —
+      // subsequent track replacements keep the same element so the sink
+      // stays bound.
+      if (createdNow) {
+        void this.applyOutputSinkId(audio);
+      }
 
       // Associate with a userId from the pending queue (FIFO)
       if (this.pendingTrackQueue.length > 0) {
@@ -381,6 +573,7 @@ export class VoiceTransport {
         ?? bootstrap.media_quality?.default_profile
         ?? 'balanced';
       await this.setupLocalAudio();
+      this.wireDeviceChangeListener();
       const pc = this.ensurePeerConnection(bootstrap.ice_servers || []);
       await this.applyAudioSenderQuality(pc);
       const signalingUrl = this.buildSignalingUrl(bootstrap.signaling_url, bootstrap.join_token);
@@ -478,6 +671,12 @@ export class VoiceTransport {
     this.userVolumePrefs.clear();
     this.mediaQuality = null;
     this.activeQualityProfile = 'balanced';
+    this.currentInputDeviceId = null;
+    this.currentOutputDeviceId = null;
+    if (this.deviceChangeUnsub) {
+      this.deviceChangeUnsub();
+      this.deviceChangeUnsub = null;
+    }
 
     this.participants.clear();
     this.emitParticipants();
