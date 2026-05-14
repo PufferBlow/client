@@ -149,7 +149,7 @@ export function DeviceSelectorModal({ isOpen, onClose, onApply }: DeviceSelector
         className="absolute inset-0 bg-[color:color-mix(in_srgb,var(--color-background)_76%,transparent)]"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-lg rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+      <div className="pb-modal relative w-full max-w-lg rounded-[var(--radius-xl)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] p-6">
           <h3 className="flex items-center space-x-3 text-lg font-semibold text-[var(--color-text)]">
@@ -160,7 +160,8 @@ export function DeviceSelectorModal({ isOpen, onClose, onApply }: DeviceSelector
           </h3>
           <button
             onClick={onClose}
-            className="h-9 w-9 rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            className="pb-transition-fast pb-focus-ring flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            aria-label="Close audio devices dialog"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -183,7 +184,7 @@ export function DeviceSelectorModal({ isOpen, onClose, onApply }: DeviceSelector
                 {mics.map((device, index) => (
                   <label
                     key={device.deviceId}
-                    className={`flex cursor-pointer items-center space-x-3 rounded-lg border p-4 transition-colors ${
+                    className={`pb-transition-fast flex cursor-pointer items-center space-x-3 rounded-[var(--radius-md)] border p-4 ${
                       selectedMic === device.deviceId
                         ? 'border-[var(--color-primary)] bg-[var(--color-surface-secondary)]'
                         : 'border-[var(--color-border-secondary)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]'
@@ -237,7 +238,7 @@ export function DeviceSelectorModal({ isOpen, onClose, onApply }: DeviceSelector
                 {headphones.map((device, index) => (
                   <label
                     key={device.deviceId}
-                    className={`flex cursor-pointer items-center space-x-3 rounded-lg border p-4 transition-colors ${
+                    className={`pb-transition-fast flex cursor-pointer items-center space-x-3 rounded-[var(--radius-md)] border p-4 ${
                       selectedHeadphones === device.deviceId
                         ? 'border-[var(--color-accent)] bg-[var(--color-surface-secondary)]'
                         : 'border-[var(--color-border-secondary)] bg-[var(--color-surface)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)]'

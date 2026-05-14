@@ -125,7 +125,7 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left transition-colors hover:bg-[var(--color-hover)]"
+        className="pb-transition pb-focus-ring flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left hover:bg-[var(--color-hover)]"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -140,7 +140,7 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
           ) : null}
         </div>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-[var(--color-text-secondary)] transition-transform ${open ? "rotate-180" : ""}`}
+          className={`pb-transition-fast h-4 w-4 shrink-0 text-[var(--color-text-secondary)] ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         />
       </button>
@@ -148,7 +148,7 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
       {open ? (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-30 mb-2 w-full overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl"
+          className="pb-popover absolute bottom-full left-0 z-30 mb-2 w-full overflow-hidden"
         >
           <ul className="max-h-64 overflow-y-auto py-1">
             {accounts.map((account) => {
@@ -159,11 +159,11 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
                     type="button"
                     onClick={() => handleSwitch(account)}
                     disabled={switching}
-                    className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                    className={`pb-transition-fast flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm disabled:opacity-50 ${
                       isActive
                         ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
                         : "text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-                    } disabled:opacity-50`}
+                    }`}
                     aria-current={isActive ? "true" : undefined}
                   >
                     <div className="min-w-0">
@@ -183,7 +183,7 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
                             handleForget(event as unknown as React.MouseEvent, account);
                           }
                         }}
-                        className="rounded p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-danger)]/15 hover:text-[var(--color-danger)]"
+                        className="pb-transition-fast rounded p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-error)]/15 hover:text-[var(--color-error)]"
                         aria-label={`Forget ${account.username} on ${account.hostPort}`}
                         title={`Forget ${account.username}`}
                       >
@@ -198,7 +198,7 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
           <button
             type="button"
             onClick={handleAddAccount}
-            className="flex w-full items-center gap-2 border-t border-[var(--color-border)] px-3 py-2 text-left text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-hover)]"
+            className="pb-transition-fast flex w-full items-center gap-2 border-t border-[var(--color-border-secondary)] px-3 py-2 text-left text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-hover)]"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             Add another account
