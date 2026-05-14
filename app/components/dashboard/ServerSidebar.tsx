@@ -192,94 +192,63 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
                 <span className="text-sm font-medium">Instance Info</span>
               </button>
 
-              <button
-                onClick={() => {
-                  if (!canCreateInvite) {
-                    return;
-                  }
-                  onServerDropdownAction('invite');
-                  onToggleServerDropdown();
-                }}
-                disabled={!canCreateInvite}
-                className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                  canCreateInvite
-                    ? 'text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                    : 'cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
-                }`}
-                title={
-                  canCreateInvite
-                    ? 'Create invite code'
-                    : userCanCreateInvite
-                      ? 'Invite creation is not available on this single-instance server build'
-                      : 'Only admins, moderators, and owners can create invite codes'
-                }
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="text-sm font-medium">Invites Unavailable</span>
-              </button>
+              {/* Privileged actions: only render when the viewer actually
+                  has the corresponding privilege. Hiding (vs. disabling)
+                  avoids leaking the privilege catalog to non-privileged
+                  users — a long list of greyed-out actions also reads as
+                  "broken" rather than "intentional access boundary." */}
+              {canCreateInvite && (
+                <button
+                  onClick={() => {
+                    onServerDropdownAction('invite');
+                    onToggleServerDropdown();
+                  }}
+                  className="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                  title="Create invite code"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="text-sm font-medium">Create Invite</span>
+                </button>
+              )}
 
-              <Link
-                to="/control-panel"
-                onClick={(event) => {
-                  if (!canAccessControlPanel) {
-                    event.preventDefault();
-                    return;
-                  }
-                  onToggleServerDropdown();
-                }}
-                aria-disabled={!canAccessControlPanel}
-                className={`mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                  canAccessControlPanel
-                    ? 'text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                    : 'pointer-events-none cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
-                }`}
-                title={
-                  canAccessControlPanel
-                    ? 'Access server control panel'
-                    : 'Only server admins and owners can access control panel'
-                }
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="text-sm font-medium">Control Panel</span>
-              </Link>
+              {canAccessControlPanel && (
+                <Link
+                  to="/control-panel"
+                  onClick={onToggleServerDropdown}
+                  className="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                  title="Access server control panel"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="text-sm font-medium">Control Panel</span>
+                </Link>
+              )}
 
-              <div className="my-2 border-t border-[var(--color-border-secondary)]" />
-
-              <button
-                onClick={() => {
-                  if (!canDeleteServer) {
-                    return;
-                  }
-                  const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                  if (confirmed) {
-                    onServerDropdownAction('delete-server');
-                  }
-                  onToggleServerDropdown();
-                }}
-                disabled={!canDeleteServer}
-                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                  canDeleteServer
-                    ? 'text-[var(--color-error)] hover:bg-[var(--color-error)]/12'
-                    : 'cursor-not-allowed text-[var(--color-text-muted)] opacity-60'
-                }`}
-                title={
-                  canDeleteServer
-                    ? 'Delete this server'
-                    : userCanDeleteServer
-                      ? 'Home instance deletion is not available on this single-instance build'
-                      : 'Only server owner can delete the server'
-                }
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span className="text-sm font-medium">Delete Unavailable</span>
-              </button>
+              {canDeleteServer && (
+                <>
+                  <div className="my-2 border-t border-[var(--color-border-secondary)]" />
+                  <button
+                    onClick={() => {
+                      const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                      if (confirmed) {
+                        onServerDropdownAction('delete-server');
+                      }
+                      onToggleServerDropdown();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/12"
+                    title="Delete this server"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span className="text-sm font-medium">Delete Server</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
