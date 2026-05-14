@@ -24,7 +24,68 @@ import type { WebSocketNotificationCreatedMessage } from './websocket';
  */
 interface ElectronBridge {
   focusWindow?: () => void;
+  setUnreadCount?: (count: number) => void;
+  getNotificationsMuted?: () => Promise<boolean>;
+  onNotificationsMutedChanged?: (cb: (muted: boolean) => void) => () => void;
 }
+
+// In-memory mirror of the tray's notifications-muted state. The dashboard
+// subscribes to onNotificationsMutedChanged on mount and updates this
+// flag; dispatchDesktopNotification consults it before showing a toast.
+// Default false in browsers (no tray) so they keep getting notifications.
+let trayNotificationsMuted = false;
+
+/** Update the cached muted state. Called by setNotificationsMuted below
+ * AND by the dashboard's onNotificationsMutedChanged subscription. */
+export const setNotificationsMutedCache = (muted: boolean): void => {
+  trayNotificationsMuted = muted;
+};
+
+/** Read the cached muted state. Exported for tests. */
+export const getNotificationsMutedCache = (): boolean => trayNotificationsMuted;
+
+const getElectronBridge = (): ElectronBridge | undefined => {
+  if (!isBrowser()) return undefined;
+  return (window as unknown as { electron?: ElectronBridge }).electron;
+};
+
+/**
+ * Push the renderer's unread count into the OS tray / dock badge surface
+ * via Electron. No-op in plain browsers.
+ */
+export const setUnreadBadge = (count: number): void => {
+  try {
+    const bridge = getElectronBridge();
+    bridge?.setUnreadCount?.(Math.max(0, Math.floor(count)));
+  } catch (error) {
+    logger.ui.debug('desktopNotifications: setUnreadCount IPC unavailable', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+/**
+ * Wire up to the Electron tray's notifications-muted toggle. Returns a
+ * disposer or a no-op when the bridge is absent (web build). The cache is
+ * primed synchronously via the returned-promise so the dashboard knows
+ * the current state before the first WS event arrives.
+ */
+export const subscribeNotificationsMuted = (
+  onChange?: (muted: boolean) => void,
+): (() => void) => {
+  const bridge = getElectronBridge();
+  if (!bridge?.onNotificationsMutedChanged) {
+    return () => {};
+  }
+  bridge.getNotificationsMuted?.().then((muted) => {
+    setNotificationsMutedCache(muted);
+    onChange?.(muted);
+  });
+  return bridge.onNotificationsMutedChanged((muted) => {
+    setNotificationsMutedCache(muted);
+    onChange?.(muted);
+  });
+};
 
 /**
  * Per-notification rendering context the caller provides at dispatch time.
@@ -120,6 +181,16 @@ export const dispatchDesktopNotification = (
 
   const notification = message.notification;
   if (!notification) return null;
+
+  // User toggled notifications off from the Electron tray; respect that
+  // even when the page is in the background. Browsers default to "not
+  // muted" because they have no tray surface to drive the cache.
+  if (trayNotificationsMuted) {
+    logger.ui.debug('desktopNotifications: suppressed (tray muted)', {
+      notification_id: notification.notification_id,
+    });
+    return null;
+  }
 
   if (shouldSuppressForActiveChannel(notification, context.activeChannelId)) {
     logger.ui.debug('desktopNotifications: suppressed (viewing active channel)', {

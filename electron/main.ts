@@ -6,11 +6,30 @@ import { createTray } from './tray';
 const isDev = !app.isPackaged;
 const PROD_INDEX = path.join(__dirname, '..', 'build', 'client', 'index.html');
 
+// Stable AppUserModelID is required on Windows so that OS notifications and
+// taskbar pins group under "Pufferblow" instead of under the auto-generated
+// `electron.app.Pufferblow`. macOS / Linux ignore this call.
+app.setAppUserModelId('social.pufferblow.client');
+
+// Single-instance lock. If a second copy of Pufferblow launches while the
+// first is running, we hand control back to the original instance (focus
+// + restore from tray) and immediately exit the new one. Without this,
+// duplicate processes would fight over the secureStorage / localStorage
+// state and silently corrupt session data.
+const gotInstanceLock = app.requestSingleInstanceLock();
+if (!gotInstanceLock) {
+  app.exit(0);
+}
+
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+// Set on app.quit so the close handler stops trapping the close event and
+// actually lets the window die. Without this the user can never fully quit
+// from the OS shell (Cmd-Q / Alt-F4 just re-hide the window).
+let quittingForReal = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -40,10 +59,39 @@ function createWindow() {
   }
 
   mainWindow.on('close', (event) => {
+    if (quittingForReal) {
+      return; // let the window actually close
+    }
     event.preventDefault();
     mainWindow?.hide();
   });
 }
+
+/**
+ * Bring the main window to the foreground from whatever state it's in:
+ * - destroyed → reconstruct it (closing via Cmd-Q et al)
+ * - minimized → restore
+ * - hidden (tray) → show + focus
+ */
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+// Second-instance handler — called when the user launches Pufferblow again
+// while a copy is already running. Foreground the existing window so
+// double-clicking the desktop icon feels like "open the app" instead of
+// silently doing nothing.
+app.on('second-instance', () => {
+  focusMainWindow();
+});
 
 app.whenReady().then(() => {
   protocol.handle('app', (request) => {
@@ -82,28 +130,31 @@ app.whenReady().then(() => {
   // we need to restore the app from the tray / minimized state. We can't
   // do this reliably from the renderer on macOS or some Linux WMs.
   ipcMain.on('focus-window', () => {
-    if (!mainWindow) {
-      createWindow();
-      return;
-    }
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-    mainWindow.show();
-    mainWindow.focus();
+    focusMainWindow();
   });
 
+  // macOS: clicking the dock icon when the app has no visible windows
+  // should re-show the existing window (or create one if it was fully
+  // closed). This is the canonical Electron pattern.
   app.on('activate', () => {
-    if (mainWindow === null) {
+    if (mainWindow === null || mainWindow.isDestroyed()) {
       createWindow();
     } else {
       mainWindow.show();
+      mainWindow.focus();
     }
   });
 });
 
 // App lives in tray — keep running when all windows are closed.
 app.on('window-all-closed', () => {});
+
+// When the user issues a real Quit (Cmd-Q on macOS, the tray's Quit menu
+// fires app.exit which bypasses this), let the close handler drop the
+// `event.preventDefault()` so the window actually closes.
+app.on('before-quit', () => {
+  quittingForReal = true;
+});
 
 if (!isDev) {
   autoUpdater.checkForUpdatesAndNotify();

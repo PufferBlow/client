@@ -33,6 +33,8 @@ import { AccountSwitcher } from "../../components/AccountSwitcher";
 import {
   dispatchDesktopNotification,
   ensureNotificationPermission,
+  setUnreadBadge,
+  subscribeNotificationsMuted,
 } from "../../services/desktopNotifications";
 import type { MessageReaction } from "../../models/Message";
 import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
@@ -269,6 +271,26 @@ export default function Dashboard() {
   useEffect(() => {
     void ensureNotificationPermission();
   }, []);
+
+  // Mirror the Electron tray's notifications-muted toggle into the
+  // desktopNotifications service so dispatchDesktopNotification can
+  // suppress toasts when the user has muted from the tray. No-op in
+  // plain-browser builds (the IPC bridge is absent).
+  useEffect(() => {
+    const dispose = subscribeNotificationsMuted();
+    return dispose;
+  }, []);
+
+  // Push the total-unread count into the OS tray / dock badge whenever the
+  // per-channel unread map changes. Web builds short-circuit inside
+  // setUnreadBadge because window.electron is undefined.
+  useEffect(() => {
+    const total = Object.values(unreadCountsByChannel).reduce(
+      (sum, value) => sum + (Number(value) || 0),
+      0,
+    );
+    setUnreadBadge(total);
+  }, [unreadCountsByChannel]);
 
   // Remember the active identity in the multi-account registry whenever we
   // have a fresh (currentUser, authToken, hostPort) triple. `rememberAccount`
