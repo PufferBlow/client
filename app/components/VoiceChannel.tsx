@@ -81,7 +81,7 @@ interface ParticipantRowProps {
   transport: VoiceTransport | null;
 }
 
-const ParticipantRow: React.FC<ParticipantRowProps> = ({ participant, transport }) => {
+const ParticipantRowImpl: React.FC<ParticipantRowProps> = ({ participant, transport }) => {
   const duration = useDuration(participant.connected_at);
   const [volume, setVolume] = useState(() => transport?.getUserVolume(participant.user_id) ?? 1);
 
@@ -133,6 +133,28 @@ const ParticipantRow: React.FC<ParticipantRowProps> = ({ participant, transport 
     </div>
   );
 };
+
+/**
+ * Memoized row: when the parent re-renders (every WS speaker_levels tick,
+ * mute toggle, etc.) only rows whose participant snapshot or transport
+ * identity actually changed get re-rendered. The custom equality function
+ * compares the fields ParticipantRow actually reads — adding a new field
+ * means updating this list.
+ */
+const ParticipantRow = React.memo(ParticipantRowImpl, (prev, next) => {
+  if (prev.transport !== next.transport) return false;
+  const a = prev.participant;
+  const b = next.participant;
+  return (
+    a.user_id === b.user_id &&
+    a.username === b.username &&
+    a.is_muted === b.is_muted &&
+    a.is_deafened === b.is_deafened &&
+    a.is_speaking === b.is_speaking &&
+    a.connected_at === b.connected_at
+  );
+});
+ParticipantRow.displayName = 'ParticipantRow';
 
 export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   channelId,
