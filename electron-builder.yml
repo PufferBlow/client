@@ -20,10 +20,14 @@ win:
       arch: [x64]
     - target: msi
       arch: [x64]
-  nsis:
-    oneClick: false
-    perMachine: true
-    allowToChangeInstallationDirectory: true
+
+# `nsis` lives at the config root in electron-builder 26.x (it was under
+# `win.nsis` in 25.x and earlier). Moving it back under `win` makes the
+# schema validator reject the whole config at build time.
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
 
 linux:
   icon: resources/icons/icon.png

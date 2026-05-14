@@ -2,7 +2,19 @@
   "name": "pufferblow",
   "version": "1.0.0",
   "description": "Official desktop and web client for Pufferblow — built with React, React Router v7, and Electron.",
-  "homepage": "./",
+  "author": {
+    "name": "Pufferblow contributors",
+    "url": "https://github.com/PufferBlow"
+  },
+  "license": "GPL-3.0",
+  "homepage": "https://pufferblow.space",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PufferBlow/client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PufferBlow/client/issues"
+  },
   "private": true,
   "main": "dist-electron/main.js",
   "engines": {
