@@ -42,6 +42,32 @@
   --color-on-warning: #000000;
   --color-on-error: #000000;
   --color-on-info: #000000;
+
+  /* Radius scale. Every surface should pick one of these, never an
+     arbitrary `rounded-[12px]`. Buttons + form controls use --radius-md,
+     menus + cards use --radius-lg, modals + the auth panel use --radius-2xl.
+     Anything outside this scale is a smell worth fixing. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-pill: 999px;
+
+  /* Motion scale. Three durations cover ~all UI: fast for hover/focus
+     state flips (think: a button color change), base for menus/dropdowns
+     and most micro-interactions, slow only for full-screen / route
+     transitions. One easing curve for everything that decelerates
+     (the overwhelming majority of UI). */
+  --motion-fast: 100ms;
+  --motion-base: 150ms;
+  --motion-slow: 220ms;
+  --motion-ease-out: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+
+  /* Layered shadows. `popover` for tray-style dropdowns + tooltip-style
+     surfaces; `modal` for actual full-overlay dialogs. */
+  --shadow-popover: 0 8px 24px var(--color-shadow);
+  --shadow-modal: 0 18px 42px var(--color-shadow-lg);
 }
 
 html,
@@ -102,6 +128,32 @@ body {
 .pb-focus-ring:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+/* The default interactive transition — color / background / border at the
+   base motion duration. Use this on hover-able surfaces instead of an
+   ad-hoc `transition-colors duration-200`. */
+.pb-transition {
+  transition-property: background-color, color, border-color, box-shadow, opacity;
+  transition-duration: var(--motion-base);
+  transition-timing-function: var(--motion-ease-out);
+}
+
+/* Faster variant for tight hover surfaces (icon buttons, pills). */
+.pb-transition-fast {
+  transition-property: background-color, color, border-color, opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease-out);
+}
+
+/* Popover surface preset: matches pb-menu but uses the new shadow token
+   and applies the canonical menu radius. Apply to dropdowns, account
+   switchers, tooltip-style flyouts, context menus. */
+.pb-popover {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
 }
 
 .pb-status-danger {
