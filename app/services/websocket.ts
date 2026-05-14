@@ -93,6 +93,46 @@ export interface WebSocketPingAckedMessage extends WebSocketBaseMessage {
   federated?: boolean;
 }
 
+/**
+ * Aggregated-reactions broadcast for a single message. Same payload goes to
+ * every channel viewer; the client computes its own `viewer_reacted` flag
+ * locally by checking whether the viewer's user_id is in the per-emoji
+ * `user_ids` list (the server intentionally doesn't bake that in here so
+ * the broadcast can be a single message for everyone).
+ */
+export interface WebSocketReactionUpdateMessage extends WebSocketBaseMessage {
+  type: 'message_reaction_added' | 'message_reaction_removed';
+  user_id?: string;
+  emoji?: string;
+  reactions?: Array<{
+    emoji: string;
+    count: number;
+    user_ids?: string[];
+  }>;
+}
+
+/**
+ * Server-pushed notification row destined for the viewer. Emitted by the
+ * pufferblow API after it records a mention (or any future notification
+ * class) so the client can light up an OS-level toast immediately.
+ *
+ * The nested `notification` shape mirrors `Notifications.to_dict()` on the
+ * server (see api/database/tables/notifications.py).
+ */
+export interface WebSocketNotificationCreatedMessage extends WebSocketBaseMessage {
+  type: 'notification_created';
+  notification: {
+    notification_id: string;
+    user_id: string;
+    type: string;
+    actor_user_id?: string | null;
+    channel_id?: string | null;
+    message_id?: string | null;
+    created_at?: string | null;
+    read_at?: string | null;
+  };
+}
+
 export type WebSocketMessage =
   | WebSocketChatMessage
   | WebSocketPresenceMessage
@@ -100,7 +140,9 @@ export type WebSocketMessage =
   | WebSocketReadConfirmationMessage
   | WebSocketErrorMessage
   | WebSocketPingReceivedMessage
-  | WebSocketPingAckedMessage;
+  | WebSocketPingAckedMessage
+  | WebSocketReactionUpdateMessage
+  | WebSocketNotificationCreatedMessage;
 
 export const isChatWebSocketMessage = (
   message: WebSocketMessage

@@ -30,6 +30,10 @@ import { listChannels, createChannel, deleteChannel } from "../../services/chann
 import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
 import { rememberAccount } from "../../services/accounts";
 import { AccountSwitcher } from "../../components/AccountSwitcher";
+import {
+  dispatchDesktopNotification,
+  ensureNotificationPermission,
+} from "../../services/desktopNotifications";
 import type { MessageReaction } from "../../models/Message";
 import { banUser, submitMessageReport, submitUserReport, timeoutUser } from "../../services/moderation";
 import { GlobalWebSocket, createGlobalWebSocket, isChatWebSocketMessage, normalizeChatWebSocketMessage } from "../../services/websocket";
@@ -258,6 +262,13 @@ export default function Dashboard() {
   // `currentMenuMessageId` alone for this because that ID lingers after the
   // context menu closes and the picker is also opened from the input toolbar.
   const [reactionTargetMessageId, setReactionTargetMessageId] = useState<string | null>(null);
+
+  // Ask the OS for permission to show desktop notifications once the
+  // dashboard mounts. ensureNotificationPermission is idempotent: it returns
+  // the cached state if granted/denied and only prompts the very first time.
+  useEffect(() => {
+    void ensureNotificationPermission();
+  }, []);
 
   // Remember the active identity in the multi-account registry whenever we
   // have a fresh (currentUser, authToken, hostPort) triple. `rememberAccount`
@@ -1161,10 +1172,9 @@ export default function Dashboard() {
               // Reaction add/remove broadcasts: every viewer gets the same
               // payload, so we compute their own `viewer_reacted` locally
               // against the user_ids list rather than relying on the server.
-              const reactionEvent = (message as { event?: string }).event;
               if (
-                reactionEvent === "message_reaction_added" ||
-                reactionEvent === "message_reaction_removed"
+                message.type === "message_reaction_added" ||
+                message.type === "message_reaction_removed"
               ) {
                 const payload = message as unknown as {
                   message_id?: string;
@@ -1194,6 +1204,34 @@ export default function Dashboard() {
                       : m,
                   ),
                 );
+                return;
+              }
+
+              // OS-level toast for fresh notifications (mentions, etc.). The
+              // service decides whether to actually fire — it suppresses when
+              // the viewer is already focused on the source channel.
+              if (message.type === "notification_created") {
+                const notif = message.notification;
+                const actor = notif.actor_user_id
+                  ? usersById.get(notif.actor_user_id)
+                  : undefined;
+                const targetChannel = notif.channel_id
+                  ? channels.find((c) => c.channel_id === notif.channel_id)
+                  : undefined;
+                const sourceMessage = notif.message_id
+                  ? messages.find((m) => m.message_id === notif.message_id)
+                  : undefined;
+                dispatchDesktopNotification(message, {
+                  actorUsername: actor?.username,
+                  channelName: targetChannel?.channel_name,
+                  bodyPreview: sourceMessage?.message,
+                  activeChannelId: selectedChannelIdRef.current,
+                  onActivate: () => {
+                    if (targetChannel) {
+                      void handleChannelSelect(targetChannel);
+                    }
+                  },
+                });
                 return;
               }
 

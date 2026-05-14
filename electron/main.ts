@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, net, session } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, net, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { createTray } from './tray';
@@ -76,6 +76,22 @@ app.whenReady().then(() => {
 
   createWindow();
   createTray(mainWindow!);
+
+  // Renderer asks main to bring the window forward. Triggered by the
+  // desktop-notifications service when the user clicks a system toast and
+  // we need to restore the app from the tray / minimized state. We can't
+  // do this reliably from the renderer on macOS or some Linux WMs.
+  ipcMain.on('focus-window', () => {
+    if (!mainWindow) {
+      createWindow();
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
   app.on('activate', () => {
     if (mainWindow === null) {
