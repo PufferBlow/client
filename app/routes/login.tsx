@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 
 import Button from "../components/Button";
 import Input from "../components/Input";
+import PasswordField from "../components/PasswordField";
 import { PufferblowBrand } from "../components/PufferblowBrand";
 import { Notice } from "../components/ui/Notice";
 import { normalizeInstance, resolveInstance } from "../services/instance";
 import { login, handleAuthentication } from "../services/user";
+import { sanitizeAuthError } from "../utils/authErrors";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
@@ -66,7 +68,11 @@ export default function Login() {
     const response = await login(normalizedInstance, { username, password });
 
     if (!response.success) {
-      setError(response.error || "Login failed.");
+      // Never echo the server's raw error here — it may distinguish
+      // "user not found" from "wrong password," which is a username-
+      // enumeration vector. sanitizeAuthError collapses both to a
+      // single generic message.
+      setError(sanitizeAuthError(response.error, "Login failed.").message);
       setIsLoading(false);
       return;
     }
@@ -144,10 +150,9 @@ export default function Login() {
               required
             />
 
-            <Input
+            <PasswordField
               id="password"
               name="password"
-              type="password"
               autoComplete="current-password"
               label="Password"
               placeholder="Enter your password"

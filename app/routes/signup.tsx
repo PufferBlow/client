@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 
 import Button from "../components/Button";
 import Input from "../components/Input";
+import PasswordField from "../components/PasswordField";
 import { PufferblowBrand } from "../components/PufferblowBrand";
 import { Notice } from "../components/ui/Notice";
 import { normalizeInstance, resolveInstance } from "../services/instance";
 import { signup, handleAuthentication } from "../services/user";
+import { sanitizeAuthError } from "../utils/authErrors";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
@@ -79,7 +81,11 @@ export default function Signup() {
     const response = await signup(normalizedInstance, { username, password });
 
     if (!response.success) {
-      setError(response.error || "Signup failed.");
+      // Sanitize so the form never echoes a server message that, for
+      // example, distinguishes "username taken" from "username invalid"
+      // in a way that aids enumeration. Known cases map to friendly
+      // generic strings; everything else falls back.
+      setError(sanitizeAuthError(response.error, "Signup failed.").message);
       setIsLoading(false);
       return;
     }
@@ -157,10 +163,9 @@ export default function Signup() {
               required
             />
 
-            <Input
+            <PasswordField
               id="password"
               name="password"
-              type="password"
               autoComplete="new-password"
               label="Password"
               helperText="Use at least 8 characters."
@@ -170,10 +175,9 @@ export default function Signup() {
               required
             />
 
-            <Input
+            <PasswordField
               id="confirmPassword"
               name="confirmPassword"
-              type="password"
               autoComplete="new-password"
               label="Confirm password"
               placeholder="Repeat your password"

@@ -58,6 +58,14 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   endIcon?: React.ReactNode;
 
   /**
+   * Interactive end-of-input element (e.g. a password reveal toggle).
+   * Unlike `endIcon`, this slot keeps `pointer-events` enabled so it can
+   * host buttons and other focusable controls. The input grows its right
+   * padding to make room.
+   */
+  endAdornment?: React.ReactNode;
+
+  /**
    * Whether the input is in a loading state
    * @default false
    */
@@ -108,6 +116,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   label,
   startIcon,
   endIcon,
+  endAdornment,
   loading = false,
   className = '',
   id,
@@ -140,7 +149,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     errorClasses,
     widthClass,
     startIcon ? 'pl-10' : '',
-    endIcon ? 'pr-10' : '',
+    endIcon || endAdornment ? 'pr-10' : '',
     className,
   ].filter(Boolean).join(' ');
 
@@ -178,11 +187,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
           {...props}
         />
 
-        {endIcon && (
+        {endIcon && !endAdornment && (
           <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
             <span className="text-[var(--color-text-muted)]" aria-hidden="true">
               {endIcon}
             </span>
+          </div>
+        )}
+
+        {endAdornment && (
+          <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
+            {endAdornment}
           </div>
         )}
 
