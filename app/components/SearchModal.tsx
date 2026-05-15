@@ -18,10 +18,31 @@ interface SearchResult {
   channel_id?: string;
 }
 
+/**
+ * Optional metadata the search handler can attach to a result set.
+ * `truncatedScan` means the server-side decrypt-and-scan didn't cover
+ * the channel's full history — there may be older matches the user
+ * doesn't see. We surface this honestly so the user doesn't assume
+ * "no results" means "no matches in history."
+ *
+ * The handler can return either a plain SearchResult[] (legacy shape)
+ * or { results, meta }. The component handles both for backwards
+ * compatibility with any caller that hasn't migrated yet.
+ */
+export interface SearchResultMeta {
+  truncatedScan?: boolean;
+  scannedChannelName?: string;
+}
+
+export type SearchHandlerReturn = SearchResult[] | {
+  results: SearchResult[];
+  meta?: SearchResultMeta;
+};
+
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSearch: (query: string) => Promise<SearchResult[]>;
+  onSearch: (query: string) => Promise<SearchHandlerReturn>;
   onSelectResult: (result: SearchResult) => void;
 }
 
@@ -34,6 +55,7 @@ const TYPE_LABELS: Record<SearchResult["type"], string> = {
 export function SearchModal({ isOpen, onClose, onSearch, onSelectResult }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [meta, setMeta] = useState<SearchResultMeta>({});
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
@@ -41,6 +63,7 @@ export function SearchModal({ isOpen, onClose, onSearch, onSelectResult }: Searc
     if (!isOpen) {
       setQuery("");
       setResults([]);
+      setMeta({});
       setSelectedIndex(-1);
     }
   }, [isOpen]);
@@ -49,16 +72,27 @@ export function SearchModal({ isOpen, onClose, onSearch, onSelectResult }: Searc
     const runSearch = async () => {
       if (query.trim().length < 2) {
         setResults([]);
+        setMeta({});
         return;
       }
 
       setIsLoading(true);
       try {
-        const searchResults = await onSearch(query.trim());
-        setResults(searchResults);
+        const handlerReturn = await onSearch(query.trim());
+        // Normalize both supported return shapes — array (legacy) or
+        // {results, meta} (preferred). Keeps older callers working
+        // without forcing a migration.
+        if (Array.isArray(handlerReturn)) {
+          setResults(handlerReturn);
+          setMeta({});
+        } else {
+          setResults(handlerReturn.results);
+          setMeta(handlerReturn.meta ?? {});
+        }
         setSelectedIndex(-1);
       } catch {
         setResults([]);
+        setMeta({});
       } finally {
         setIsLoading(false);
       }
@@ -125,6 +159,22 @@ export function SearchModal({ isOpen, onClose, onSearch, onSelectResult }: Searc
           autoFocus
           className="w-full rounded-lg border pb-border bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
         />
+
+        {/* Honest banner when the server-side scan didn't cover the
+            whole channel. Substring search decrypts up to scan_limit
+            (1000 by default) recent messages — older matches won't
+            appear and the user deserves to know. */}
+        {meta.truncatedScan && !isLoading && query.trim().length >= 2 && (
+          <div
+            role="status"
+            className="rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-secondary)]"
+          >
+            Search covered the most recent messages
+            {meta.scannedChannelName ? <> in <span className="font-medium text-[var(--color-text)]">#{meta.scannedChannelName}</span></> : null}
+            . Older history wasn't scanned — open the channel to load it,
+            or narrow your query.
+          </div>
+        )}
 
         <div className="max-h-96 space-y-1 overflow-y-auto rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-2">
           {isLoading ? (

@@ -715,6 +715,11 @@ export default function Dashboard() {
   const handleSearch = async (query: string) => {
     const q = query.toLowerCase();
     const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string; channel_id?: string }> = [];
+    // truncatedScan is set when the server side reports its decrypt
+    // window didn't cover the whole channel — surfaced in the modal so
+    // the user doesn't assume the result set is exhaustive.
+    let truncatedScan = false;
+    let scannedChannelName: string | undefined;
 
     // Track message IDs already emitted so the server-side hits don't
     // duplicate the locally-cached matches.
@@ -760,6 +765,10 @@ export default function Dashboard() {
           authToken,
         );
         if (response.success && response.data?.messages) {
+          if (response.data.truncated_scan) {
+            truncatedScan = true;
+            scannedChannelName = selectedChannel.channel_name;
+          }
           for (const message of response.data.messages) {
             if (seenMessageIds.has(message.message_id)) continue;
             // Server-side hits all belong to the channel we searched against.
@@ -815,7 +824,10 @@ export default function Dashboard() {
       }
     }
 
-    return results.slice(0, 25);
+    return {
+      results: results.slice(0, 25),
+      meta: { truncatedScan, scannedChannelName },
+    };
   };
 
   const handleSelectSearchResult = (result: any) => {
