@@ -202,7 +202,7 @@ export default function Settings() {
   // Show skeleton loading state
   if (userLoading) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+      <div className="h-full bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         {/* Nord-themed Sidebar Skeleton */}
         <div className="w-64 bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] flex flex-col">
           <div className="h-12 border-b border-[var(--color-border)] flex items-center px-4 bg-[var(--color-background-tertiary)]">
@@ -236,7 +236,7 @@ export default function Settings() {
   // Show error state - redirect to dashboard if profile fetch fails
   if (userError) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+      <div className="h-full bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
           <div className="rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8">
             <div className="mb-6">
@@ -265,7 +265,7 @@ export default function Settings() {
   // Show loading timeout error
   if (loadingTimeout) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center p-4">
+      <div className="h-full bg-[var(--color-background)] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
           <div className="rounded-[1.75rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-8">
             <div className="mb-6">
@@ -301,7 +301,7 @@ export default function Settings() {
 
   return (
     <>
-      <div className="h-screen bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
+      <div className="h-full bg-[var(--color-background)] flex font-sans select-none relative overflow-hidden">
         <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main Content */}

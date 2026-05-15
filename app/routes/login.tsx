@@ -103,8 +103,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
-      <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-10 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-[var(--color-background)]">
+      <div className="mx-auto flex min-h-full w-full max-w-md items-center px-4 py-10 sm:px-6 lg:px-8">
         <section className="w-full rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 sm:p-8">
           <div className="mb-8">
             <PufferblowBrand

@@ -22,20 +22,43 @@ import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
+import { persistQueryClient } from '@tanstack/react-query-persist-client';
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { getAuthTokenFromCookies } from "./services/user";
 import { startBackgroundAuthRefresh } from "./services/authSession";
 import { buildAuthRedirectPath, resolvePostAuthRedirect } from "./utils/authRedirect";
 
-// Create a client
+const CACHE_KEY = 'PUFFERBLOW_QUERY_CACHE';
+const CACHE_BUSTER = 'pb-v1';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes
+      staleTime: 1000 * 60 * 5,        // 5 min: data is fresh, no background refetch
+      gcTime: 1000 * 60 * 60 * 24,     // 24h: keep unused data in memory/storage
       retry: 1,
     },
   },
 });
+
+// Persist the React Query cache to localStorage so channels, server info, and
+// user data survive page reloads and app restarts — the same pattern Discord
+// uses (they run SQLite; localStorage is sufficient for our data volumes).
+// On startup the cache hydrates instantly, then refetches stale data in the
+// background so the user never sees a blank loading screen on re-open.
+if (typeof window !== 'undefined') {
+  const persister = createSyncStoragePersister({
+    storage: window.localStorage,
+    key: CACHE_KEY,
+    throttleTime: 1000,
+  });
+  persistQueryClient({
+    queryClient,
+    persister,
+    maxAge: 1000 * 60 * 60 * 24,
+    buster: CACHE_BUSTER,
+  });
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -65,7 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-text)] antialiased">
         <TitleBar />
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -78,8 +101,12 @@ export default function App() {
 
   useEffect(() => {
     return startBackgroundAuthRefresh(() => {
+      // Clear both in-memory and persisted cache on auth expiry so stale
+      // user data doesn't leak into the next session.
       queryClient.clear();
-      if (typeof window === 'undefined') return;
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(CACHE_KEY);
+      }
 
       const currentPath = window.location.pathname;
       const publicPaths = new Set(['/login', '/signup', '/', '/download']);
@@ -93,16 +120,18 @@ export default function App() {
     });
   }, []);
 
-  // Check authentication status
   const authToken = getAuthTokenFromCookies();
   const isAuthenticated = !!authToken;
 
-  // Define route categories
+  // The Electron desktop client does not ship the marketing home page or the
+  // download page — those only make sense on the web. Redirect them immediately.
+  const isElectronClient = typeof window !== 'undefined' && 'electron' in window;
+  const electronOnlyRedirectPaths = new Set(['/', '/download']);
+
   const publicRoutes = ['/login', '/signup', '/', '/download'];
-  const homeRoutes = ['/']; // Home/marketing page at root
+  const homeRoutes = ['/'];
   const authRoutes = ['/login', '/signup'];
 
-  // Check if current route requires authentication
   const currentPath = location.pathname;
   const isHomeRoute = homeRoutes.includes(currentPath);
   const isAuthRoute = authRoutes.includes(currentPath);
@@ -111,12 +140,14 @@ export default function App() {
   const searchParams = new URLSearchParams(location.search);
   const redirectTarget = resolvePostAuthRedirect(searchParams.get("redirect"));
 
-  // Universal authentication logic for both web and desktop:
-
-  // 1. If authenticated user tries to access auth pages, redirect to dashboard
   let content: React.ReactNode = <Outlet />;
 
-  if (isAuthRoute && isAuthenticated) {
+  // Electron: home/download → login or dashboard immediately.
+  if (isElectronClient && electronOnlyRedirectPaths.has(currentPath)) {
+    content = isAuthenticated
+      ? <Navigate to="/dashboard" replace />
+      : <Navigate to="/login" replace />;
+  } else if (isAuthRoute && isAuthenticated) {
     content = <Navigate to={redirectTarget} replace />;
   } else if (isHomeRoute && isAuthenticated) {
     content = <Navigate to="/dashboard" replace />;
@@ -129,12 +160,7 @@ export default function App() {
     );
   }
 
-  // 4. Debug authentication state for settings page access
-  if (currentPath === '/settings' && !isAuthenticated) {
-    console.log('Settings page access blocked: Not authenticated');
-  }
 
-  
 
   return (
     <TitleBarProvider>
