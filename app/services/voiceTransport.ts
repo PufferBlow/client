@@ -107,6 +107,14 @@ interface SignalMessage {
   error?: string;
 }
 
+// Reconnect tuning. The first retry happens almost immediately so transient
+// blips (laptop sleep, WiFi handoff) recover invisibly; subsequent retries
+// back off so we don't hammer the SFU during an outage. After
+// MAX_RECONNECT_ATTEMPTS we give up and surface a `failed` state so the UI
+// can offer a manual rejoin.
+const RECONNECT_BACKOFF_MS = [500, 1500, 4000, 10_000];
+const MAX_RECONNECT_ATTEMPTS = RECONNECT_BACKOFF_MS.length;
+
 export class VoiceTransport {
   private callbacks: VoiceTransportCallbacks;
   private ws: WebSocket | null = null;
@@ -119,6 +127,17 @@ export class VoiceTransport {
   private isDeafened = false;
   private activeQualityProfile: 'low' | 'balanced' | 'high' = 'balanced';
   private mediaQuality: RTCMediaQuality | null = null;
+
+  // Reconnect state. We hold onto the bootstrap from the initial connect so
+  // a transient WebSocket / ICE drop can re-open the signaling channel
+  // without going back to the REST `join` endpoint (which would mint a new
+  // session_id and force every other peer to see us leave + rejoin).
+  private lastBootstrap: VoiceSessionBootstrap | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // True once disconnect() has been called explicitly — prevents a stray
+  // ws.onclose firing after we've torn down from kicking off a reconnect.
+  private intentionalDisconnect = false;
 
   // Per-user volume: userId → preferred volume 0..1
   private userVolumePrefs = new Map<string, number>();
@@ -422,13 +441,24 @@ export class VoiceTransport {
     pc.onconnectionstatechange = () => {
       switch (pc.connectionState) {
         case 'connected':
+          // Successful connect (initial or after retry) — clear the retry
+          // counter so the next transient drop gets the full backoff budget.
+          this.reconnectAttempts = 0;
           this.setState('connected');
           break;
         case 'disconnected':
+          // Disconnected is transient — Chrome fires this when ICE checks
+          // are failing but the PC may still recover on its own. Mark
+          // reconnecting for UI feedback but don't immediately tear down.
+          // If we don't reach connected within a few seconds, `failed`
+          // fires and the explicit reconnect kicks in.
           this.setState('reconnecting');
           break;
         case 'failed':
-          this.setState('failed');
+          // Hard ICE failure. Try an ICE restart via fresh offer; if the
+          // signaling channel is also down, scheduleReconnect will reopen
+          // the WS first.
+          this.scheduleReconnect('pc-failed');
           break;
         case 'closed':
           this.setState('idle');
@@ -456,14 +486,112 @@ export class VoiceTransport {
       ws.onopen = () => resolve();
       ws.onerror = () => reject(new Error('Failed to open voice signaling websocket'));
       ws.onclose = () => {
-        if (this.state !== 'idle') {
-          this.setState('failed');
+        // Don't react to a close we triggered ourselves (disconnect() path),
+        // and don't reconnect from the idle state — that means we never
+        // really got connected and the initial connect() will throw on its
+        // own.
+        if (this.intentionalDisconnect || this.state === 'idle') {
+          return;
         }
+        this.scheduleReconnect('ws-closed');
       };
       ws.onmessage = (event) => {
         this.handleSignalMessage(event.data);
       };
     });
+  }
+
+  /**
+   * Schedule an exponential-backoff reconnect. Idempotent — repeated calls
+   * during the same outage (e.g. both the WS and the PC firing close events)
+   * collapse into a single retry on the timer that's already armed.
+   *
+   * Why we re-use the original bootstrap: minting a new session via REST
+   * would change the session_id and make every other peer see a leave+rejoin
+   * pair. Replaying the same join_token keeps continuity. The SFU's `join`
+   * handler is documented as idempotent, and `offer` always renegotiates,
+   * so re-sending both on the new WS picks us back up where we left off.
+   */
+  private scheduleReconnect(reason: string): void {
+    if (this.intentionalDisconnect) return;
+    if (this.reconnectTimer) return;
+    if (!this.lastBootstrap) {
+      // Nothing to reconnect to — connect() was never called or already
+      // tore down. Surface a hard failure so the UI can route to manual
+      // rejoin instead of leaving the user in a stuck reconnecting state.
+      this.setState('failed');
+      return;
+    }
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      this.emitError(
+        `Voice reconnect gave up after ${MAX_RECONNECT_ATTEMPTS} attempts (${reason})`,
+      );
+      this.setState('failed');
+      return;
+    }
+
+    const delay = RECONNECT_BACKOFF_MS[this.reconnectAttempts] ?? 10_000;
+    this.reconnectAttempts += 1;
+    this.setState('reconnecting');
+    voiceLogger.info('voiceTransport: scheduling reconnect', {
+      attempt: this.reconnectAttempts,
+      delay_ms: delay,
+      reason,
+    });
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.attemptReconnect(reason);
+    }, delay);
+  }
+
+  /**
+   * Single reconnect attempt. Closes the old signaling socket, opens a
+   * fresh one against the same SFU URL + join token, sends `join` to
+   * refresh participant state, and issues an ICE-restart offer so the
+   * existing peer connection re-establishes its media path. If anything
+   * throws we schedule another retry (subject to MAX_RECONNECT_ATTEMPTS).
+   */
+  private async attemptReconnect(reason: string): Promise<void> {
+    if (this.intentionalDisconnect || !this.lastBootstrap || !this.pc) {
+      return;
+    }
+
+    try {
+      if (this.ws) {
+        try {
+          this.ws.onclose = null; // suppress recursive reconnect from the old socket
+          this.ws.close();
+        } catch {
+          // no-op
+        }
+        this.ws = null;
+      }
+
+      const signalingUrl = this.buildSignalingUrl(
+        this.lastBootstrap.signaling_url,
+        this.lastBootstrap.join_token,
+      );
+      await this.openSignaling(signalingUrl);
+      this.sendSignal({ type: 'join', session_id: this.lastBootstrap.session_id });
+
+      // ICE restart forces fresh candidates without dropping senders /
+      // receivers, so audio resumes as soon as the new path is established.
+      const offer = await this.pc.createOffer({ iceRestart: true });
+      await this.pc.setLocalDescription(offer);
+      this.sendSignal({ type: 'offer', offer });
+
+      // State will flip to `connected` via onconnectionstatechange once
+      // ICE finishes. Leaving it as `reconnecting` is correct in the gap.
+      voiceLogger.info('voiceTransport: reconnect handshake sent', { reason });
+    } catch (error) {
+      voiceLogger.warn('voiceTransport: reconnect attempt failed', {
+        attempt: this.reconnectAttempts,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.scheduleReconnect(`retry-after-error:${reason}`);
+    }
   }
 
   private sendSignal(message: SignalMessage): void {
@@ -566,6 +694,13 @@ export class VoiceTransport {
 
   async connect(bootstrap: VoiceSessionBootstrap): Promise<void> {
     this.setState('connecting');
+    // Persist the bootstrap so an unexpected WS close or ICE failure can
+    // be recovered by replaying the same join_token + signaling_url.
+    // Replaced verbatim on every connect() call — picking up a new
+    // session via REST should never re-enter the reconnect path.
+    this.lastBootstrap = bootstrap;
+    this.reconnectAttempts = 0;
+    this.intentionalDisconnect = false;
 
     try {
       this.mediaQuality = bootstrap.media_quality ?? null;
@@ -641,6 +776,16 @@ export class VoiceTransport {
   }
 
   async disconnect(): Promise<void> {
+    // Flag set first so any in-flight ws.onclose / pc.onconnectionstatechange
+    // events that fire during teardown skip the reconnect path.
+    this.intentionalDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.lastBootstrap = null;
+    this.reconnectAttempts = 0;
+
     if (this.ws) {
       try {
         this.ws.close(1000, 'voice-disconnect');
