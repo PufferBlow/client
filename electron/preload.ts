@@ -42,4 +42,19 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.removeListener('notifications-muted-changed', listener);
     };
   },
+
+  // ── Custom title bar window controls ────────────────────────────────────
+  windowMinimize: (): Promise<void> => ipcRenderer.invoke('window-minimize'),
+  windowMaximize: (): Promise<void> => ipcRenderer.invoke('window-maximize'),
+  windowClose: (): Promise<void> => ipcRenderer.invoke('window-close'),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-is-maximized'),
+  /**
+   * Subscribe to maximize/restore transitions so the title bar icon updates
+   * without polling. Returns a disposer for React effect cleanup.
+   */
+  onWindowMaximizeChanged: (cb: (isMaximized: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => cb(isMaximized);
+    ipcRenderer.on('window-maximize-changed', listener);
+    return () => ipcRenderer.removeListener('window-maximize-changed', listener);
+  },
 });

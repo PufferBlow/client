@@ -65,6 +65,11 @@ function createWindow() {
     event.preventDefault();
     mainWindow?.hide();
   });
+
+  // Push maximize state changes to the renderer so the title bar can swap
+  // the restore/maximize icon without polling.
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('window-maximize-changed', true));
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window-maximize-changed', false));
 }
 
 /**
@@ -132,6 +137,16 @@ app.whenReady().then(() => {
   ipcMain.on('focus-window', () => {
     focusMainWindow();
   });
+
+  // Custom title bar window controls.
+  ipcMain.handle('window-minimize', () => mainWindow?.minimize());
+  ipcMain.handle('window-maximize', () => {
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+    else mainWindow?.maximize();
+  });
+  // Close fires the existing 'close' handler which hides to tray unless quitting.
+  ipcMain.handle('window-close', () => mainWindow?.close());
+  ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized() ?? false);
 
   // macOS: clicking the dock icon when the app has no visible windows
   // should re-show the existing window (or create one if it was fully

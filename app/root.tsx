@@ -16,6 +16,8 @@ import "./app.css";
 import { PufferblowMark } from "./components/PufferblowBrand";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ToastProvider } from "./components/Toast";
+import { TitleBar } from "./components/TitleBar";
+import { TitleBarProvider } from "./context/TitleBarContext";
 import {
   QueryClient,
   QueryClientProvider,
@@ -61,8 +63,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)] antialiased">
-        <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
+      <body className="h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-text)] antialiased">
+        <TitleBar />
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -134,11 +137,13 @@ export default function App() {
   
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ToastProvider>{content}</ToastProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <TitleBarProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ToastProvider>{content}</ToastProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </TitleBarProvider>
   );
 }
 

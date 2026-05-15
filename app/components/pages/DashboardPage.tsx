@@ -52,6 +52,7 @@ import { DashboardOverlays } from "../dashboard-page/DashboardOverlays";
 import { MembersPanel } from "../dashboard-page/MembersPanel";
 import { MessagePane } from "../dashboard-page/MessagePane";
 import { ServerRail } from "../dashboard-page/ServerRail";
+import { useTitleBar } from "../../context/TitleBarContext";
 import type { DisplayUser } from "../dashboard-page/types";
 import { getAttachmentCategory, normalizeExtensions } from "../dashboard-page/types";
 import { useDashboardComposer } from "../dashboard-page/useDashboardComposer";
@@ -71,6 +72,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const showToast = useToast();
+  const { setServerName } = useTitleBar();
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
   const {
@@ -206,6 +208,12 @@ export default function Dashboard() {
     serverInfo,
     normalizeExtensions,
   });
+  // Keep the title bar in sync with the current server name.
+  useEffect(() => {
+    setServerName(serverInfo?.server_name ?? null);
+    return () => setServerName(null);
+  }, [serverInfo?.server_name, setServerName]);
+
   // @mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSelectedIdx, setMentionSelectedIdx] = useState(0);
@@ -2042,7 +2050,7 @@ export default function Dashboard() {
   if (showServerConfigError) {
     logger.ui.error('Server configuration error', { error: errorMessage });
     return (
-      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center">
+      <div className="h-full bg-[var(--color-background)] flex items-center justify-center">
         <div className="text-center text-[var(--color-text)]">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text)]">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2068,7 +2076,7 @@ export default function Dashboard() {
 
   if (loadingTimeout) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex items-center justify-center">
+      <div className="h-full bg-[var(--color-background)] flex items-center justify-center">
         <div className="text-center text-[var(--color-text)]">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text)]">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2094,7 +2102,7 @@ export default function Dashboard() {
 
   if (!currentUser) {
     return (
-      <div className="h-screen bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
+      <div className="h-full bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative">
         <div className="flex h-full shrink-0 flex-col gap-2">
           <div className="flex min-h-0 flex-1 gap-2">
             <div className="w-16 bg-[var(--color-surface)] rounded-2xl shadow-xl border border-[var(--color-border)] flex flex-col items-center py-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent animate-pulse">
@@ -2285,7 +2293,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
+    <div className="h-full overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
       {/* Left Sidebar Container */}
       <div className="flex h-full shrink-0 flex-col gap-2">
         {/* Server and Channel Sidebars Row */}
