@@ -69,8 +69,118 @@ export const USER_ROLES: Record<UserRole, RoleInfo> = {
 
 export const DEFAULT_AVATAR_BACKGROUND = 'f1edd1';
 
+/**
+ * Build a DiceBear identicon URL for the given seed. This is the
+ * official identicon integration — used both as a "no custom avatar
+ * yet" fallback AND as the live render when ``avatar_kind === 'identicon'``.
+ *
+ * The backgroundColor parameter is hex-without-the-#. If a caller
+ * passes a full ``#RRGGBB``, strip the leading character; for the
+ * accent_color case we want the same color on the identicon
+ * background as on the rest of the user's branding.
+ */
+export const createIdenticonUrl = (
+  seed: string,
+  options: { backgroundColor?: string } = {},
+): string => {
+  const bg = (options.backgroundColor ?? `#${DEFAULT_AVATAR_BACKGROUND}`)
+    .replace(/^#/, '');
+  return `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(
+    seed || 'user',
+  )}&backgroundColor=${bg}`;
+};
+
+/**
+ * Backwards-compatible alias. ``createFallbackAvatarUrl`` was the old
+ * name when this URL was only used as a fallback. New code should call
+ * ``createIdenticonUrl`` directly; this name will be removed once all
+ * call sites have migrated.
+ */
 export const createFallbackAvatarUrl = (seed: string): string =>
-  `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(seed || 'user')}&backgroundColor=${DEFAULT_AVATAR_BACKGROUND}`;
+  createIdenticonUrl(seed);
+
+/**
+ * Resolve the actual URL to bind to an <img> for a profile's avatar.
+ *
+ * - ``avatar_kind === 'image'`` AND ``avatar_url`` set → use the upload
+ * - Otherwise → identicon URL built from ``avatar_seed`` (or
+ *   ``user_id`` / ``username`` as fallback ordering)
+ *
+ * Tolerates partial profiles: missing fields fall back to safe
+ * defaults so legacy rows still render.
+ */
+export interface AppearanceFields {
+  user_id?: string;
+  username?: string;
+  avatar_kind?: 'identicon' | 'image' | null;
+  banner_kind?: 'solid' | 'image' | null;
+  avatar_url?: string | null;
+  banner_url?: string | null;
+  accent_color?: string | null;
+  avatar_seed?: string | null;
+}
+
+export const resolveAvatarUrl = (
+  profile: AppearanceFields,
+  fallbackUrl?: string,
+): string => {
+  if (profile.avatar_kind === 'image' && profile.avatar_url) {
+    return profile.avatar_url;
+  }
+  if (fallbackUrl && profile.avatar_kind === 'image') {
+    return fallbackUrl;
+  }
+  const seed =
+    profile.avatar_seed ||
+    profile.user_id ||
+    profile.username ||
+    'user';
+  // Tint the identicon background with the accent color so an
+  // identicon-only profile looks intentional rather than generic.
+  return createIdenticonUrl(seed, {
+    backgroundColor: profile.accent_color ?? undefined,
+  });
+};
+
+/**
+ * Resolve the banner rendering decision for a profile.
+ *
+ * Returns one of:
+ *   { mode: 'image', url }    — render <img src=url />
+ *   { mode: 'solid', color }  — render a flat color div
+ *
+ * The solid mode also gets a derived gradient tail so the banner
+ * isn't visually flat — see ``solidBannerGradient`` below.
+ */
+export type ResolvedBanner =
+  | { mode: 'image'; url: string }
+  | { mode: 'solid'; color: string };
+
+export const DEFAULT_ACCENT_COLOR = '#6366f1'; // indigo-500 from the palette
+
+export const resolveBanner = (profile: AppearanceFields): ResolvedBanner => {
+  if (profile.banner_kind === 'image' && profile.banner_url) {
+    return { mode: 'image', url: profile.banner_url };
+  }
+  return {
+    mode: 'solid',
+    color: profile.accent_color || DEFAULT_ACCENT_COLOR,
+  };
+};
+
+/**
+ * The 16-color palette the server uses for derive_accent_color.
+ * Mirrored here so the appearance settings UI can show the exact
+ * same swatches the server picks from on creation. Changing this
+ * list without updating the server side will produce a divergent
+ * picker experience.
+ */
+export const ACCENT_COLOR_PALETTE = [
+  '#ef4444', '#f97316', '#f59e0b', '#eab308',
+  '#84cc16', '#22c55e', '#10b981', '#14b8a6',
+  '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1',
+  '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+] as const;
 
 export const getUserAccentColor = (rolesIds: string[] | undefined): string => {
   if (rolesIds?.some((role) => role.toLowerCase() === UserRole.OWNER)) {
@@ -122,6 +232,13 @@ export interface ApiUserProfile {
   about?: string;
   avatar_url?: string;
   banner_url?: string;
+  // Appearance toggle + identicon/color state. Returned by the
+  // /users/profile route post-appearance-feature. Pre-feature rows
+  // get backfilled at server boot so these should always be present.
+  avatar_kind?: 'identicon' | 'image';
+  banner_kind?: 'solid' | 'image';
+  accent_color?: string;
+  avatar_seed?: string;
   status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
   origin_server: string;
   inbox_id?: string;
@@ -141,6 +258,42 @@ export interface ApiUserProfile {
   created_at: string;
   updated_at: string;
 }
+
+export interface UpdateAppearanceRequest {
+  avatar_kind?: 'identicon' | 'image';
+  banner_kind?: 'solid' | 'image';
+  accent_color?: string;
+  shuffle_avatar_seed?: boolean;
+}
+
+export interface UpdateAppearanceResponse {
+  status_code: number;
+  message: string;
+  avatar_kind?: 'identicon' | 'image' | null;
+  banner_kind?: 'solid' | 'image' | null;
+  accent_color?: string | null;
+  avatar_seed?: string | null;
+}
+
+/**
+ * Switch the viewer's avatar/banner mode without uploading anything.
+ * Use this to revert from a custom upload back to the identicon, pick
+ * a different solid color, or shuffle the identicon seed.
+ */
+export const updateProfileAppearance = async (
+  hostPort: string,
+  authToken: string,
+  body: UpdateAppearanceRequest,
+): Promise<ApiResponse<UpdateAppearanceResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.put<UpdateAppearanceResponse>(
+    '/api/v1/users/profile/appearance',
+    {
+      auth_token: authToken,
+      ...body,
+    },
+  );
+};
 
 // User authentication functions
 export const login = async (hostPort: string, credentials: LoginCredentials): Promise<ApiResponse<AuthToken>> => {

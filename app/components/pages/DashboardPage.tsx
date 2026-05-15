@@ -25,7 +25,7 @@ import { validateMessageInput } from "../../utils/markdown";
 import { extractMentionQuery, insertMentionAtCursor, parseMentions } from "../../utils/mentions";
 import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
-import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus } from "../../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner } from "../../services/user";
 import { listChannels, createChannel, deleteChannel } from "../../services/channel";
 import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
 import { rememberAccount } from "../../services/accounts";
@@ -1980,13 +1980,45 @@ export default function Dashboard() {
       if (response.success && response.data?.user_data) {
         const userData = response.data.user_data;
 
+        // Resolve avatar/banner via the appearance helpers. resolveAvatarUrl
+        // honors avatar_kind: 'image' uses the uploaded URL; 'identicon'
+        // (default for new users) renders the DiceBear identicon seeded
+        // from avatar_seed and tinted with the user's accent_color.
+        // resolveBanner does the same for solid-vs-image banner mode.
+        const resolvedAvatar = resolveAvatarUrl(
+          {
+            user_id: userData.user_id || userId,
+            username: displayedUsername,
+            avatar_kind: userData.avatar_kind,
+            banner_kind: userData.banner_kind,
+            avatar_url: userData.avatar_url
+              ? createFullUrl(userData.avatar_url) || undefined
+              : undefined,
+            accent_color: userData.accent_color,
+            avatar_seed: userData.avatar_seed,
+          },
+        );
+        const resolvedBannerResult = resolveBanner({
+          banner_kind: userData.banner_kind,
+          banner_url: userData.banner_url
+            ? createFullUrl(userData.banner_url) || undefined
+            : undefined,
+          accent_color: userData.accent_color,
+        });
+
         const displayUser: DisplayUser = {
           id: userData.user_id || userId,
           username: displayedUsername,
-          avatar: userData.avatar_url ? createFullUrl(userData.avatar_url) || createFallbackAvatarUrl(displayedUsername) : createFallbackAvatarUrl(displayedUsername),
-          banner: userData.banner_url ? createFullUrl(userData.banner_url) : undefined,
-          accentColor: getUserAccentColor(userData.roles_ids),
-          bannerColor: getUserAccentColor(userData.roles_ids),
+          avatar: resolvedAvatar,
+          // banner stays undefined when banner_kind=solid so UserCard
+          // renders just the gradient backdrop using bannerColor.
+          banner: resolvedBannerResult.mode === 'image' ? resolvedBannerResult.url : undefined,
+          // accentColor (for badges/etc) prefers the user-chosen palette
+          // value when present; falls back to the role-derived color.
+          accentColor: userData.accent_color || getUserAccentColor(userData.roles_ids),
+          bannerColor: resolvedBannerResult.mode === 'solid'
+            ? resolvedBannerResult.color
+            : (userData.accent_color || getUserAccentColor(userData.roles_ids)),
           customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
           externalLinks: [], // Would be loaded from user preferences/settings in real implementation
           status: (

@@ -7,7 +7,7 @@ import { CroppableImage } from "../../components/CroppableImage";
 import { ModernSlider, ModernToggle } from "../../components/AudioControls";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/Button";
-import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout } from "../../services/user";
+import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout, USER_QUERY_KEYS } from "../../services/user";
 import { normalizeInstance, resolveInstance } from "../../services/instance";
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Palette, Volume2, Server, Shield } from 'lucide-react';
@@ -16,6 +16,7 @@ import { SettingsSidebar } from "../settings/SettingsSidebar";
 import type { SettingsTab, SettingsTabId } from "../settings/types";
 import { useSettingsAudio } from "../settings/useSettingsAudio";
 import { useSettingsProfile } from "../settings/useSettingsProfile";
+import { ProfileAppearanceControls } from "../settings/ProfileAppearanceControls";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
@@ -432,6 +433,20 @@ export default function Settings() {
                           </div>
                         </div>
                       </div>
+
+                      <ProfileAppearanceControls
+                        profile={currentUser as any}
+                        onAppearanceChanged={() => {
+                          // Invalidate the profile cache so the page picks
+                          // up the new avatar_kind / accent_color / seed.
+                          // The toggle endpoint doesn't return the full
+                          // profile shape, so a refetch is the cleanest
+                          // way to keep every consumer in sync.
+                          void queryClient.invalidateQueries({
+                            queryKey: USER_QUERY_KEYS.currentProfile(),
+                          });
+                        }}
+                      />
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4">
