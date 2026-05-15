@@ -962,7 +962,14 @@ export class VoiceTransport {
         break;
       }
       case 'error': {
+        // Server-sent error means the SFU is rejecting us at the protocol
+        // level (invalid token, room full, instance mismatch, etc).
+        // Treat as final — clearing lastBootstrap and flipping the
+        // intentionalDisconnect flag means the WS close that follows
+        // won't kick off a reconnect loop with the same bad token.
         this.emitError(msg.error || 'Voice signaling error');
+        this.lastBootstrap = null;
+        this.intentionalDisconnect = true;
         this.setState('failed');
         break;
       }
@@ -973,13 +980,14 @@ export class VoiceTransport {
 
   async connect(bootstrap: VoiceSessionBootstrap): Promise<void> {
     this.setState('connecting');
-    // Persist the bootstrap so an unexpected WS close or ICE failure can
-    // be recovered by replaying the same join_token + signaling_url.
-    // Replaced verbatim on every connect() call — picking up a new
-    // session via REST should never re-enter the reconnect path.
-    this.lastBootstrap = bootstrap;
     this.reconnectAttempts = 0;
     this.intentionalDisconnect = false;
+    // lastBootstrap is set AFTER the WS handshake completes successfully
+    // (see below). Setting it up front meant a failed initial connect
+    // would leave the bootstrap cached, and a late-arriving ws.onclose
+    // event would trigger scheduleReconnect against the same bad token —
+    // a 4-attempt loop on a permanently rejected session.
+    this.lastBootstrap = null;
 
     try {
       this.mediaQuality = bootstrap.media_quality ?? null;
@@ -993,15 +1001,31 @@ export class VoiceTransport {
       const signalingUrl = this.buildSignalingUrl(bootstrap.signaling_url, bootstrap.join_token);
       await this.openSignaling(signalingUrl);
 
+      // openSignaling resolved → the WS is open and the SFU accepted us
+      // at the protocol level. Now it's safe to cache the bootstrap for
+      // the reconnect path. A subsequent ws.onclose / pc 'failed' will
+      // legitimately need this to recover.
+      this.lastBootstrap = bootstrap;
+
       this.sendSignal({ type: 'join', session_id: bootstrap.session_id });
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       this.sendSignal({ type: 'offer', offer });
 
-      this.setState('connected');
+      // Don't optimistically setState('connected') here — ICE hasn't
+      // completed and pc.onconnectionstatechange will flip us to
+      // 'connected' once the media path is actually established. The
+      // old optimistic flip caused a connecting → connected → reconnecting
+      // bounce when the initial ICE attempt failed against a slow TURN.
       this.sendAudioState();
     } catch (error) {
+      // Initial connect failure is final — clear the bootstrap so any
+      // delayed ws.onclose firing during teardown can't re-enter the
+      // reconnect path. The caller (VoiceChannel) surfaces the error
+      // and the user clicks Join again to retry.
+      this.lastBootstrap = null;
+      this.intentionalDisconnect = true;
       this.setState('failed');
       this.emitError(error instanceof Error ? error.message : 'Failed to connect voice transport');
       throw error;
