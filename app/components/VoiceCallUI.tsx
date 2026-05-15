@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, MonitorUp, MonitorOff, PhoneOff, Volume2, VolumeX } from 'lucide-react';
 import type { VoiceSessionActions } from './VoiceChannel';
 import type { VoiceParticipant } from '../services/voiceTransport';
 
@@ -15,6 +15,55 @@ interface ParticipantCardProps {
   isSelf: boolean;
   session: VoiceSessionActions;
 }
+
+/**
+ * Renders a single MediaStream into a `<video>` element. Used for both
+ * the local self-preview (muted so the user doesn't hear their own
+ * shared audio twice) and remote peers. The video element's srcObject
+ * is bound via ref so React's diffing doesn't try to serialize the
+ * MediaStream into the DOM — that would crash on Object→String.
+ */
+interface ScreenShareTileProps {
+  stream: MediaStream;
+  label: string;
+  isLocal?: boolean;
+}
+
+const ScreenShareTile: React.FC<ScreenShareTileProps> = ({ stream, label, isLocal = false }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = stream;
+    // play() can reject if the tab is backgrounded — swallow the
+    // promise rejection; the browser will resume on focus.
+    void video.play().catch(() => undefined);
+    return () => {
+      // Release the binding on unmount so the GC can reclaim the
+      // stream wrapper. We don't stop tracks here — the transport
+      // owns track lifecycle.
+      video.srcObject = null;
+    };
+  }, [stream]);
+
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-[var(--color-border)] bg-black p-1 max-w-[280px]">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal}
+        className="w-full h-auto rounded-md aspect-video object-contain bg-black"
+      />
+      <div className="flex items-center gap-1 px-1 pb-0.5">
+        <MonitorUp className="w-3 h-3 text-[var(--color-info)]" />
+        <span className="text-[10px] text-[var(--color-text-muted)] truncate">{label}</span>
+        {isLocal && <span className="text-[10px] text-[var(--color-text-muted)]">(you)</span>}
+      </div>
+    </div>
+  );
+};
 
 const ParticipantCard: React.FC<ParticipantCardProps> = ({ participant, isSelf, session }) => {
   const displayName = participant.username || `User ${participant.user_id.slice(-4)}`;
@@ -93,7 +142,30 @@ export const VoiceCallUI: React.FC<VoiceCallUIProps> = ({
   currentUserId,
   currentUsername,
 }) => {
-  const { participants, isMuted, isDeafened, toggleMute, toggleDeafen, leave } = session;
+  const {
+    participants,
+    isMuted,
+    isDeafened,
+    toggleMute,
+    toggleDeafen,
+    leave,
+    startScreenShare,
+    stopScreenShare,
+    isScreenSharing,
+    remoteScreenShares,
+    localScreenStream,
+  } = session;
+
+  // Build a username lookup for labeling remote screen-share tiles.
+  // participants comes from the transport's participant_joined stream
+  // so usernames may be empty for very fresh joins — fall back to a
+  // truncated user_id which is still better than "unknown".
+  const usernameForUser = (userId: string): string => {
+    const found = participants.find((p) => p.user_id === userId);
+    return found?.username || `User ${userId.slice(-4)}`;
+  };
+
+  const hasAnyShares = isScreenSharing || remoteScreenShares.size > 0;
 
   // Include self as a participant card if not already in list
   const allParticipants: VoiceParticipant[] = React.useMemo(() => {
@@ -125,6 +197,29 @@ export const VoiceCallUI: React.FC<VoiceCallUIProps> = ({
           <span className="text-xs text-[var(--color-success)] font-medium">● Connected</span>
         </div>
       </div>
+
+      {/* Screen-share tile row. Rendered above the participant grid so
+          the active sharer's content is the visual focus; participants
+          collapse to small avatars below. */}
+      {hasAnyShares && (
+        <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-[var(--color-border)]/50">
+          {localScreenStream && currentUserId && (
+            <ScreenShareTile
+              key={`local:${currentUserId}`}
+              stream={localScreenStream}
+              label={currentUsername || 'You'}
+              isLocal
+            />
+          )}
+          {Array.from(remoteScreenShares.entries()).map(([userId, stream]) => (
+            <ScreenShareTile
+              key={`remote:${userId}`}
+              stream={stream}
+              label={usernameForUser(userId)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Participant grid */}
       <div className="px-4 py-3">
@@ -159,6 +254,36 @@ export const VoiceCallUI: React.FC<VoiceCallUIProps> = ({
         >
           {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
           {isMuted ? 'Unmute' : 'Mute'}
+        </button>
+
+        <button
+          onClick={() => {
+            if (isScreenSharing) {
+              void stopScreenShare();
+            } else {
+              // Swallow NotAllowed/Abort silently — that's "user cancelled
+              // the picker," which isn't an error worth flashing.
+              void startScreenShare().catch((error) => {
+                const name = error instanceof DOMException ? error.name : '';
+                if (name !== 'NotAllowedError' && name !== 'AbortError') {
+                  console.warn('Screen share failed:', error);
+                }
+              });
+            }
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-[var(--color-border)] ${
+            isScreenSharing
+              ? 'bg-[var(--color-info)] text-[var(--color-on-info)] hover:bg-[var(--color-info)]/90'
+              : 'bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]'
+          }`}
+          title={isScreenSharing ? 'Stop screen sharing' : 'Share your screen'}
+        >
+          {isScreenSharing ? (
+            <MonitorOff className="w-3.5 h-3.5" />
+          ) : (
+            <MonitorUp className="w-3.5 h-3.5" />
+          )}
+          {isScreenSharing ? 'Stop sharing' : 'Share screen'}
         </button>
 
         <button

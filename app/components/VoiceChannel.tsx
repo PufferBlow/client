@@ -26,6 +26,20 @@ export interface VoiceSessionActions {
   leave: () => Promise<void>;
   setUserVolume: (userId: string, volume: number) => void;
   getUserVolume: (userId: string) => number;
+  // Screen-share controls. startScreenShare can reject (user denies the
+  // browser prompt, browser doesn't support getDisplayMedia, etc.); the
+  // caller should toast on rejection. stopScreenShare is safe to call
+  // when not sharing — no-ops.
+  startScreenShare: () => Promise<void>;
+  stopScreenShare: () => Promise<void>;
+  isScreenSharing: boolean;
+  // user_id -> live screen-share MediaStream. The UI binds these to
+  // <video> elements. Updated whenever a remote peer starts/stops or
+  // disconnects.
+  remoteScreenShares: Map<string, MediaStream>;
+  // The local user's screen-capture stream, for rendering a self-preview.
+  // null when not sharing.
+  localScreenStream: MediaStream | null;
   isMuted: boolean;
   isDeafened: boolean;
   participants: VoiceParticipant[];
@@ -184,6 +198,15 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Screen share state, mirrored from the transport. We use plain React
+  // state for the remote streams Map (replaced on each update so the
+  // dependency arrays in consumers behave) and a boolean + ref for the
+  // local capture stream.
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
+  const [remoteScreenShares, setRemoteScreenShares] = useState<Map<string, MediaStream>>(
+    () => new Map(),
+  );
   const [qualityProfile, setQualityProfile] = useState<'low' | 'balanced' | 'high'>(
     mediaQuality?.default_profile ?? 'balanced'
   );
@@ -241,6 +264,20 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         });
       },
       onError: (message) => setError(message),
+      // Remote screen-share streams arrive here. We replace the Map
+      // identity on every update so React picks up the change — mutating
+      // in place would skip useMemo / useEffect dependencies downstream.
+      onRemoteScreenShare: (userId, stream) => {
+        setRemoteScreenShares((prev) => {
+          const next = new Map(prev);
+          if (stream) {
+            next.set(userId, stream);
+          } else {
+            next.delete(userId);
+          }
+          return next;
+        });
+      },
     });
 
     transportRef.current = transport;
@@ -273,6 +310,35 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
     }
   }, [isDeafened, sessionId]);
 
+  const handleStartScreenShare = useCallback(async () => {
+    const transport = transportRef.current;
+    if (!transport) return;
+    try {
+      await transport.startScreenShare();
+      setLocalScreenStream(transport.getLocalScreenStream());
+      setIsScreenSharing(true);
+    } catch (shareError) {
+      // The most common rejection is the user cancelling the picker —
+      // not a real error, but the surrounding UI may want to flash a
+      // brief hint. Re-throwing lets the caller distinguish (e.g.
+      // ignore NotAllowedError silently, toast on others).
+      const name = shareError instanceof DOMException ? shareError.name : '';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        const message = shareError instanceof Error ? shareError.message : 'Failed to share screen';
+        setError(message);
+      }
+      throw shareError;
+    }
+  }, []);
+
+  const handleStopScreenShare = useCallback(async () => {
+    const transport = transportRef.current;
+    if (!transport) return;
+    await transport.stopScreenShare();
+    setLocalScreenStream(null);
+    setIsScreenSharing(false);
+  }, []);
+
   const handleLeaveVoiceChannel = useCallback(async () => {
     const transport = transportRef.current;
     if (!transport) return;
@@ -290,6 +356,12 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
       setParticipants([]);
       setIsMuted(false);
       setIsDeafened(false);
+      // Clear screen-share state — the transport disconnect path already
+      // stopped tracks and fired onRemoteScreenShare(null) for each
+      // remote tile, but the local state mirrors here need to reset too.
+      setIsScreenSharing(false);
+      setLocalScreenStream(null);
+      setRemoteScreenShares(new Map());
       onConnectionStateChangeRef.current?.({
         connected: false,
         channelId,
@@ -314,11 +386,29 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
       leave: handleLeaveVoiceChannel,
       setUserVolume: (userId, volume) => transportRef.current?.setUserVolume(userId, volume),
       getUserVolume: (userId) => transportRef.current?.getUserVolume(userId) ?? 1,
+      startScreenShare: handleStartScreenShare,
+      stopScreenShare: handleStopScreenShare,
+      isScreenSharing,
+      remoteScreenShares,
+      localScreenStream,
       isMuted,
       isDeafened,
       participants,
     });
-  }, [isConnected, toggleMute, toggleDeafen, handleLeaveVoiceChannel, isMuted, isDeafened, participants]);
+  }, [
+    isConnected,
+    toggleMute,
+    toggleDeafen,
+    handleLeaveVoiceChannel,
+    handleStartScreenShare,
+    handleStopScreenShare,
+    isScreenSharing,
+    remoteScreenShares,
+    localScreenStream,
+    isMuted,
+    isDeafened,
+    participants,
+  ]);
 
   const handleJoinVoiceChannel = async () => {
     const authToken = getAuthTokenFromCookies();

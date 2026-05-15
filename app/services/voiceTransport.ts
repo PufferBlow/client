@@ -82,13 +82,27 @@ export interface VoiceParticipant {
   is_muted?: boolean;
   is_deafened?: boolean;
   is_speaking?: boolean;
+  is_sharing_screen?: boolean;
   connected_at?: string;
 }
+
+/**
+ * Fired whenever a remote peer's screen-share track arrives or goes away.
+ * `stream === null` means "tear down the tile for this user" — the peer
+ * stopped sharing, or disconnected, or the SFU told us to drop it.
+ * Otherwise `stream` is the MediaStream the UI should bind to a <video>
+ * element.
+ */
+export type RemoteScreenShareCallback = (
+  userId: string,
+  stream: MediaStream | null,
+) => void;
 
 interface VoiceTransportCallbacks {
   onStateChange?: (state: VoiceTransportState) => void;
   onParticipantsChange?: (participants: VoiceParticipant[]) => void;
   onError?: (error: string) => void;
+  onRemoteScreenShare?: RemoteScreenShareCallback;
 }
 
 interface SignalMessage {
@@ -127,6 +141,27 @@ export class VoiceTransport {
   private isDeafened = false;
   private activeQualityProfile: 'low' | 'balanced' | 'high' = 'balanced';
   private mediaQuality: RTCMediaQuality | null = null;
+
+  // Screen share state.
+  // - localScreenStream: the MediaStream returned by getDisplayMedia. Held
+  //   so stopScreenShare can stop every track (mic-bound audio track too,
+  //   if the user opted in to share with sound).
+  // - screenVideoSender: the RTCRtpSender created when we addTrack'd the
+  //   video. Kept on the side so stopScreenShare can removeTrack without
+  //   having to scan getSenders() to find the right one.
+  // - pendingVideoUserIds: FIFO of user IDs we've been told are about to
+  //   publish a video track via the SFU's screen_share_started broadcast.
+  //   The next video track that arrives in ontrack gets bound to the head
+  //   of this queue. Mirror of the audio queue pattern that's already
+  //   shipping — see pendingTrackQueue above.
+  // - remoteScreenStreams: user_id -> the live MediaStream for their screen
+  //   share, so we can stop/replace it on screen_share_stopped without
+  //   relying on the UI to hold the reference.
+  private localScreenStream: MediaStream | null = null;
+  private screenVideoSender: RTCRtpSender | null = null;
+  private screenAudioSender: RTCRtpSender | null = null;
+  private pendingVideoUserIds: string[] = [];
+  private remoteScreenStreams = new Map<string, MediaStream>();
 
   // Reconnect state. We hold onto the bootstrap from the initial connect so
   // a transient WebSocket / ICE drop can re-open the signaling channel
@@ -381,6 +416,188 @@ export class VoiceTransport {
     );
   }
 
+  /**
+   * Bind an incoming video track to a user. The SFU sends a
+   * `screen_share_started` broadcast (which lands in handleSignalMessage
+   * and pushes to pendingVideoUserIds) right before forwarding the track,
+   * so we pop the next pending userId and emit onRemoteScreenShare.
+   *
+   * If the queue is empty when the track arrives — e.g. announce arrived
+   * after the track due to network reordering, or the publisher started
+   * sharing before we joined and we missed the broadcast — we silently
+   * drop the track. The user remains in the participant list with their
+   * is_sharing_screen flag, so the worst case is "this peer shows as
+   * sharing but the tile is empty," not a stuck call.
+   *
+   * track.onended fires when the publisher stops or disconnects, which
+   * the SFU handles via a `screen_share_stopped` broadcast — but we
+   * also belt-and-suspenders clean up here in case the broadcast is lost.
+   */
+  private handleRemoteVideoTrack(track: MediaStreamTrack, stream: MediaStream): void {
+    const userId = this.pendingVideoUserIds.shift();
+    if (!userId) {
+      voiceLogger.warn('voiceTransport: video track arrived with no pending user binding', {
+        track_id: track.id,
+      });
+      return;
+    }
+    this.remoteScreenStreams.set(userId, stream);
+    this.callbacks.onRemoteScreenShare?.(userId, stream);
+
+    track.onended = () => {
+      if (this.remoteScreenStreams.get(userId) === stream) {
+        this.remoteScreenStreams.delete(userId);
+        this.callbacks.onRemoteScreenShare?.(userId, null);
+      }
+    };
+  }
+
+  /**
+   * Start publishing a screen share. Captures via getDisplayMedia with
+   * `audio: true` so the user can opt in to share system sound, but
+   * gracefully accepts an audio-less stream (most browsers prompt for
+   * each). The video track is addTrack'd on the existing peer connection
+   * which triggers onnegotiationneeded → renegotiation, and a
+   * `screen_share_started` signal is sent so other clients know who to
+   * bind the incoming track to.
+   *
+   * Throws if the user denies the prompt or the browser doesn't support
+   * getDisplayMedia. Callers should surface the error via toast — the
+   * call itself stays alive.
+   */
+  async startScreenShare(): Promise<void> {
+    if (!this.pc) {
+      throw new Error('Cannot start screen share — not connected to voice');
+    }
+    if (this.localScreenStream) {
+      // Already sharing — be idempotent rather than throwing.
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error('Screen sharing is not supported in this browser');
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+    });
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) {
+      // Shouldn't happen — getDisplayMedia always returns a video track —
+      // but handle defensively.
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error('Screen capture returned no video track');
+    }
+
+    // Browser-level "Stop sharing" button (Chrome's overlay) ends the
+    // track directly. Wire that to our normal stop path so the SFU and
+    // other peers find out.
+    videoTrack.onended = () => {
+      void this.stopScreenShare();
+    };
+
+    this.localScreenStream = stream;
+    this.screenVideoSender = this.pc.addTrack(videoTrack, stream);
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) {
+      this.screenAudioSender = this.pc.addTrack(audioTrack, stream);
+    }
+
+    // Renegotiate. addTrack synchronously dirties the senders so the
+    // resulting offer includes the new m-line. The SFU's offer handler
+    // is renegotiation-friendly — it always SetRemoteDescription +
+    // generates a fresh answer.
+    await this.renegotiate();
+
+    // Announce after renegotiation so the SFU has already accepted the
+    // new track when other peers receive the broadcast. Ordering matters:
+    // if we announce first, the peer pops a pending userId, the track
+    // arrives, gets bound — good. If we announce after, same outcome.
+    // The race is harmless either way because pendingVideoUserIds is
+    // populated on the announce, not on the track arrival.
+    this.sendSignal({ type: 'screen_share_started' });
+  }
+
+  /**
+   * Stop publishing a screen share. Removes the video sender (and audio
+   * sender if present), stops the local tracks, renegotiates so the SFU
+   * tears down its end, and broadcasts the stop so other clients drop
+   * their tile.
+   *
+   * Safe to call when not sharing — no-ops in that case.
+   */
+  async stopScreenShare(): Promise<void> {
+    if (!this.localScreenStream || !this.pc) return;
+
+    if (this.screenVideoSender) {
+      try {
+        this.pc.removeTrack(this.screenVideoSender);
+      } catch (error) {
+        voiceLogger.warn('voiceTransport: removeTrack(video) failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      this.screenVideoSender = null;
+    }
+    if (this.screenAudioSender) {
+      try {
+        this.pc.removeTrack(this.screenAudioSender);
+      } catch (error) {
+        voiceLogger.warn('voiceTransport: removeTrack(audio) failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      this.screenAudioSender = null;
+    }
+
+    for (const track of this.localScreenStream.getTracks()) {
+      track.stop();
+    }
+    this.localScreenStream = null;
+
+    try {
+      await this.renegotiate();
+    } catch (error) {
+      // Best-effort — even if the renegotiation fails, the local capture
+      // is stopped and the broadcast still lets other peers tear down.
+      voiceLogger.warn('voiceTransport: renegotiation after stop failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    this.sendSignal({ type: 'screen_share_stopped' });
+  }
+
+  /**
+   * True iff this transport is currently publishing a screen share track.
+   * Used by the UI to flip the share button into a stop-share state.
+   */
+  isScreenSharing(): boolean {
+    return this.localScreenStream !== null;
+  }
+
+  /**
+   * Returns the local screen-capture stream so the UI can render a
+   * self-preview tile. Null when not sharing.
+   */
+  getLocalScreenStream(): MediaStream | null {
+    return this.localScreenStream;
+  }
+
+  /**
+   * Create and send a fresh offer. Used by startScreenShare /
+   * stopScreenShare after addTrack / removeTrack. We don't use
+   * onnegotiationneeded because the initial connect() already does
+   * createOffer manually — wiring both would double-fire on the first
+   * connection. Doing it explicitly here keeps the flow predictable.
+   */
+  private async renegotiate(): Promise<void> {
+    if (!this.pc) return;
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    this.sendSignal({ type: 'offer', offer });
+  }
+
   private ensurePeerConnection(iceServers: IceServerConfig[]): RTCPeerConnection {
     if (this.pc) return this.pc;
 
@@ -403,6 +620,14 @@ export class VoiceTransport {
     pc.ontrack = (event) => {
       const stream = event.streams[0];
       if (!stream) return;
+
+      // Video tracks are screen shares — branch into the screen-share
+      // path which surfaces a MediaStream to the UI via callback rather
+      // than creating a hidden <audio> element.
+      if (event.track.kind === 'video') {
+        this.handleRemoteVideoTrack(event.track, stream);
+        return;
+      }
 
       const trackId = event.track.id;
       let audio = this.remoteAudioEls.get(trackId);
@@ -613,12 +838,57 @@ export class VoiceTransport {
         const participants = msg.participants ?? [];
         this.participants.clear();
         this.pendingTrackQueue = [];
+        // Reset the video queue too. Any participant who is already
+        // sharing at the time we join gets pre-queued so their forwarded
+        // video track binds correctly when it lands.
+        this.pendingVideoUserIds = [];
         for (const participant of participants) {
           this.participants.set(participant.user_id, participant);
-          // Queue existing participants for track assignment
           this.pendingTrackQueue.push(participant.user_id);
+          if (participant.is_sharing_screen) {
+            this.pendingVideoUserIds.push(participant.user_id);
+          }
         }
         this.emitParticipants();
+        break;
+      }
+      case 'screen_share_started': {
+        const userId = String(msg.payload?.user_id ?? '');
+        if (!userId) break;
+        // Update the participant flag so consumers (UI participant list)
+        // can show a "sharing screen" indicator before the video track
+        // itself arrives.
+        const current = this.participants.get(userId);
+        if (current) {
+          this.participants.set(userId, { ...current, is_sharing_screen: true });
+          this.emitParticipants();
+        }
+        // Queue the userId for the next inbound video track. Dedupe to
+        // tolerate the SFU re-broadcasting on a client reconnect — pushing
+        // twice would leave a phantom userId waiting forever.
+        if (!this.pendingVideoUserIds.includes(userId)) {
+          this.pendingVideoUserIds.push(userId);
+        }
+        break;
+      }
+      case 'screen_share_stopped': {
+        const userId = String(msg.payload?.user_id ?? '');
+        if (!userId) break;
+        const current = this.participants.get(userId);
+        if (current) {
+          this.participants.set(userId, { ...current, is_sharing_screen: false });
+          this.emitParticipants();
+        }
+        // If we never bound the track (announce out of order, or we
+        // didn't have onRemoteScreenShare registered), still drain the
+        // pending queue so a later legitimate share doesn't get bound to
+        // the wrong user.
+        this.pendingVideoUserIds = this.pendingVideoUserIds.filter((id) => id !== userId);
+        const stream = this.remoteScreenStreams.get(userId);
+        if (stream) {
+          this.remoteScreenStreams.delete(userId);
+          this.callbacks.onRemoteScreenShare?.(userId, null);
+        }
         break;
       }
       case 'participant_joined': {
@@ -646,7 +916,16 @@ export class VoiceTransport {
         if (userId) {
           this.participants.delete(userId);
           this.userAudioMap.delete(userId);
-          this.pendingTrackQueue = this.pendingTrackQueue.filter(id => id !== userId);
+          this.pendingTrackQueue = this.pendingTrackQueue.filter((id) => id !== userId);
+          this.pendingVideoUserIds = this.pendingVideoUserIds.filter((id) => id !== userId);
+          // Drop any remote screen stream that hasn't been torn down yet.
+          // The SFU broadcasts screen_share_stopped before participant_left
+          // when a sharing peer disconnects, so this is a safety net for
+          // out-of-order delivery.
+          if (this.remoteScreenStreams.has(userId)) {
+            this.remoteScreenStreams.delete(userId);
+            this.callbacks.onRemoteScreenShare?.(userId, null);
+          }
           this.emitParticipants();
         }
         break;
@@ -818,6 +1097,23 @@ export class VoiceTransport {
     this.activeQualityProfile = 'balanced';
     this.currentInputDeviceId = null;
     this.currentOutputDeviceId = null;
+
+    // Screen share teardown. Notify the UI for every still-open remote
+    // tile (cleanup happens before UI sees the state change) and stop
+    // any local capture tracks we were publishing.
+    if (this.localScreenStream) {
+      for (const track of this.localScreenStream.getTracks()) {
+        track.stop();
+      }
+      this.localScreenStream = null;
+    }
+    this.screenVideoSender = null;
+    this.screenAudioSender = null;
+    for (const userId of this.remoteScreenStreams.keys()) {
+      this.callbacks.onRemoteScreenShare?.(userId, null);
+    }
+    this.remoteScreenStreams.clear();
+    this.pendingVideoUserIds = [];
     if (this.deviceChangeUnsub) {
       this.deviceChangeUnsub();
       this.deviceChangeUnsub = null;
