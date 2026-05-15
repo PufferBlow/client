@@ -70,6 +70,10 @@ function createWindow() {
   // the restore/maximize icon without polling.
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window-maximize-changed', true));
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window-maximize-changed', false));
+
+  // Push fullscreen transitions so the title bar can hide itself in fullscreen.
+  mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send('window-fullscreen-changed', true));
+  mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('window-fullscreen-changed', false));
 }
 
 /**

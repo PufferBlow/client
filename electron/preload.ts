@@ -57,4 +57,9 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('window-maximize-changed', listener);
     return () => ipcRenderer.removeListener('window-maximize-changed', listener);
   },
+  onWindowFullscreenChanged: (cb: (isFullscreen: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, isFullscreen: boolean) => cb(isFullscreen);
+    ipcRenderer.on('window-fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
+  },
 });
