@@ -1338,16 +1338,16 @@ export function RecentActivity() {
     const target = event.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
 
-    // Mock user data for display
+    // Seed the modal with only the fields we actually know from the activity
+    // payload — username, id, and (sometimes) an avatar URL. UserProfileModal
+    // resolves the rest via useUserProfile(id); we used to fabricate status /
+    // bio / joinedAt / roles here, which flashed lies for a moderator before
+    // the real fetch resolved.
     const user = {
       id: userId,
-      username: username,
+      username,
       avatar: null,
       avatar_url: activity?.user?.avatar_url || activity?.metadata?.avatar_url || null,
-      status: 'online' as const, // Mock status
-      bio: `${username} performed this server action`,
-      joinedAt: '2023-01-15', // Mock join date
-      roles: ['Admin', 'Owner'] // Mock roles for server setting changers
     };
 
     // Position the modal relative to the clicked username
@@ -4208,21 +4208,36 @@ export function UserProfileModal({
 
   if (!isOpen || !user) return null;
 
+  // Merge the seed (from the caller) with the freshly fetched profile. Only
+  // fields the API actually returned populate; we deliberately do NOT invent
+  // a `joinedAt` of "today" when the field is missing — `null` lets the
+  // template hide that row entirely instead of flashing a lie.
   const displayUser = fetchedUser
     ? {
         ...user,
         ...fetchedUser,
         id: fetchedUser.id || fetchedUser.user_id || user.id,
         username: fetchedUser.username || user.username,
-        bio: fetchedUser.bio || user.bio,
-        joinedAt: fetchedUser.joinedAt || fetchedUser.created_at || user.joinedAt || new Date().toISOString(),
+        bio: fetchedUser.bio || user.bio || null,
+        joinedAt:
+          fetchedUser.joinedAt ||
+          fetchedUser.created_at ||
+          user.joinedAt ||
+          null,
         avatar_url: fetchedUser.avatar_url ?? user.avatar_url ?? null,
         avatar: fetchedUser.avatar ?? user.avatar ?? null,
       }
     : {
         ...user,
-        joinedAt: user.joinedAt || new Date().toISOString(),
+        bio: user.bio || null,
+        joinedAt: user.joinedAt || null,
       };
+
+  const joinedDate = (() => {
+    if (!displayUser.joinedAt) return null;
+    const d = new Date(displayUser.joinedAt);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString();
+  })();
 
   return (
     <div
@@ -4243,26 +4258,24 @@ export function UserProfileModal({
           />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-[var(--color-text)] truncate">{displayUser.username}</div>
-            <div className="text-xs text-[var(--color-text-secondary)]">{displayUser.bio}</div>
+            {displayUser.bio && (
+              <div className="text-xs text-[var(--color-text-secondary)] truncate">{displayUser.bio}</div>
+            )}
           </div>
         </div>
 
-        {/* Joined date */}
-        <div className="text-xs text-[var(--color-text-muted)] pb-2">
-          Joined {new Date(displayUser.joinedAt).toLocaleDateString()}
-        </div>
-
-        {/* Actions (if different from current user) */}
-        {displayUser.id !== currentUserId && (
-          <div className="border-t border-[var(--color-border)] pt-2">
-            <button className="w-full text-left px-2 py-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-secondary)] rounded transition-colors">
-              Start Conversation
-            </button>
-            <button className="w-full text-left px-2 py-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-secondary)] rounded transition-colors">
-              Add Friend
-            </button>
+        {/* Joined date — only when the server actually returned it. */}
+        {joinedDate && (
+          <div className="text-xs text-[var(--color-text-muted)] pb-2">
+            Joined {joinedDate}
           </div>
         )}
+        {/*
+         * Note: "Start Conversation" and "Add Friend" buttons used to live
+         * here but were stubs — no DM or friendship service exists. Removed
+         * rather than shown disabled, because for moderators the modal is
+         * informational only and there's no useful action to surface yet.
+         */}
       </div>
     </div>
   );

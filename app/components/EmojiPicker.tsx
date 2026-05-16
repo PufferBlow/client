@@ -22,7 +22,7 @@ interface GifResult {
 export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: EmojiPickerProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'emoji' | 'gif' | 'sticker'>('emoji');
+  const [activeTab, setActiveTab] = useState<'emoji' | 'gif'>('emoji');
   const [gifs, setGifs] = useState<GifResult[]>([]);
   const [isLoadingGifs, setIsLoadingGifs] = useState(false);
   const [gifError, setGifError] = useState<string | null>(null);
@@ -192,7 +192,6 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         <h3 className="text-sm font-semibold text-[var(--color-text)]">
           {activeTab === 'emoji' && 'Emoji'}
           {activeTab === 'gif' && 'GIF'}
-          {activeTab === 'sticker' && 'Sticker'}
         </h3>
 
         {/* Close button */}
@@ -231,16 +230,6 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         >
           GIF
         </button>
-        <button
-          onClick={() => setActiveTab('sticker')}
-          className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
-            activeTab === 'sticker'
-              ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-text)]'
-              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-          }`}
-        >
-          🏷️
-        </button>
       </div>
 
       {/* Search Input */}
@@ -248,9 +237,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         <input
           type="text"
           placeholder={
-            activeTab === 'emoji' ? 'Search emojis...' :
-            activeTab === 'gif' ? 'Search GIFs...' :
-            'Search stickers...'
+            activeTab === 'emoji' ? 'Search emojis...' : 'Search GIFs...'
           }
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -347,13 +334,6 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
           </>
         )}
 
-        {activeTab === 'sticker' && (
-          <div className="py-8 text-center text-[var(--color-text-secondary)]">
-            <div className="text-3xl mb-2">🏷️</div>
-            <div className="text-sm">Sticker search coming soon</div>
-            <div className="mt-1 text-xs text-[var(--color-text-muted)]">Browse and send animated stickers</div>
-          </div>
-        )}
       </div>
     </div>
   );
