@@ -951,7 +951,7 @@ export function StorageTab({
           {[
             { label: 'Files', value: files.length.toLocaleString(), icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', color: 'var(--color-primary)' },
             { label: 'Total size', value: formatFileSize(totalSize), icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4', color: 'var(--color-success)' },
-            { label: 'Images', value: imageCount.toLocaleString(), icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z', color: '#a78bfa' },
+            { label: 'Images', value: imageCount.toLocaleString(), icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'var(--color-info)' },
             { label: 'Orphaned', value: orphanedCount.toLocaleString(), icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z', color: orphanedCount > 0 ? 'var(--color-error)' : 'var(--color-text-muted)' },
           ].map(stat => (
             <div key={stat.label} className="flex items-center gap-3 px-6 py-4">
