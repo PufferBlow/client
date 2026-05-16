@@ -32,18 +32,6 @@ import { banUser, timeoutUser, fetchReports, resolveReport, type Report } from "
 import { getBackgroundTaskStatuses, runBackgroundTask, toggleBackgroundTask, getBackupConfig, updateBackupConfig } from "../../services/backgroundTasks";
 import { logger } from "../../utils/logger";
 import type { Channel } from "../../models";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from "chart.js";
 import { Line, Bar, Pie } from "react-chartjs-2";
 import { Hash, Mic } from "lucide-react";
 import type { ShowToast } from "../Toast";
@@ -54,267 +42,30 @@ import {
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Notice } from "../ui/Notice";
 import { renderFileTypeIcon } from "../../utils/fileTypeMeta";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-);
-
-const getControlPanelAvatarLabel = (username: string) =>
-  username
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2) || '?';
-
-function ControlPanelAvatar({
-  username,
-  avatarUrl,
-  className,
-}: {
-  username: string;
-  avatarUrl?: string | null;
-  className: string;
-}) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const resolvedAvatarUrl = avatarUrl ? convertToFullStorageUrl(avatarUrl) : null;
-
-  if (resolvedAvatarUrl && !imageFailed) {
-    return (
-      <img
-        src={resolvedAvatarUrl}
-        alt={username}
-        onError={() => setImageFailed(true)}
-        className={`${className} object-cover`}
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`${className} flex items-center justify-center bg-[var(--color-surface-secondary)] text-xs font-semibold text-[var(--color-text)]`}
-      aria-label={`${username} avatar placeholder`}
-    >
-      {getControlPanelAvatarLabel(username)}
-    </div>
-  );
-}
-
-const cx = (...classes: Array<string | false | null | undefined>) =>
-  classes.filter(Boolean).join(" ");
-
-const controlPanelSectionClass =
-  "rounded-[1.5rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 shadow-sm";
-const controlPanelInsetClass =
-  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
-const controlPanelQuietClass =
-  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_72%,var(--color-background)_28%)] p-5";
-const controlPanelCardClass =
-  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4";
-const controlPanelMetricClass =
-  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
-const controlPanelChartCardClass =
-  "rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-5";
-const controlPanelRowClass =
-  "rounded-[1rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4 transition-colors hover:border-[var(--color-border)] hover:bg-[var(--color-hover)]";
-const controlPanelInputClass =
-  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-2.5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
-const controlPanelTextAreaClass =
-  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-3 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
-const controlPanelSelectClass =
-  "w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-2.5 text-[var(--color-text)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]";
-
-const controlPanelButtonClass = (variant: "primary" | "secondary" | "ghost" | "danger" = "secondary") =>
-  cx(
-    "inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium tracking-[-0.01em] transition-colors",
-    variant === "primary" &&
-      "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]",
-    variant === "secondary" &&
-      "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)]",
-    variant === "ghost" &&
-      "border-transparent bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
-    variant === "danger" &&
-      "border-[color:color-mix(in_srgb,var(--color-error)_32%,var(--color-border-secondary))] bg-[color:color-mix(in_srgb,var(--color-error)_10%,var(--color-surface-secondary))] text-[var(--color-text)] hover:bg-[color:color-mix(in_srgb,var(--color-error)_16%,var(--color-surface-secondary))]",
-  );
-
-const controlPanelSegmentClass = (active: boolean) =>
-  cx(
-    "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-    active
-      ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-      : "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
-  );
-
-const controlPanelBadgeClass = (tone: "neutral" | "success" | "warning" | "info" | "danger" = "neutral") =>
-  cx(
-    "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]",
-    tone === "neutral" &&
-      "border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]",
-    tone === "success" && "pb-status-success",
-    tone === "warning" && "pb-status-warning",
-    tone === "info" && "pb-status-info",
-    tone === "danger" && "pb-status-danger",
-  );
-
-const formatCompactNumber = (value: number | null | undefined) =>
-  typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "—";
-
-const resolveCssVar = (name: string, fallback: string) => {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return fallback;
-  }
-
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-};
-
-const hexToRgba = (value: string, alpha: number) => {
-  const hex = value.replace("#", "").trim();
-  if (hex.length !== 3 && hex.length !== 6) {
-    return value;
-  }
-
-  const normalized =
-    hex.length === 3
-      ? hex
-          .split("")
-          .map((char) => `${char}${char}`)
-          .join("")
-      : hex;
-
-  const int = Number.parseInt(normalized, 16);
-  const r = (int >> 16) & 255;
-  const g = (int >> 8) & 255;
-  const b = int & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const getControlPanelChartPalette = () => {
-  const text = resolveCssVar("--color-text", "#fafafa");
-  const textSecondary = resolveCssVar("--color-text-secondary", "#d4d4d4");
-  const textMuted = resolveCssVar("--color-text-muted", "#737373");
-  const border = resolveCssVar("--color-border-secondary", "rgba(255,255,255,0.08)");
-  const primary = resolveCssVar("--color-primary", "#fafafa");
-  const success = resolveCssVar("--color-success", "#7ecf9f");
-  const warning = resolveCssVar("--color-warning", "#d6b36a");
-  const info = resolveCssVar("--color-info", "#86aee8");
-  const error = resolveCssVar("--color-error", "#d8837b");
-
-  return {
-    text,
-    textSecondary,
-    textMuted,
-    border,
-    primary,
-    success,
-    warning,
-    info,
-    error,
-    neutralFill: hexToRgba(primary, 0.12),
-    neutralStroke: hexToRgba(primary, 0.7),
-    successFill: hexToRgba(success, 0.18),
-    successStroke: success,
-    warningFill: hexToRgba(warning, 0.2),
-    warningStroke: warning,
-    infoFill: hexToRgba(info, 0.18),
-    infoStroke: info,
-    errorFill: hexToRgba(error, 0.16),
-    errorStroke: error,
-  };
-};
-
-const createChartOptions = (kind: "line" | "bar" | "pie") => {
-  const palette = getControlPanelChartPalette();
-
-  if (kind === "pie") {
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: "bottom" as const,
-          labels: {
-            color: palette.textSecondary,
-            usePointStyle: true,
-            padding: 18,
-            boxWidth: 10,
-            boxHeight: 10,
-            font: {
-              size: 11,
-            },
-          },
-        },
-      },
-    };
-  }
-
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: "index" as const,
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        backgroundColor: "rgba(12, 12, 12, 0.94)",
-        borderColor: palette.border,
-        borderWidth: 1,
-        titleColor: palette.text,
-        bodyColor: palette.textSecondary,
-        padding: 12,
-        displayColors: false,
-      },
-    },
-    scales: {
-      x: {
-        border: {
-          display: false,
-        },
-        ticks: {
-          color: palette.textMuted,
-          maxRotation: 0,
-          autoSkipPadding: 14,
-          font: {
-            size: 11,
-          },
-        },
-        grid: {
-          display: false,
-        },
-      },
-      y: {
-        beginAtZero: true,
-        border: {
-          display: false,
-        },
-        ticks: {
-          color: palette.textMuted,
-          padding: 10,
-          font: {
-            size: 11,
-          },
-        },
-        grid: {
-          color: hexToRgba(resolveCssVar("--color-text", "#fafafa"), 0.08),
-          drawTicks: false,
-        },
-      },
-    },
-  };
-};
+import { ControlPanelAvatar, getControlPanelAvatarLabel } from "./ControlPanelAvatar";
+import {
+  cx,
+  controlPanelSectionClass,
+  controlPanelInsetClass,
+  controlPanelQuietClass,
+  controlPanelCardClass,
+  controlPanelMetricClass,
+  controlPanelChartCardClass,
+  controlPanelRowClass,
+  controlPanelInputClass,
+  controlPanelTextAreaClass,
+  controlPanelSelectClass,
+  controlPanelButtonClass,
+  controlPanelSegmentClass,
+  controlPanelBadgeClass,
+  formatCompactNumber,
+} from "./shared";
+import {
+  resolveCssVar,
+  hexToRgba,
+  getControlPanelChartPalette,
+  createChartOptions,
+} from "./chartPalette";
 
 export function TasksTab({
   showToast
