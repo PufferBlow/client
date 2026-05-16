@@ -1,10 +1,58 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+/**
+ * Subset of `electron-updater`'s UpdateInfo we forward to the renderer.
+ * Replicated here so the renderer doesn't have to take a dependency on
+ * the updater package just to type the IPC payload.
+ */
+interface UpdateInfo {
+  version: string;
+  releaseName?: string | null;
+  releaseNotes?: string | null;
+  releaseDate: string;
+}
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
-  onUpdateAvailable: (cb: () => void) => ipcRenderer.on('update-available', cb),
-  onUpdateDownloaded: (cb: () => void) => ipcRenderer.on('update-downloaded', cb),
+  /**
+   * Fires once an update has been detected on the release feed. The info
+   * payload includes the version string — useful for "v1.2.3 is available"
+   * copy in the banner.
+   */
+  onUpdateAvailable: (cb: (info: UpdateInfo) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfo) => cb(info);
+    ipcRenderer.on('update-available', listener);
+    return () => ipcRenderer.removeListener('update-available', listener);
+  },
+  /**
+   * Fires once the update bundle has finished downloading in the background.
+   * Renderer should now offer the user a "restart to update" action that
+   * calls `installUpdate()` below.
+   */
+  onUpdateDownloaded: (cb: (info: UpdateInfo) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfo) => cb(info);
+    ipcRenderer.on('update-downloaded', listener);
+    return () => ipcRenderer.removeListener('update-downloaded', listener);
+  },
   installUpdate: () => ipcRenderer.send('install-update'),
+
+  /**
+   * Subscribe to `pufferblow://` activations forwarded from the main
+   * process. The URL is the raw string the OS handed us — the renderer
+   * is responsible for parsing it into a route. Returns a disposer.
+   */
+  onDeepLink: (cb: (url: string) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, url: string) => cb(url);
+    ipcRenderer.on('deep-link', listener);
+    return () => ipcRenderer.removeListener('deep-link', listener);
+  },
+  /**
+   * Drain any deep-link URL that arrived before the renderer had finished
+   * mounting (cold start protocol activations from the OS). One-shot —
+   * the main process clears its queue once we read it.
+   */
+  getPendingDeepLink: (): Promise<string | null> =>
+    ipcRenderer.invoke('get-pending-deep-link'),
   /**
    * Bring the main window to the foreground and give it focus. Used by the
    * desktop-notifications service when the user clicks an OS notification —

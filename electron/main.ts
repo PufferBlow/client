@@ -6,6 +6,18 @@ import { createTray } from './tray';
 const isDev = !app.isPackaged;
 const PROD_INDEX = path.join(__dirname, '..', 'build', 'client', 'index.html');
 
+/**
+ * Custom URL scheme registered with the OS so external clients can deep-link
+ * into the app (e.g. clicking `pufferblow://m/<message_id>` in a browser or
+ * chat opens the desktop client and navigates there).
+ *
+ * On macOS the URL is delivered via `app.on('open-url')`. On Windows / Linux
+ * the OS launches a new copy of the executable with the URL appended to
+ * argv; the single-instance lock catches it and we surface the URL to the
+ * already-running window in the `second-instance` handler.
+ */
+const PROTOCOL = 'pufferblow';
+
 // Stable AppUserModelID is required on Windows so that OS notifications and
 // taskbar pins group under "Pufferblow" instead of under the auto-generated
 // `electron.app.Pufferblow`. macOS / Linux ignore this call.
@@ -30,6 +42,47 @@ let mainWindow: BrowserWindow | null = null;
 // actually lets the window die. Without this the user can never fully quit
 // from the OS shell (Cmd-Q / Alt-F4 just re-hide the window).
 let quittingForReal = false;
+
+/**
+ * URL queued before the renderer has finished mounting. The first `pufferblow://`
+ * activation often arrives before our React tree has subscribed to the
+ * `deep-link` IPC event — store it here so the renderer can pull it via
+ * `get-pending-deep-link` on mount.
+ */
+let pendingDeepLink: string | null = null;
+
+/** Find the first `pufferblow://...` URL anywhere in an argv array. */
+const extractDeepLink = (argv: readonly string[]): string | null =>
+  argv.find((arg) => typeof arg === 'string' && arg.startsWith(`${PROTOCOL}://`)) ?? null;
+
+/**
+ * Hand a deep link to the renderer. If the window isn't ready yet, queue it
+ * so a fresh mount can drain it via the `get-pending-deep-link` IPC. We
+ * never queue more than one URL — the latest activation wins, which matches
+ * how OS protocol activations behave when the user clicks twice quickly.
+ */
+const dispatchDeepLink = (url: string | null): void => {
+  if (!url) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('deep-link', url);
+  } else {
+    pendingDeepLink = url;
+  }
+};
+
+// Register `pufferblow://` with the OS as a default protocol handler. In
+// dev on Windows we have to point the registration at electron.exe + our
+// compiled main.js so the second-instance argv is well-formed; in
+// packaged builds Electron does the right thing on its own.
+if (isDev && process.platform === 'win32') {
+  app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1] ?? '')]);
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+// First-launch URL on Windows/Linux (the OS appends the activation URL to argv
+// when it launches us). Queue it now so the eventual renderer mount drains it.
+pendingDeepLink = extractDeepLink(process.argv);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -95,11 +148,26 @@ function focusMainWindow() {
 }
 
 // Second-instance handler — called when the user launches Pufferblow again
-// while a copy is already running. Foreground the existing window so
-// double-clicking the desktop icon feels like "open the app" instead of
-// silently doing nothing.
-app.on('second-instance', () => {
+// while a copy is already running, including when the OS spawns a new copy
+// to deliver a `pufferblow://` activation on Windows / Linux. Foreground the
+// existing window and forward any deep-link URL into the renderer.
+app.on('second-instance', (_event, argv) => {
   focusMainWindow();
+  dispatchDeepLink(extractDeepLink(argv));
+});
+
+// macOS deep-link path. Unlike Windows / Linux the URL never appears in
+// argv — the OS delivers it through this event instead, both at cold start
+// (queued for the renderer) and to a running instance (dispatched live).
+app.on('open-url', (event, url) => {
+  if (!url.startsWith(`${PROTOCOL}://`)) return;
+  event.preventDefault();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    dispatchDeepLink(url);
+  } else {
+    pendingDeepLink = url;
+  }
 });
 
 app.whenReady().then(() => {
@@ -152,6 +220,16 @@ app.whenReady().then(() => {
   ipcMain.handle('window-close', () => mainWindow?.close());
   ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized() ?? false);
 
+  // Renderer pulls any queued deep link on mount. We can't reliably push the
+  // URL via `webContents.send` for cold-start activations because the renderer
+  // hasn't subscribed to the event listener yet — the renderer asks once it's
+  // ready, then we hand the queued URL over (and clear it; one-shot).
+  ipcMain.handle('get-pending-deep-link', () => {
+    const url = pendingDeepLink;
+    pendingDeepLink = null;
+    return url;
+  });
+
   // macOS: clicking the dock icon when the app has no visible windows
   // should re-show the existing window (or create one if it was fully
   // closed). This is the canonical Electron pattern.
@@ -175,6 +253,49 @@ app.on('before-quit', () => {
   quittingForReal = true;
 });
 
+// ── Auto-updater ────────────────────────────────────────────────────────────
+//
+// electron-updater fires lifecycle events that we forward into the renderer
+// via IPC so a React component can surface "an update is available" and
+// later "ready to install — restart now". The renderer answers with
+// `install-update` once the user clicks the restart button, at which point
+// we call `quitAndInstall` from the main process (the renderer can't trigger
+// the squirrel restart directly).
+//
+// Errors are logged but never fatal; a failed update check should not crash
+// the app. Updates only run in packaged builds — `app.isPackaged` guards
+// against pulling a release manifest while developing.
 if (!isDev) {
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-available', info);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('update-downloaded', info);
+  });
+  autoUpdater.on('error', (err) => {
+    // Non-fatal. Use console rather than a logger import so we don't pull
+    // renderer deps into the main bundle.
+    console.error('[autoUpdater] error', err);
+  });
+
+  ipcMain.on('install-update', () => {
+    // `quitAndInstall` bypasses our `close → hide to tray` trap because it
+    // calls `app.exit` internally; the `before-quit` handler still runs
+    // first so `quittingForReal` flips on. Belt and suspenders: set it
+    // here too in case Electron skips the lifecycle event.
+    quittingForReal = true;
+    autoUpdater.quitAndInstall();
+  });
+
+  // Initial check happens once the app is ready. We use `checkForUpdates`
+  // (not `checkForUpdatesAndNotify`) because the renderer now owns the UI;
+  // the built-in OS toast that `…AndNotify` shows would be a duplicate.
+  app.whenReady().then(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[autoUpdater] initial check failed', err);
+    });
+  });
 }

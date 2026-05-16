@@ -18,6 +18,8 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { ToastProvider } from "./components/Toast";
 import { TitleBar } from "./components/TitleBar";
 import { TitleBarProvider } from "./context/TitleBarContext";
+import { DeepLinkRouter } from "./components/DeepLinkRouter";
+import { UpdateBanner } from "./components/UpdateBanner";
 import {
   QueryClient,
   QueryClientProvider,
@@ -166,7 +168,13 @@ export default function App() {
     <TitleBarProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <ToastProvider>{content}</ToastProvider>
+          <ToastProvider>
+            {/* Electron-only: navigate on pufferblow:// activations. No-op in browser. */}
+            <DeepLinkRouter />
+            {content}
+            {/* Electron-only: surface auto-updater progress. No-op in browser. */}
+            <UpdateBanner />
+          </ToastProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </TitleBarProvider>
