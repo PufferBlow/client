@@ -8,6 +8,31 @@ const voiceLogger = logger.network;
 // headphones picks actually route audio.
 const AUDIO_SETTINGS_STORAGE_KEY = 'pufferblow-audio-settings';
 const AUDIO_DEVICES_CHANGED_EVENT = 'pufferblow:audio-devices-changed';
+/**
+ * Dispatched by the Settings page after the user flips any audio
+ * setting that the live voice transport cares about (mic gain, voice
+ * activity mode / PTT, audio quality preset). Carries no payload —
+ * the transport re-reads localStorage when it fires.
+ */
+export const AUDIO_SETTINGS_CHANGED_EVENT = 'pufferblow:audio-settings-changed';
+
+export type VoiceActivityMode = 'voice' | 'ptt';
+export type AudioQualityPreset = 'good' | 'better' | 'best';
+
+/**
+ * Upper-bound audio bitrate per quality preset, in kilobits per second.
+ * Live calls cap their RTCRtpSender bitrate at min(server-profile, this).
+ *
+ * Numbers picked to match the labels shown on the Settings page (~64 /
+ * ~128 / ~256 kbps). Opus tops out around 510 kbps and runs comfortably
+ * at 32+ kbps for speech, so the range here is well inside the codec's
+ * sane envelope.
+ */
+const QUALITY_BITRATE_KBPS: Record<AudioQualityPreset, number> = {
+  good: 64,
+  better: 128,
+  best: 256,
+};
 
 interface PersistedAudioSelections {
   inputDeviceId: string | null;
@@ -21,6 +46,16 @@ interface PersistedAudioSelections {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
+  /**
+   * Input gain applied via a Web Audio GainNode in the local audio graph.
+   * Stored as a 0–200 integer percentage (matches the slider UI); 100 is
+   * unity. We clamp to [0, 200] on read so a future schema change can't
+   * blow our ear-drums.
+   */
+  micVolume: number;
+  voiceActivityMode: VoiceActivityMode;
+  pttKey: string;
+  audioQuality: AudioQualityPreset;
 }
 
 const DEFAULT_AUDIO_SELECTIONS: PersistedAudioSelections = {
@@ -29,6 +64,10 @@ const DEFAULT_AUDIO_SELECTIONS: PersistedAudioSelections = {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
+  micVolume: 100,
+  voiceActivityMode: 'voice',
+  pttKey: 'Alt',
+  audioQuality: 'better',
 };
 
 /**
@@ -54,13 +93,30 @@ function readAudioSettings(): PersistedAudioSelections {
       echoCancellation?: boolean;
       noiseSuppression?: boolean;
       autoGainControl?: boolean;
+      micVolume?: number;
+      voiceActivityMode?: string;
+      pttKey?: string;
+      audioQuality?: string;
     };
+    const micRaw = typeof parsed.micVolume === 'number' ? parsed.micVolume : 100;
+    // Clamp into the 0–200% range the slider exposes. Anything higher would
+    // amplify line noise into clipping for very little perceived benefit.
+    const micVolume = Math.max(0, Math.min(200, micRaw));
+    const mode: VoiceActivityMode = parsed.voiceActivityMode === 'ptt' ? 'ptt' : 'voice';
+    const quality: AudioQualityPreset =
+      parsed.audioQuality === 'good' || parsed.audioQuality === 'best'
+        ? parsed.audioQuality
+        : 'better';
     return {
       inputDeviceId: parsed.selectedInputDevice?.trim() || null,
       outputDeviceId: parsed.selectedOutputDevice?.trim() || null,
       echoCancellation: parsed.echoCancellation ?? true,
       noiseSuppression: parsed.noiseSuppression ?? true,
       autoGainControl: parsed.autoGainControl ?? true,
+      micVolume,
+      voiceActivityMode: mode,
+      pttKey: parsed.pttKey?.trim() || 'Alt',
+      audioQuality: quality,
     };
   } catch {
     return { ...DEFAULT_AUDIO_SELECTIONS };
@@ -219,6 +275,39 @@ export class VoiceTransport {
   // subscriptions.
   private deviceChangeUnsub: (() => void) | null = null;
 
+  // ── Web Audio local input graph ─────────────────────────────────────────
+  // The microphone stream returned by getUserMedia is routed through an
+  // AudioContext so we can:
+  //   1. apply the user's mic-volume slider as a real GainNode
+  //   2. expose the processed stream to RTCPeerConnection
+  //
+  // The "raw" stream from getUserMedia is held separately so disconnect can
+  // stop its tracks (the processed stream from the destination node doesn't
+  // own the mic — it just observes the graph output).
+  private localAudioContext: AudioContext | null = null;
+  private localGainNode: GainNode | null = null;
+  private localMicStream: MediaStream | null = null;
+  // The Settings page dispatches AUDIO_SETTINGS_CHANGED_EVENT after any
+  // mid-call settings flip; this unsub cleans the listener on disconnect.
+  private audioSettingsChangeUnsub: (() => void) | null = null;
+
+  // ── Push-to-talk state ──────────────────────────────────────────────────
+  // When voiceActivityMode === 'ptt', the audio track stays disabled by
+  // default and only fires while the PTT key is held. We hold the listeners
+  // here so disconnect / mode-change can remove them without stacking.
+  private currentVoiceActivityMode: VoiceActivityMode = 'voice';
+  private currentPttKey: string = 'Alt';
+  private pttKeydownHandler: ((event: KeyboardEvent) => void) | null = null;
+  private pttKeyupHandler: ((event: KeyboardEvent) => void) | null = null;
+  // True while the user holds the PTT key. Distinct from `isMuted` — the
+  // user can be in PTT mode AND muted, in which case the key does nothing.
+  private isPttActive = false;
+
+  // Latest user-selected audio quality preset; consulted by
+  // applyAudioSenderQuality to cap the sender bitrate below the
+  // server-negotiated profile.
+  private currentAudioQuality: AudioQualityPreset = 'better';
+
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
   }
@@ -272,15 +361,16 @@ export class VoiceTransport {
 
     const audioSettings = this.mediaQuality?.audio;
     const persisted = readAudioSettings();
-    const { inputDeviceId, outputDeviceId, echoCancellation, noiseSuppression, autoGainControl } =
-      persisted;
-    this.currentInputDeviceId = inputDeviceId;
-    this.currentOutputDeviceId = outputDeviceId;
+    this.currentInputDeviceId = persisted.inputDeviceId;
+    this.currentOutputDeviceId = persisted.outputDeviceId;
+    this.currentVoiceActivityMode = persisted.voiceActivityMode;
+    this.currentPttKey = persisted.pttKey;
+    this.currentAudioQuality = persisted.audioQuality;
 
     const audioConstraints: MediaTrackConstraints = {
-      echoCancellation,
-      noiseSuppression,
-      autoGainControl,
+      echoCancellation: persisted.echoCancellation,
+      noiseSuppression: persisted.noiseSuppression,
+      autoGainControl: persisted.autoGainControl,
       sampleRate: audioSettings?.sample_rate_hz,
       channelCount: audioSettings?.stereo_enabled
         ? Math.max(audioSettings.channels, 2)
@@ -289,14 +379,208 @@ export class VoiceTransport {
     // Honor the mic picked in DeviceSelectorModal / settings. Without this
     // the browser silently uses the system default and the device picker
     // becomes a lie.
-    if (inputDeviceId) {
-      audioConstraints.deviceId = { exact: inputDeviceId };
+    if (persisted.inputDeviceId) {
+      audioConstraints.deviceId = { exact: persisted.inputDeviceId };
     }
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
+    const rawStream = await navigator.mediaDevices.getUserMedia({
       audio: audioConstraints,
       video: false,
     });
+    this.localStream = this.buildLocalAudioGraph(rawStream, persisted.micVolume);
+    this.applyVoiceActivityMode(persisted.voiceActivityMode, persisted.pttKey);
+    this.wireAudioSettingsListener();
+  }
+
+  /**
+   * Build the local input audio graph:
+   *
+   *   mic (rawStream) → MediaStreamAudioSourceNode
+   *                       │
+   *                       ▼
+   *                   GainNode  (.gain = micVolume / 100)
+   *                       │
+   *                       ▼
+   *           MediaStreamAudioDestinationNode → destination.stream
+   *
+   * The destination stream is what we hand to RTCPeerConnection, so the
+   * user's mic-volume slider drives the audio peers actually receive — not
+   * just a local meter. The raw stream is held on `localMicStream` so
+   * disconnect can stop its tracks.
+   *
+   * Falls back to returning `rawStream` unchanged if AudioContext isn't
+   * available (server-side render, locked-down WebView). The peers in that
+   * case get the un-processed mic, which is identical to the old behavior
+   * before this change.
+   */
+  private buildLocalAudioGraph(rawStream: MediaStream, micVolumePercent: number): MediaStream {
+    if (typeof window === 'undefined' || typeof AudioContext === 'undefined') {
+      this.localMicStream = rawStream;
+      return rawStream;
+    }
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(rawStream);
+      const gain = ctx.createGain();
+      gain.gain.value = Math.max(0, micVolumePercent / 100);
+      const destination = ctx.createMediaStreamDestination();
+      source.connect(gain);
+      gain.connect(destination);
+
+      this.localAudioContext = ctx;
+      this.localGainNode = gain;
+      this.localMicStream = rawStream;
+      return destination.stream;
+    } catch (error) {
+      voiceLogger.warn('voiceTransport: failed to build local audio graph; falling back to raw mic', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.localMicStream = rawStream;
+      return rawStream;
+    }
+  }
+
+  /**
+   * Install or remove the global keydown/keyup listeners that gate the
+   * outgoing audio track when the user is in push-to-talk mode. Idempotent
+   * — repeated calls with the same mode are safe.
+   *
+   * The audio track's `.enabled` flag is what controls whether mic audio
+   * reaches the RTCPeerConnection. In 'voice' mode it's just `!isMuted`.
+   * In 'ptt' mode it's `!isMuted && isPttActive`, so muting still wins
+   * over the key.
+   */
+  private applyVoiceActivityMode(mode: VoiceActivityMode, pttKey: string): void {
+    this.currentVoiceActivityMode = mode;
+    this.currentPttKey = pttKey;
+    this.removePttListeners();
+
+    if (mode === 'voice') {
+      this.isPttActive = false;
+      this.refreshLocalTrackEnabled();
+      return;
+    }
+
+    // PTT mode: track is off until the key is held. We listen on window so
+    // the call can stay open while the user is focused on a message
+    // composer or other input; bare `keydown` listeners don't propagate
+    // through inputs, but the listener fires regardless.
+    if (typeof window === 'undefined') return;
+
+    const normalized = pttKey.toLowerCase();
+    const matches = (event: KeyboardEvent): boolean => {
+      // Modifier keys come through as `event.key === 'Alt'` etc.; letter
+      // keys come through as lowercased characters. Accept both forms.
+      const k = event.key.toLowerCase();
+      if (k === normalized) return true;
+      // Space is persisted as a single space character; event.key for
+      // space is ' ', which equals normalized after lowercase. Belt-and-
+      // suspenders accept 'space' too in case the UI ever writes that.
+      if (normalized === ' ' && (k === ' ' || k === 'space')) return true;
+      return false;
+    };
+
+    this.pttKeydownHandler = (event) => {
+      if (!matches(event)) return;
+      if (this.isPttActive) return;
+      this.isPttActive = true;
+      this.refreshLocalTrackEnabled();
+    };
+    this.pttKeyupHandler = (event) => {
+      if (!matches(event)) return;
+      if (!this.isPttActive) return;
+      this.isPttActive = false;
+      this.refreshLocalTrackEnabled();
+    };
+
+    window.addEventListener('keydown', this.pttKeydownHandler);
+    window.addEventListener('keyup', this.pttKeyupHandler);
+
+    this.refreshLocalTrackEnabled();
+  }
+
+  private removePttListeners(): void {
+    if (typeof window === 'undefined') return;
+    if (this.pttKeydownHandler) {
+      window.removeEventListener('keydown', this.pttKeydownHandler);
+      this.pttKeydownHandler = null;
+    }
+    if (this.pttKeyupHandler) {
+      window.removeEventListener('keyup', this.pttKeyupHandler);
+      this.pttKeyupHandler = null;
+    }
+  }
+
+  /**
+   * Recompute the audio track's `enabled` flag from the current mute + PTT
+   * state. Single source of truth so setMuted / setVoiceActivityMode / the
+   * PTT key handlers don't fight over the flag.
+   */
+  private refreshLocalTrackEnabled(): void {
+    if (!this.localStream) return;
+    const shouldTransmit =
+      !this.isMuted &&
+      (this.currentVoiceActivityMode === 'voice' || this.isPttActive);
+    for (const track of this.localStream.getAudioTracks()) {
+      track.enabled = shouldTransmit;
+    }
+  }
+
+  /**
+   * Subscribe to the window-level AUDIO_SETTINGS_CHANGED_EVENT so the
+   * Settings page can push live changes (mic gain, PTT mode, audio
+   * quality) into the call without the user having to leave + rejoin.
+   *
+   * Idempotent — repeated calls just re-use the existing subscription.
+   * Cleared on disconnect.
+   */
+  private wireAudioSettingsListener(): void {
+    if (typeof window === 'undefined') return;
+    if (this.audioSettingsChangeUnsub) return;
+    const handler = () => {
+      this.refreshFromPersistedAudioSettings();
+    };
+    window.addEventListener(AUDIO_SETTINGS_CHANGED_EVENT, handler);
+    this.audioSettingsChangeUnsub = () => {
+      window.removeEventListener(AUDIO_SETTINGS_CHANGED_EVENT, handler);
+    };
+  }
+
+  /**
+   * Re-read the persisted audio settings and apply any deltas to the live
+   * call. Called on AUDIO_SETTINGS_CHANGED_EVENT. We deliberately avoid
+   * touching getUserMedia constraints here — device + DSP changes still
+   * route through handleDeviceChange + a fresh track swap, because the
+   * browser doesn't expose live constraint updates for those.
+   */
+  private refreshFromPersistedAudioSettings(): void {
+    const persisted = readAudioSettings();
+
+    if (this.localGainNode && this.localAudioContext) {
+      const target = Math.max(0, persisted.micVolume / 100);
+      // Short ramp to avoid the click that a hard gain jump produces on
+      // continuous audio. 30ms is fast enough to feel instant but slow
+      // enough to be smooth.
+      try {
+        this.localGainNode.gain.setTargetAtTime(target, this.localAudioContext.currentTime, 0.01);
+      } catch {
+        this.localGainNode.gain.value = target;
+      }
+    }
+
+    if (
+      persisted.voiceActivityMode !== this.currentVoiceActivityMode ||
+      persisted.pttKey !== this.currentPttKey
+    ) {
+      this.applyVoiceActivityMode(persisted.voiceActivityMode, persisted.pttKey);
+    }
+
+    if (persisted.audioQuality !== this.currentAudioQuality) {
+      this.currentAudioQuality = persisted.audioQuality;
+      if (this.pc) {
+        void this.applyAudioSenderQuality(this.pc);
+      }
+    }
   }
 
   /**
@@ -373,36 +657,41 @@ export class VoiceTransport {
         const audioSettings = this.mediaQuality?.audio;
         // Re-read settings so a mid-call toggle flip on the Settings page
         // takes effect on the next device swap, not just on rejoin.
-        const { echoCancellation, noiseSuppression, autoGainControl } = readAudioSettings();
+        const settings = readAudioSettings();
         const constraints: MediaTrackConstraints = {
-          echoCancellation,
-          noiseSuppression,
-          autoGainControl,
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+          autoGainControl: settings.autoGainControl,
           sampleRate: audioSettings?.sample_rate_hz,
           channelCount: audioSettings?.stereo_enabled
             ? Math.max(audioSettings.channels, 2)
             : audioSettings?.channels,
           deviceId: { exact: nextInput },
         };
-        const nextStream = await navigator.mediaDevices.getUserMedia({
+        const nextRawStream = await navigator.mediaDevices.getUserMedia({
           audio: constraints,
           video: false,
         });
-        const nextTrack = nextStream.getAudioTracks()[0];
+        // Tear down the old audio graph (the old AudioContext was holding
+        // the previous mic's source node; rebuilding is cheaper and safer
+        // than trying to swap the source in place).
+        this.teardownLocalAudioGraph();
+        const previousProcessedStream = this.localStream;
+        this.localStream = this.buildLocalAudioGraph(nextRawStream, settings.micVolume);
+        const nextTrack = this.localStream.getAudioTracks()[0];
         if (!nextTrack) return;
-        // Inherit the current mute state so swapping mid-call doesn't
-        // accidentally unmute the user.
-        nextTrack.enabled = !this.isMuted;
-        const previousStream = this.localStream;
-        this.localStream = nextStream;
         await Promise.all(
           this.pc
             .getSenders()
             .filter((sender) => sender.track?.kind === 'audio')
             .map((sender) => sender.replaceTrack(nextTrack)),
         );
-        if (previousStream) {
-          for (const track of previousStream.getTracks()) {
+        // Re-apply mute + PTT state to the new track and stop the old
+        // processed stream's tracks (the destination node held them, the
+        // raw stream's tracks were already stopped inside teardown).
+        this.refreshLocalTrackEnabled();
+        if (previousProcessedStream && previousProcessedStream !== nextRawStream) {
+          for (const track of previousProcessedStream.getTracks()) {
             track.stop();
           }
         }
@@ -414,11 +703,44 @@ export class VoiceTransport {
     }
   }
 
+  /**
+   * Stop the raw mic stream and close the AudioContext built by
+   * buildLocalAudioGraph. Leaves `localStream` (the processed stream)
+   * alone — the caller is responsible for swapping or stopping that
+   * separately, depending on whether this is a device swap or a full
+   * disconnect.
+   */
+  private teardownLocalAudioGraph(): void {
+    if (this.localMicStream) {
+      for (const track of this.localMicStream.getTracks()) {
+        track.stop();
+      }
+      this.localMicStream = null;
+    }
+    if (this.localAudioContext) {
+      try {
+        void this.localAudioContext.close();
+      } catch {
+        // closing a closed context throws; ignore.
+      }
+      this.localAudioContext = null;
+    }
+    this.localGainNode = null;
+  }
+
   private async applyAudioSenderQuality(pc: RTCPeerConnection): Promise<void> {
     const activeProfile = this.getActiveAudioProfile();
-    if (!activeProfile) {
-      return;
-    }
+    const serverBitrateKbps = activeProfile?.bitrate_kbps;
+    const userBitrateKbps = QUALITY_BITRATE_KBPS[this.currentAudioQuality];
+
+    // Cap at the lower of (server profile, user preset) so the server can
+    // still enforce an upper bound (e.g. a free tier) while a user who
+    // wants to save bandwidth can dial themselves below it. If the server
+    // never provided a profile we just use the user's preset.
+    const targetBitrateKbps =
+      typeof serverBitrateKbps === 'number'
+        ? Math.min(serverBitrateKbps, userBitrateKbps)
+        : userBitrateKbps;
 
     const audioSenders = pc
       .getSenders()
@@ -434,7 +756,7 @@ export class VoiceTransport {
 
           encodings[0] = {
             ...encodings[0],
-            maxBitrate: activeProfile.bitrate_kbps * 1000,
+            maxBitrate: targetBitrateKbps * 1000,
           };
 
           await sender.setParameters({
@@ -1079,11 +1401,9 @@ export class VoiceTransport {
 
   setMuted(muted: boolean): boolean {
     this.isMuted = muted;
-    if (this.localStream) {
-      for (const track of this.localStream.getAudioTracks()) {
-        track.enabled = !muted;
-      }
-    }
+    // Funnel the actual `enabled` flag through one place so mute + PTT can
+    // coexist (e.g. mute wins over a held PTT key).
+    this.refreshLocalTrackEnabled();
     this.sendAudioState();
     return this.isMuted;
   }
@@ -1142,6 +1462,19 @@ export class VoiceTransport {
         track.stop();
       }
       this.localStream = null;
+    }
+    // Stop the raw mic stream + close the AudioContext built by
+    // buildLocalAudioGraph. Without this the AudioContext can keep the
+    // mic LED on after the user has hung up.
+    this.teardownLocalAudioGraph();
+    this.removePttListeners();
+    this.isPttActive = false;
+    this.currentVoiceActivityMode = 'voice';
+    this.currentPttKey = 'Alt';
+    this.currentAudioQuality = 'better';
+    if (this.audioSettingsChangeUnsub) {
+      this.audioSettingsChangeUnsub();
+      this.audioSettingsChangeUnsub = null;
     }
 
     for (const audio of this.remoteAudioEls.values()) {

@@ -36,7 +36,8 @@ export function useSettingsAudio({
   const [inputGainNode, setInputGainNode] = useState<GainNode | null>(null);
   const [outputGainNode, setOutputGainNode] = useState<GainNode | null>(null);
   const [activeAudioContext, setActiveAudioContext] = useState<AudioContext | null>(null);
-  const [isPTTActive, setIsPTTActive] = useState(false);
+  // isPTTActive state lived here when the hook owned PTT; deleted along
+  // with the dead keydown listener.
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -89,6 +90,15 @@ export function useSettingsAudio({
         audioQuality,
       }),
     );
+    // Notify any live VoiceTransport so mid-call slider/PTT/quality flips
+    // take effect without requiring a leave + rejoin. The transport
+    // re-reads localStorage on the event — no payload needed.
+    try {
+      window.dispatchEvent(new CustomEvent("pufferblow:audio-settings-changed"));
+    } catch {
+      // CustomEvent unavailable in some sandboxes (test env, very old WebViews).
+      // Non-fatal — the next call connect will pick up the latest values.
+    }
   }, [
     selectedInputDevice,
     selectedOutputDevice,
@@ -103,34 +113,12 @@ export function useSettingsAudio({
     audioQuality,
   ]);
 
-  useEffect(() => {
-    if (voiceActivityMode !== "ptt" || !pttKey) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === pttKey.toLowerCase() && !isPTTActive) {
-        setIsPTTActive(true);
-        setMessage({ type: "success", text: "PTT activated - audio transmission enabled" });
-        event.preventDefault();
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === pttKey.toLowerCase() && isPTTActive) {
-        setIsPTTActive(false);
-        setMessage({ type: "success", text: "PTT released - audio transmission disabled" });
-        event.preventDefault();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [isPTTActive, pttKey, setMessage, voiceActivityMode]);
+  // The Settings page used to mount a global keydown listener here that
+  // fired a toast on every PTT press / release. That was the only thing
+  // PTT did — the real audio track was never gated. Now that
+  // voiceTransport owns PTT (installs its own listener when a call is
+  // live and toggles the audio track's `enabled` flag), the toast-spam
+  // listener is dead weight. Settings is purely a configuration surface.
 
   useEffect(() => {
     if (inputGainNode) {

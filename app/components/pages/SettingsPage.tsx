@@ -1341,15 +1341,7 @@ export default function Settings() {
                           </svg>
                         </div>
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-semibold text-[var(--color-text)]">Input Volume</h3>
-                            <span
-                              className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
-                              title="This slider applies to the microphone test below. Live calls don't yet route audio through a gain node — coming soon."
-                            >
-                              Mic test only
-                            </span>
-                          </div>
+                          <h3 className="text-base font-semibold text-[var(--color-text)]">Input Volume</h3>
                           <p className="text-sm text-[var(--color-text-secondary)]">Adjust microphone sensitivity</p>
                         </div>
                       </div>
@@ -1423,15 +1415,7 @@ export default function Settings() {
                 {/* Voice Activity & Push-to-Talk */}
                 <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
                   <div className="p-6 border-b border-[var(--color-border)]">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium text-[var(--color-text)]">Voice Activity & Push-to-Talk</h3>
-                      <span
-                        className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
-                        title="The PTT key fires a UI toast today but doesn't yet gate the live audio track — coming soon."
-                      >
-                        Coming soon
-                      </span>
-                    </div>
+                    <h3 className="text-lg font-medium text-[var(--color-text)]">Voice Activity & Push-to-Talk</h3>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">Configure how Pufferblow detects when you're speaking</p>
                   </div>
 
@@ -1508,15 +1492,7 @@ export default function Settings() {
                 {/* Audio Quality */}
                 <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
                   <div className="p-6 border-b border-[var(--color-border)]">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-medium text-[var(--color-text)]">Audio Quality</h3>
-                      <span
-                        className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
-                        title="Live calls use sample-rate and bitrate negotiated with the server's media-quality profile; this preset only applies to the microphone test."
-                      >
-                        Mic test only
-                      </span>
-                    </div>
+                    <h3 className="text-lg font-medium text-[var(--color-text)]">Audio Quality</h3>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">Choose your preferred audio quality settings</p>
                   </div>
 
