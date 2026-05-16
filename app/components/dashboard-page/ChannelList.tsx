@@ -27,6 +27,10 @@ interface ChannelListProps {
   ) => void;
   onVoiceSessionReady: (session: VoiceSessionActions | null) => void;
   rtcMediaQuality: RTCMediaQuality | null;
+  /** Avatar resolver for voice-channel participant rows. Passed through
+   *  to each VoiceChannel; mirrors the same prop on VoiceCallUI so the
+   *  sidebar and the main call view show the same faces. */
+  resolveAvatarUrl?: (userId: string, username?: string) => string | undefined;
 }
 
 /**
@@ -57,6 +61,7 @@ export function ChannelList({
   setCurrentVoiceChannel,
   onVoiceSessionReady,
   rtcMediaQuality,
+  resolveAvatarUrl,
 }: ChannelListProps) {
   if (channelsError) {
     return (
@@ -152,6 +157,7 @@ export function ChannelList({
                     );
                   }}
                   onVoiceSessionReady={onVoiceSessionReady}
+                  resolveAvatarUrl={resolveAvatarUrl}
                 />
               ))}
             </div>

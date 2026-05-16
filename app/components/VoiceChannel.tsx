@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react';
 
+import { VoiceParticipantContextMenu } from './VoiceParticipantContextMenu';
+
 import {
   applyVoiceSessionAction,
   getVoiceChannelParticipants,
@@ -14,6 +16,7 @@ import {
   type VoiceTransport,
   type VoiceTransportState,
 } from '../services/voiceTransport';
+import { voiceCallSession, installVoiceUnloadHandler } from '../services/voiceCallSession';
 import type { RTCMediaQuality } from '../services/system';
 import { getAuthTokenFromCookies } from '../services/user';
 import { logger } from '../utils/logger';
@@ -61,6 +64,14 @@ interface VoiceChannelProps {
   }) => void;
   onVoiceSessionReady?: (session: VoiceSessionActions | null) => void;
   mediaQuality?: RTCMediaQuality | null;
+  /**
+   * Resolver that turns a participant's user_id into an avatar URL.
+   * Mirrors the same prop on VoiceCallUI: the consumer (DashboardPage)
+   * owns the user cache, this component just consumes the lookup.
+   * Optional -- when omitted, the sidebar participant row falls back
+   * to a letter-on-color circle.
+   */
+  resolveAvatarUrl?: (userId: string, username?: string) => string | undefined;
 }
 
 /** Format seconds into mm:ss or hh:mm:ss */
@@ -93,57 +104,75 @@ function useDuration(connectedAt?: string): string {
 interface ParticipantRowProps {
   participant: VoiceParticipant;
   transport: VoiceTransport | null;
+  /** Avatar URL for this participant. Optional -- when undefined the row
+   *  falls back to a letter-on-color circle so federated/unhydrated peers
+   *  still render something recognizable. Resolved by the consumer
+   *  (DashboardPage) through its users cache. */
+  avatarUrl?: string;
+  /** Fires on right-click. The parent (VoiceChannel) owns the menu state. */
+  onContextMenu?: (event: React.MouseEvent, participant: VoiceParticipant) => void;
 }
 
-const ParticipantRowImpl: React.FC<ParticipantRowProps> = ({ participant, transport }) => {
+const ParticipantRowImpl: React.FC<ParticipantRowProps> = ({
+  participant,
+  avatarUrl,
+  onContextMenu,
+}) => {
   const duration = useDuration(participant.connected_at);
-  const [volume, setVolume] = useState(() => transport?.getUserVolume(participant.user_id) ?? 1);
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = parseFloat(e.target.value);
-    setVolume(v);
-    transport?.setUserVolume(participant.user_id, v);
-  };
+  const displayName = participant.username || `User ${participant.user_id.slice(-4)}`;
+  const [avatarImgFailed, setAvatarImgFailed] = useState(false);
+  const showAvatarImage = !!avatarUrl && !avatarImgFailed;
 
   return (
-    <div className="flex flex-col gap-1 py-1 px-1">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {/* Speaking / muted indicator */}
-        <div
-          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-            participant.is_speaking
-              ? 'bg-[var(--color-success)] animate-pulse'
-              : participant.is_muted
-                ? 'bg-[var(--color-error)]'
-                : 'bg-[var(--color-text-muted)]'
-          }`}
-        />
-        <span className="text-xs text-[var(--color-text)] truncate flex-1">
-          {participant.username || `User ${participant.user_id.slice(-4)}`}
-        </span>
-        <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0 font-mono">
-          {duration}
-        </span>
-        {participant.is_muted && (
-          <MicOff className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />
+    <div
+      className="flex items-center gap-2 py-1 px-1 rounded hover:bg-[var(--color-hover)]/40 cursor-context-menu"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu?.(e, participant);
+      }}
+    >
+      {/* Avatar circle. Speaking state shows as a green ring around the
+          avatar; muted state dims it slightly. The image falls back to
+          a colored letter circle when the resolver had no URL or the
+          image failed to load. */}
+      <div className="relative flex-shrink-0">
+        {showAvatarImage ? (
+          <img
+            src={avatarUrl}
+            alt={displayName}
+            onError={() => setAvatarImgFailed(true)}
+            className={`h-5 w-5 rounded-full object-cover transition-all ${
+              participant.is_speaking
+                ? 'ring-2 ring-[var(--color-success)] ring-offset-1 ring-offset-transparent'
+                : ''
+            } ${participant.is_muted ? 'opacity-60' : ''}`}
+          />
+        ) : (
+          <div
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white transition-all ${
+              participant.is_speaking
+                ? 'bg-[var(--color-success)] ring-2 ring-[var(--color-success)]/40'
+                : 'bg-[var(--color-primary)]'
+            } ${participant.is_muted ? 'opacity-60' : ''}`}
+          >
+            {displayName.charAt(0).toUpperCase()}
+          </div>
         )}
       </div>
-      {/* Volume slider */}
-      <div className="flex items-center gap-1.5 pl-3">
-        <VolumeX className="w-2.5 h-2.5 text-[var(--color-text-muted)] flex-shrink-0" />
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={volume}
-          onChange={handleVolumeChange}
-          onClick={(e) => e.stopPropagation()}
-          className="flex-1 h-1 accent-[var(--color-primary)] cursor-pointer"
-          title={`Volume: ${Math.round(volume * 100)}%`}
-        />
-        <Volume2 className="w-2.5 h-2.5 text-[var(--color-text-muted)] flex-shrink-0" />
-      </div>
+
+      <span className="text-xs text-[var(--color-text)] truncate flex-1">
+        {displayName}
+      </span>
+      <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0 font-mono">
+        {duration}
+      </span>
+      {participant.is_muted && (
+        <MicOff className="w-3 h-3 text-[var(--color-error)] flex-shrink-0" />
+      )}
+      {/* Volume slider moved to right-click context menu (see
+          VoiceParticipantContextMenu). Keeps the sidebar row compact
+          and matches the action-pattern used everywhere else. */}
     </div>
   );
 };
@@ -154,9 +183,16 @@ const ParticipantRowImpl: React.FC<ParticipantRowProps> = ({ participant, transp
  * identity actually changed get re-rendered. The custom equality function
  * compares the fields ParticipantRow actually reads — adding a new field
  * means updating this list.
+ *
+ * `onContextMenu` is intentionally NOT compared: the parent passes a new
+ * function reference each render (closure over menu state). Comparing it
+ * would force re-render every tick. Since the callback only uses its
+ * arguments (event + participant), changing identity doesn't change
+ * behavior.
  */
 const ParticipantRow = React.memo(ParticipantRowImpl, (prev, next) => {
   if (prev.transport !== next.transport) return false;
+  if (prev.avatarUrl !== next.avatarUrl) return false;
   const a = prev.participant;
   const b = next.participant;
   return (
@@ -179,8 +215,20 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   onConnectionStateChange,
   onVoiceSessionReady,
   mediaQuality,
+  resolveAvatarUrl,
 }) => {
   const transportRef = useRef<VoiceTransport | null>(null);
+
+  // Right-click menu state for the sidebar participant rows. Lives at
+  // this level (one per VoiceChannel instance) so opening a menu on one
+  // participant in this channel doesn't conflict with the global voice
+  // call UI menu in the main panel.
+  const [participantMenu, setParticipantMenu] = useState<{
+    userId: string;
+    username?: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Stable refs for callbacks — updated every render but never trigger effects
   const onConnectionStateChangeRef = useRef(onConnectionStateChange);
@@ -190,22 +238,44 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   useEffect(() => { onVoiceSessionReadyRef.current = onVoiceSessionReady; });
   useEffect(() => { onToggleConnectionRef.current = onToggleConnection; });
 
-  const [connectionState, setConnectionState] = useState<VoiceTransportState>('idle');
-  const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // If a call is already in progress for THIS channel (we got here via
+  // remount after a navigation away+back, not a fresh dashboard load),
+  // seed every piece of React state from the still-alive transport's
+  // snapshot getters. This is what makes the call survive navigation:
+  // the transport in the registry was kept running, and we re-attach
+  // the React-side view of it as if no unmount had happened.
+  const existingActive = voiceCallSession.get();
+  const reusedTransport: VoiceTransport | null =
+    existingActive && existingActive.channelId === channelId
+      ? existingActive.transport
+      : null;
+
+  const [connectionState, setConnectionState] = useState<VoiceTransportState>(
+    () => reusedTransport?.getState() ?? 'idle',
+  );
+  const [participants, setParticipants] = useState<VoiceParticipant[]>(
+    () => reusedTransport?.getParticipants() ?? [],
+  );
+  const [sessionId, setSessionId] = useState<string | null>(
+    () => reusedTransport?.getActiveSessionId() ?? null,
+  );
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => reusedTransport?.getIsMuted() ?? false);
+  const [isDeafened, setIsDeafened] = useState(() => reusedTransport?.getIsDeafened() ?? false);
   const [isExpanded, setIsExpanded] = useState(false);
   // Screen share state, mirrored from the transport. We use plain React
   // state for the remote streams Map (replaced on each update so the
   // dependency arrays in consumers behave) and a boolean + ref for the
   // local capture stream.
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(
+    () => reusedTransport?.isScreenSharing() ?? false,
+  );
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(
+    () => reusedTransport?.getLocalScreenStream() ?? null,
+  );
   const [remoteScreenShares, setRemoteScreenShares] = useState<Map<string, MediaStream>>(
-    () => new Map(),
+    () => reusedTransport?.getRemoteScreenStreams() ?? new Map(),
   );
   const [qualityProfile, setQualityProfile] = useState<'low' | 'balanced' | 'high'>(
     mediaQuality?.default_profile ?? 'balanced'
@@ -251,9 +321,13 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
   }, [channelId, isConnected]);
 
   useEffect(() => {
-    const transport = createVoiceTransport({
+    // Build the callback bundle the transport notifies on state changes.
+    // Defined inline so we capture stable refs (callbacks via React's
+    // ref-update pattern). Used in two places below: attached to a
+    // reused transport, or passed to createVoiceTransport for a new one.
+    const callbacks = {
       onStateChange: setConnectionState,
-      onParticipantsChange: (nextParticipants) => {
+      onParticipantsChange: (nextParticipants: VoiceParticipant[]) => {
         setParticipants(nextParticipants);
         onConnectionStateChangeRef.current?.({
           connected: nextParticipants.length > 0,
@@ -263,11 +337,11 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           participantCount: nextParticipants.length,
         });
       },
-      onError: (message) => setError(message),
+      onError: (message: string) => setError(message),
       // Remote screen-share streams arrive here. We replace the Map
       // identity on every update so React picks up the change — mutating
       // in place would skip useMemo / useEffect dependencies downstream.
-      onRemoteScreenShare: (userId, stream) => {
+      onRemoteScreenShare: (userId: string, stream: MediaStream | null) => {
         setRemoteScreenShares((prev) => {
           const next = new Map(prev);
           if (stream) {
@@ -278,12 +352,42 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           return next;
         });
       },
-    });
+    };
+
+    // Reuse path: there's an active call registered for this exact
+    // channel, which means we're remounting after a navigation away +
+    // back. The transport is still alive in the registry; swap our
+    // callbacks onto it instead of building a new one. State was
+    // already seeded from the transport's snapshot getters via the
+    // lazy useState initializers above.
+    const existing = voiceCallSession.get();
+    let transport: VoiceTransport;
+    if (existing && existing.channelId === channelId) {
+      transport = existing.transport;
+      transport.setCallbacks(callbacks);
+    } else {
+      transport = createVoiceTransport(callbacks);
+    }
 
     transportRef.current = transport;
 
     return () => {
-      void transport.disconnect();
+      // Two cleanup paths:
+      //
+      //   1. THIS transport is the currently-active call -> leave it
+      //      running, just detach our callbacks so we don't reach into
+      //      unmounted React state. Re-mounting the component (route
+      //      change away+back) will pick it up again via the reuse
+      //      path above. This is the "voice survives navigation" win.
+      //
+      //   2. Otherwise this transport is dormant (a sidebar row the
+      //      user never joined) -> disconnect to free the WebRTC
+      //      objects, matching the original behavior. No call to drop.
+      if (voiceCallSession.get()?.transport === transport) {
+        transport.setCallbacks({});
+      } else {
+        void transport.disconnect();
+      }
       transportRef.current = null;
     };
   }, [channelId, channelName]);
@@ -352,6 +456,11 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
       const message = leaveError instanceof Error ? leaveError.message : 'Failed to leave';
       setError(message);
     } finally {
+      // Clear the registry so the next unmount disposes the transport
+      // normally instead of treating it as the active call. Must happen
+      // here (regardless of the try/catch outcome) so a Leave that
+      // partially failed still releases the registry slot.
+      voiceCallSession.clear();
       setSessionId(null);
       setParticipants([]);
       setIsMuted(false);
@@ -449,6 +558,14 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         media_quality: bootstrap.media_quality ?? mediaQuality ?? undefined,
       });
 
+      // Register as the active call so the transport survives a future
+      // remount (route change to /settings, /control-panel, etc.). The
+      // unload handler is a one-time install that disconnects the
+      // transport if the page actually closes -- those two together are
+      // what enforce "only exit voice when exiting the client".
+      voiceCallSession.set({ transport, channelId, channelName });
+      installVoiceUnloadHandler();
+
       const statusResponse = await getVoiceChannelStatus(channelId, authToken, bootstrap.session_id);
       if (statusResponse.success && statusResponse.data?.participants) {
         setParticipants(statusResponse.data.participants);
@@ -530,16 +647,19 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-1" />
         )}
 
-        {/* Expand/collapse button */}
+        {/* Expand/collapse button. Bigger hit target than the old chevron
+            (16px icon inside a 24px padded button) so it's easier to grab
+            without precision-hovering, and always-visible at reduced
+            opacity so users discover it without having to find the row. */}
         <button
-          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+          className="ml-1 p-1 rounded text-[var(--color-text-muted)] opacity-70 hover:opacity-100 hover:bg-[var(--color-hover)]/40 transition-opacity focus:opacity-100"
           onClick={handleExpandToggle}
           aria-label={isExpanded ? 'Collapse' : 'Expand'}
         >
           {isExpanded ? (
-            <ChevronDown className="w-3 h-3" />
+            <ChevronDown className="w-4 h-4" />
           ) : (
-            <ChevronRight className="w-3 h-3" />
+            <ChevronRight className="w-4 h-4" />
           )}
         </button>
       </div>
@@ -578,6 +698,15 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
                 key={p.user_id}
                 participant={p}
                 transport={transportRef.current}
+                avatarUrl={resolveAvatarUrl?.(p.user_id, p.username)}
+                onContextMenu={(e, participant) => {
+                  setParticipantMenu({
+                    userId: participant.user_id,
+                    username: participant.username,
+                    x: e.clientX,
+                    y: e.clientY,
+                  });
+                }}
               />
             ))
           ) : (
@@ -622,6 +751,34 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
           )}
         </div>
       )}
+
+      {/* Right-click menu for sidebar participant rows. Driven by the
+          per-row onContextMenu handlers above; reads/writes volume
+          directly through the transport so the menu doesn't keep its
+          own state across opens. */}
+      <VoiceParticipantContextMenu
+        isOpen={participantMenu !== null}
+        position={{ x: participantMenu?.x ?? 0, y: participantMenu?.y ?? 0 }}
+        userId={participantMenu?.userId ?? ''}
+        username={participantMenu?.username}
+        // Note: we don't know `isSelf` cheaply here (the sidebar row's
+        // participant data is just `{user_id, username, flags...}`), so
+        // we leave the volume slider visible. Adjusting your own volume
+        // is a no-op at the transport level (you can't lower your own
+        // playback), so this is harmless.
+        isSelf={false}
+        initialVolume={
+          participantMenu
+            ? transportRef.current?.getUserVolume(participantMenu.userId) ?? 1
+            : undefined
+        }
+        onVolumeChange={(v) => {
+          if (participantMenu) {
+            transportRef.current?.setUserVolume(participantMenu.userId, v);
+          }
+        }}
+        onClose={() => setParticipantMenu(null)}
+      />
     </div>
   );
 };

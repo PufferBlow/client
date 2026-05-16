@@ -312,12 +312,45 @@ export class VoiceTransport {
     this.callbacks = callbacks;
   }
 
+  /**
+   * Replace the callback bundle. Used by the voice-call session registry
+   * so a transport can outlive any single React mount: when the
+   * VoiceChannel component remounts after a navigation away/back, it
+   * swaps fresh callbacks onto the existing transport rather than
+   * tearing it down and creating a new one (which would drop the call).
+   *
+   * Callers should pull current state via the getter methods immediately
+   * after swapping callbacks -- the transport doesn't re-emit on
+   * setCallbacks since nothing has changed from its perspective.
+   */
+  setCallbacks(callbacks: VoiceTransportCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
   getState(): VoiceTransportState {
     return this.state;
   }
 
   getParticipants(): VoiceParticipant[] {
     return Array.from(this.participants.values());
+  }
+
+  /**
+   * Snapshot getters for state that's normally observed via callbacks.
+   * Used by the registry-aware mount path in VoiceChannel to seed React
+   * state from a still-alive transport after a route-change remount.
+   */
+  getIsMuted(): boolean {
+    return this.isMuted;
+  }
+  getIsDeafened(): boolean {
+    return this.isDeafened;
+  }
+  getRemoteScreenStreams(): Map<string, MediaStream> {
+    return new Map(this.remoteScreenStreams);
+  }
+  getActiveSessionId(): string | null {
+    return this.lastBootstrap?.session_id ?? null;
   }
 
   private setState(state: VoiceTransportState): void {
