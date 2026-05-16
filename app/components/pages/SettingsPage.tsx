@@ -17,6 +17,7 @@ import type { SettingsTab, SettingsTabId } from "../settings/types";
 import { useSettingsAudio } from "../settings/useSettingsAudio";
 import { useSettingsProfile } from "../settings/useSettingsProfile";
 import { ProfileAppearanceControls } from "../settings/ProfileAppearanceControls";
+import { ServerTab } from "../settings/tabs/ServerTab";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
@@ -166,8 +167,7 @@ export default function Settings() {
     setShowResetModal(false);
   };
 
-  const handleHostPortSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleHostPortSubmit = async () => {
     if (!newHostPort.trim()) return;
     let normalizedInstance = '';
     try {
@@ -1785,33 +1785,12 @@ export default function Settings() {
             )}
 
             {activeTab === 'server' && (
-              <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
-                <h3 className="text-lg leading-6 font-medium text-[var(--color-text)] mb-4">Server Settings</h3>
-                <div className="space-y-6">
-                  <div>
-                    <h4 className="text-sm font-medium text-[var(--color-text)]">Home Instance</h4>
-                    <p className="mt-1 mb-4 text-sm text-[var(--color-text-secondary)]">Set the instance origin the client uses for API, websocket, and media requests.</p>
-                    <div className="space-y-4">
-                      <div>
-                        <label htmlFor="currentHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">Current Instance</label>
-                        <input type="text" name="currentHostPort" id="currentHostPort" value={hostPort || 'No home instance configured'} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" readOnly />
-                      </div>
-                      <div>
-                        <label htmlFor="newHostPort" className="block text-sm font-medium text-[var(--color-text-secondary)]">New Instance Address</label>
-                        <input type="text" name="newHostPort" id="newHostPort" placeholder="localhost:7575, https://pb.example, or chat.example.com" value={newHostPort} onChange={e => setNewHostPort(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={handleHostPortSubmit}
-                        disabled={!newHostPort.trim()}
-                        variant="primary"
-                      >
-                        Update Instance
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ServerTab
+                hostPort={hostPort}
+                newHostPort={newHostPort}
+                setNewHostPort={setNewHostPort}
+                onSubmit={handleHostPortSubmit}
+              />
             )}
 
             {activeTab === 'security' && (
