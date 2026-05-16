@@ -20,7 +20,7 @@ import { Button } from "../../components/Button";
 import { ControlPanelContent } from "../control-panel/ControlPanelContent";
 import { ControlPanelHeader } from "../control-panel/ControlPanelHeader";
 import { ControlPanelSidebar } from "../control-panel/ControlPanelSidebar";
-import { FileViewerModal } from "../control-panel/FileViewerModal";
+import { FilePreviewSidebar } from "../control-panel/FilePreviewSidebar";
 import type { ControlPanelTab, ControlPanelTabId, StorageFile } from "../control-panel/types";
 import { useControlPanelData } from "../control-panel/useControlPanelData";
 import { getAuthTokenForRequests } from "../../services/authSession";
@@ -306,7 +306,12 @@ export default function ControlPanelPage() {
         onClose={() => setChannelCreationModalOpen(false)}
         onCreateChannel={handleCreateChannel}
       />
-      <FileViewerModal
+      {/* Right-side preview drawer for the Storage tab. Replaced the
+          older centered FileViewerModal -- the sidebar gives more room
+          for inline media and a dedicated provenance panel (uploader,
+          channel, message link). The state shape is unchanged so the
+          tab's existing setter still works as-is. */}
+      <FilePreviewSidebar
         isOpen={fileViewerModal.isOpen}
         file={fileViewerModal.file}
         onClose={() => setFileViewerModal({ isOpen: false, file: null })}
