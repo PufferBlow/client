@@ -21,6 +21,7 @@ import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
+import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
 import { extractMentionQuery, insertMentionAtCursor, parseMentions } from "../../utils/mentions";
 import { sendPing } from "../../services/ping";
@@ -218,6 +219,16 @@ export default function Dashboard() {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSelectedIdx, setMentionSelectedIdx] = useState(0);
   const mentionDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Moderation modal state. Single field because the modal is opened in
+  // exactly one of two modes — keeping them parallel as booleans would
+  // let both be true at once. `null` means the modal is closed.
+  const [moderationAction, setModerationAction] = useState<{
+    kind: "timeout" | "ban";
+    userId: string;
+    username: string;
+  } | null>(null);
+  const [moderationSubmitting, setModerationSubmitting] = useState(false);
 
   const filteredMentionUsers = useMemo(() => {
     if (mentionQuery === null) return [];
@@ -1511,8 +1522,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleUserTimeout = async (userId: string, username: string) => {
-    const authToken = getAuthTokenFromCookies() || '';
+  // Opens the moderation modal in timeout mode. The actual API call happens
+  // in handleModerationSubmit once the moderator confirms — splitting the
+  // intent from the execution lets us reuse one modal for both action kinds
+  // and run validation on the form inputs before hitting the network.
+  const handleUserTimeout = (userId: string, username: string) => {
+    const authToken = getAuthTokenFromCookies() || "";
     if (!authToken) {
       showToast({
         message: "You need to be signed in to moderate users.",
@@ -1521,49 +1536,11 @@ export default function Dashboard() {
       });
       return;
     }
-
-    const durationInput = window.prompt(`Timeout ${username} for how many minutes?`, '60');
-    if (!durationInput) {
-      return;
-    }
-
-    const durationMinutes = Number.parseInt(durationInput, 10);
-    if (!Number.isFinite(durationMinutes) || durationMinutes < 1) {
-      showToast({
-        message: "Please enter a valid timeout duration in minutes.",
-        tone: "error",
-        category: "validation",
-      });
-      return;
-    }
-
-    const reason = window.prompt(`Optional timeout reason for ${username}:`, '') || undefined;
-    const response = await timeoutUser(userId, {
-      auth_token: authToken,
-      duration_minutes: durationMinutes,
-      reason,
-    });
-
-    if (!response.success) {
-      showToast({
-        message: `Failed to timeout ${username}: ${response.error || 'Unknown error'}`,
-        tone: "error",
-        category: "system",
-      });
-      return;
-    }
-
-    showToast({
-      message: `${username} has been timed out for ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}.`,
-      tone: "success",
-      category: "destructive",
-    });
-    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
-    setSelectedContextUser(null);
+    setModerationAction({ kind: "timeout", userId, username });
   };
 
-  const handleUserBan = async (userId: string, username: string) => {
-    const authToken = getAuthTokenFromCookies() || '';
+  const handleUserBan = (userId: string, username: string) => {
+    const authToken = getAuthTokenFromCookies() || "";
     if (!authToken) {
       showToast({
         message: "You need to be signed in to moderate users.",
@@ -1572,34 +1549,75 @@ export default function Dashboard() {
       });
       return;
     }
+    setModerationAction({ kind: "ban", userId, username });
+  };
 
-    const confirmed = window.confirm(`Ban ${username} from this home instance?`);
-    if (!confirmed) {
-      return;
-    }
-
-    const reason = window.prompt(`Optional ban reason for ${username}:`, '') || undefined;
-    const response = await banUser(userId, {
-      auth_token: authToken,
-      reason,
-    });
-
-    if (!response.success) {
+  /**
+   * Executes the pending moderation action with the form values gathered
+   * by ModerationActionModal. The modal pre-validates duration so the
+   * `durationMinutes` field is guaranteed defined for timeouts.
+   */
+  const handleModerationSubmit = async (data: ModerationActionSubmit) => {
+    if (!moderationAction) return;
+    const { kind, userId, username } = moderationAction;
+    const authToken = getAuthTokenFromCookies() || "";
+    if (!authToken) {
       showToast({
-        message: `Failed to ban ${username}: ${response.error || 'Unknown error'}`,
+        message: "You need to be signed in to moderate users.",
         tone: "error",
         category: "system",
       });
+      setModerationAction(null);
       return;
     }
 
-    showToast({
-      message: `${username} has been banned from this home instance.`,
-      tone: "success",
-      category: "destructive",
-    });
-    setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
-    setSelectedContextUser(null);
+    setModerationSubmitting(true);
+    try {
+      if (kind === "timeout") {
+        const response = await timeoutUser(userId, {
+          auth_token: authToken,
+          duration_minutes: data.durationMinutes!,
+          reason: data.reason,
+        });
+        if (!response.success) {
+          showToast({
+            message: `Failed to timeout ${username}: ${response.error || "Unknown error"}`,
+            tone: "error",
+            category: "system",
+          });
+          return;
+        }
+        const minutes = data.durationMinutes!;
+        showToast({
+          message: `${username} has been timed out for ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+          tone: "success",
+          category: "destructive",
+        });
+      } else {
+        const response = await banUser(userId, {
+          auth_token: authToken,
+          reason: data.reason,
+        });
+        if (!response.success) {
+          showToast({
+            message: `Failed to ban ${username}: ${response.error || "Unknown error"}`,
+            tone: "error",
+            category: "system",
+          });
+          return;
+        }
+        showToast({
+          message: `${username} has been banned from this home instance.`,
+          tone: "success",
+          category: "destructive",
+        });
+      }
+      setModerationAction(null);
+      setUserContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+      setSelectedContextUser(null);
+    } finally {
+      setModerationSubmitting(false);
+    }
   };
 
   // Message input handlers
@@ -3471,6 +3489,20 @@ export default function Dashboard() {
             },
           },
         ]}
+      />
+
+      <ModerationActionModal
+        action={
+          moderationAction
+            ? { kind: moderationAction.kind, username: moderationAction.username }
+            : null
+        }
+        isSubmitting={moderationSubmitting}
+        onSubmit={handleModerationSubmit}
+        onCancel={() => {
+          if (moderationSubmitting) return;
+          setModerationAction(null);
+        }}
       />
 
       <ConfirmDialog

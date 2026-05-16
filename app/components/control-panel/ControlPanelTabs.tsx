@@ -47,6 +47,7 @@ import {
 import { Line, Bar, Pie } from "react-chartjs-2";
 import { Hash, Mic } from "lucide-react";
 import type { ShowToast } from "../Toast";
+import { ModerationActionModal, type ModerationActionSubmit } from "../ModerationActionModal";
 import {
   RoleBadgeList,
 } from "./RoleManagement";
@@ -2299,6 +2300,14 @@ export function MembersTab({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [selectedUserMenu, setSelectedUserMenu] = useState<typeof users[0] | null>(null);
   const [userMenuPosition, setUserMenuPosition] = useState({ x: 0, y: 0 });
+  // Moderation modal — same single-field pattern used in DashboardPage so a
+  // moderator can never trigger two simultaneous prompts.
+  const [moderationAction, setModerationAction] = useState<{
+    kind: 'timeout' | 'ban';
+    userId: string;
+    username: string;
+  } | null>(null);
+  const [moderationSubmitting, setModerationSubmitting] = useState(false);
 
   // Show loading state when no users are loaded yet
   if (!users || users.length === 0) {
@@ -2358,88 +2367,86 @@ export function MembersTab({
     setUserMenuOpen(!userMenuOpen || selectedUserMenu?.user_id !== user.user_id);
   };
 
-  const handleUserAction = async (action: 'editRoles' | 'timeout' | 'ban') => {
+  const handleUserAction = (action: 'editRoles' | 'timeout' | 'ban') => {
     if (!selectedUserMenu) return;
 
-    const authToken = getAuthTokenFromCookies() || '';
     const targetUserId = selectedUserMenu.user_id;
     const targetUsername = selectedUserMenu.username;
 
-    switch (action) {
-      case 'editRoles':
-        onOpenRolesTab();
-        break;
-      case 'timeout': {
-        const durationInput = window.prompt(`Timeout ${targetUsername} for how many minutes?`, '60');
-        if (!durationInput) {
-          break;
-        }
-
-        const durationMinutes = Number.parseInt(durationInput, 10);
-        if (!Number.isFinite(durationMinutes) || durationMinutes < 1) {
-          showToast({
-            message: "Please enter a valid timeout duration in minutes.",
-            tone: 'error',
-            category: 'validation',
-          });
-          break;
-        }
-
-        const reason = window.prompt(`Optional timeout reason for ${targetUsername}:`, '') || undefined;
-        const response = await timeoutUser(targetUserId, {
-          auth_token: authToken,
-          duration_minutes: durationMinutes,
-          reason,
-        });
-
-        if (!response.success) {
-          showToast({
-            message: `Failed to timeout ${targetUsername}: ${response.error || 'Unknown error'}`,
-            tone: 'error',
-            category: 'system',
-          });
-          break;
-        }
-
-        showToast({
-          message: `${targetUsername} has been timed out for ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}.`,
-          tone: 'success',
-          category: 'destructive',
-        });
-        break;
-      }
-      case 'ban': {
-        const confirmed = window.confirm(`Ban ${targetUsername} from this home instance?`);
-        if (!confirmed) {
-          break;
-        }
-
-        const reason = window.prompt(`Optional ban reason for ${targetUsername}:`, '') || undefined;
-        const response = await banUser(targetUserId, {
-          auth_token: authToken,
-          reason,
-        });
-
-        if (!response.success) {
-          showToast({
-            message: `Failed to ban ${targetUsername}: ${response.error || 'Unknown error'}`,
-            tone: 'error',
-            category: 'system',
-          });
-          break;
-        }
-
-        showToast({
-          message: `${targetUsername} has been banned from this home instance.`,
-          tone: 'success',
-          category: 'destructive',
-        });
-        break;
-      }
+    if (action === 'editRoles') {
+      onOpenRolesTab();
+      setUserMenuOpen(false);
+      setSelectedUserMenu(null);
+      return;
     }
 
-    setUserMenuOpen(false);
-    setSelectedUserMenu(null);
+    // Defer the actual ban/timeout call into handleModerationSubmit so the
+    // modal can collect a duration + reason with proper inputs (and inline
+    // validation) instead of stacked window.prompt dialogs.
+    setModerationAction({ kind: action, userId: targetUserId, username: targetUsername });
+  };
+
+  const handleModerationSubmit = async (data: ModerationActionSubmit) => {
+    if (!moderationAction) return;
+    const { kind, userId, username } = moderationAction;
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      showToast({
+        message: 'You need to be signed in to moderate users.',
+        tone: 'error',
+        category: 'system',
+      });
+      setModerationAction(null);
+      return;
+    }
+
+    setModerationSubmitting(true);
+    try {
+      if (kind === 'timeout') {
+        const response = await timeoutUser(userId, {
+          auth_token: authToken,
+          duration_minutes: data.durationMinutes!,
+          reason: data.reason,
+        });
+        if (!response.success) {
+          showToast({
+            message: `Failed to timeout ${username}: ${response.error || 'Unknown error'}`,
+            tone: 'error',
+            category: 'system',
+          });
+          return;
+        }
+        const minutes = data.durationMinutes!;
+        showToast({
+          message: `${username} has been timed out for ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+          tone: 'success',
+          category: 'destructive',
+        });
+      } else {
+        const response = await banUser(userId, {
+          auth_token: authToken,
+          reason: data.reason,
+        });
+        if (!response.success) {
+          showToast({
+            message: `Failed to ban ${username}: ${response.error || 'Unknown error'}`,
+            tone: 'error',
+            category: 'system',
+          });
+          return;
+        }
+        showToast({
+          message: `${username} has been banned from this home instance.`,
+          tone: 'success',
+          category: 'destructive',
+        });
+      }
+      setModerationAction(null);
+      setUserMenuOpen(false);
+      setSelectedUserMenu(null);
+    } finally {
+      setModerationSubmitting(false);
+    }
   };
 
   // Close menu on outside click
@@ -2457,6 +2464,19 @@ export function MembersTab({
 
   return (
     <div className="space-y-6">
+      <ModerationActionModal
+        action={
+          moderationAction
+            ? { kind: moderationAction.kind, username: moderationAction.username }
+            : null
+        }
+        isSubmitting={moderationSubmitting}
+        onSubmit={handleModerationSubmit}
+        onCancel={() => {
+          if (moderationSubmitting) return;
+          setModerationAction(null);
+        }}
+      />
       <div className={controlPanelSectionClass}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Members</h2>

@@ -41,6 +41,13 @@ export default function Settings() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [newHostPort, setNewHostPort] = useState('');
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  // Theme-naming modal — replaces window.prompt('Enter a name for your custom
+  // theme:') so the rename uses themed inputs and keyboard handling like the
+  // rest of the app.
+  const [themeNameModal, setThemeNameModal] = useState<{ open: boolean; value: string }>({
+    open: false,
+    value: "",
+  });
 
   const {
     userStatus,
@@ -1216,16 +1223,12 @@ export default function Settings() {
                     Reset to Default
                   </button>
                   <button
-                    onClick={() => {
-                      const configName = prompt('Enter a name for your custom theme:');
-                      if (configName?.trim()) {
-                        setAppearanceConfig({
-                          ...appearanceConfig,
-                          name: configName.trim()
-                        });
-                        setMessage({ type: 'success', text: `Theme named "${configName.trim()}" and saved!` });
-                      }
-                    }}
+                    onClick={() =>
+                      setThemeNameModal({
+                        open: true,
+                        value: appearanceConfig.name || "",
+                      })
+                    }
                     className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] text-sm rounded transition-colors"
                   >
                     Save Custom Theme
@@ -1899,6 +1902,65 @@ export default function Settings() {
             )}
           </div>
         </div>
+
+        <Modal
+          isOpen={themeNameModal.open}
+          onClose={() => setThemeNameModal({ open: false, value: "" })}
+          title="Save Custom Theme"
+          description="Give this theme a name so it shows up in your saved presets."
+          widthClassName="max-w-md"
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setThemeNameModal({ open: false, value: "" })}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  const trimmed = themeNameModal.value.trim();
+                  if (!trimmed) return;
+                  setAppearanceConfig({ ...appearanceConfig, name: trimmed });
+                  setMessage({
+                    type: "success",
+                    text: `Theme named "${trimmed}" and saved!`,
+                  });
+                  setThemeNameModal({ open: false, value: "" });
+                }}
+                disabled={!themeNameModal.value.trim()}
+              >
+                Save
+              </Button>
+            </div>
+          }
+        >
+          <input
+            type="text"
+            autoFocus
+            value={themeNameModal.value}
+            onChange={(e) =>
+              setThemeNameModal((prev) => ({ ...prev, value: e.target.value }))
+            }
+            placeholder="My Nord remix"
+            maxLength={64}
+            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && themeNameModal.value.trim()) {
+                const trimmed = themeNameModal.value.trim();
+                setAppearanceConfig({ ...appearanceConfig, name: trimmed });
+                setMessage({
+                  type: "success",
+                  text: `Theme named "${trimmed}" and saved!`,
+                });
+                setThemeNameModal({ open: false, value: "" });
+              }
+            }}
+          />
+        </Modal>
 
         <Modal
           isOpen={showResetModal}
