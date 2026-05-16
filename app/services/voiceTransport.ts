@@ -12,29 +12,58 @@ const AUDIO_DEVICES_CHANGED_EVENT = 'pufferblow:audio-devices-changed';
 interface PersistedAudioSelections {
   inputDeviceId: string | null;
   outputDeviceId: string | null;
+  /**
+   * The three DSP toggles the Settings page lets the user flip. All three
+   * default to `true` when the user has never opened Settings — that
+   * matches both the hook default in useSettingsAudio.ts and the long-
+   * standing behavior of the voice stack before these toggles existed.
+   */
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
 }
 
+const DEFAULT_AUDIO_SELECTIONS: PersistedAudioSelections = {
+  inputDeviceId: null,
+  outputDeviceId: null,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+
 /**
- * Read the persisted audio-device selections from localStorage. Returns
- * (null, null) outside the browser, when storage is empty, or when the
- * payload is malformed. Tolerates schema drift (the settings page writes
- * additional fields beyond these two device IDs).
+ * Read the persisted audio settings from localStorage. Returns defaults
+ * outside the browser, when storage is empty, or when the payload is
+ * malformed. Tolerates schema drift (the settings page writes additional
+ * fields beyond what we consume here).
+ *
+ * Settings apply at call-connect time and again on every mid-call device
+ * swap — there's no live event for the DSP toggles, but in practice users
+ * change them rarely and a leave + rejoin (or a device swap) refreshes
+ * the constraints. Worth revisiting if telemetry shows people toggling
+ * mid-call and getting confused.
  */
-function readAudioDeviceSelections(): PersistedAudioSelections {
-  if (typeof window === 'undefined') return { inputDeviceId: null, outputDeviceId: null };
+function readAudioSettings(): PersistedAudioSelections {
+  if (typeof window === 'undefined') return { ...DEFAULT_AUDIO_SELECTIONS };
   try {
     const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
-    if (!raw) return { inputDeviceId: null, outputDeviceId: null };
+    if (!raw) return { ...DEFAULT_AUDIO_SELECTIONS };
     const parsed = JSON.parse(raw) as {
       selectedInputDevice?: string;
       selectedOutputDevice?: string;
+      echoCancellation?: boolean;
+      noiseSuppression?: boolean;
+      autoGainControl?: boolean;
     };
     return {
       inputDeviceId: parsed.selectedInputDevice?.trim() || null,
       outputDeviceId: parsed.selectedOutputDevice?.trim() || null,
+      echoCancellation: parsed.echoCancellation ?? true,
+      noiseSuppression: parsed.noiseSuppression ?? true,
+      autoGainControl: parsed.autoGainControl ?? true,
     };
   } catch {
-    return { inputDeviceId: null, outputDeviceId: null };
+    return { ...DEFAULT_AUDIO_SELECTIONS };
   }
 }
 
@@ -242,14 +271,16 @@ export class VoiceTransport {
     if (this.localStream) return;
 
     const audioSettings = this.mediaQuality?.audio;
-    const { inputDeviceId, outputDeviceId } = readAudioDeviceSelections();
+    const persisted = readAudioSettings();
+    const { inputDeviceId, outputDeviceId, echoCancellation, noiseSuppression, autoGainControl } =
+      persisted;
     this.currentInputDeviceId = inputDeviceId;
     this.currentOutputDeviceId = outputDeviceId;
 
     const audioConstraints: MediaTrackConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      echoCancellation,
+      noiseSuppression,
+      autoGainControl,
       sampleRate: audioSettings?.sample_rate_hz,
       channelCount: audioSettings?.stereo_enabled
         ? Math.max(audioSettings.channels, 2)
@@ -323,7 +354,7 @@ export class VoiceTransport {
   private async handleDeviceChange(
     detail: AudioDeviceChangeDetail | undefined,
   ): Promise<void> {
-    const persisted = readAudioDeviceSelections();
+    const persisted = readAudioSettings();
     const nextInput = detail?.inputDeviceId ?? persisted.inputDeviceId;
     const nextOutput = detail?.outputDeviceId ?? persisted.outputDeviceId;
 
@@ -340,10 +371,13 @@ export class VoiceTransport {
       this.currentInputDeviceId = nextInput;
       try {
         const audioSettings = this.mediaQuality?.audio;
+        // Re-read settings so a mid-call toggle flip on the Settings page
+        // takes effect on the next device swap, not just on rejoin.
+        const { echoCancellation, noiseSuppression, autoGainControl } = readAudioSettings();
         const constraints: MediaTrackConstraints = {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation,
+          noiseSuppression,
+          autoGainControl,
           sampleRate: audioSettings?.sample_rate_hz,
           channelCount: audioSettings?.stereo_enabled
             ? Math.max(audioSettings.channels, 2)
