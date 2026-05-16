@@ -18,6 +18,7 @@ import { useSettingsAudio } from "../settings/useSettingsAudio";
 import { useSettingsProfile } from "../settings/useSettingsProfile";
 import { ProfileAppearanceControls } from "../settings/ProfileAppearanceControls";
 import { ServerTab } from "../settings/tabs/ServerTab";
+import { SecurityTab } from "../settings/tabs/SecurityTab";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
@@ -1794,66 +1795,21 @@ export default function Settings() {
             )}
 
             {activeTab === 'security' && (
-              <div className="space-y-6">
-                <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
-                  <h3 className="text-lg leading-6 font-medium text-[var(--color-text)] mb-4">Security Settings</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-sm font-medium text-[var(--color-text)]">Change Password</h4>
-                      <div className="mt-2 space-y-4">
-                        <div>
-                          <label htmlFor="currentPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">Current password</label>
-                          <input type="password" name="currentPassword" id="currentPassword" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
-                        </div>
-                        <div>
-                          <label htmlFor="newPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">New password</label>
-                          <input type="password" name="newPassword" id="newPassword" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
-                        </div>
-                        <div>
-                          <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--color-text-secondary)]">Confirm password</label>
-                          <input type="password" name="confirmPassword" id="confirmPassword" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-[var(--color-border)] rounded-lg shadow-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)] transition-all duration-200 sm:text-sm" />
-                        </div>
-                        <Button
-                          type="button"
-                          onClick={handlePasswordSubmit}
-                          disabled={updatePasswordMutation.isPending}
-                          loading={updatePasswordMutation.isPending}
-                          variant="primary"
-                        >
-                          {updatePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-[var(--color-border)] pt-6">
-                      <h4 className="text-sm font-medium text-[var(--color-text)]">Authentication Token</h4>
-                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Resetting your authentication token will log you out</p>
-                      <div className="mt-3">
-                        <Button type="button" onClick={() => setShowResetModal(true)} variant="danger">
-                          Reset Auth Token
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-[var(--color-border)] pt-6">
-                      <h4 className="text-sm font-medium text-[var(--color-text)]">Sign Out</h4>
-                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Sign out of your account</p>
-                      <div className="mt-3">
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            logout();
-                            setTimeout(() => window.location.href = '/login', 100);
-                          }}
-                          variant="danger"
-                        >
-                          Sign Out
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <SecurityTab
+                currentPassword={currentPassword}
+                setCurrentPassword={setCurrentPassword}
+                newPassword={newPassword}
+                setNewPassword={setNewPassword}
+                confirmPassword={confirmPassword}
+                setConfirmPassword={setConfirmPassword}
+                onUpdatePassword={handlePasswordSubmit}
+                isUpdatingPassword={updatePasswordMutation.isPending}
+                onOpenResetTokenModal={() => setShowResetModal(true)}
+                onSignOut={() => {
+                  logout();
+                  setTimeout(() => (window.location.href = '/login'), 100);
+                }}
+              />
             )}
           </div>
         </div>
