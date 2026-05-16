@@ -127,8 +127,22 @@ export function TitleBar() {
   const { serverName } = useTitleBar();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // `mounted` is the SSR-safety latch. SSR has no `window`, so isElectron()
+  // returns false on the server -> server emits null. But on the client's
+  // FIRST render (the hydration pass), `window.electron` already exists in
+  // the Electron renderer, so isElectron() returns true and we'd emit the
+  // <div style={{WebkitAppRegion:'drag'}}>. That mismatch trips React's
+  // hydration check and the whole tree gets thrown away and re-rendered.
+  //
+  // The fix: keep `mounted` false during the first client render (matches
+  // SSR's null output exactly), then flip it to true in useEffect, which
+  // only runs post-hydration. The second render is no longer a hydration
+  // pass, so emitting the title bar then is fine.
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+
     const el = getElectron();
     if (!el) return;
 
@@ -147,7 +161,7 @@ export function TitleBar() {
     };
   }, []);
 
-  if (!isElectron() || isFullscreen) return null;
+  if (!mounted || !isElectron() || isFullscreen) return null;
 
   const el = getElectron();
   const isMac = el?.platform === 'darwin';

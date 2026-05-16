@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { NotificationMenu, type NotificationItem } from "../NotificationMenu";
+import { SearchModal, type SearchHandlerReturn } from "../SearchModal";
 import type { Channel } from "../../models";
 
 interface UnreadMarker {
@@ -21,6 +22,22 @@ interface ChatHeaderProps {
   onJumpToFirstUnread: () => void;
   membersListVisible: boolean;
   onToggleMembersList: () => void;
+  /**
+   * Whether the channel-search panel is open. Wired to the magnifier
+   * icon in the header. The panel is a floating dropdown anchored to
+   * the icon (like the notifications menu), not a centered modal.
+   */
+  isSearchOpen: boolean;
+  /** Open/close the search panel. */
+  setSearchOpen: (open: boolean) => void;
+  /** Channel-scoped search handler. Runs against the active channel only. */
+  onSearch?: (query: string) => Promise<SearchHandlerReturn>;
+  /** Called when the user picks a result from the panel. */
+  onSelectSearchResult?: (result: {
+    id: string;
+    type: "message" | "user" | "channel";
+    channel_id?: string;
+  }) => void;
 }
 
 /**
@@ -28,10 +45,10 @@ interface ChatHeaderProps {
  * bell with unread count, jump-to-unread button (only when the current
  * channel has a stored unread marker), and the right-rail member-toggle.
  *
- * The 'User details', 'Search in channel', and 'More options' icons are
- * deliberately non-functional today — they're placeholders for future
- * features the design committed to. Left as-is so this extraction is
- * purely structural; wiring them up is a separate concern.
+ * The 'User details' and 'More options' icons are still placeholders;
+ * the 'Search in channel' icon is wired to `onOpenSearch` and hidden
+ * when the active channel is a voice channel (voice channels have no
+ * messages to search).
  */
 export function ChatHeader({
   selectedChannel,
@@ -47,7 +64,14 @@ export function ChatHeader({
   onJumpToFirstUnread,
   membersListVisible,
   onToggleMembersList,
+  isSearchOpen,
+  setSearchOpen,
+  onSearch,
+  onSelectSearchResult,
 }: ChatHeaderProps) {
+  // Voice channels have no message history -- the search button (and any
+  // future channel-search affordances) don't apply. Hide accordingly.
+  const isVoiceChannel = selectedChannel?.channel_type === 'voice';
   return (
     <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]/70">
       <div className="flex items-center">
@@ -110,16 +134,38 @@ export function ChatHeader({
             />
           </svg>
         </button>
-        <button className="pb-icon-btn" title="Search in channel" aria-label="Search in channel">
-          <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-        </button>
+        {!isVoiceChannel && (
+          // `relative` wrapper so the floating SearchModal (absolute
+          // right:0 top:12) anchors to the search button, matching the
+          // notifications dropdown pattern above.
+          <div className="relative">
+            <button
+              onClick={() => setSearchOpen(!isSearchOpen)}
+              className="pb-icon-btn"
+              title="Search this channel"
+              aria-label="Search this channel"
+              aria-expanded={isSearchOpen}
+            >
+              <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </button>
+            {onSearch && onSelectSearchResult && (
+              <SearchModal
+                isOpen={isSearchOpen}
+                onClose={() => setSearchOpen(false)}
+                onSearch={onSearch}
+                onSelectResult={onSelectSearchResult}
+                channelName={selectedChannel?.channel_name}
+              />
+            )}
+          </div>
+        )}
         <button
           onClick={onToggleMembersList}
           className="pb-icon-btn hidden xl:inline-flex"

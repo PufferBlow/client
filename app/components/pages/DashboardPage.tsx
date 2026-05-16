@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import ReactDOM from 'react-dom';
 import { ChannelCreationModal } from "../../components/ChannelCreationModal";
 import { UserContextMenu } from "../../components/UserContextMenu";
-import { SearchModal } from "../../components/SearchModal";
 import { EmojiPicker } from "../../components/EmojiPicker";
 import { VoiceChannel } from "../../components/VoiceChannel";
 import { VoiceCallUI } from "../../components/VoiceCallUI";
@@ -718,55 +717,62 @@ export default function Dashboard() {
     }
   };
 
+  /**
+   * Channel-scoped search. Returns message hits from the CURRENT channel
+   * only -- no cross-channel results, no user results, no channel-name
+   * matches. Two sources, deduped:
+   *
+   *   1. Local message cache -- instant, covers the messages already
+   *      loaded into the active view.
+   *   2. Server-side decrypt-and-scan for the active channel -- picks
+   *      up matches outside the local cache, capped at the server's
+   *      `scan_limit`. When the cap was hit, the result's `meta`
+   *      reports `truncatedScan: true` so the panel can warn the user.
+   *
+   * Returns an empty result set when no channel is selected, which
+   * matches the UI behavior of hiding the search button entirely in
+   * that case.
+   */
   const handleSearch = async (query: string) => {
     const q = query.toLowerCase();
     const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string; channel_id?: string }> = [];
-    // truncatedScan is set when the server side reports its decrypt
-    // window didn't cover the whole channel — surfaced in the modal so
-    // the user doesn't assume the result set is exhaustive.
     let truncatedScan = false;
     let scannedChannelName: string | undefined;
-
-    // Track message IDs already emitted so the server-side hits don't
-    // duplicate the locally-cached matches.
     const seenMessageIds = new Set<string>();
 
-    // Search messages that are already loaded in memory (cheap, instant).
+    if (!selectedChannel) {
+      return { results, meta: { truncatedScan, scannedChannelName } };
+    }
+    const currentChannelId = selectedChannel.channel_id;
+
+    // Local cache: messages already loaded for the active channel.
     for (const message of messages) {
-      if (message.message?.toLowerCase().includes(q)) {
-        const channel = channels.find(c => c.channel_id === message.channel_id);
-        const sender = usersById.get(message.sender_user_id);
-        results.push({
-          id: message.message_id,
-          type: "message",
-          title: sender?.username || message.username || "Unknown User",
-          subtitle: channel ? `#${channel.channel_name}` : undefined,
-          content: message.message,
-          timestamp: message.sent_at,
-          channel_id: message.channel_id || undefined,
-        });
-        seenMessageIds.add(message.message_id);
-      }
+      if (message.channel_id !== currentChannelId) continue;
+      if (!message.message?.toLowerCase().includes(q)) continue;
+      const sender = usersById.get(message.sender_user_id);
+      results.push({
+        id: message.message_id,
+        type: "message",
+        title: sender?.username || message.username || "Unknown User",
+        subtitle: `#${selectedChannel.channel_name}`,
+        content: message.message,
+        timestamp: message.sent_at,
+        channel_id: message.channel_id || undefined,
+      });
+      seenMessageIds.add(message.message_id);
     }
 
-    // Hit the server's scan-capped search for the currently-selected channel.
-    // This picks up matches outside the locally-cached page. Skip when the
-    // query is too short for the server (min 2 chars) or when no channel is
-    // active. Failures are non-fatal — local results still display.
+    // Server-side scan for the active channel. Failures are non-fatal --
+    // local results still display.
     const authToken = getAuthTokenFromCookies() || '';
     const resolvedInstance =
       resolveStoredInstance(getHostPortFromStorage()) ??
       resolveStoredInstance(getHostPortFromCookies());
-    if (
-      selectedChannel &&
-      authToken &&
-      resolvedInstance &&
-      query.trim().length >= 2
-    ) {
+    if (authToken && resolvedInstance && query.trim().length >= 2) {
       try {
         const response = await searchChannelMessages(
           resolvedInstance.raw,
-          selectedChannel.channel_id,
+          currentChannelId,
           query.trim(),
           authToken,
         );
@@ -777,61 +783,34 @@ export default function Dashboard() {
           }
           for (const message of response.data.messages) {
             if (seenMessageIds.has(message.message_id)) continue;
-            // Server-side hits all belong to the channel we searched against.
-            const resultChannelId = message.channel_id || selectedChannel.channel_id;
-            const channel = channels.find(c => c.channel_id === resultChannelId);
             const sender = usersById.get(message.sender_user_id);
             results.push({
               id: message.message_id,
               type: "message",
               title: sender?.username || message.username || "Unknown User",
-              subtitle: channel ? `#${channel.channel_name}` : undefined,
+              subtitle: `#${selectedChannel.channel_name}`,
               content: message.message,
               timestamp: message.sent_at,
-              channel_id: resultChannelId,
+              channel_id: currentChannelId,
             });
             seenMessageIds.add(message.message_id);
           }
         } else if (!response.success) {
           logger.network.warn("Server-side channel search failed", {
-            channelId: selectedChannel.channel_id,
+            channelId: currentChannelId,
             error: response.error,
           });
         }
       } catch (error) {
         logger.network.warn("Server-side channel search threw", {
-          channelId: selectedChannel.channel_id,
+          channelId: currentChannelId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
     }
 
-    // Search users
-    for (const user of users) {
-      if (user.username?.toLowerCase().includes(q)) {
-        results.push({
-          id: user.user_id,
-          type: "user",
-          title: user.username,
-          subtitle: user.status === 'online' ? 'Online' : user.status === 'idle' ? 'Idle' : user.status === 'dnd' ? 'Do Not Disturb' : 'Offline',
-        });
-      }
-    }
-
-    // Search channels
-    for (const channel of channels) {
-      if (channel.channel_name?.toLowerCase().includes(q)) {
-        results.push({
-          id: channel.channel_id,
-          type: "channel",
-          title: `#${channel.channel_name}`,
-          subtitle: channel.channel_type === 'voice' ? 'Voice Channel' : 'Text Channel',
-        });
-      }
-    }
-
     return {
-      results: results.slice(0, 25),
+      results: results.slice(0, 50),
       meta: { truncatedScan, scannedChannelName },
     };
   };
@@ -1315,7 +1294,16 @@ export default function Dashboard() {
               if (
                 isOwnMessage ||
                 isAlreadyProcessed ||
-                readMessageIdsRef.current.has(normalizedMessage.message_id)
+                readMessageIdsRef.current.has(normalizedMessage.message_id) ||
+                // If the user is actively viewing this channel, the message
+                // is already appended above (line ~1306) and a markMessagesRead
+                // call was kicked off. Returning here prevents the unread
+                // count + notification entry from being created for a
+                // message that's literally on screen -- the badge would
+                // never go to zero because `markMessagesRead` resolving
+                // doesn't decrement `unreadCountsByChannel`. This was the
+                // user-visible "badge counts up forever" bug.
+                incomingChannelId === selectedChannelIdRef.current
               ) {
                 return;
               }
@@ -1515,6 +1503,42 @@ export default function Dashboard() {
         channel: channel
       });
     }
+  };
+
+  /**
+   * Avatar resolver for voice-channel participants. Shared between two
+   * consumers so the sidebar participant rows and the main VoiceCallUI
+   * tiles render the same face for the same user_id:
+   *
+   *   1. <ChannelList> -> <VoiceChannel> -> <ParticipantRow>
+   *   2. <VoiceCallUI> -> <ParticipantCard>
+   *
+   * Resolution order:
+   *   - Local users cache (`usersById`) covers remote participants we've
+   *     already loaded for this server.
+   *   - `currentUser` covers self when the users list response omits the
+   *     requester.
+   *   - Identicon fallback derived from username or user_id covers
+   *     freshly-joined federated peers we haven't fetched a profile for.
+   *
+   * Defined once here as a plain const (the function recreates per
+   * render but each consumer just calls it during render anyway, so
+   * memoizing wouldn't help with re-renders).
+   */
+  const resolveVoiceParticipantAvatar = (
+    userId: string,
+    username?: string,
+  ): string | undefined => {
+    const found =
+      usersById.get(userId) ??
+      (userId === currentUser?.user_id ? currentUser : undefined);
+    if (found?.avatar_url) {
+      return (
+        createFullUrl(found.avatar_url) ??
+        createFallbackAvatarUrl(found.username || username || userId)
+      );
+    }
+    return createFallbackAvatarUrl(username || found?.username || userId);
   };
 
   // Opens the moderation modal in timeout mode. The actual API call happens
@@ -2414,6 +2438,7 @@ export default function Dashboard() {
                 setVoiceSessionActions(session);
               }}
               rtcMediaQuality={serverInfo?.rtc_media_quality ?? null}
+              resolveAvatarUrl={resolveVoiceParticipantAvatar}
             />
       </ChannelPanel>
         </div>
@@ -2464,18 +2489,106 @@ export default function Dashboard() {
           onJumpToFirstUnread={handleJumpToFirstUnread}
           membersListVisible={membersListVisible}
           onToggleMembersList={() => setMembersListVisible(!membersListVisible)}
+          // Search is now a floating panel anchored to the magnifier icon
+          // inside ChatHeader (mirrors the notifications dropdown). The
+          // panel is scoped to the active channel's messages only.
+          isSearchOpen={searchModalOpen}
+          setSearchOpen={setSearchModalOpen}
+          onSearch={handleSearch}
+          onSelectSearchResult={handleSelectSearchResult}
         />
 
-        {/* Voice Call UI - shown when in an active voice call for this channel */}
-        {selectedChannel?.channel_type === 'voice' && currentVoiceChannel?.channelId === selectedChannel?.channel_id && voiceSessionActions && (
-          <VoiceCallUI
-            channelName={selectedChannel.channel_name}
-            session={voiceSessionActions}
-            currentUserId={currentUser?.user_id}
-            currentUsername={currentUser?.username ?? undefined}
-          />
-        )}
+        {/*
+          Voice channels don't carry messages — the body of the chat area
+          becomes the voice room (participant grid + screen-share tiles +
+          control bar) instead of the messages scroller and composer. We
+          keep ChatHeader visible above so channel switching, members
+          toggle, etc. still work consistently across channel types.
 
+          The "not yet joined" branch is a passive placeholder: joining a
+          voice channel happens by clicking the channel row in the sidebar
+          (see VoiceChannel.tsx -> handleJoinVoiceChannel), which both
+          selects and connects. The placeholder only appears in edge
+          cases (a failed connect that left the channel selected, or a
+          manual disconnect without switching channels).
+        */}
+        {selectedChannel?.channel_type === 'voice' ? (
+          // No outer overflow here -- VoiceCallUI now manages its own
+          // internal scroller for the participant grid, so the wrapper
+          // just provides bounded height via flex-1 / min-h-0.
+          <div className="flex-1 min-h-0">
+            {currentVoiceChannel?.channelId === selectedChannel?.channel_id && voiceSessionActions ? (
+              <VoiceCallUI
+                channelName={selectedChannel.channel_name}
+                session={voiceSessionActions}
+                currentUserId={currentUser?.user_id}
+                currentUsername={currentUser?.username ?? undefined}
+                // Resolve each participant's avatar through the already-
+                // hydrated users cache. The voice transport doesn't carry
+                // avatar URLs on the wire (the SFU only knows user_id +
+                // username + speaking/mute flags), so DashboardPage --
+                // which owns the users list -- supplies the lookup.
+                //
+                // Resolution order:
+                //   1. Local users cache (`usersById`) -- covers remote
+                //      participants we've already loaded for this server.
+                //   2. `currentUser` -- covers self, since the users list
+                //      response may or may not include the requester.
+                //   3. Identicon fallback derived from username or
+                //      user_id -- covers freshly-joined federated peers
+                //      we haven't fetched a profile for yet.
+                resolveAvatarUrl={resolveVoiceParticipantAvatar}
+                // Banner resolver mirrors the avatar one: look up the user
+                // in the cache, return their banner image if they've
+                // uploaded one. If they haven't, return undefined and
+                // VoiceCallUI's ParticipantCard falls back to a hash-
+                // derived solid color so each tile still looks distinct.
+                // (We don't surface accent_color here because it's not
+                // on the lightweight User model used by the users list;
+                // the per-tile color fallback handles that case fine.)
+                // Left-click on a participant tile opens the user's profile
+                // card -- same flow as clicking a name in the members list
+                // or in the message stream. 'messages' as the tooltip source
+                // gives the card a centered anchor (above/below the tile),
+                // which matches how it looks when clicking a message author.
+                onParticipantClick={(userId, username, event) =>
+                  handleUserClick(userId, username, event, 'messages')
+                }
+                resolveBanner={(userId) => {
+                  // `currentUser` (from useCurrentUserProfile) and User-list
+                  // entries (from `usersById`) have different TS shapes --
+                  // the intersection in the union drops `banner_url`. So
+                  // we look up generically and cast to read the optional
+                  // field. At runtime both shapes carry banner_url when
+                  // the user has set one; missing on either side just
+                  // falls through to the hash-color fallback.
+                  const found =
+                    usersById.get(userId) ??
+                    (userId === currentUser?.user_id ? currentUser : undefined);
+                  const bannerUrl = (found as { banner_url?: string | null } | undefined)
+                    ?.banner_url;
+                  if (bannerUrl) {
+                    const url = createFullUrl(bannerUrl);
+                    if (url) return { kind: 'image', url };
+                  }
+                  return undefined;
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center p-8">
+                <div className="text-center text-[var(--color-text-secondary)]">
+                  <div className="text-base font-medium text-[var(--color-text)]">
+                    Voice channel · #{selectedChannel.channel_name}
+                  </div>
+                  <div className="text-sm text-[var(--color-text-muted)] mt-2">
+                    Click this channel in the sidebar to join the call.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         {/* Messages Area */}
         <div
           ref={messagesContainerRef}
@@ -2904,6 +3017,8 @@ export default function Dashboard() {
             onGifSelect={handleGifSelect}
           />
         </div>
+        </>
+        )}
 
       </MessagePane>
 
@@ -2928,12 +3043,9 @@ export default function Dashboard() {
         onCreateChannel={handleCreateChannel}
       />
 
-      <SearchModal
-        isOpen={searchModalOpen}
-        onClose={() => setSearchModalOpen(false)}
-        onSearch={handleSearch}
-        onSelectResult={handleSelectSearchResult}
-      />
+      {/* SearchModal used to be mounted globally here as a centered
+          modal. It now lives inside ChatHeader as a floating dropdown
+          anchored to the magnifier icon, so nothing renders here. */}
 
       <MessageContextMenu
         isOpen={messageContextMenu.isOpen}
