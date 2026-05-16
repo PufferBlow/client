@@ -117,47 +117,35 @@ export default function Signup() {
 
   return (
     <div className="min-h-full bg-[var(--color-background)]">
-      <div className="mx-auto flex min-h-full w-full max-w-md items-center px-4 py-10 sm:px-6 lg:px-8">
-        <section className="w-full rounded-[2rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-6 sm:p-8">
-          <div className="mb-8">
-            <PufferblowBrand
-              size={56}
-              subtitle="Create an account on your instance"
-              surfaceColor="var(--color-surface)"
-              className="flex-col items-center gap-4"
-              align="center"
-              textClassName="items-center"
-            />
-          </div>
-
-          <div className="mb-8">
-            <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[var(--color-text)]">
-              Create account
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-              Sign up on your home instance and we’ll sign you in immediately after setup.
-            </p>
-          </div>
+      <div className="mx-auto flex min-h-full w-full max-w-sm items-center px-4 py-6 sm:px-6">
+        <section className="w-full rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-5 sm:p-6">
+          <PufferblowBrand
+            size={40}
+            subtitle="Create an account"
+            surfaceColor="var(--color-surface)"
+            className="mb-5 flex-col items-center gap-2"
+            align="center"
+            textClassName="items-center"
+          />
 
           {error ? (
-            <div className="mb-5">
+            <div className="mb-4">
               <Notice tone="error" message={error} />
             </div>
           ) : null}
 
           {signupSuccess ? (
-            <div className="mb-5">
-              <Notice tone="success" message="Account created. Redirecting now." />
+            <div className="mb-4">
+              <Notice tone="success" message="Account created. Redirecting…" />
             </div>
           ) : null}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <Input
               id="username"
               name="username"
               autoComplete="username"
               label="Username"
-              placeholder="Choose a username"
               disabled={isSubmitting}
               fullWidth
               required
@@ -168,9 +156,8 @@ export default function Signup() {
               name="password"
               autoComplete="new-password"
               label="Password"
-              helperText="Use at least 8 characters."
-              placeholder="Create a password"
               disabled={isSubmitting}
+              minLength={8}
               fullWidth
               required
             />
@@ -180,7 +167,6 @@ export default function Signup() {
               name="confirmPassword"
               autoComplete="new-password"
               label="Confirm password"
-              placeholder="Repeat your password"
               disabled={isSubmitting}
               fullWidth
               required
@@ -189,14 +175,14 @@ export default function Signup() {
             <Input
               id="hostPort"
               name="hostPort"
-              label="Home Instance"
-              placeholder="localhost:7575, https://pb.example, or chat.example.com"
+              label="Home instance"
+              placeholder="localhost:7575"
               disabled={isSubmitting}
               fullWidth
               required
             />
 
-            <label className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+            <label className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
               <input
                 id="remember-me"
                 name="remember-me"
@@ -204,40 +190,31 @@ export default function Signup() {
                 disabled={isSubmitting}
                 className="h-4 w-4 rounded border border-[var(--color-border)] bg-[var(--color-background)]"
               />
-              Remember this session on this device
+              Remember me
             </label>
 
             <Button
               type="submit"
               fullWidth
-              size="lg"
               loading={isLoading}
               disabled={signupSuccess}
             >
-              {signupSuccess ? "Redirecting..." : "Create account"}
+              {signupSuccess ? "Redirecting…" : "Create account"}
             </Button>
-
-            <p className="text-center text-xs text-[var(--color-text-muted)]">
-              {signupSuccess
-                ? "Your account is ready on this home instance."
-                : "You’ll be signed in automatically once the account is created."}
-            </p>
           </form>
 
-          <div className="mt-8 border-t border-[var(--color-border-secondary)] pt-6 text-center text-sm text-[var(--color-text-secondary)]">
-            <p>
-              Already have an account?{" "}
-              <Link
-                to={buildSiblingAuthLink(
-                  "/login",
-                  new URLSearchParams(location.search).get("redirect"),
-                )}
-                className="text-[var(--color-text)] underline decoration-[var(--color-border)] underline-offset-4 transition-colors hover:text-[var(--color-text-secondary)]"
-              >
-                Sign in
-              </Link>
-            </p>
-          </div>
+          <p className="mt-4 text-center text-sm text-[var(--color-text-secondary)]">
+            Have an account?{" "}
+            <Link
+              to={buildSiblingAuthLink(
+                "/login",
+                new URLSearchParams(location.search).get("redirect"),
+              )}
+              className="text-[var(--color-text)] underline decoration-[var(--color-border)] underline-offset-4 transition-colors hover:text-[var(--color-text-secondary)]"
+            >
+              Sign in
+            </Link>
+          </p>
         </section>
       </div>
     </div>
