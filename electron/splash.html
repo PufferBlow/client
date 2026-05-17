@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pufferblow</title>
+  <!--
+    Splash screen shown immediately on app launch while:
+      1. The renderer bundle is loaded (Electron's default behaviour
+         is a blank window for ~500ms-1.5s while the React tree
+         mounts; this fills that gap with brand-correct chrome).
+      2. The auto-updater performs its initial GitHub release check.
+
+    Constraints kept tight on purpose:
+      - No external assets (fonts, network requests). The window is
+        going to live ~1s in the common case; even a Google Fonts
+        load would flash uglier than no font swap at all.
+      - All CSS / SVG / motion inline. No script tag — the splash
+        is purely informational, the main process owns its lifetime.
+      - Transparent frameless window in main.ts, so the body is the
+        only thing painted; we keep it as a centered card on a
+        translucent background so the splash works on both light
+        and dark desktops without depending on a theme system.
+  -->
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: default;
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    /*
+     * Centered card. Keeps a small footprint so the splash window
+     * itself is small (320x320 in main.ts) — large enough to read
+     * the wordmark, small enough not to look like a "real" window
+     * the user might try to drag or resize.
+     */
+    .pb-splash-shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background:
+        radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 65%),
+        #0a0a0a;
+      color: #fafafa;
+      border-radius: 18px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      -webkit-app-region: drag;
+    }
+
+    /*
+     * Logo mark. Same geometry as PufferblowMark in the renderer
+     * (`app/components/PufferblowBrand.tsx`) so the splash and the
+     * post-mount logo line up perfectly — no jarring "redraw" when
+     * we transition the user from splash to the main window.
+     *
+     * The looping animation is a slow breathe + a subtle rotation
+     * on the spoke ring. Two separate animations on overlapping
+     * elements so neither feels mechanical.
+     */
+    .pb-splash-logo {
+      width: 96px;
+      height: 96px;
+      animation: pbSplashBreathe 2.6s ease-in-out infinite;
+    }
+
+    .pb-splash-logo svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .pb-splash-spokes {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pbSplashRotate 9s linear infinite;
+    }
+
+    .pb-splash-mark line {
+      stroke: #fafafa;
+      stroke-width: 3.2;
+      stroke-linecap: round;
+      fill: none;
+    }
+
+    .pb-splash-mark .pb-splash-ring {
+      stroke: #fafafa;
+      stroke-width: 3.2;
+      fill: none;
+    }
+
+    .pb-splash-mark .pb-splash-knockout {
+      fill: #0a0a0a;
+    }
+
+    .pb-splash-mark .pb-splash-dot {
+      fill: #fafafa;
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pbSplashDot 2.6s ease-in-out infinite;
+    }
+
+    .pb-splash-text {
+      font-size: 13px;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(250, 250, 250, 0.72);
+    }
+
+    /* Status line — main.ts updates this via DOM manipulation
+       through a small IPC handshake; defaults to a neutral
+       "Loading" so the user always sees readable copy. */
+    .pb-splash-status {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(250, 250, 250, 0.42);
+      min-height: 14px;
+      transition: opacity 200ms ease;
+    }
+
+    /* Animations.
+       - breathe: gentle scale pulse, mirrors `pbLogoBreathe` in app.css
+         so visual identity is consistent.
+       - rotate: very slow spoke wheel, idle motion that proves the
+         app isn't frozen.
+       - dot: alpha pulse on the center dot, anchored against the
+         rotating spokes so the eye has a still focal point. */
+    @keyframes pbSplashBreathe {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.04); }
+    }
+
+    @keyframes pbSplashRotate {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pbSplashDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.55; transform: scale(0.85); }
+    }
+
+    /* Honour user motion preferences. The breathe + rotation are
+       decorative; falling back to a still logo is more polite than
+       forcing motion on someone who has it disabled. */
+    @media (prefers-reduced-motion: reduce) {
+      .pb-splash-logo,
+      .pb-splash-spokes,
+      .pb-splash-mark .pb-splash-dot {
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="pb-splash-shell">
+    <div class="pb-splash-logo" aria-hidden="true">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="pb-splash-mark">
+        <g class="pb-splash-spokes">
+          <line x1="50" y1="50" x2="82" y2="50" />
+          <line x1="50" y1="50" x2="18" y2="50" />
+          <line x1="50" y1="50" x2="50" y2="82" />
+          <line x1="50" y1="50" x2="50" y2="18" />
+          <line x1="50" y1="50" x2="73" y2="73" />
+          <line x1="50" y1="50" x2="27" y2="27" />
+          <line x1="50" y1="50" x2="27" y2="73" />
+          <line x1="50" y1="50" x2="73" y2="27" />
+        </g>
+        <circle class="pb-splash-knockout" cx="50" cy="50" r="21" />
+        <circle class="pb-splash-ring" cx="50" cy="50" r="21" />
+        <circle class="pb-splash-dot" cx="50" cy="50" r="3.2" />
+      </svg>
+    </div>
+
+    <div class="pb-splash-text">Pufferblow</div>
+    <div id="pb-splash-status" class="pb-splash-status">Loading</div>
+  </div>
+
+  <script>
+    // Tiny IPC-less status updater: main.ts injects status text by
+    // calling `executeJavaScript` on the splash window. Keeping the
+    // script side small (no preload, no listeners) means the splash
+    // window can stay context-isolated with nothing exposed.
+    window.__pbSetSplashStatus = function (text) {
+      var el = document.getElementById('pb-splash-status');
+      if (el) el.textContent = String(text || '');
+    };
+  </script>
+</body>
+</html>

@@ -14,6 +14,12 @@ files:
   - package.json
 
 win:
+  # IMPORTANT: this .ico must embed every size Windows asks for —
+  # 16, 24, 32, 48, 64, 128 and (critically) 256. UAC and the modern
+  # explorer thumbnail at 96+ DPI both pull the 256x256 entry; if it
+  # isn't there, Windows substitutes the default Electron icon
+  # (which is what we hit before regenerating from icon.png with
+  # the full size set).
   icon: resources/icons/icon.ico
   target:
     - target: nsis
@@ -21,13 +27,26 @@ win:
     - target: msi
       arch: [x64]
 
-# `nsis` lives at the config root in electron-builder 26.x (it was under
-# `win.nsis` in 25.x and earlier). Moving it back under `win` makes the
-# schema validator reject the whole config at build time.
+# `nsis` lives at the config root in electron-builder 26.x (it was
+# under `win.nsis` in 25.x and earlier). Moving it back under `win`
+# makes the schema validator reject the whole config at build time.
+#
+# `installerIcon` / `uninstallerIcon` are what Windows shows in the
+# UAC elevation dialog for the installer .exe and the Add/Remove
+# Programs uninstaller, respectively. They MUST be set explicitly:
+# without them, NSIS falls back to its own default icon (a tiny
+# black/yellow gear), which is what looked like "the Electron icon"
+# in the elevation prompt.
 nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
+  installerIcon: resources/icons/icon.ico
+  uninstallerIcon: resources/icons/icon.ico
+  # NSIS embeds an icon resource directly into the installer .exe
+  # too; pointing it at the same multi-resolution .ico keeps every
+  # surface (UAC, file explorer, taskbar) consistent.
+  installerHeaderIcon: resources/icons/icon.ico
 
 linux:
   icon: resources/icons/icon.png

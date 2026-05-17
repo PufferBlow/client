@@ -97,6 +97,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 // Set on app.quit so the close handler stops trapping the close event and
 // actually lets the window die. Without this the user can never fully quit
 // from the OS shell (Cmd-Q / Alt-F4 just re-hide the window).
@@ -143,6 +144,95 @@ if (isDev && process.platform === 'win32') {
 // when it launches us). Queue it now so the eventual renderer mount drains it.
 pendingDeepLink = extractDeepLink(process.argv);
 
+/**
+ * Tiny splash window that fronts the app while:
+ *   1. the renderer bundle parses + the React tree mounts, and
+ *   2. the auto-updater performs its first GitHub release check.
+ *
+ * Frameless, transparent, always-on-top, no taskbar entry. The
+ * window stays alive until the main window emits `ready-to-show`
+ * (or, as a safety net, until a 6s timeout fires — we never want
+ * a stuck splash to keep the user from reaching the app).
+ *
+ * Status copy is updated via `executeJavaScript` so we don't have
+ * to set up a preload for a 1-second window. The HTML exposes a
+ * tiny `__pbSetSplashStatus` shim for that purpose.
+ */
+function createSplashWindow(): void {
+  splashWindow = new BrowserWindow({
+    width: 320,
+    height: 320,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    center: true,
+    show: true,
+    backgroundColor: '#00000000',
+    title: 'Pufferblow',
+    icon: path.join(__dirname, '..', 'resources', 'icons', 'icon.png'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  splashWindow.setMenuBarVisibility(false);
+  splashWindow.loadFile(path.join(__dirname, 'splash.html')).catch((err) => {
+    // Splash failing to load shouldn't gate the actual app boot;
+    // log and let `createWindow` proceed as if no splash existed.
+    console.error('[splash] failed to load splash.html', err);
+    splashWindow?.destroy();
+    splashWindow = null;
+  });
+
+  splashWindow.on('closed', () => {
+    splashWindow = null;
+  });
+}
+
+/**
+ * Push a status line into the splash window. Safe to call before
+ * the page has finished loading — `executeJavaScript` queues until
+ * `did-finish-load`. Best-effort; we silently swallow errors so a
+ * crashed splash can't block the main flow.
+ */
+function setSplashStatus(text: string): void {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const safe = text.replace(/[\\'"]/g, ' ');
+  splashWindow.webContents
+    .executeJavaScript(`window.__pbSetSplashStatus && window.__pbSetSplashStatus('${safe}')`)
+    .catch(() => {
+      // Swallow — splash may have already been destroyed.
+    });
+}
+
+/**
+ * Hide + destroy the splash window. Done with a brief fade-out by
+ * dropping the opacity before destroying, so the transition into
+ * the main window doesn't snap. Safe to call multiple times.
+ */
+function dismissSplashWindow(): void {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const target = splashWindow;
+  splashWindow = null;
+  try {
+    target.setOpacity(0);
+  } catch {
+    // Some platforms (older Linux WMs) don't support setOpacity on
+    // transparent windows -- not fatal, just skip the fade.
+  }
+  setTimeout(() => {
+    if (!target.isDestroyed()) target.destroy();
+  }, 180);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -153,6 +243,12 @@ function createWindow() {
     transparent: false,
     resizable: true,
     center: true,
+    // Defer the first paint until the renderer is ready. Without
+    // this, Electron flashes a blank white (or black-themed) window
+    // for ~500-1500ms while the React tree mounts. With `show:
+    // false` + the `ready-to-show` handler below, the user only
+    // ever sees the splash followed by the fully-rendered app.
+    show: false,
     title: 'Pufferblow',
     icon: path.join(__dirname, '..', 'resources', 'icons', 'icon.png'),
     webPreferences: {
@@ -169,6 +265,27 @@ function createWindow() {
   } else {
     mainWindow.loadURL('app://pufferblow/');
   }
+
+  // `ready-to-show` fires after the renderer has painted at least
+  // one frame -- the canonical Electron signal that it's safe to
+  // reveal the window without flashing blank chrome.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+    dismissSplashWindow();
+  });
+
+  // Safety net: if the renderer never reaches ready-to-show (a
+  // crash early in mount, a long-running blocking call), we still
+  // promote the main window after 6s so the user isn't trapped
+  // looking at the splash forever.
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    dismissSplashWindow();
+  }, 6000);
 
   mainWindow.on('close', (event) => {
     if (quittingForReal) {
@@ -258,6 +375,11 @@ app.whenReady().then(() => {
     });
   });
 
+  // Splash first, then main window. The splash paints inside
+  // ~50ms; the main window's renderer takes longer to mount, so
+  // we get the user-perceived-fast launch even when the React
+  // bundle parse is slow.
+  createSplashWindow();
   createWindow();
   createTray(mainWindow!);
 
@@ -362,22 +484,31 @@ if (!isDev) {
 
   autoUpdater.on('checking-for-update', () => {
     sendUpdateEvent('update-checking', { startedAt: new Date().toISOString() });
+    // Surface the boot-time check on the splash status line so the
+    // user knows what's happening during the launch wait.
+    setSplashStatus('Checking for updates');
   });
   autoUpdater.on('update-available', (info) => {
     sendUpdateEvent('update-available', info);
+    setSplashStatus(`Update ${info?.version ?? ''} available`);
   });
   autoUpdater.on('update-not-available', (info) => {
     // Useful for a "you're up to date" toast after a manual check.
     // Auto-checks shouldn't surface this — the renderer decides.
     sendUpdateEvent('update-not-available', info);
+    setSplashStatus('Up to date');
   });
   autoUpdater.on('download-progress', (progress) => {
     // `progress` shape (from electron-updater):
     //   { percent, transferred, total, bytesPerSecond, delta }
     sendUpdateEvent('update-download-progress', progress);
+    if (progress && typeof progress.percent === 'number') {
+      setSplashStatus(`Downloading update  ${Math.round(progress.percent)}%`);
+    }
   });
   autoUpdater.on('update-downloaded', (info) => {
     sendUpdateEvent('update-downloaded', info);
+    setSplashStatus('Update ready');
   });
   autoUpdater.on('error', (err) => {
     // Non-fatal. Use console rather than a logger import so we don't
@@ -389,6 +520,11 @@ if (!isDev) {
     sendUpdateEvent('update-error', {
       message: err instanceof Error ? err.message : String(err),
     });
+    // Don't surface the error on the splash — it's small and the
+    // banner inside the app will show it once the main window is up.
+    // Reset the status so we don't leave "Checking for updates"
+    // stuck on screen.
+    setSplashStatus('Loading');
   });
 
   ipcMain.on('install-update', () => {
