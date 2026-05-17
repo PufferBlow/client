@@ -1,10 +1,69 @@
 import { app, BrowserWindow, ipcMain, protocol, net, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import fs from 'fs';
 import path from 'path';
 import { createTray } from './tray';
 
 const isDev = !app.isPackaged;
 const PROD_INDEX = path.join(__dirname, '..', 'build', 'client', 'index.html');
+
+// ── Main-process settings file ───────────────────────────────────────
+//
+// A tiny JSON blob in the userData directory that holds main-process-
+// only preferences -- things the renderer can toggle but that must
+// take effect BEFORE the renderer mounts (or even before app.ready).
+// Hardware acceleration is the only field today; the structure is
+// designed to grow as we add more "needs-restart" toggles.
+//
+// File reads/writes are synchronous on purpose: the startup read
+// must complete before `app.disableHardwareAcceleration()` is
+// called, which itself must happen before `app.whenReady()`. The
+// async API would be impossible to await here.
+interface MainSettings {
+  /**
+   * `false` (default) -> we call `app.disableHardwareAcceleration()`
+   * on startup. `true` -> we let Electron's default behaviour stand
+   * and the GPU process renders the page. Changes require a full
+   * app restart; the renderer surfaces that.
+   */
+  hardwareAccelerationEnabled?: boolean;
+}
+
+const mainSettingsFilePath = path.join(app.getPath('userData'), 'main-settings.json');
+
+function readMainSettings(): MainSettings {
+  try {
+    const raw = fs.readFileSync(mainSettingsFilePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as MainSettings) : {};
+  } catch {
+    // File missing / malformed / permission issue -> defaults. Never
+    // throw at startup just because settings are corrupt; we'd brick
+    // the app in a way the user can't recover from without nuking
+    // their profile directory.
+    return {};
+  }
+}
+
+function writeMainSettings(settings: MainSettings): void {
+  try {
+    fs.mkdirSync(path.dirname(mainSettingsFilePath), { recursive: true });
+    fs.writeFileSync(mainSettingsFilePath, JSON.stringify(settings, null, 2), 'utf-8');
+  } catch (err) {
+    // Settings write is best-effort. If it fails we log + continue
+    // -- the user's setting won't persist across restart but the
+    // current session is unaffected.
+    console.error('Failed to write main settings', err);
+  }
+}
+
+// Apply hardware-acceleration preference BEFORE app.whenReady().
+// Default is "disabled" -- enabling means the user has explicitly
+// opted in via the Settings page.
+const startupMainSettings = readMainSettings();
+if (!startupMainSettings.hardwareAccelerationEnabled) {
+  app.disableHardwareAcceleration();
+}
 
 /**
  * Custom URL scheme registered with the OS so external clients can deep-link
@@ -228,6 +287,20 @@ app.whenReady().then(() => {
     const url = pendingDeepLink;
     pendingDeepLink = null;
     return url;
+  });
+
+  // Hardware-acceleration toggle. The Settings page calls these to
+  // read the current preference + persist a change. The actual
+  // `app.disableHardwareAcceleration()` call already happened at
+  // module load (see top of file); the renderer informs the user
+  // that a change requires a restart to take effect.
+  ipcMain.handle('get-hardware-acceleration', () => {
+    return readMainSettings().hardwareAccelerationEnabled ?? false;
+  });
+  ipcMain.handle('set-hardware-acceleration', (_event, enabled: boolean) => {
+    const settings = readMainSettings();
+    settings.hardwareAccelerationEnabled = !!enabled;
+    writeMainSettings(settings);
   });
 
   // macOS: clicking the dock icon when the app has no visible windows

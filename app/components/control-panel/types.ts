@@ -33,6 +33,7 @@ export type StorageFile = {
 
 export type ControlPanelTabId =
   | "overview"
+  | "activity"
   | "moderation"
   | "members"
   | "roles"

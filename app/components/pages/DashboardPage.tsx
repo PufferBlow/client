@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, useTransition } from "react";
 import ReactDOM from 'react-dom';
 import { ChannelCreationModal } from "../../components/ChannelCreationModal";
 import { UserContextMenu } from "../../components/UserContextMenu";
@@ -27,11 +27,13 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
 import { extractMentionQuery, insertMentionAtCursor, parseMentions } from "../../utils/mentions";
+import { findEmojiAliasMatches } from "../../utils/emojiAliases";
 import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner } from "../../services/user";
-import { listChannels, createChannel, deleteChannel } from "../../services/channel";
-import { addReaction, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
+import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
+import { Modal } from "../../components/ui/Modal";
+import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
 import { rememberAccount } from "../../services/accounts";
 import { AccountSwitcher } from "../../components/AccountSwitcher";
 import {
@@ -47,6 +49,7 @@ import { listUsers, type ListUsersResponse } from "../../services/user";
 import { getServerInfo, type ServerInfo } from "../../services/system";
 import { convertToFullStorageUrl } from "../../services/apiClient";
 import { resolveStoredInstance } from "../../services/instance";
+import { useTrackLastRoute } from "../../utils/uiStatePersistence";
 import { buildAuthRedirectPath } from "../../utils/authRedirect";
 import type { Channel } from "../../models";
 import type { Message } from "../../models";
@@ -64,6 +67,9 @@ import { useDashboardData } from "../dashboard-page/useDashboardData";
 
 /** Deterministic hue (0–359) derived from a server name string. */
 export default function Dashboard() {
+  // Remember the dashboard as the user's last destination so the
+  // index route can put them back here on next launch.
+  useTrackLastRoute("/dashboard");
   const navigate = useNavigate();
   const location = useLocation();
   const showToast = useToast();
@@ -214,6 +220,40 @@ export default function Dashboard() {
   const [mentionSelectedIdx, setMentionSelectedIdx] = useState(0);
   const mentionDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Highlight-by-message-id. Search-result clicks (and other future
+  // deep-link flows) set this to flash the target message briefly
+  // after scrolling to it. Cleared on a timer so the highlight is a
+  // transient affordance, not permanent.
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
+  // Emoji `:alias:` autocomplete state. Populated when the user types
+  // `:smile` or similar in the composer; cleared on selection / Escape
+  // / loss of trigger pattern. The popover above the textarea reads
+  // from this; arrow keys / Tab / Enter route through `handleKeyPress`.
+  const [emojiSuggest, setEmojiSuggest] = useState<{
+    query: string;
+    matches: Array<{ alias: string; emoji: string }>;
+    selectedIdx: number;
+    /** Position of the `:` token start in the textarea value. */
+    tokenStart: number;
+    /** End of the alias token (the cursor position when it was opened). */
+    tokenEnd: number;
+  } | null>(null);
+
+  // Categorized upload picker. The "+" button in the composer used to
+  // open a single OS file dialog that accepted every server-allowed
+  // type at once. Now it opens a small popover with four entries
+  // (Image / Video / Audio / File) and each one points at its own
+  // hidden <input> with an `accept` attribute scoped to that category.
+  // The unscoped `fileInputRef` (from useDashboardComposer) is still
+  // used for the "File" entry as a true catch-all. All four inputs
+  // share `handleFileUpload`, so the pipeline downstream is unchanged.
+  const [uploadPickerOpen, setUploadPickerOpen] = useState(false);
+  const uploadPickerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
   // Moderation modal state. Single field because the modal is opened in
   // exactly one of two modes — keeping them parallel as booleans would
   // let both be true at once. `null` means the modal is closed.
@@ -258,8 +298,88 @@ export default function Dashboard() {
   );
 
   const canDeleteChannels = hasResolvedPrivilege(currentUser, "delete_channels");
+  const canEditChannels = hasResolvedPrivilege(currentUser, "edit_channels");
+  // Edit-channel modal state. Opened from the channel right-click
+  // menu in the sidebar; mirrors the same flow used in the control
+  // panel's Channels tab. `editingChannel` is the snapshot of the
+  // row the user is editing; `editChannelForm` is the live in-modal
+  // draft so cancelling cleanly discards changes.
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [editChannelForm, setEditChannelForm] = useState<{ channel_name: string; is_private: boolean }>(
+    { channel_name: "", is_private: false },
+  );
+  const [editChannelSaving, setEditChannelSaving] = useState(false);
+  useEffect(() => {
+    if (editingChannel) {
+      setEditChannelForm({
+        channel_name: editingChannel.channel_name,
+        is_private: !!editingChannel.is_private,
+      });
+    }
+  }, [editingChannel]);
+  const handleSaveChannelEdit = async () => {
+    if (!editingChannel) return;
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      showToast({ message: 'Authentication token not found.', tone: 'error', category: 'system' });
+      return;
+    }
+    const trimmedName = editChannelForm.channel_name.trim();
+    if (!trimmedName) {
+      showToast({ message: 'Channel name cannot be empty.', tone: 'error', category: 'validation' });
+      return;
+    }
+    // Only send fields that actually changed so the backend's
+    // unique-name check doesn't reject saving against the channel's
+    // own current name.
+    const payload: { channel_name?: string; is_private?: boolean } = {};
+    if (trimmedName !== editingChannel.channel_name) payload.channel_name = trimmedName;
+    if (!!editChannelForm.is_private !== !!editingChannel.is_private) {
+      payload.is_private = editChannelForm.is_private;
+    }
+    if (Object.keys(payload).length === 0) {
+      setEditingChannel(null);
+      return;
+    }
+    setEditChannelSaving(true);
+    try {
+      const response = await updateChannel(editingChannel.channel_id, payload, authToken);
+      if (response.success) {
+        showToast({
+          message: `Channel #${trimmedName} updated successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
+        const listResponse = await listChannels(authToken);
+        if (listResponse.success && listResponse.data && listResponse.data.channels) {
+          setChannels(listResponse.data.channels);
+        }
+        setEditingChannel(null);
+      } else {
+        const isCollision =
+          response.error?.includes('409') ||
+          response.error?.toLowerCase().includes('already exists');
+        showToast({
+          message: isCollision
+            ? 'A channel with that name already exists. Choose a different name.'
+            : `Failed to update channel: ${response.error || 'Unknown error'}`,
+          tone: 'error',
+          category: isCollision ? 'validation' : 'system',
+        });
+      }
+    } catch (err) {
+      showToast({
+        message: 'An unexpected error occurred while updating the channel.',
+        tone: 'error',
+        category: 'system',
+      });
+    } finally {
+      setEditChannelSaving(false);
+    }
+  };
   const canTimeoutUsers = hasResolvedPrivilege(currentUser, "mute_users");
   const canBanUsers = hasResolvedPrivilege(currentUser, "ban_users");
+  const canDeleteMessages = hasResolvedPrivilege(currentUser, "delete_messages");
   const currentUserPrivileges = currentUser?.resolved_privileges || [];
   const canCreateInvite =
     currentUser?.is_admin ||
@@ -271,6 +391,26 @@ export default function Dashboard() {
     currentUserPrivileges.includes("manage_server_settings");
   const canDeleteServer =
     currentUser?.is_owner || currentUserPrivileges.includes("manage_server_settings");
+  // "Create Channel" is gated by the `create_channels` privilege so the
+  // option doesn't tempt non-eligible viewers; the modal itself can
+  // still validate server-side. Falls back to the admin/owner flags
+  // for the broad-strokes "this user can manage stuff" cases.
+  const canCreateChannels =
+    currentUser?.is_owner ||
+    currentUser?.is_admin ||
+    currentUserPrivileges.includes("create_channels");
+  // "Leave Server" only renders when the viewer is NOT a native member
+  // of this instance -- a federated visitor has somewhere to leave to,
+  // while the home-instance user's account *is* this server's account
+  // and "leave" would mean deleting it (a different flow). The check
+  // compares the user's `origin_server` (host:port string from signup)
+  // against the host:port the client is currently connected to.
+  const homeHostPort =
+    (typeof window !== "undefined" && (getHostPortFromStorage() || getHostPortFromCookies())) || "";
+  const canLeaveServer =
+    !!currentUser?.origin_server &&
+    !!homeHostPort &&
+    currentUser.origin_server !== homeHostPort;
 
   // Tracks whether the emoji picker is currently aimed at the message input
   // (default) or at adding a reaction to a specific message. We can't reuse
@@ -293,6 +433,27 @@ export default function Dashboard() {
     const dispose = subscribeNotificationsMuted();
     return dispose;
   }, []);
+
+  // Close the composer upload picker when the user clicks anywhere
+  // outside of it, or hits Escape. Bound only while the popover is
+  // open so it doesn't burn cycles otherwise.
+  useEffect(() => {
+    if (!uploadPickerOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (uploadPickerRef.current && !uploadPickerRef.current.contains(e.target as Node)) {
+        setUploadPickerOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUploadPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [uploadPickerOpen]);
 
   // Push the total-unread count into the OS tray / dock badge whenever the
   // per-channel unread map changes. Web builds short-circuit inside
@@ -505,18 +666,27 @@ export default function Dashboard() {
     };
   }, [isTooltipOpen]);
 
+  // Auto-resize the composer textarea + schedule draft persistence.
+  // Both used to fire as separate per-keystroke effects; combining
+  // them into one effect halves the post-render setup cost and
+  // colocates the two pieces of work that consume `messageInput` so
+  // a future change can see them together. `scheduleDraftPersistence`
+  // is itself debounced inside the hook (250ms), so the only thing
+  // that runs synchronously per keystroke is the resize.
   useEffect(() => {
     resizeMessageComposer();
-  }, [messageInput, resizeMessageComposer]);
-
-  useEffect(() => {
     if (!selectedChannel) {
       flushPendingDraftPersistence();
       return;
     }
-
     scheduleDraftPersistence(selectedChannel.channel_id, messageInput);
-  }, [flushPendingDraftPersistence, messageInput, scheduleDraftPersistence, selectedChannel]);
+  }, [
+    messageInput,
+    resizeMessageComposer,
+    selectedChannel,
+    flushPendingDraftPersistence,
+    scheduleDraftPersistence,
+  ]);
 
   useEffect(() => () => {
     flushPendingDraftPersistence();
@@ -735,7 +905,7 @@ export default function Dashboard() {
    */
   const handleSearch = async (query: string) => {
     const q = query.toLowerCase();
-    const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string; channel_id?: string }> = [];
+    const results: Array<{ id: string; type: "message" | "user" | "channel"; title: string; subtitle?: string; content?: string; timestamp?: string; channel_id?: string; avatar?: string }> = [];
     let truncatedScan = false;
     let scannedChannelName: string | undefined;
     const seenMessageIds = new Set<string>();
@@ -744,6 +914,21 @@ export default function Dashboard() {
       return { results, meta: { truncatedScan, scannedChannelName } };
     }
     const currentChannelId = selectedChannel.channel_id;
+
+    // Shared avatar lookup -- mirrors how the messages list resolves
+    // sender avatars so a search result and the actual message row
+    // show the same face. Falls back to the message's own
+    // `sender_avatar_url` (server-attached) before giving up.
+    const resolveSenderAvatar = (senderUserId: string, fallback?: string | null): string | undefined => {
+      const cached = usersById.get(senderUserId);
+      if (cached?.avatar_url) {
+        return createFullUrl(cached.avatar_url) ?? undefined;
+      }
+      if (fallback) {
+        return createFullUrl(fallback) ?? undefined;
+      }
+      return undefined;
+    };
 
     // Local cache: messages already loaded for the active channel.
     for (const message of messages) {
@@ -758,6 +943,7 @@ export default function Dashboard() {
         content: message.message,
         timestamp: message.sent_at,
         channel_id: message.channel_id || undefined,
+        avatar: resolveSenderAvatar(message.sender_user_id, message.sender_avatar_url),
       });
       seenMessageIds.add(message.message_id);
     }
@@ -792,6 +978,7 @@ export default function Dashboard() {
               content: message.message,
               timestamp: message.sent_at,
               channel_id: currentChannelId,
+              avatar: resolveSenderAvatar(message.sender_user_id, message.sender_avatar_url),
             });
             seenMessageIds.add(message.message_id);
           }
@@ -815,6 +1002,89 @@ export default function Dashboard() {
     };
   };
 
+  /**
+   * Scroll the chat stream to a specific message and flash it. Used by
+   * search-result clicks; can be reused for jump-to-mention or
+   * permalink flows. The DOM anchor is set on each message group's
+   * outer container as `id="msg-<message_id>"`; the highlight state
+   * adds a temporary ring around the row that fades after ~1.6s.
+   */
+  const scrollToMessage = (messageId: string) => {
+    // Defer to next frame so the channel-switch render has flushed
+    // (otherwise the target element may not exist yet).
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(messageId);
+      window.setTimeout(() => {
+        setHighlightedMessageId((prev) => (prev === messageId ? null : prev));
+      }, 1600);
+    });
+  };
+
+  /**
+   * Inspect the textarea value + cursor position to decide whether
+   * we're inside an active `:emoji_alias` token. Returns the matching
+   * alias prefix + position bounds when we are, null otherwise. The
+   * trigger is intentionally loose: typing `:` opens the popover with
+   * the most-common emojis (empty-prefix match); typing letters
+   * narrows it; a space / newline / closing `:` dismisses it.
+   */
+  const detectEmojiToken = (
+    value: string,
+    caret: number,
+  ): { query: string; tokenStart: number; tokenEnd: number } | null => {
+    // Walk backwards from the caret looking for an unbroken alias-y
+    // run [a-z0-9_+-] followed by `:`. Stop at whitespace or another
+    // colon (closing colon means the alias is already complete and
+    // should be replaced via `convertEmojiAliasesOnSend`, not via the
+    // autocomplete popover).
+    const before = value.slice(0, caret);
+    const match = before.match(/(?:^|\s):([a-z0-9_+\-]*)$/i);
+    if (!match) return null;
+    const query = match[1].toLowerCase();
+    const tokenStart = before.length - match[0].length + (match[0].startsWith(":") ? 0 : 1);
+    return { query, tokenStart, tokenEnd: caret };
+  };
+
+  // Emoji alias matching now uses the precomputed prefix buckets from
+  // `utils/emojiAliases.ts` -- no Object.entries / sort happens per
+  // keystroke. See that module for the lookup structure.
+  const matchEmojiAliases = findEmojiAliasMatches;
+
+  // Deferred autocomplete update: typing a key must update the
+  // textarea synchronously (or the cursor jumps), but the autocomplete
+  // popover can lag a frame without harm. Wrapping `setEmojiSuggest` in
+  // a transition tells React to treat the popover update as low-
+  // priority -- React 19 will preempt it if more keystrokes arrive.
+  const [, startEmojiSuggestTransition] = useTransition();
+
+  /**
+   * Replace the active `:alias` token (or `:alias:`) in `messageInput`
+   * with the chosen emoji, advance the caret, and close the popover.
+   * Re-focuses the textarea so typing continues naturally.
+   */
+  const applyEmojiSuggestion = (emoji: string) => {
+    if (!emojiSuggest) return;
+    const { tokenStart, tokenEnd } = emojiSuggest;
+    // If a closing `:` follows the cursor (user typed `:smile:` then
+    // moved back), absorb it so we don't leave a dangling colon.
+    let endCut = tokenEnd;
+    if (messageInput[tokenEnd] === ":") endCut = tokenEnd + 1;
+    const next =
+      messageInput.slice(0, tokenStart) + emoji + messageInput.slice(endCut);
+    setMessageInput(next);
+    setEmojiSuggest(null);
+    requestAnimationFrame(() => {
+      const ta = messageInputRef.current;
+      if (!ta) return;
+      const caret = tokenStart + emoji.length;
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+    });
+  };
+
   const handleSelectSearchResult = (result: any) => {
     logger.ui.debug("Selected dashboard search result", { resultType: result?.type, resultId: result?.id });
     setSearchModalOpen(false);
@@ -829,7 +1099,20 @@ export default function Dashboard() {
         result.channel_id ||
         channels.find(c => messages.some(m => m.message_id === result.id && m.channel_id === c.channel_id))?.channel_id;
       const channel = channelId ? channels.find(c => c.channel_id === channelId) : undefined;
-      if (channel) void handleChannelSelect(channel);
+      if (channel) {
+        const isAlreadyOpen = selectedChannel?.channel_id === channel.channel_id;
+        if (isAlreadyOpen) {
+          // Same channel -- just scroll. No need to await any load.
+          scrollToMessage(result.id);
+        } else {
+          // Different channel -- switch first, then scroll on the
+          // next render. handleChannelSelect is async (loads messages
+          // for the new channel); the message we're targeting might
+          // be off-screen until those load. The RAF inside
+          // scrollToMessage handles the timing.
+          void handleChannelSelect(channel).then(() => scrollToMessage(result.id));
+        }
+      }
     }
   };
 
@@ -1067,6 +1350,111 @@ export default function Dashboard() {
         category: "validation",
       });
     }
+  };
+
+  /**
+   * Copy the message's *text* (not the ID) to the clipboard. Separate
+   * from handleMessageCopy because the right-click menu exposes both:
+   * "Copy Message" (this) and "Copy Message ID" (handleMessageCopy).
+   * Attachment-only messages fall back to a friendly placeholder so
+   * the clipboard isn't silently empty.
+   */
+  const handleMessageCopyText = async (messageId: string | null) => {
+    if (!messageId) return;
+    const message = getMessageById(messageId);
+    if (!message) {
+      showToast({
+        message: "Message no longer available to copy.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+    const text =
+      message.message?.trim() ||
+      (message.attachments && message.attachments.length > 0
+        ? "(attachment-only message)"
+        : "");
+    if (!text) {
+      showToast({
+        message: "Nothing to copy from this message.",
+        tone: "warning",
+        category: "validation",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      logger.ui.error("Failed to copy message text", { error });
+      showToast({
+        message: "Failed to copy message text. Please try again.",
+        tone: "error",
+        category: "validation",
+      });
+    }
+  };
+
+  /**
+   * Delete a message. Authorization happens server-side; we still gate
+   * the UI affordance behind canDelete (sender or `delete_messages`
+   * privilege) so non-eligible viewers don't see the option at all.
+   * No confirmation dialog right now -- the context menu interaction is
+   * itself two-step (right-click, then click Delete).
+   */
+  const handleMessageDelete = async (messageId: string | null) => {
+    if (!messageId) return;
+    const message = getMessageById(messageId);
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) {
+      showToast({
+        message: "You need to be signed in to delete messages.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+    if (!message?.channel_id) {
+      showToast({
+        message: "Cannot determine which channel this message belongs to.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+    try {
+      const response = await deleteMessage(hostPort, messageId, authToken, message.channel_id);
+      if (!response.success) {
+        throw new Error(response.error || "Delete failed");
+      }
+      // The WS stream broadcasts a deletion event that prunes the local
+      // cache, but optimistically remove now so the row vanishes on the
+      // right-click frame instead of waiting a round-trip.
+      setMessages((prev) => prev.filter((m) => m.message_id !== messageId));
+    } catch (error) {
+      logger.ui.error("Failed to delete message", { error });
+      showToast({
+        message: error instanceof Error ? error.message : "Failed to delete message.",
+        tone: "error",
+        category: "system",
+      });
+    }
+  };
+
+  /**
+   * Edit a message. The server doesn't ship message-edit yet (see
+   * services/message.ts updateMessage stub), so this surfaces a clear
+   * "not yet" toast instead of pretending to work. Wired here so the
+   * menu item itself stays consistent across surfaces -- if/when the
+   * server adds the endpoint, only this handler changes.
+   */
+  const handleMessageEdit = (messageId: string | null) => {
+    if (!messageId) return;
+    showUnsupportedSingleInstanceAction(
+      "Editing messages",
+      "The server doesn't ship message editing yet. The right-click menu surfaces the option so it's discoverable; we'll wire it up once the API lands.",
+    );
   };
 
   const handleUserReport = (userId: string, username?: string) => {
@@ -1496,13 +1884,71 @@ export default function Dashboard() {
 
   const handleChannelContextMenu = (event: React.MouseEvent, channel: Channel) => {
     event.preventDefault();
-    if (canDeleteChannels) {
-      setChannelContextMenu({
-        isOpen: true,
-        position: { x: event.clientX, y: event.clientY },
-        channel: channel
-      });
-    }
+    // The menu now always opens -- "Mark As Read" is available to every
+    // viewer, not just admins. Individual items inside the menu still
+    // gate themselves by privilege (e.g. Delete Channel requires
+    // canDeleteChannels).
+    setChannelContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+      channel: channel,
+    });
+  };
+
+  /**
+   * Clear unread state for a single channel without navigating to it.
+   * Wired to the "Mark As Read" item on the channel context menu and
+   * called per-channel by the server-dropdown's "Mark All As Read".
+   * UI-only (no API call) -- mirrors how `handleChannelSelect` clears
+   * the channel's entry when the user actually opens it.
+   */
+  const handleMarkChannelRead = (channelId: string) => {
+    markChannelNotificationsRead(channelId);
+    setUnreadCountsByChannel((prev) => {
+      if (!prev[channelId]) return prev;
+      const next = { ...prev };
+      delete next[channelId];
+      return next;
+    });
+  };
+
+  /**
+   * Server-wide "Mark All As Read." Reuses the existing notification
+   * clear path; renamed in the UI to match the dropdown label.
+   */
+  const handleMarkAllChannelsRead = () => {
+    handleMarkAllNotificationsRead();
+  };
+
+  /**
+   * Stub for server mute. The backend doesn't ship a per-server mute
+   * flag yet, so this surfaces the standard "not yet" toast instead of
+   * pretending to mute anything. The menu entry stays so the feature
+   * is discoverable; wiring lands once the API does.
+   */
+  const handleMuteServer = () => {
+    showUnsupportedSingleInstanceAction(
+      "Server mute",
+      "Muting the whole server (silence channel notifications, keep mention pings) isn't shipped yet. The dropdown surfaces the action so we know to wire it once the API lands.",
+    );
+  };
+
+  /**
+   * Stub for "Leave Server." Only renders in the dropdown when the
+   * viewer's account origin is NOT this server (you can't leave the
+   * home instance that minted your account). For everyone else this
+   * is a federated visit; the action will eventually unsubscribe the
+   * viewer from this server's channels. Currently a toast stub.
+   */
+  const handleLeaveServer = () => {
+    const confirmed = window.confirm(
+      "Leave this server? You'll need a new invite to rejoin.",
+    );
+    if (!confirmed) return;
+    showUnsupportedSingleInstanceAction(
+      "Leave server",
+      "Leaving a federated server (unsubscribing from its channels and removing it from your sidebar) isn't shipped yet.",
+    );
   };
 
   /**
@@ -1640,10 +2086,18 @@ export default function Dashboard() {
   };
 
   // Message input handlers
+  //
+  // `useDeferredValue` lets non-urgent consumers (the character count
+  // in the composer footer, the send button's `disabled` state) read
+  // a slightly stale version of `messageInput` while the textarea
+  // itself uses the live value. Under React 19 concurrent rendering
+  // this means a fast typist isn't blocked by re-evaluations of these
+  // derived fields -- React updates them in a low-priority pass.
+  const deferredMessageInput = useDeferredValue(messageInput);
   const canSendMessage =
     Boolean(selectedChannel) &&
     !isSendingMessage &&
-    (Boolean(messageInput.trim()) || messageAttachments.length > 0);
+    (Boolean(deferredMessageInput.trim()) || messageAttachments.length > 0);
 
   const handleSendMessage = async () => {
     const trimmedMessage = messageInput.trim();
@@ -2056,7 +2510,15 @@ export default function Dashboard() {
           bannerColor: resolvedBannerResult.mode === 'solid'
             ? resolvedBannerResult.color
             : (userData.accent_color || getUserAccentColor(userData.roles_ids)),
-          customStatus: userData.roles_ids?.includes('owner') ? 'Server Owner' : userData.roles_ids?.includes('admin') ? 'Administrator' : 'Active Member',
+          // customStatus is meant for the user's optional one-line
+          // status text. The previous fallback ("Server Owner" /
+          // "Administrator" / "Active Member") duplicated the role
+          // badge already rendered in the profile card's badge row,
+          // so "Server Owner" ended up showing twice on the popup.
+          // We leave this undefined until the API surfaces a real
+          // custom-status field; the role badge alone now communicates
+          // role membership.
+          customStatus: undefined,
           externalLinks: [], // Would be loaded from user preferences/settings in real implementation
           status: (
             userData.status === 'online' ||
@@ -2384,17 +2846,22 @@ export default function Dashboard() {
             <div className="flex flex-col items-center py-2 space-y-2">
               <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
-            {/* Current Server */}
+            {/* Current Server — mirrors the channel-sidebar header
+                avatar: square-ish at rest, radius expands on hover. The
+                wrapper and the inner img/span share a `group` so the
+                shape stays in sync (the wrapper has no visual of its
+                own, but `rounded-*` on both keeps things tidy if a
+                future style adds a background or border to either). */}
             {serverInfo && (
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 cursor-pointer group relative">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer group relative hover:rounded-2xl">
                 {serverInfo.avatar_url ? (
                   <img
                     src={serverInfo.avatar_url}
                     alt={`${serverInfo.server_name} avatar`}
-                    className="w-12 h-12 rounded-2xl object-cover"
+                    className="w-12 h-12 rounded-lg object-cover transition-all duration-200 group-hover:rounded-2xl"
                   />
                 ) : (
-                  <span className="text-[var(--color-on-primary)] font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-2xl">
+                  <span className="text-[var(--color-on-primary)] font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-lg transition-all duration-200 group-hover:rounded-2xl">
                     {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -2420,7 +2887,13 @@ export default function Dashboard() {
               canCreateInvite={canCreateInvite}
               canAccessControlPanel={canAccessControlPanel}
               canDeleteServer={canDeleteServer}
+              canCreateChannels={canCreateChannels}
+              canLeaveServer={canLeaveServer}
               onInviteActionUnavailable={handleInviteActionUnavailable}
+              onCreateChannel={() => setChannelCreationModalOpen(true)}
+              onMarkAllChannelsRead={handleMarkAllChannelsRead}
+              onMuteServer={handleMuteServer}
+              onLeaveServer={handleLeaveServer}
               showToast={showToast}
             />
 
@@ -2623,7 +3096,12 @@ export default function Dashboard() {
                     banner: undefined,
                     accentColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
                     bannerColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
-                    customStatus: foundUserRoleNames[0] || 'Active Member',
+                    // Was: customStatus = first role name. Same
+                    // duplication issue as above — the role badge in
+                    // the profile card already renders this, so the
+                    // pill restated it. Leave blank until a real
+                    // custom-status API field exists.
+                    customStatus: undefined,
                     externalLinks: [], // Would be loaded from user preferences/settings in real implementation
                     status: (
                       foundUser.status === 'online' ||
@@ -2652,7 +3130,10 @@ export default function Dashboard() {
                     banner: undefined,
                     accentColor: 'var(--color-accent)',
                     bannerColor: undefined,
-                    customStatus: 'Member',
+                    // Was: customStatus = "Member". Placeholder copy
+                    // that the profile card's role badge already
+                    // communicates; suppressing avoids the duplicate.
+                    customStatus: undefined,
                     externalLinks: [],
                     status: (
                       firstMessage.sender_status === 'online' ||
@@ -2688,10 +3169,24 @@ export default function Dashboard() {
                       </div>
                     )}
                   <div
-                    className={`group relative flex items-start space-x-3 px-2 py-1 rounded hover:bg-[var(--color-surface-secondary)]/30 transition-colors ${firstMessage.sender_user_id === currentUser?.user_id
-                        ? 'bg-[var(--color-primary)]/20 border-l-4 border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]/30'
-                        : ''
-                      }`}
+                    id={`msg-${firstMessage.message_id}`}
+                    // Hover background removed -- the row no longer lights
+                    // up just because the cursor passes over it. Discord-
+                    // style hover-revealed actions still work via the
+                    // `group` class and the per-message timestamp below.
+                    // Own-message tint is also dropped (separate change).
+                    //
+                    // The `id="msg-..."` anchor is the scroll target for
+                    // search-result clicks and other deep-link flows (see
+                    // scrollToMessage above). When highlighted, the row
+                    // gets a primary-color ring + tinted background that
+                    // fades in/out via the transition; auto-clears after
+                    // ~1.6s via a setTimeout in scrollToMessage.
+                    className={`group relative flex items-start space-x-3 px-2 py-1 rounded transition-colors duration-500 ${
+                      highlightedMessageId === firstMessage.message_id
+                        ? "bg-[var(--color-primary)]/10 ring-1 ring-[var(--color-primary)]/40"
+                        : ""
+                    }`}
                     onMouseEnter={() => setHoveredMessageId(firstMessage.message_id)}
                     onMouseLeave={() => setHoveredMessageId(null)}
                     onContextMenu={(e) => handleMessageGroupContextMenu(groupMessageIds, e)}
@@ -2727,8 +3222,33 @@ export default function Dashboard() {
                         <span className="text-[var(--color-text-secondary)] text-xs select-text">{messageTimestamp}</span>
                       </div>
                       <div className="space-y-1">
-                        {group.map((message) => (
-                          <div key={message.message_id}>
+                        {group.map((message, messageIndex) => {
+                          // Per-message timestamp shown on hover. The
+                          // group-leading message already has its time
+                          // visible next to the username (the span
+                          // above), AND its left gutter is occupied by
+                          // the avatar -- showing the hover timestamp
+                          // there would collide with the avatar. So we
+                          // only render the hover-revealed timestamp
+                          // on continuation messages (messageIndex > 0),
+                          // where the gutter is empty. This matches
+                          // Discord's pattern.
+                          const messageTime = new Date(message.sent_at).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true,
+                          });
+                          const isContinuation = messageIndex > 0;
+                          return (
+                          <div key={message.message_id} className="group/msg relative">
+                            {isContinuation && (
+                              <span
+                                className="pointer-events-none absolute -left-[3.25rem] top-0.5 text-[10px] tabular-nums text-[var(--color-text-muted)] opacity-0 transition-opacity group-hover/msg:opacity-100"
+                                aria-hidden="true"
+                              >
+                                {messageTime}
+                              </span>
+                            )}
                             <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
                             <MessageEmbeds content={message.message} />
 
@@ -2762,7 +3282,8 @@ export default function Dashboard() {
                               </div>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       {/* Hover Menu Button */}
                       <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === firstMessage.message_id ? "opacity-100" : ""}`}>
@@ -2890,13 +3411,20 @@ export default function Dashboard() {
                 </div>
               ))}
 
-              {/* Clear all attachments button */}
+              {/* Clear-all attachments. Sized like a staged tile and
+                  rendered with a muted error tone so it sits visually
+                  alongside the previews instead of looking like an
+                  alert slab. */}
               {messageAttachments.length > 1 && (
                 <button
                   onClick={() => setMessageAttachments([])}
-                  className="px-3 py-2 bg-[var(--color-error)] hover:bg-[var(--color-error)]/90 text-[var(--color-on-error)] text-sm rounded-lg transition-colors"
+                  className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--color-error)]/40 bg-[var(--color-error)]/8 px-4 text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/14 min-w-[7rem]"
+                  title="Remove all staged attachments"
                 >
-                  Clear All
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span className="text-xs font-medium">Clear all</span>
                 </button>
               )}
             </div>
@@ -2904,12 +3432,60 @@ export default function Dashboard() {
 
             <div
               ref={messageInputBarRef}
-              className={`relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-6 py-4 transition-colors duration-200 hover:bg-[var(--color-surface)] ${
+              // Hover effect intentionally removed -- the bar shouldn't
+              // light up just because the cursor passes over it. Focus
+              // is what indicates "I'm typing here," not hover.
+              className={`relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-6 py-4 ${
                 !selectedChannel ? 'pointer-events-none opacity-50' : ''
               }`}
             >
               <div className="flex items-end space-x-3">
-              {/* Hidden File Input */}
+              {/* Four hidden inputs -- one per upload category. Each
+                  one has an `accept` scoped to the server-allowed types
+                  for that category, so the OS file picker only shows
+                  matching files. They all funnel through the same
+                  `handleFileUpload` handler downstream, so the upload
+                  pipeline doesn't change. The unscoped `fileInputRef`
+                  is the catch-all "File" entry. */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                multiple
+                onChange={handleFileUpload}
+                disabled={!selectedChannel || isSendingMessage}
+                className="hidden"
+                accept={
+                  uploadPolicy.imageExtensions.length > 0
+                    ? uploadPolicy.imageExtensions.map((e) => `.${e}`).join(",")
+                    : "image/*"
+                }
+              />
+              <input
+                ref={videoInputRef}
+                type="file"
+                multiple
+                onChange={handleFileUpload}
+                disabled={!selectedChannel || isSendingMessage}
+                className="hidden"
+                accept={
+                  uploadPolicy.videoExtensions.length > 0
+                    ? uploadPolicy.videoExtensions.map((e) => `.${e}`).join(",")
+                    : "video/*"
+                }
+              />
+              <input
+                ref={audioInputRef}
+                type="file"
+                multiple
+                onChange={handleFileUpload}
+                disabled={!selectedChannel || isSendingMessage}
+                className="hidden"
+                accept={
+                  uploadPolicy.audioExtensions.length > 0
+                    ? uploadPolicy.audioExtensions.map((e) => `.${e}`).join(",")
+                    : "audio/*"
+                }
+              />
               <input
                 ref={fileInputRef}
                 type="file"
@@ -2920,29 +3496,208 @@ export default function Dashboard() {
                 accept={uploadPolicy.acceptAttribute}
               />
 
-              {/* File Upload Button */}
+              {/* "+" button + categorized upload menu. Click toggles a
+                  small popover anchored above the button (the composer
+                  is at the bottom of the chat area) with four entries.
+                  Each entry triggers its scoped <input>'s click which
+                  opens the OS picker pre-filtered to that type. */}
+              <div className="relative" ref={uploadPickerRef}>
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setUploadPickerOpen((prev) => !prev)}
                   className="pb-icon-btn flex-shrink-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
                   disabled={!selectedChannel || isSendingMessage}
-                  title="Upload file"
-                  aria-label="Upload file"
+                  title="Upload an attachment"
+                  aria-label="Upload an attachment"
+                  aria-haspopup="menu"
+                  aria-expanded={uploadPickerOpen}
                 >
-                <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-              </button>
+                  <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+                {uploadPickerOpen && (
+                  <div
+                    role="menu"
+                    aria-label="Upload type"
+                    className="absolute bottom-full left-0 z-20 mb-2 w-52 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl"
+                  >
+                    {[
+                      {
+                        id: "image",
+                        label: "Image",
+                        sub: "PNG, JPG, GIF…",
+                        iconPath:
+                          "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
+                        ref: imageInputRef,
+                      },
+                      {
+                        id: "video",
+                        label: "Video",
+                        sub: "MP4, WebM, MOV…",
+                        iconPath:
+                          "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z",
+                        ref: videoInputRef,
+                      },
+                      {
+                        id: "audio",
+                        label: "Audio",
+                        sub: "MP3, WAV, FLAC…",
+                        iconPath:
+                          "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z",
+                        ref: audioInputRef,
+                      },
+                      {
+                        id: "file",
+                        label: "File",
+                        sub: "Anything else",
+                        iconPath:
+                          "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+                        ref: fileInputRef,
+                      },
+                    ].map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setUploadPickerOpen(false);
+                          entry.ref.current?.click();
+                        }}
+                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                      >
+                        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={entry.iconPath} />
+                          </svg>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{entry.label}</span>
+                          <span className="block truncate text-xs text-[var(--color-text-muted)]">
+                            {entry.sub}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Message Input */}
-                <div className="flex-1 min-h-0">
+                <div className="relative flex-1 min-h-0">
+                  {/* Emoji alias autocomplete popover. Positions itself
+                      above the textarea (bottom-full). Mouse-clickable
+                      items + keyboard nav via the onKeyDown handler
+                      below (Tab/Enter to confirm, ↑↓ to select, Esc to
+                      dismiss). */}
+                  {emojiSuggest && emojiSuggest.matches.length > 0 && (
+                    <div className="absolute bottom-full left-0 z-30 mb-2 w-72 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
+                      <div className="border-b border-[var(--color-border)] px-3 py-1.5 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                        Emoji · :{emojiSuggest.query || "…"}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        {emojiSuggest.matches.map((m, idx) => (
+                          <button
+                            key={m.alias}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyEmojiSuggestion(m.emoji);
+                            }}
+                            onMouseEnter={() =>
+                              setEmojiSuggest((prev) =>
+                                prev ? { ...prev, selectedIdx: idx } : prev,
+                              )
+                            }
+                            className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm transition-colors ${
+                              idx === emojiSuggest.selectedIdx
+                                ? "bg-[var(--color-active)]"
+                                : "hover:bg-[var(--color-hover)]"
+                            }`}
+                          >
+                            <span className="text-base leading-none">{m.emoji}</span>
+                            <span className="truncate font-mono text-xs text-[var(--color-text-secondary)]">
+                              :{m.alias}:
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <textarea
                     ref={messageInputRef}
                     value={messageInput}
                     onChange={(e) => {
-                      setMessageInput(e.target.value);
+                      const value = e.target.value;
+                      // setMessageInput is the urgent update: the
+                      // textarea's controlled value must reflect the
+                      // keystroke immediately or the cursor jumps.
+                      setMessageInput(value);
+                      // The autocomplete state is non-urgent. React 19
+                      // can defer this update and preempt it if the
+                      // user types more keys before the popover finishes
+                      // computing. This keeps the textarea responsive
+                      // even when the alias list is large.
+                      const caret = e.target.selectionStart ?? value.length;
+                      const token = detectEmojiToken(value, caret);
+                      startEmojiSuggestTransition(() => {
+                        if (!token) {
+                          setEmojiSuggest(null);
+                          return;
+                        }
+                        const matches = matchEmojiAliases(token.query);
+                        if (matches.length === 0) {
+                          setEmojiSuggest(null);
+                          return;
+                        }
+                        setEmojiSuggest({
+                          query: token.query,
+                          matches,
+                          selectedIdx: 0,
+                          tokenStart: token.tokenStart,
+                          tokenEnd: token.tokenEnd,
+                        });
+                      });
                     }}
                     onBlur={flushPendingDraftPersistence}
-                    onKeyDown={handleKeyPress}
+                    onKeyDown={(e) => {
+                      // Emoji autocomplete keyboard nav takes priority
+                      // when its popover is open; fall through to the
+                      // normal send/newline handler otherwise.
+                      if (emojiSuggest && emojiSuggest.matches.length > 0) {
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setEmojiSuggest((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  selectedIdx: Math.min(prev.selectedIdx + 1, prev.matches.length - 1),
+                                }
+                              : prev,
+                          );
+                          return;
+                        }
+                        if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setEmojiSuggest((prev) =>
+                            prev
+                              ? { ...prev, selectedIdx: Math.max(prev.selectedIdx - 1, 0) }
+                              : prev,
+                          );
+                          return;
+                        }
+                        if (e.key === "Enter" || e.key === "Tab") {
+                          e.preventDefault();
+                          applyEmojiSuggestion(emojiSuggest.matches[emojiSuggest.selectedIdx].emoji);
+                          return;
+                        }
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEmojiSuggest(null);
+                          return;
+                        }
+                      }
+                      handleKeyPress(e);
+                    }}
                     placeholder={selectedChannel ? `Message #${selectedChannel.channel_name}` : 'Select a channel to start messaging'}
                     disabled={!selectedChannel || isSendingMessage}
                     className="w-full bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2994,7 +3749,11 @@ export default function Dashboard() {
                 </div>
                 {selectedChannel && (
                   <span>
-                    {messageInput.trim().length}
+                    {/* Uses the deferred value -- the counter doesn't
+                        need to track every keystroke synchronously,
+                        and reading the live value pulls this whole
+                        block back onto the urgent render path. */}
+                    {deferredMessageInput.trim().length}
                     {uploadPolicy.maxMessageLength ? `/${uploadPolicy.maxMessageLength}` : ''}
                   </span>
                 )}
@@ -3047,46 +3806,109 @@ export default function Dashboard() {
           modal. It now lives inside ChatHeader as a floating dropdown
           anchored to the magnifier icon, so nothing renders here. */}
 
-      <MessageContextMenu
-        isOpen={messageContextMenu.isOpen}
-        position={messageContextMenu.position}
-        onClose={() => setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
-        onReply={() => handleMessageReply(currentMenuMessageId)}
-        onReact={() => {
-          // Open emoji picker aimed at the message under the context menu.
-          // The picker shares the same component with the message-input flow,
-          // so we mark the intent here via `reactionTargetMessageId`.
-          const rect = { left: messageContextMenu.position.x, top: messageContextMenu.position.y, right: messageContextMenu.position.x, bottom: messageContextMenu.position.y };
-          const pickerWidth = 320;
-          const pickerHeight = 400;
-          const gap = 8;
+      {/* Capability flags are derived per-message at render time. The
+          right-click target lives in `currentMenuMessageId` and we
+          resolve it through `getMessageById` to read sender_user_id /
+          channel_id; missing sender => default to "viewer is not self"
+          which hides Edit + restores Report rows. Privileges come from
+          the dashboard-wide `canDeleteMessages` / `canBanUsers` /
+          `canTimeoutUsers` flags computed earlier from the user's
+          resolved instance privileges. */}
+      {(() => {
+        const ctxMessage = currentMenuMessageId ? getMessageById(currentMenuMessageId) : null;
+        const senderId = ctxMessage?.sender_user_id ?? null;
+        const senderUsername = ctxMessage?.username ?? usersById.get(senderId ?? '')?.username;
+        const isOwnMessage = !!senderId && senderId === currentUser?.user_id;
 
-          // Position to the right of the menu
-          let x = rect.right + gap;
-          let y = rect.top;
+        return (
+          <MessageContextMenu
+            isOpen={messageContextMenu.isOpen}
+            position={messageContextMenu.position}
+            onClose={() => setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } })}
+            isSelf={isOwnMessage}
+            canEdit={isOwnMessage}
+            canDelete={isOwnMessage || canDeleteMessages}
+            canBan={canBanUsers}
+            canTimeout={canTimeoutUsers}
+            onAddReaction={() => {
+              // Open emoji picker aimed at the message under the context
+              // menu. The picker shares the same component with the
+              // message-input flow, so we mark the intent here via
+              // `reactionTargetMessageId`.
+              const rect = {
+                left: messageContextMenu.position.x,
+                top: messageContextMenu.position.y,
+                right: messageContextMenu.position.x,
+                bottom: messageContextMenu.position.y,
+              };
+              const pickerWidth = 320;
+              const pickerHeight = 400;
+              const gap = 8;
 
-          // If it would go off the right edge, position to the left
-          if (x + pickerWidth > window.innerWidth) {
-            x = rect.left - pickerWidth - gap;
-          }
+              let x = rect.right + gap;
+              let y = rect.top;
+              if (x + pickerWidth > window.innerWidth) {
+                x = rect.left - pickerWidth - gap;
+              }
+              if (y + pickerHeight > window.innerHeight) {
+                y = window.innerHeight - pickerHeight - gap;
+              }
+              if (y < gap) {
+                y = gap;
+              }
 
-          // Adjust if picker would go off-screen vertically
-          if (y + pickerHeight > window.innerHeight) {
-            y = window.innerHeight - pickerHeight - gap;
-          }
-          if (y < gap) {
-            y = gap;
-          }
-
-          if (currentMenuMessageId) {
-            setReactionTargetMessageId(currentMenuMessageId);
-          }
-          setIsEmojiPickerOpen(true);
-          setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } }); // Close context menu
-        }}
-        onCopyLink={() => handleMessageCopy(currentMenuMessageId)}
-        onReport={() => handleMessageReport(currentMenuMessageId)}
-      />
+              if (currentMenuMessageId) {
+                setReactionTargetMessageId(currentMenuMessageId);
+              }
+              setIsEmojiPickerOpen(true);
+              setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+            }}
+            onReply={() => handleMessageReply(currentMenuMessageId)}
+            // Reply-in-DM intentionally not wired: DMs aren't a
+            // first-class surface in this client yet, and the menu
+            // policy is "every shown option must work". Omitting the
+            // handler hides the row entirely; the option will come
+            // back the moment the DM composer ships.
+            onCopyMessage={() => handleMessageCopyText(currentMenuMessageId)}
+            // Per-invocation override (e.g. the message-group menu sets
+            // a multi-ID copy handler + plural label). Fall back to the
+            // single-message handler when no override is supplied.
+            onCopyMessageId={
+              messageContextMenu.onCopyLink ?? (() => handleMessageCopy(currentMenuMessageId))
+            }
+            copyMessageIdLabel={messageContextMenu.customCopyLinkLabel}
+            // Edit Message is also intentionally unwired right now —
+            // the server hasn't shipped a message-edit endpoint yet
+            // (`updateMessage` in services/message.ts is a stub). The
+            // option will come back when the API lands. Same policy
+            // as Reply-in-DM above: don't surface non-working options.
+            onEdit={undefined}
+            onDelete={() => void handleMessageDelete(currentMenuMessageId)}
+            onReportMessage={
+              messageContextMenu.onReport ?? (() => handleMessageReport(currentMenuMessageId))
+            }
+            reportMessageLabel={messageContextMenu.customReportLabel}
+            onReportUser={() => {
+              if (senderId) {
+                handleUserReport(senderId, senderUsername);
+              }
+              setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+            }}
+            onTimeoutUser={() => {
+              if (senderId) {
+                handleUserTimeout(senderId, senderUsername || "user");
+              }
+              setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+            }}
+            onBanUser={() => {
+              if (senderId) {
+                handleUserBan(senderId, senderUsername || "user");
+              }
+              setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+            }}
+          />
+        );
+      })()}
 
       <UserContextMenu
         isOpen={userContextMenu.isOpen}
@@ -3135,31 +3957,95 @@ export default function Dashboard() {
         canBan={canBanUsers && selectedContextUser?.userId !== currentUser?.user_id}
       />
 
+      {/* Channel right-click menu. "Mark As Read" is always available
+          (every user can clear their own unread state); "Delete Channel"
+          only renders for viewers with `delete_channels`. The list is
+          built inline because items append/skip based on per-channel
+          context, not just static privileges. */}
       <ContextMenu
         isOpen={channelContextMenu.isOpen && !!channelContextMenu.channel}
         position={channelContextMenu.position}
         onClose={() => setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null })}
-        items={[
-          {
-            id: "delete-channel",
-            label: "Delete Channel",
-            tone: "danger",
+        items={(() => {
+          const items: Array<
+            | { id: string; label: string; icon?: React.ReactNode; tone?: "default" | "danger" | "warning" | "success"; onSelect: () => void }
+            | { id: string; separator: true }
+          > = [];
+          const ctxChannel = channelContextMenu.channel;
+          if (!ctxChannel) return items;
+          items.push({
+            id: "mark-read",
+            label: "Mark As Read",
             icon: (
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"
+                  d="M5 13l4 4L19 7"
                 />
               </svg>
             ),
             onSelect: () => {
-              setChannelDeleteConfirm({ isOpen: true, channel: channelContextMenu.channel });
+              handleMarkChannelRead(ctxChannel.channel_id);
               setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
             },
-          },
-        ]}
+          });
+          // Edit Channel — gated by edit_channels. Mirrors the
+          // control-panel Channels tab edit flow; channel_type stays
+          // immutable on this surface for the same reason (flipping
+          // text<->voice would orphan messages or participant rows).
+          if (canEditChannels) {
+            items.push({ id: "sep-edit", separator: true });
+            items.push({
+              id: "edit-channel",
+              label: "Edit Channel",
+              icon: (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              ),
+              onSelect: () => {
+                setEditingChannel(ctxChannel);
+                setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+              },
+            });
+          }
+          if (canDeleteChannels) {
+            items.push({ id: "sep-delete", separator: true });
+            items.push({
+              id: "delete-channel",
+              label: "Delete Channel",
+              tone: "danger",
+              icon: (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {/* Full trash-can glyph, matching the icon used by
+                      every other "Delete X" action in the app
+                      (message delete, file attachment delete, storage
+                      tab delete, server-options dropdown delete).
+                      The previous path only had the body arc, which
+                      rendered as a U-shape without a lid or contents. */}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              ),
+              onSelect: () => {
+                setChannelDeleteConfirm({ isOpen: true, channel: ctxChannel });
+                setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+              },
+            });
+          }
+          return items;
+        })()}
       />
 
       <ModerationActionModal
@@ -3175,6 +4061,130 @@ export default function Dashboard() {
           setModerationAction(null);
         }}
       />
+
+      {/* Edit-channel modal, opened from the channel sidebar's
+          right-click menu. Same UX rules as the control-panel
+          version: channel_type stays a read-only badge because
+          flipping text<->voice would orphan messages or participant
+          rows. */}
+      <Modal
+        isOpen={Boolean(editingChannel)}
+        onClose={() => {
+          if (editChannelSaving) return;
+          setEditingChannel(null);
+        }}
+        title={editingChannel ? `Edit #${editingChannel.channel_name}` : "Edit Channel"}
+        widthClassName="max-w-lg"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditingChannel(null)}
+              disabled={editChannelSaving}
+              className="rounded-lg border border-transparent px-4 py-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveChannelEdit}
+              disabled={editChannelSaving}
+              className="rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {editChannelSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        }
+      >
+        {editingChannel && (
+          <div className="space-y-5">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[var(--color-text)]">
+                Channel Type
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2.5">
+                {editingChannel.channel_type === "voice" ? (
+                  <>
+                    <svg className="h-4 w-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-14 0m7 7v4m-4 0h8m-4-4a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    <span className="text-sm text-[var(--color-text)]">Voice channel</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4 text-[var(--color-text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                    </svg>
+                    <span className="text-sm text-[var(--color-text)]">Text channel</span>
+                  </>
+                )}
+                <span className="ml-auto rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+                  Locked
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Switching between text and voice isn't supported — it would orphan messages or
+                participant rows. To change the medium, delete and recreate the channel.
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="dashboard-edit-channel-name"
+                className="mb-1 block text-sm font-medium text-[var(--color-text)]"
+              >
+                Channel Name
+              </label>
+              <input
+                id="dashboard-edit-channel-name"
+                type="text"
+                value={editChannelForm.channel_name}
+                onChange={(e) =>
+                  setEditChannelForm((prev) => ({ ...prev, channel_name: e.target.value }))
+                }
+                disabled={editChannelSaving}
+                className="w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-2.5 text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] transition-colors focus:border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+                placeholder="channel-name"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--color-text)]">Private channel</div>
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  Only the server owner, admins, and invited users can see private channels.
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={editChannelForm.is_private}
+                    onChange={(e) =>
+                      setEditChannelForm((prev) => ({ ...prev, is_private: e.target.checked }))
+                    }
+                    disabled={editChannelSaving}
+                  />
+                  <div
+                    className={`h-6 w-11 rounded-full transition-colors ${
+                      editChannelForm.is_private
+                        ? "bg-[var(--color-primary)]"
+                        : "bg-[var(--color-surface-tertiary)]"
+                    }`}
+                  />
+                  <div
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      editChannelForm.is_private ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         isOpen={channelDeleteConfirm.isOpen && !!channelDeleteConfirm.channel}

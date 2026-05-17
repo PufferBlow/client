@@ -201,9 +201,14 @@ export function BlockedIPsTab({
   }
 
   return (
-    <div className="space-y-6">
+    // Tab fills the full available height so the blocked-IP list can
+    // scroll independently of the outer chrome instead of pushing the
+    // page taller as more IPs are added. The control-panel content
+    // area already has overflow-y-auto, so `flex-1 min-h-0` is enough
+    // to claim all vertical space and let inner scrollers take over.
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
       {/* Blocked IPs Management Header */}
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
+      <div className="flex min-h-0 flex-1 flex-col bg-[var(--color-surface)] rounded-lg p-6 border border-[var(--color-border)]">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-medium text-[var(--color-text)]">Blocked IP Addresses</h2>
@@ -310,7 +315,7 @@ export function BlockedIPsTab({
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {filteredIPs.map((blockedIP, index) => (
               <div
                 key={index}
@@ -327,16 +332,56 @@ export function BlockedIPsTab({
 
                   {/* IP Details */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h4 className="font-medium text-[var(--color-text)]">{blockedIP.ip}</h4>
                       <span className="rounded px-2 py-1 text-xs font-medium bg-[var(--color-error)] text-[var(--color-on-error)]">
                         Blocked
                       </span>
+                      {/* Attempts-while-blocked counter. Pulled from
+                          the rate-limit middleware which increments
+                          on every rejected hit. We always render the
+                          chip (even on 0) so the column reads
+                          consistently across rows; the colour shifts
+                          to error tones once the IP is actively
+                          re-trying so an attack-in-progress is easy
+                          to spot. */}
+                      {(() => {
+                        const attempts = Number(blockedIP.block_attempts_count ?? 0);
+                        const tone =
+                          attempts === 0
+                            ? "var(--color-text-muted)"
+                            : attempts < 10
+                              ? "var(--color-warning)"
+                              : "var(--color-error)";
+                        return (
+                          <span
+                            className="rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums"
+                            style={{
+                              color: tone,
+                              borderColor: `color-mix(in srgb, ${tone} 35%, transparent)`,
+                              background: `color-mix(in srgb, ${tone} 10%, transparent)`,
+                            }}
+                            title={
+                              blockedIP.last_attempt_at
+                                ? `Last attempt: ${new Date(blockedIP.last_attempt_at).toLocaleString()}`
+                                : "No attempts recorded yet"
+                            }
+                          >
+                            {attempts} attempt{attempts === 1 ? "" : "s"}
+                          </span>
+                        );
+                      })()}
                     </div>
-                    <div className="flex items-center space-x-4 text-sm text-[var(--color-text-secondary)]">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--color-text-secondary)]">
                       <span>Reason: {blockedIP.reason}</span>
                       <span>•</span>
                       <span>Blocked: {new Date(blockedIP.blocked_at).toLocaleDateString()}</span>
+                      {blockedIP.last_attempt_at ? (
+                        <>
+                          <span>•</span>
+                          <span>Last hit: {new Date(blockedIP.last_attempt_at).toLocaleString()}</span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -358,21 +403,28 @@ export function BlockedIPsTab({
           </div>
         )}
 
-        {/* Information Panel */}
-        <div
-          className="mt-6 rounded-lg border p-4"
-          style={{
-            background: 'linear-gradient(to right, color-mix(in srgb, var(--color-error) 10%, transparent), color-mix(in srgb, var(--color-warning) 10%, transparent))',
-            borderColor: 'color-mix(in srgb, var(--color-error) 35%, transparent)',
-          }}
-        >
-          <h3 className="mb-2 text-lg font-medium text-[var(--color-text)]">About IP Blocking</h3>
-          <p className="text-[var(--color-text-secondary)] text-sm">
-            Blocked IP addresses are automatically prevented from accessing the server by the rate limiting middleware.
-            IPs are typically blocked when they exceed rate limits or engage in malicious activities.
-            You can manually block IPs here for security purposes, or unblock them if needed.
-          </p>
-        </div>
+      </div>
+
+      {/* Information Panel — lifted out of the main section so it
+          sits at the bottom of the tab as a footer strip. Keeping it
+          inside the section pinched the scrollable list above (the
+          list is flex-1 inside that container, so any sibling below
+          stole vertical space from the list). Moving it down here as
+          a sibling of the section lets the list use the full height
+          and gives the explanatory copy a clear footer position. */}
+      <div
+        className="shrink-0 rounded-lg border p-4"
+        style={{
+          background: 'linear-gradient(to right, color-mix(in srgb, var(--color-error) 10%, transparent), color-mix(in srgb, var(--color-warning) 10%, transparent))',
+          borderColor: 'color-mix(in srgb, var(--color-error) 35%, transparent)',
+        }}
+      >
+        <h3 className="mb-2 text-lg font-medium text-[var(--color-text)]">About IP Blocking</h3>
+        <p className="text-[var(--color-text-secondary)] text-sm">
+          Blocked IP addresses are automatically prevented from accessing the server by the rate limiting middleware.
+          IPs are typically blocked when they exceed rate limits or engage in malicious activities.
+          You can manually block IPs here for security purposes, or unblock them if needed.
+        </p>
       </div>
 
       {/* Unblock Confirmation Modal */}

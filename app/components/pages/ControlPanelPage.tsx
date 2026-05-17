@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router";
 import {
+  Activity,
   BarChart3,
   CheckSquare,
   CircleX,
@@ -26,15 +27,42 @@ import { useControlPanelData } from "../control-panel/useControlPanelData";
 import { getAuthTokenForRequests } from "../../services/authSession";
 import { hasResolvedPrivilege, getAuthTokenFromCookies, useCurrentUserProfile } from "../../services/user";
 import { logger } from "../../utils/logger";
+import { usePersistedUIState, useTrackLastRoute } from "../../utils/uiStatePersistence";
 
 export default function ControlPanelPage() {
+  // Mark this as the operator's most recent destination so the index
+  // route can rehydrate them here on next launch.
+  useTrackLastRoute("/control-panel");
   const showToast = useToast();
   const {
     data: currentUser,
     isLoading: isCurrentUserLoading,
     error: currentUserError,
   } = useCurrentUserProfile();
-  const [activeTab, setActiveTab] = useState<ControlPanelTabId>("overview");
+  // Restore the last-open control-panel tab from localStorage so a
+  // refresh / desktop relaunch drops the operator back where they
+  // were. We still seed with "overview" as the fallback for fresh
+  // sessions; the privilege gate below downshifts to the first
+  // visible tab if the persisted one is gated off.
+  const {
+    controlPanelTabId: persistedControlPanelTabId,
+    setControlPanelTabId: persistControlPanelTabId,
+  } = usePersistedUIState(currentUser?.user_id);
+  const [activeTab, setActiveTabState] = useState<ControlPanelTabId>("overview");
+  const setActiveTab = (tabId: ControlPanelTabId) => {
+    setActiveTabState(tabId);
+    persistControlPanelTabId(tabId);
+  };
+  // Apply the persisted tab once it arrives from localStorage (state
+  // load is async on mount). Done inside an effect so the initial
+  // "overview" doesn't overwrite the persisted value.
+  useEffect(() => {
+    if (persistedControlPanelTabId && persistedControlPanelTabId !== activeTab) {
+      setActiveTabState(persistedControlPanelTabId as ControlPanelTabId);
+    }
+    // Only run when persistedControlPanelTabId resolves; intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistedControlPanelTabId]);
   const [channelCreationModalOpen, setChannelCreationModalOpen] = useState(false);
   const [fileViewerModal, setFileViewerModal] = useState<{
     isOpen: boolean;
@@ -88,9 +116,26 @@ export default function ControlPanelPage() {
     canViewRoles,
   });
 
-  const dashboardTabs: ControlPanelTab[] = canViewOverview
-    ? [{ id: "overview", label: "Overview", icon: <BarChart3 className="h-6 w-6" /> }]
-    : [];
+  // Dashboard section now also hosts "Server" (the runtime-config tab
+  // formerly labeled "Settings", under Instance Configuration) and
+  // "Instance Ping" (formerly under Security & Advanced). Both are
+  // operator-facing "is the server doing what I want" surfaces, so
+  // sitting next to Overview makes the Dashboard column the natural
+  // landing place for monitoring.
+  const dashboardTabs: ControlPanelTab[] = [
+    canViewOverview
+      ? { id: "overview", label: "Overview", icon: <BarChart3 className="h-6 w-6" /> }
+      : null,
+    canViewOverview
+      ? { id: "activity", label: "Activity", icon: <Activity className="h-6 w-6" /> }
+      : null,
+    canViewSettings
+      ? { id: "settings", label: "Server", icon: <Settings className="h-6 w-6" /> }
+      : null,
+    canViewInstancePing
+      ? { id: "instance-ping", label: "Instance Ping", icon: <PlugZap className="h-6 w-6" /> }
+      : null,
+  ].filter(Boolean) as ControlPanelTab[];
 
   const managementTabs: ControlPanelTab[] = [
     canViewModeration ? { id: "moderation", label: "Moderation", icon: <Shield className="h-6 w-6" /> } : null,
@@ -99,17 +144,20 @@ export default function ControlPanelPage() {
     canViewChannels ? { id: "channels", label: "Channels", icon: <Hash className="h-6 w-6" /> } : null,
   ].filter(Boolean) as ControlPanelTab[];
 
+  // "Settings" moved out of Instance Configuration and into Dashboard
+  // as "Server" (see dashboardTabs). Tasks + Storage stay here.
   const configurationTabs: ControlPanelTab[] = [
     canViewTasks ? { id: "tasks", label: "Tasks", icon: <CheckSquare className="h-6 w-6" /> } : null,
-    canViewSettings ? { id: "settings", label: "Settings", icon: <Settings className="h-6 w-6" /> } : null,
     canViewStorage ? { id: "storage", label: "Storage", icon: <Folder className="h-6 w-6" /> } : null,
   ].filter(Boolean) as ControlPanelTab[];
 
+  // "Instance Ping" moved out of this section into Dashboard. What
+  // stays here is the pure security/operations surface: Security,
+  // Blocked IPs, Logs.
   const securityTabs: ControlPanelTab[] = [
     canViewSecurity ? { id: "security", label: "Security", icon: <Lock className="h-6 w-6" /> } : null,
     canViewBlockedIps ? { id: "blocked-ips", label: "Blocked IPs", icon: <CircleX className="h-6 w-6" /> } : null,
     canViewLogs ? { id: "logs", label: "Logs", icon: <FileText className="h-6 w-6" /> } : null,
-    canViewInstancePing ? { id: "instance-ping", label: "Instance Ping", icon: <PlugZap className="h-6 w-6" /> } : null,
   ].filter(Boolean) as ControlPanelTab[];
 
   const tabs = [...dashboardTabs, ...managementTabs, ...configurationTabs, ...securityTabs];

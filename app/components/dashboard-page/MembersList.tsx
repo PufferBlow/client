@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { UserListItem } from "../dashboard/UserListItem";
 import { getResolvedRoleNames } from "../../services/user";
 import type { ListUsersResponse } from "../../services/user";
@@ -42,6 +43,17 @@ export function MembersList({
   onUserClick,
   onUserContextMenu,
 }: MembersListProps) {
+  // Member-name substring filter. Case-insensitive. Empty query shows
+  // every member; matches are kept in their original role grouping so
+  // a server-owner search hit still renders under the "Server Owner"
+  // group rather than getting flattened into one list.
+  const [memberQuery, setMemberQuery] = useState("");
+  const filteredUsers = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => u.username?.toLowerCase().includes(q));
+  }, [users, memberQuery]);
+
   return (
     <div className="w-72 h-full bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] flex flex-col">
       {/* Header with close button */}
@@ -70,6 +82,37 @@ export function MembersList({
           </svg>
         </button>
       </div>
+
+      {/* Search input. Hidden on the error / empty branches below since
+          there's nothing to filter against in those states. */}
+      {!usersError && users.length > 0 && (
+        <div className="border-b border-[var(--color-border)] px-3 py-2">
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={memberQuery}
+              onChange={(e) => setMemberQuery(e.target.value)}
+              placeholder="Search members"
+              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] py-1.5 pl-8 pr-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus)]"
+              aria-label="Search members"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Scrollable Members Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--color-border-secondary)] scrollbar-track-transparent">
@@ -122,10 +165,16 @@ export function MembersList({
               This server appears to be empty.
             </p>
           </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="p-6 text-center">
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              No members match "{memberQuery}"
+            </p>
+          </div>
         ) : (
           <div className="p-4 space-y-4">
             <GroupedMembers
-              users={users}
+              users={filteredUsers}
               onUserClick={onUserClick}
               onUserContextMenu={onUserContextMenu}
             />

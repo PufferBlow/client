@@ -62,12 +62,10 @@ export function ControlPanelSidebar({
   return (
     <div className="flex w-64 flex-col border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]">
       <div className="flex h-12 items-center border-b border-[var(--color-border)] bg-[var(--color-background-tertiary)] px-4">
-        <div className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] font-semibold text-[var(--color-text)]">
-            P
-          </div>
-          <span className="text-sm font-semibold text-[var(--color-text)]">Server Control Panel</span>
-        </div>
+        {/* "P" prefix circle removed -- the title text is enough; the
+            circle was redundant chrome that competed with the sidebar
+            tab icons for visual attention. */}
+        <span className="text-sm font-semibold text-[var(--color-text)]">Server Control Panel</span>
         <div className="ml-auto">
           <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">
             Host

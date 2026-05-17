@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Volume2, Volume1, VolumeX } from 'lucide-react';
 import type { MessageAttachment } from '../models/Message';
 import { VideoPlayer } from './VideoPlayer';
 import { MediaLightbox } from './MediaLightbox';
@@ -14,6 +15,53 @@ interface AttachmentBubbleProps extends MessageAttachment {
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic'];
 const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v', 'ogv'];
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'];
+
+// ── Attachment volume preference ─────────────────────────────────────
+//
+// Shared between every audio attachment player in the message stream
+// AND the Settings page's "Audio Attachment Volume" slider. Persisted
+// in the same localStorage blob as the rest of the audio settings
+// (`pufferblow-audio-settings`) and broadcast via the existing
+// `pufferblow:audio-settings-changed` CustomEvent so adjusting volume
+// in one player updates every other player in real time.
+//
+// Default 100 means "play attachments at full system volume." 0 mutes.
+
+const AUDIO_SETTINGS_STORAGE_KEY = "pufferblow-audio-settings";
+const AUDIO_SETTINGS_CHANGED_EVENT = "pufferblow:audio-settings-changed";
+const DEFAULT_ATTACHMENT_VOLUME = 100;
+
+function readAttachmentVolume(): number {
+  if (typeof window === "undefined") return DEFAULT_ATTACHMENT_VOLUME;
+  try {
+    const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_ATTACHMENT_VOLUME;
+    const parsed = JSON.parse(raw);
+    const v = Number(parsed.attachmentVolume);
+    if (Number.isFinite(v) && v >= 0 && v <= 100) return v;
+  } catch {
+    // Bad JSON / serialisation drift -- fall back to default.
+  }
+  return DEFAULT_ATTACHMENT_VOLUME;
+}
+
+function writeAttachmentVolume(value: number): void {
+  if (typeof window === "undefined") return;
+  const clamped = Math.min(100, Math.max(0, Math.round(value)));
+  try {
+    const raw = window.localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+    const existing = raw ? JSON.parse(raw) : {};
+    existing.attachmentVolume = clamped;
+    window.localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify(existing));
+    // Fire the same event the Settings page hook uses, so every other
+    // audio player on screen (and the live VoiceTransport) picks up
+    // the change immediately.
+    window.dispatchEvent(new CustomEvent(AUDIO_SETTINGS_CHANGED_EVENT));
+  } catch {
+    // localStorage can throw under quota / private-mode conditions --
+    // best-effort, the next save attempt may succeed.
+  }
+}
 
 const buildFallbackWaveform = (seed: string, barCount = 44): number[] => {
   let hash = 2166136261;
@@ -64,6 +112,12 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   const [isGifHovered, setIsGifHovered] = useState(false);
   const [gifAutoPlayDone, setGifAutoPlayDone] = useState(false);
   const [gifCanvasReady, setGifCanvasReady] = useState(false);
+  // Volume preference (0..100) shared via localStorage with the Settings
+  // page and every other audio player. The popover state controls the
+  // small slider drawer next to the download button.
+  const [attachmentVolume, setAttachmentVolume] = useState<number>(() => readAttachmentVolume());
+  const [volumePopoverOpen, setVolumePopoverOpen] = useState(false);
+  const volumePopoverRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const gifCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const gifHiddenImgRef = useRef<HTMLImageElement | null>(null);
@@ -229,6 +283,59 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
 
   const audioProgress = audioDuration > 0 ? Math.min(1, audioCurrentTime / audioDuration) : 0;
 
+  // Apply the volume preference to the underlying <audio> element.
+  // Runs on mount, on every volume change, and on every audio element
+  // remount (the audio ref's identity changes if the variant re-renders).
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = Math.min(1, Math.max(0, attachmentVolume / 100));
+  }, [attachmentVolume]);
+
+  // Cross-instance sync: when another player (or the Settings page)
+  // adjusts the attachment volume, picks up the change. Listening on
+  // window because the event is broadcast at that scope.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onSettingsChange = () => {
+      const next = readAttachmentVolume();
+      setAttachmentVolume((prev) => (prev === next ? prev : next));
+    };
+    window.addEventListener(AUDIO_SETTINGS_CHANGED_EVENT, onSettingsChange);
+    return () => window.removeEventListener(AUDIO_SETTINGS_CHANGED_EVENT, onSettingsChange);
+  }, []);
+
+  // Close the volume popover on outside-click and Escape. Bound only
+  // while open so it doesn't burn cycles on every player.
+  useEffect(() => {
+    if (!volumePopoverOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (volumePopoverRef.current && !volumePopoverRef.current.contains(e.target as Node)) {
+        setVolumePopoverOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setVolumePopoverOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [volumePopoverOpen]);
+
+  const handleVolumeSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = Number(event.target.value);
+    setAttachmentVolume(next);
+    writeAttachmentVolume(next);
+  };
+
+  // Speaker icon glyph picked by current level. Standard three-state
+  // (muted / low / high) so the button visually mirrors what playback
+  // is doing without needing to open the popover.
+  const VolumeIcon =
+    attachmentVolume <= 0 ? VolumeX : attachmentVolume < 50 ? Volume1 : Volume2;
+
   const handleDownload = async (
     event?: React.MouseEvent<HTMLButtonElement>,
   ) => {
@@ -269,16 +376,40 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     }
   };
 
-  const seekAudio = (event: React.MouseEvent<HTMLDivElement>) => {
+  /**
+   * Click-AND-drag seek. The previous implementation was a single click
+   * handler -- you could jump but you couldn't scrub. This now:
+   *
+   *   1. Applies the initial position on pointerdown.
+   *   2. Attaches window-level mousemove/mouseup listeners so dragging
+   *      past the waveform's edges still seeks correctly (the rect is
+   *      captured once, so values clamp to [0, 1] at the boundaries).
+   *   3. Cleans the listeners up on mouseup.
+   *
+   * Window-level listeners are intentional: dragging outside the
+   * waveform container shouldn't lose the gesture. The classic
+   * audio-scrubbing pattern.
+   */
+  const handleSeekPointerDown = (event: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
-    if (!audio || !audioDuration) {
-      return;
-    }
-
+    if (!audio || !audioDuration) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    audio.currentTime = ratio * audioDuration;
-    setAudioCurrentTime(audio.currentTime);
+
+    const applyAt = (clientX: number) => {
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      audio.currentTime = ratio * audioDuration;
+      setAudioCurrentTime(audio.currentTime);
+    };
+
+    applyAt(event.clientX);
+
+    const onMove = (ev: MouseEvent) => applyAt(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   // Image/Video attachment (large bubble style)
@@ -300,7 +431,7 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             type="button"
             onClick={handleDownload}
             disabled={isDownloading}
-            className="pb-focus-ring absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)]/90 text-[var(--color-text)] opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-70"
+            className="pb-focus-ring absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-primary)] text-[var(--color-on-primary)] opacity-0 transition-opacity duration-200 hover:bg-[var(--color-primary-hover)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-70"
             title={`Download ${filename || 'image'}`}
             aria-label={`Download ${filename || 'image'}`}
           >
@@ -335,17 +466,31 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
                 }}
                 onError={() => { setImageLoading(false); setImageError(true); }}
               />
+              {/* Sizing rules for the GIF (and same for the static image
+                  branch below):
+                    - `max-w-full` caps width to the message container,
+                      so a 4K-resolution GIF doesn't break the layout
+                    - `max-h-96` (24rem / 384px) caps height
+                    - `h-auto` + no `w-full` means a small GIF (e.g.
+                      120x80) renders at its intrinsic size instead of
+                      being stretched to fill the column
+                    - `object-contain` keeps the aspect ratio when the
+                      caps DO clip a large GIF down
+                  Together these are also enough to neutralise
+                  dimension-spoofing attempts -- a GIF declaring
+                  absurd intrinsic dimensions just clips to the caps
+                  rather than blowing up the layout. */}
               {/* Canvas: static first frame (always in DOM so ref works, hidden when animating) */}
               <canvas
                 ref={gifCanvasRef}
-                className="w-full h-auto max-h-96 object-contain"
+                className="h-auto max-h-96 max-w-full object-contain"
                 style={{ display: gifCanvasReady && !showAnimated ? 'block' : 'none' }}
               />
               {/* Animated GIF: shown when hovered or auto-playing */}
               <img
                 src={resolvedUrl}
                 alt={filename || 'Attachment'}
-                className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+                className={`h-auto max-h-96 max-w-full object-contain transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
                 style={{ display: gifCanvasReady && !showAnimated ? 'none' : 'block' }}
                 loading="lazy"
               />
@@ -354,7 +499,7 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             <img
               src={resolvedUrl}
               alt={filename || 'Attachment'}
-              className={`w-full h-auto max-h-96 object-contain transition-opacity duration-300 ${
+              className={`h-auto max-h-96 max-w-full object-contain transition-opacity duration-300 ${
                 imageLoading ? 'opacity-0' : 'opacity-100'
               }`}
               onLoad={() => setImageLoading(false)}
@@ -378,8 +523,14 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     }
 
     if (isVideo) {
+      // Note: no `onClick={onClick}` on the wrapper, unlike the image
+      // branch. Images open the MediaLightbox when clicked; videos
+      // shouldn't, because clicking a video naturally means "play it"
+      // and routing to a fullscreen overlay just gets in the way. The
+      // VideoPlayer's own video element handles play/pause on click,
+      // and the fullscreen button inside the player handles fullscreen.
       return (
-        <div className={`group relative ${className}`} onClick={onClick}>
+        <div className={`group relative ${className}`}>
           <VideoPlayer
             src={resolvedUrl}
             filename={filename}
@@ -389,7 +540,7 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             type="button"
             onClick={handleDownload}
             disabled={isDownloading}
-            className="pb-focus-ring absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)]/90 text-[var(--color-text)] opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-70"
+            className="pb-focus-ring absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-primary)] text-[var(--color-on-primary)] opacity-0 transition-opacity duration-200 hover:bg-[var(--color-primary-hover)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-70"
             title={`Download ${filename || 'video'}`}
             aria-label={`Download ${filename || 'video'}`}
           >
@@ -402,11 +553,13 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     }
   }
 
-  // Audio attachment (inline player + waveform)
+  // Audio attachment (inline player + waveform). Same `max-w-md` cap as
+  // the file variant so audio bubbles don't stretch across the entire
+  // message column.
   if (isAudioAttachment && !audioError) {
     return (
       <div
-        className={`rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-3 ${className}`}
+        className={`max-w-md rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-3 ${className}`}
       >
         <audio
           ref={audioRef}
@@ -447,8 +600,8 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
           </button>
 
           <div
-            className="pb-audio-waveform flex-1 cursor-pointer rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-2"
-            onClick={seekAudio}
+            className="pb-audio-waveform flex-1 cursor-pointer select-none rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-2"
+            onMouseDown={handleSeekPointerDown}
             role="slider"
             aria-label="Audio timeline"
             aria-valuemin={0}
@@ -460,13 +613,27 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
                 const threshold = (index + 1) / waveformBars.length;
                 const isActive = threshold <= audioProgress;
                 const barHeight = Math.max(4, Math.round(6 + bar * 24));
+                // Active bars get the brand-accent color directly via
+                // inline style so the played portion of the timeline is
+                // clearly distinguishable from the upcoming portion.
+                // Previously both states were variations of "text color
+                // with different opacity", and the play-animation pulse
+                // washed inactive bars up to near-active brightness --
+                // which made it look like the entire track was played.
+                //
+                // The playing pulse is now ONLY applied to inactive
+                // bars: played bars stay solid in primary color, upcoming
+                // bars subtly pulse to show audio is live. Clean
+                // progress signal + visual life, no contradiction.
                 return (
                   <span
                     key={`${index}-${barHeight}`}
-                    className={`pb-audio-bar ${isActive ? 'pb-audio-bar-active' : ''} ${audioPlaying ? 'pb-audio-bar-playing' : ''}`}
+                    className={`pb-audio-bar ${isActive ? 'pb-audio-bar-active' : ''} ${audioPlaying && !isActive ? 'pb-audio-bar-playing' : ''}`}
                     style={{
                       height: `${barHeight}px`,
                       animationDelay: `${(index % 12) * 42}ms`,
+                      backgroundColor: isActive ? 'var(--color-primary)' : undefined,
+                      opacity: isActive ? 1 : undefined,
                     }}
                   />
                 );
@@ -491,27 +658,79 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={isDownloading}
-            className="inline-flex flex-shrink-0 items-center space-x-1 rounded-md border pb-border bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
-            title={`Download ${filename || 'audio'}`}
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>Download</span>
-          </button>
+          {/* Action cluster: volume button + download button, sitting
+              next to each other so all controls feel like one group.
+              The volume popover anchors above the volume button via
+              `bottom-full` so it doesn't get clipped at the bubble's
+              top edge. */}
+          <div className="flex items-center gap-2">
+            <div className="relative" ref={volumePopoverRef}>
+              <button
+                type="button"
+                onClick={() => setVolumePopoverOpen((prev) => !prev)}
+                className="pb-focus-ring inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+                title={`Volume: ${attachmentVolume}%`}
+                aria-label={`Volume: ${attachmentVolume}%`}
+                aria-haspopup="true"
+                aria-expanded={volumePopoverOpen}
+              >
+                <VolumeIcon className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {volumePopoverOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Volume control"
+                  className="absolute bottom-full right-0 z-20 mb-2 flex w-72 items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-lg"
+                >
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={attachmentVolume}
+                    onChange={handleVolumeSliderChange}
+                    className="h-1 flex-1 cursor-pointer accent-[var(--color-primary)]"
+                    aria-label="Volume"
+                    autoFocus
+                  />
+                  <span className="min-w-[2.5rem] text-right text-xs tabular-nums text-[var(--color-text-secondary)]">
+                    {attachmentVolume}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Icon-only download. Matches the file-bubble button style
+                exactly -- same primary-color treatment, since download is
+                the only secondary action on an audio attachment (the
+                play button is the primary action and lives on the left). */}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="pb-focus-ring inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-70"
+              title={`Download ${filename || 'audio'}`}
+              aria-label={`Download ${filename || 'audio'}`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // File attachment (compact bubble style with prominent download button)
+  // File attachment (compact bubble style with prominent download button).
+  // `max-w-md` (28rem / 448px) caps the bubble so it doesn't stretch across
+  // the full message column the way it used to -- a file row only needs to
+  // fit "icon + filename + size + download," not a paragraph's worth of
+  // width. The audio + media variants are still free to grow wider since
+  // their content benefits from it (waveform, image previews).
   return (
     <div
-      className={`flex items-center space-x-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4 transition-colors hover:bg-[var(--color-hover)] ${className}`}
+      className={`flex max-w-md items-center space-x-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4 transition-colors hover:bg-[var(--color-hover)] ${className}`}
     >
       {/* File Icon */}
       <div className="flex-shrink-0">
@@ -530,18 +749,21 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
         )}
       </div>
 
-      {/* Download Button */}
+      {/* Download Button -- icon-only square. Same h-8 w-8 footprint as
+          the floating download buttons on image / video bubbles, but
+          with the primary-color treatment kept because this is the
+          file's primary (and only) CTA. */}
       <button
         type="button"
         onClick={handleDownload}
         disabled={isDownloading}
-        className="inline-flex flex-shrink-0 items-center space-x-1 rounded-md border pb-border bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+        className="pb-focus-ring inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-70"
         title={`Download ${filename || 'file'}`}
+        aria-label={`Download ${filename || 'file'}`}
       >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <span>Download</span>
       </button>
     </div>
   );

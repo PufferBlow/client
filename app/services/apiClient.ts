@@ -272,6 +272,13 @@ export interface BlockedIP {
   ip: string;
   reason: string;
   blocked_at: string;
+  // Number of requests that were rejected because this IP was on the
+  // blocklist. Surfaced by the operator UI as a counter so blocks
+  // that are still under attack can be distinguished from quiet ones.
+  // Optional on the client because older server versions don't return
+  // it; the UI shows 0 in that case.
+  block_attempts_count?: number;
+  last_attempt_at?: string | null;
 }
 
 export interface BlockIPRequest {

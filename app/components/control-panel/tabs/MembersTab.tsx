@@ -1,13 +1,20 @@
 /**
  * MembersTab — admin roster of all users on the instance, with role badges
  * and quick moderation actions (timeout, ban, edit roles).
+ *
+ * Role assignment now happens directly in this tab via
+ * MemberRoleEditorModal — the old "Edit Roles" menu item used to jump
+ * the user over to the Roles tab to find the same person again, which
+ * was an awkward two-step flow for what is fundamentally a per-member
+ * action. The Roles tab is still where you build role definitions; this
+ * tab is now where you assign them.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getAuthTokenFromCookies, type ListUsersResponse } from "../../../services/user";
 import { banUser, timeoutUser } from "../../../services/moderation";
 import type { ShowToast } from "../../Toast";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../ModerationActionModal";
-import { RoleBadgeList } from "../RoleManagement";
+import { MemberRoleEditorModal, RoleBadgeList } from "../RoleManagement";
 import { ControlPanelAvatar } from "../ControlPanelAvatar";
 import {
   cx,
@@ -18,14 +25,18 @@ import {
 } from "../shared";
 
 export function MembersTab({
+  authToken,
   roles,
   users,
   onOpenRolesTab,
+  onRolesChanged,
   showToast
 }: {
+  authToken: string;
   roles: import("../../../services/system").InstanceRole[];
   users: ListUsersResponse['users'];
   onOpenRolesTab: () => void;
+  onRolesChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,15 +51,31 @@ export function MembersTab({
     username: string;
   } | null>(null);
   const [moderationSubmitting, setModerationSubmitting] = useState(false);
+  // Role editor modal — opened from the per-member "Edit Roles" menu
+  // item below. Lives in this tab so assignment can happen without
+  // jumping to the Roles tab to find the same user again.
+  const [roleEditorUser, setRoleEditorUser] = useState<{
+    user_id: string;
+    username: string;
+    roles_ids: string[];
+    avatar_url?: string | null;
+  } | null>(null);
+  // Refs for the dropdown menu and the trigger button. The outside-
+  // click handler uses them to decide whether a mousedown should
+  // close the menu. Without these the handler would fire on the menu
+  // items themselves and clear `selectedUserMenu` before the click
+  // handler had a chance to read it, which broke "Edit Roles".
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuTriggerRef = useRef<HTMLElement | null>(null);
 
   // Show loading state when no users are loaded yet
   if (!users || users.length === 0) {
     return (
-      <div className="space-y-6">
-        <div className={controlPanelSectionClass}>
+      <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
+        <div className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col")}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Members</h2>
-            <button className={cx(controlPanelButtonClass('secondary'), "cursor-not-allowed opacity-60")}>
+            <button className={cx(controlPanelButtonClass('secondary'), "cursor-not-allowed opacity-60 whitespace-nowrap")}>
               Invite Member
             </button>
           </div>
@@ -90,7 +117,12 @@ export function MembersTab({
     event.preventDefault();
     event.stopPropagation();
 
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    // Remember which trigger opened the menu so the outside-click
+    // handler can ignore a re-click on it (otherwise the close-on-
+    // outside fires first and the same click immediately reopens).
+    userMenuTriggerRef.current = target;
     setSelectedUserMenu(user);
     setUserMenuPosition({
       x: Math.min(rect.left + window.scrollX, window.innerWidth - 200),
@@ -106,7 +138,16 @@ export function MembersTab({
     const targetUsername = selectedUserMenu.username;
 
     if (action === 'editRoles') {
-      onOpenRolesTab();
+      // Open the role editor for THIS user, in this tab. The Roles tab
+      // remains the place to define roles, but assigning them to a
+      // specific member happens here so the moderator doesn't lose the
+      // context they're working in.
+      setRoleEditorUser({
+        user_id: selectedUserMenu.user_id,
+        username: selectedUserMenu.username,
+        roles_ids: selectedUserMenu.roles_ids || [],
+        avatar_url: selectedUserMenu.avatar_url || selectedUserMenu.avatar || null,
+      });
       setUserMenuOpen(false);
       setSelectedUserMenu(null);
       return;
@@ -181,11 +222,25 @@ export function MembersTab({
     }
   };
 
-  // Close menu on outside click
+  // Close menu on outside click. We have to scope this carefully: a
+  // blanket `setSelectedUserMenu(null)` on every mousedown would
+  // clear the user reference before the menu item's own click
+  // handler can read it, which is exactly the bug that left "Edit
+  // Roles" doing nothing. We bail out for mousedowns inside the
+  // dropdown (so menu items resolve normally) and for mousedowns on
+  // the trigger that opened the menu (so re-clicking the 3-dot
+  // doesn't close-then-immediately-reopen).
   useEffect(() => {
     if (!userMenuOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (userMenuRef.current && target && userMenuRef.current.contains(target)) {
+        return;
+      }
+      if (userMenuTriggerRef.current && target && userMenuTriggerRef.current.contains(target)) {
+        return;
+      }
       setUserMenuOpen(false);
       setSelectedUserMenu(null);
     };
@@ -195,7 +250,7 @@ export function MembersTab({
   }, [userMenuOpen]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
       <ModerationActionModal
         action={
           moderationAction
@@ -209,30 +264,53 @@ export function MembersTab({
           setModerationAction(null);
         }}
       />
-      <div className={controlPanelSectionClass}>
-        <div className="flex items-center justify-between mb-6">
+
+      {/* Role editor modal. Stays inside MembersTab so closing it
+          returns the moderator to the same scroll position in the
+          roster they were already working in. */}
+      <MemberRoleEditorModal
+        authToken={authToken}
+        isOpen={Boolean(roleEditorUser)}
+        onClose={() => setRoleEditorUser(null)}
+        roles={roles}
+        showToast={showToast}
+        user={roleEditorUser}
+        onRolesChanged={onRolesChanged}
+      />
+
+      <div className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col")}>
+        {/* Header. The Open Roles + Invite Member buttons used to share
+            a single inline row with the search input. The input is
+            `w-full` so it ballooned and squeezed the buttons until
+            their labels wrapped. Now: the search input owns a flex-1
+            slot, and both action buttons sit in a no-shrink group with
+            `whitespace-nowrap` so they always have enough width for
+            their label regardless of the surrounding layout. */}
+        <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Members</h2>
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={onOpenRolesTab}
-              className={controlPanelButtonClass('secondary')}
-            >
-              Open Roles
-            </button>
+          <div className="flex flex-1 flex-wrap items-center gap-3 lg:justify-end">
             <input
               type="text"
               placeholder="Search members..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={controlPanelInputClass}
+              className={cx(controlPanelInputClass, "min-w-0 flex-1 lg:max-w-sm")}
             />
-            <button className={controlPanelButtonClass('primary')}>
-              Invite Member
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={onOpenRolesTab}
+                className={cx(controlPanelButtonClass('secondary'), "whitespace-nowrap")}
+              >
+                Open Roles
+              </button>
+              <button className={cx(controlPanelButtonClass('primary'), "whitespace-nowrap")}>
+                Invite Member
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {/* Filter users based on search term */}
           {users.filter(user =>
             searchTerm === '' ||
@@ -286,6 +364,7 @@ export function MembersTab({
       {/* User Menu Dropdown */}
       {userMenuOpen && selectedUserMenu && (
         <div
+          ref={userMenuRef}
           className="fixed z-50 w-48 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] py-1 shadow-lg"
           style={{ left: userMenuPosition.x, top: userMenuPosition.y }}
         >

@@ -1,7 +1,10 @@
 /**
  * OverviewTab — dashboard landing pane. Shows server banner/avatar, key
- * metrics, registration/activity/online/channel charts, and the
- * RecentActivity feed.
+ * metrics, registration/activity/online/channel charts, and live
+ * telemetry. The recent-activity feed used to live here too but moved
+ * to its own dedicated tab so this pane stays focused on counters +
+ * charts + telemetry; the feed has its own scrolling needs that
+ * pulled the page's attention.
  */
 import React, { useEffect, useState } from "react";
 import { Line, Bar, Pie } from "react-chartjs-2";
@@ -23,9 +26,7 @@ import {
   type ActivityMetrics,
   type ServerOverview,
 } from "../../../services/system";
-import { convertToFullStorageUrl } from "../../../services/apiClient";
 import { logger } from "../../../utils/logger";
-import { RecentActivity } from "../RecentActivity";
 import {
   cx,
   controlPanelSectionClass,
@@ -41,9 +42,12 @@ import {
 } from "../shared";
 import { getControlPanelChartPalette, createChartOptions } from "../chartPalette";
 
-export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }) {
+// `onSettingsClick` is accepted for back-compat with the existing
+// caller in ControlPanelContent but the in-tab button that used it
+// (in the now-removed server banner) is gone. The prop is silently
+// unused; we can drop it from the call site whenever convenient.
+export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
   const [viewMode, setViewMode] = useState<'numbers' | 'diagram'>('numbers');
-  const [bannerExpanded, setBannerExpanded] = useState(false);
   const [chartData, setChartData] = useState<{
     userRegistrations?: ChartData;
     messageActivity?: ChartData;
@@ -134,14 +138,28 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         const newChartData: typeof chartData = {};
         const newRawStats: typeof rawStats = {};
 
-        // Helper function to format chart data for Chart.js
+        // Helper function to format chart data for Chart.js.
+        //
+        // Backend shapes we accept here:
+        //  1. Chart.js native: `{labels, datasets}` — passed through.
+        //  2. Time-series array from `_chart_response`: each item is a
+        //     `ChartData.to_chart_format()` row, i.e.
+        //       { time_key, primary_value, metrics, period,
+        //         timestamp, date? }
+        //     The label comes from `date` / `time_key`, the value
+        //     from `primary_value` (or `metrics.count` as a fallback).
+        //  3. Pie-shape array from the user_status route:
+        //       [{label, value}, ...]
+        //  4. Object map fallback: `{key1: number, ...}`.
         const formatChartData = (backendData: any, chartType: string) => {
-          if (!backendData || typeof backendData !== 'object') {
+          if (!backendData || (Array.isArray(backendData) && backendData.length === 0)) {
             return null;
           }
 
           // If already in Chart.js format, return as-is
-          if ('labels' in backendData && 'datasets' in backendData && Array.isArray(backendData.datasets)) {
+          if (!Array.isArray(backendData) && typeof backendData === 'object' &&
+              'labels' in backendData && 'datasets' in backendData &&
+              Array.isArray(backendData.datasets)) {
             return backendData;
           }
 
@@ -153,18 +171,57 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
 
             // Handle different possible data formats from backend
             if (Array.isArray(backendData)) {
-              labels = backendData.map(item => item.label || item.name || item.x || `Item ${backendData.indexOf(item) + 1}`);
-              data = backendData.map(item => parseFloat(item.value || item.y || item.data || 0));
+              labels = backendData.map((item, idx) => {
+                if (typeof item !== 'object' || item === null) return `Item ${idx + 1}`;
+                // Backend `ChartData.to_chart_format()` priority: date
+                // (daily), time_key (anything), timestamp (hourly).
+                // Fall back to the generic Chart.js item keys for
+                // forward-compat with any future shape.
+                return (
+                  item.label ??
+                  item.name ??
+                  item.date ??
+                  item.time_key ??
+                  item.timestamp ??
+                  item.x ??
+                  `Item ${idx + 1}`
+                );
+              });
+              data = backendData.map((item) => {
+                if (typeof item !== 'object' || item === null) {
+                  return parseFloat(String(item ?? 0)) || 0;
+                }
+                // primary_value is what the backend stores on every
+                // ChartData row; the rest are fallbacks for older /
+                // alternate shapes.
+                const candidate =
+                  item.primary_value ??
+                  item.value ??
+                  item.y ??
+                  item.data ??
+                  item.count ??
+                  (item.metrics && (item.metrics.count ?? item.metrics.value)) ??
+                  0;
+                const n = typeof candidate === 'number' ? candidate : parseFloat(String(candidate));
+                return Number.isFinite(n) ? n : 0;
+              });
             } else if (typeof backendData === 'object') {
               // Handle object format
               labels = Object.keys(backendData).filter(key => key !== 'labels' && key !== 'datasets');
-              data = Object.values(backendData).filter(val => typeof val === 'number' && !labels.includes(val as any)) as number[];
+              data = labels.map((key) => {
+                const v = (backendData as any)[key];
+                const n = typeof v === 'number' ? v : parseFloat(String(v ?? 0));
+                return Number.isFinite(n) ? n : 0;
+              });
             }
 
-            // Ensure we have valid data
-            if (labels.length === 0 && data.length === 0) {
-              labels = ['No Data'];
-              data = [0];
+            // Ensure we have valid data. Returning null here lets the
+            // caller render the "no data yet" empty state instead of
+            // a misleading "Item 1: 0" placeholder bar.
+            if (labels.length === 0 || data.every((d) => !Number.isFinite(d) || d === 0)) {
+              if (labels.length === 0) {
+                return null;
+              }
             }
 
             const palette = getControlPanelChartPalette();
@@ -406,6 +463,43 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
     return 'var(--color-success)';
   };
 
+  /**
+   * Status for a single resource value. Returns both a human-readable
+   * label and a control-panel tone so cards can stamp the right badge.
+   * Thresholds:
+   *   - <45%   Healthy   (success)
+   *   - 45-64% Normal    (info)
+   *   - 65-84% Warm      (warning)  -- worth keeping an eye on
+   *   - ≥85%   Critical  (danger)   -- act before things start failing
+   */
+  const getUsageStatus = (
+    value: number,
+  ): { label: string; tone: "success" | "info" | "warning" | "danger" } => {
+    if (value >= 85) return { label: "Critical", tone: "danger" };
+    if (value >= 65) return { label: "Warm", tone: "warning" };
+    if (value >= 45) return { label: "Normal", tone: "info" };
+    return { label: "Healthy", tone: "success" };
+  };
+
+  /** Format the larger I/O numbers without being noisy at low rates. */
+  const formatThroughput = (mbPerSec: number): string => {
+    if (mbPerSec < 0.05) return "Idle";
+    if (mbPerSec < 1) return `${(mbPerSec * 1000).toFixed(0)} KB/s`;
+    return `${mbPerSec.toFixed(1)} MB/s`;
+  };
+
+  /** Compact uptime: "4d 12h", "12h 30m", or "45m" rather than the
+   *  back-end's verbose format which can run "4 days, 12 hours, ...". */
+  const formatUptime = (seconds: number): string => {
+    const s = Math.max(0, Math.floor(seconds));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+
   const MetricCard = ({
     label,
     value,
@@ -452,29 +546,94 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
     </div>
   );
 
+  /**
+   * Resource utilization card. The percent number is the headline (big
+   * + tabular-nums so successive frames don't jitter), the progress bar
+   * gives shape-at-a-glance, the status badge says what to do about it
+   * ("Healthy" vs "Warm" vs "Critical"), and the detail line shows the
+   * actual GB-of-GB so the percent isn't disembodied.
+   */
   const UsageCard = ({
     label,
     value,
     detail,
-    accent,
   }: {
     label: string;
     value: number;
     detail: string;
-    accent: string;
+  }) => {
+    const status = getUsageStatus(value);
+    const accent = getUsageTone(value);
+    return (
+      <div className={controlPanelCardClass}>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">
+            {label}
+          </span>
+          <span className={controlPanelBadgeClass(status.tone)}>{status.label}</span>
+        </div>
+        <div className="mb-3 flex items-baseline gap-2">
+          <span className="text-3xl font-semibold tabular-nums tracking-[-0.04em] text-[var(--color-text)]">
+            {Math.round(value)}
+          </span>
+          <span className="text-base text-[var(--color-text-tertiary)]">%</span>
+        </div>
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-background)]">
+          <div
+            className="h-1.5 rounded-full transition-all duration-300"
+            style={{ width: `${Math.max(0, Math.min(value, 100))}%`, backgroundColor: accent }}
+          />
+        </div>
+        <div className="text-xs text-[var(--color-text-secondary)]">{detail}</div>
+      </div>
+    );
+  };
+
+  /**
+   * Disk I/O card. Renders read + write throughputs with up/down arrows
+   * and an "Idle" label below ~50 KB/s so a quiet server doesn't look
+   * broken. Uses the same card chrome as UsageCard so the row reads
+   * as one coherent group rather than "three percent cards + a random
+   * I/O card".
+   */
+  const DiskIOCard = ({
+    readMbPerSec,
+    writeMbPerSec,
+  }: {
+    readMbPerSec: number;
+    writeMbPerSec: number;
   }) => (
     <div className={controlPanelCardClass}>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">{label}</span>
-        <span className="text-sm font-medium text-[var(--color-text-secondary)]">{value}%</span>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">
+          Disk I/O
+        </span>
+        <span className={controlPanelBadgeClass("info")}>Throughput</span>
       </div>
-      <div className="mb-3 h-2 rounded-full bg-[var(--color-background)]">
-        <div
-          className="h-2 rounded-full transition-all duration-300"
-          style={{ width: `${Math.max(0, Math.min(value, 100))}%`, backgroundColor: accent }}
-        />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+            Read
+          </span>
+          <span className="text-sm font-medium tabular-nums text-[var(--color-text)]">
+            {formatThroughput(readMbPerSec)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+            Write
+          </span>
+          <span className="text-sm font-medium tabular-nums text-[var(--color-text)]">
+            {formatThroughput(writeMbPerSec)}
+          </span>
+        </div>
       </div>
-      <div className="text-sm text-[var(--color-text-secondary)]">{detail}</div>
     </div>
   );
 
@@ -496,7 +655,6 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
     </div>
   );
 
-  const primaryDescription = serverInfo?.server_description?.trim();
   const overviewMetrics = [
     {
       label: 'Online now',
@@ -546,64 +704,14 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
   ];
 
   return (
-    <div className="space-y-6">
-      {serverInfo ? (
-        <section className={controlPanelSectionClass}>
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex flex-1 items-start gap-4">
-              {serverInfo.avatar_url ? (
-                <img
-                  src={convertToFullStorageUrl(serverInfo.avatar_url)}
-                  alt={serverInfo.server_name}
-                  className="h-16 w-16 rounded-[1.25rem] border border-[var(--color-border-secondary)] object-cover"
-                />
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-2xl font-semibold text-[var(--color-text)]">
-                  {serverInfo.server_name.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="mb-3 flex flex-wrap items-center gap-3">
-                  <span className={controlPanelBadgeClass('success')}>Instance online</span>
-                  <span className={controlPanelBadgeClass('neutral')}>Version {serverInfo.version}</span>
-                  <span className={controlPanelBadgeClass('neutral')}>
-                    {serverInfo.is_private ? 'Invite only' : 'Public access'}
-                  </span>
-                </div>
-                <h2 className="text-3xl font-semibold tracking-[-0.05em] text-[var(--color-text)]">
-                  {serverInfo.server_name}
-                </h2>
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
-                  {primaryDescription
-                    ? bannerExpanded || primaryDescription.length <= 180
-                      ? primaryDescription
-                      : `${primaryDescription.slice(0, 180)}...`
-                    : 'Set a short description so admins can immediately understand the purpose of this instance.'}
-                </p>
-                {primaryDescription && primaryDescription.length > 180 ? (
-                  <button
-                    onClick={() => setBannerExpanded((value) => !value)}
-                    className="mt-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
-                  >
-                    {bannerExpanded ? 'Show less' : 'Read full description'}
-                  </button>
-                ) : null}
-              </div>
-            </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
+      {/* Server banner block (avatar + name + description + version
+          badges + Instance Settings button) was removed -- it duplicated
+          information available in the Dashboard sidebar and the Server
+          tab. The Overview pane now opens directly with the metrics
+          + telemetry grid. */}
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={onSettingsClick} className={controlPanelButtonClass('secondary')}>
-                Instance settings
-              </button>
-              <button onClick={refreshUsage} disabled={usageLoading} className={controlPanelButtonClass('ghost')}>
-                {usageLoading ? 'Refreshing…' : 'Refresh usage'}
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <section className={controlPanelSectionClass}>
+      <section className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col overflow-y-auto pr-1")}>
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-xl font-semibold tracking-[-0.03em] text-[var(--color-text)]">Overview</h2>
@@ -640,15 +748,45 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                 <div className="mb-5 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text)]">
-                      Resource health
+                      Live telemetry
                     </h3>
                     <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                      Live host metrics with clearer thresholds and less visual noise.
+                      Host CPU, memory, storage, and I/O. Status is the
+                      severity of the worst resource right now.
                     </p>
                   </div>
-                  <span className={controlPanelBadgeClass(usageError ? 'danger' : 'info')}>
-                    {usageError ? 'Issue' : 'Live telemetry'}
-                  </span>
+                  {/* Single status badge driven by the worst resource. */}
+                  {(() => {
+                    if (usageError) {
+                      return (
+                        <span className={controlPanelBadgeClass("danger")}>
+                          Telemetry offline
+                        </span>
+                      );
+                    }
+                    if (usageLoading || !serverUsage) {
+                      return (
+                        <span className={controlPanelBadgeClass("info")}>Collecting…</span>
+                      );
+                    }
+                    const worst = Math.max(
+                      serverUsage.cpu_percent,
+                      serverUsage.ram_percent,
+                      serverUsage.storage_percent,
+                    );
+                    const overall = getUsageStatus(worst);
+                    return (
+                      <span className={controlPanelBadgeClass(overall.tone)}>
+                        {overall.tone === "success"
+                          ? "All systems healthy"
+                          : overall.tone === "info"
+                            ? "Normal load"
+                            : overall.tone === "warning"
+                              ? "Monitor"
+                              : "Attention needed"}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {usageLoading ? (
@@ -674,55 +812,58 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
                   </div>
                 ) : serverUsage ? (
                   <div className="space-y-4">
+                    {/* Four-card row: three resource cards (CPU /
+                        Memory / Storage) each with their own status
+                        badge + percent + bar + GB-of-GB detail; one
+                        I/O card with read/write throughput. The row
+                        collapses to 2 columns on md, 1 on mobile. */}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                       <UsageCard
                         label="CPU"
                         value={serverUsage.cpu_percent}
-                        detail="Processor utilization"
-                        accent={getUsageTone(serverUsage.cpu_percent)}
+                        detail="Processor load"
                       />
                       <UsageCard
                         label="Memory"
                         value={serverUsage.ram_percent}
-                        detail={`${serverUsage.ram_used_gb}GB of ${serverUsage.ram_total_gb}GB in use`}
-                        accent={getUsageTone(serverUsage.ram_percent)}
+                        detail={`${serverUsage.ram_used_gb} GB of ${serverUsage.ram_total_gb} GB`}
                       />
                       <UsageCard
                         label="Storage"
                         value={serverUsage.storage_percent}
-                        detail={`${serverUsage.storage_used_gb}GB of ${serverUsage.storage_total_gb}GB used`}
-                        accent={getUsageTone(serverUsage.storage_percent)}
+                        detail={`${serverUsage.storage_used_gb} GB of ${serverUsage.storage_total_gb} GB`}
                       />
-                      <div className={controlPanelCardClass}>
-                        <div className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]">
-                          Disk I/O
-                        </div>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-[var(--color-text-secondary)]">Read</span>
-                            <span className="text-sm font-medium text-[var(--color-text)]">{serverUsage.disk_read_mb_per_sec} MB/s</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-[var(--color-text-secondary)]">Write</span>
-                            <span className="text-sm font-medium text-[var(--color-text)]">{serverUsage.disk_write_mb_per_sec} MB/s</span>
-                          </div>
-                          <div className="border-t border-[var(--color-border-secondary)] pt-3 text-sm text-[var(--color-text-secondary)]">
-                            Uptime {serverUsage.uptime_formatted}
-                          </div>
-                        </div>
-                      </div>
+                      <DiskIOCard
+                        readMbPerSec={serverUsage.disk_read_mb_per_sec}
+                        writeMbPerSec={serverUsage.disk_write_mb_per_sec}
+                      />
                     </div>
 
+                    {/* Footer strip: uptime + last-updated. Dropped the
+                        old "Messages/hour and channel utilization" line
+                        -- those numbers don't belong in a host-health
+                        panel; they're already shown in the metric cards
+                        above. Activity is about people, telemetry is
+                        about the box; mixing them was confusing. */}
                     <div className={controlPanelQuietClass}>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className={controlPanelBadgeClass('success')}>System online</span>
-                          <span className="text-sm text-[var(--color-text-secondary)]">
-                            Last updated {new Date(serverUsage.timestamp * 1000).toLocaleTimeString()}
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-[var(--color-text-secondary)]">
+                        <span className="flex items-center gap-2">
+                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Uptime{" "}
+                          <span className="font-medium tabular-nums text-[var(--color-text)]">
+                            {formatUptime(serverUsage.uptime_seconds)}
                           </span>
-                        </div>
-                        <span className="text-sm text-[var(--color-text-secondary)]">
-                          Messages/hour {activityMetrics?.messages_per_hour ?? '—'} and {activityMetrics?.channel_utilization ?? '—'}% channel utilization
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Updated{" "}
+                          <span className="font-medium tabular-nums text-[var(--color-text)]">
+                            {new Date(serverUsage.timestamp * 1000).toLocaleTimeString()}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -825,8 +966,9 @@ export function OverviewTab({ onSettingsClick }: { onSettingsClick: () => void }
         )}
       </section>
 
-      <RecentActivity />
-
+      {/* Recent activity feed moved to its own "Activity" tab so this
+          pane stays focused on counters + telemetry. See ControlPanelContent
+          for the routing. */}
     </div>
   );
 }

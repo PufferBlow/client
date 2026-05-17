@@ -6,7 +6,9 @@ interface SearchResult {
   title: string;
   subtitle?: string;
   content?: string;
+  /** ISO timestamp string. Rendered as a short HH:MM time in the row. */
   timestamp?: string;
+  /** Sender's resolved avatar URL (full, not relative). */
   avatar?: string;
   /**
    * Channel containing this result. Required for message-type results so the
@@ -14,6 +16,34 @@ interface SearchResult {
    * came from the server-side scan and aren't in the local message cache.
    */
   channel_id?: string;
+}
+
+/**
+ * Hash a string to a deterministic HSL color. Used for the letter
+ * fallback when a result's sender doesn't have a resolved avatar URL
+ * (e.g. federated sender we haven't hydrated yet). Same djb2-style
+ * pattern used by the voice-call participant tiles.
+ */
+function colorFromString(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 45%, 32%)`;
+}
+
+function formatResultTime(iso: string | undefined): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -256,38 +286,75 @@ export function SearchModal({
           </div>
         ) : (
           <div className="divide-y divide-[var(--color-border)]">
-            {results.map((result, index) => (
-              <button
-                key={result.id}
-                onClick={() => selectResult(result)}
-                className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
-                  selectedIndex === index
-                    ? "bg-[var(--color-active)]"
-                    : "hover:bg-[var(--color-hover)]"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-[var(--color-text)]">
-                      {result.title}
-                    </span>
-                    <span className="shrink-0 rounded border border-[var(--color-border-secondary)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">
-                      {TYPE_LABELS[result.type]}
-                    </span>
+            {results.map((result, index) => {
+              // Discord-style result row: avatar in the left gutter,
+              // sender name + timestamp on the header line, message
+              // body text below. Same density as the messages list
+              // itself so previewing a result feels continuous with
+              // jumping to it. Letter fallback covers senders without
+              // a resolved avatar (federated/unhydrated).
+              const time = formatResultTime(result.timestamp);
+              const avatarLetter =
+                (result.title || "?").charAt(0).toUpperCase();
+              return (
+                <button
+                  key={result.id}
+                  onClick={() => selectResult(result)}
+                  className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
+                    selectedIndex === index
+                      ? "bg-[var(--color-active)]"
+                      : "hover:bg-[var(--color-hover)]"
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div className="flex-shrink-0">
+                    {result.avatar ? (
+                      <img
+                        src={result.avatar}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-9 w-9 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
+                        style={{ backgroundColor: colorFromString(result.title || result.id) }}
+                      >
+                        {avatarLetter}
+                      </div>
+                    )}
                   </div>
-                  {result.subtitle ? (
-                    <div className="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">
-                      {result.subtitle}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-sm font-medium text-[var(--color-text)]">
+                        {result.title}
+                      </span>
+                      {time && (
+                        <span className="shrink-0 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                          {time}
+                        </span>
+                      )}
+                      {result.type !== "message" && (
+                        <span className="ml-auto shrink-0 rounded border border-[var(--color-border-secondary)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                          {TYPE_LABELS[result.type]}
+                        </span>
+                      )}
                     </div>
-                  ) : null}
-                  {result.content ? (
-                    <p className="mt-1 line-clamp-2 text-sm text-[var(--color-text-muted)]">
-                      {result.content}
-                    </p>
-                  ) : null}
-                </div>
-              </button>
-            ))}
+                    {result.subtitle && (
+                      <div className="truncate text-[11px] text-[var(--color-text-muted)]">
+                        {result.subtitle}
+                      </div>
+                    )}
+                    {result.content && (
+                      <p className="mt-1 line-clamp-2 text-sm text-[var(--color-text-secondary)]">
+                        {result.content}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

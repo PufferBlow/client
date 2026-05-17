@@ -13,6 +13,19 @@ export interface Report {
   message_ids?: string[];
   channel_ids?: string[];
   sender?: { id: string; username: string } | null;
+  /**
+   * Optional inline message previews for message reports. When the
+   * backend includes this we can render the reported text directly in
+   * the moderation queue instead of asking the moderator to chase down
+   * each message_id manually. Empty / missing array -> the UI falls
+   * back to showing the bare message IDs.
+   */
+  message_excerpts?: Array<{
+    id: string;
+    content?: string | null;
+    channel_name?: string | null;
+    sent_at?: string | null;
+  }>;
   // User reports
   target_user?: { id: string; username: string };
 }

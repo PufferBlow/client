@@ -7,10 +7,12 @@
  *  - URL input with quick presets / history
  *  - Real-time latency measurement (round-trip to /healthz)
  *  - HTTP status + colour-coded result badge
- *  - History log of recent probe results
+ *  - History log of recent probe results — persisted to localStorage
+ *    so the moderator's last batch of probes survives a reload /
+ *    desktop-client restart instead of vanishing with the tab state.
  *  - Copy-friendly result display
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -68,10 +70,54 @@ export interface InstancePingTabProps {
   showToast: ShowToast;
 }
 
+// localStorage key for the probe history. Single global key (not
+// per-user) because Instance Ping is an operator tool: a moderator
+// running probes from the same client wants to see them across
+// sign-ins, not have them silo'd per account.
+const PING_HISTORY_STORAGE_KEY = 'pufferblow-instance-ping-history';
+// Keep the persisted history bounded so localStorage doesn't grow
+// without limit if the operator probes a lot.
+const PING_HISTORY_MAX = 50;
+
+const loadPersistedResults = (): ProbeResult[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PING_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Defensive: drop anything still 'pending' from a previous session,
+    // since there's no probe in flight to ever resolve it.
+    return parsed
+      .filter((entry: any): entry is ProbeResult =>
+        entry && typeof entry === 'object' && typeof entry.id === 'string',
+      )
+      .map((entry) => (entry.status === 'pending' ? { ...entry, status: 'error', error: 'Probe interrupted' } : entry));
+  } catch {
+    return [];
+  }
+};
+
 export function InstancePingTab({ showToast }: InstancePingTabProps) {
   const [targetUrl, setTargetUrl] = useState('');
   const [isProbing, setIsProbing] = useState(false);
-  const [results, setResults] = useState<ProbeResult[]>([]);
+  // Lazy-initialise from localStorage so the first render already has
+  // the persisted history visible — no flicker between empty + restored
+  // states.
+  const [results, setResults] = useState<ProbeResult[]>(() => loadPersistedResults());
+
+  // Persist on every change. Cheap; the array is small (≤ 50 entries).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        PING_HISTORY_STORAGE_KEY,
+        JSON.stringify(results.slice(0, PING_HISTORY_MAX)),
+      );
+    } catch {
+      // Ignore quota / privacy-mode failures; in-memory state still works.
+    }
+  }, [results]);
 
   const probe = async () => {
     const url = targetUrl.trim();
@@ -91,7 +137,7 @@ export function InstancePingTab({ showToast }: InstancePingTabProps) {
       probedAt: new Date().toISOString(),
     };
 
-    setResults((prev) => [pending, ...prev.slice(0, 19)]);
+    setResults((prev) => [pending, ...prev.slice(0, PING_HISTORY_MAX - 1)]);
     setIsProbing(true);
 
     const response = await pingInstance({ target_instance_url: normalized });
@@ -136,7 +182,16 @@ export function InstancePingTab({ showToast }: InstancePingTabProps) {
     }
   };
 
-  const clearResults = () => setResults([]);
+  const clearResults = () => {
+    setResults([]);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(PING_HISTORY_STORAGE_KEY);
+      } catch {
+        // best-effort; in-memory clear above is enough for UX.
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">

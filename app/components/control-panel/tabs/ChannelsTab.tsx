@@ -1,20 +1,30 @@
 /**
- * ChannelsTab — admin view for listing, creating, and deleting channels on
- * the home instance. Channel data is owned by the parent ControlPanelPage and
- * passed in / out via `channels` + `setChannels`.
+ * ChannelsTab — admin view for listing, creating, editing, and deleting
+ * channels on the home instance. Channel data is owned by the parent
+ * ControlPanelPage and passed in / out via `channels` + `setChannels`.
+ *
+ * Edit constraint: `channel_type` (text vs voice) is rendered as a
+ * read-only badge in the edit modal. Switching mediums on an existing
+ * channel would orphan messages (text -> voice) or participant rows
+ * (voice -> text), so the API rejects it; the UI surfaces the same
+ * rule by not offering the control. To change a channel's medium,
+ * delete and recreate.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Hash, Mic } from "lucide-react";
 import { getAuthTokenFromCookies } from "../../../services/user";
-import { listChannels, deleteChannel } from "../../../services/channel";
+import { listChannels, deleteChannel, updateChannel } from "../../../services/channel";
 import { logger } from "../../../utils/logger";
 import type { Channel } from "../../../models";
 import type { ShowToast } from "../../Toast";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { Modal } from "../../ui/Modal";
+import { Button } from "../../Button";
 import {
   cx,
   controlPanelSectionClass,
   controlPanelButtonClass,
+  controlPanelInputClass,
   controlPanelRowClass,
 } from "../shared";
 
@@ -30,10 +40,120 @@ export function ChannelsTab({
   showToast: ShowToast;
 }) {
   const [deleteConfirmChannel, setDeleteConfirmChannel] = useState<Channel | null>(null);
+  // Channel-type filter. "all" shows every channel; the other values
+  // narrow to a single kind. Private is its own bucket regardless of
+  // medium, matching the sidebar's channel grouping pattern.
+  const [typeFilter, setTypeFilter] = useState<"all" | "text" | "voice" | "private">("all");
+  // Edit-channel modal state. `editingChannel` is the snapshot of the
+  // row that opened the modal; `editForm` is the live in-modal draft.
+  // Two separate values so cancel/close discards the draft without
+  // touching the source row, and the channel_type badge always shows
+  // the original (immutable) value.
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [editForm, setEditForm] = useState<{ channel_name: string; is_private: boolean }>({
+    channel_name: "",
+    is_private: false,
+  });
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Sync the draft form whenever a different channel is selected for
+  // editing. Resetting on every open also wipes stale half-typed state
+  // from a previous edit that the user cancelled.
+  useEffect(() => {
+    if (editingChannel) {
+      setEditForm({
+        channel_name: editingChannel.channel_name,
+        is_private: !!editingChannel.is_private,
+      });
+    }
+  }, [editingChannel]);
+
+  const filteredChannels = channels.filter((channel) => {
+    if (typeFilter === "all") return true;
+    if (typeFilter === "private") return !!channel.is_private;
+    if (typeFilter === "voice") return !channel.is_private && channel.channel_type === "voice";
+    // "text"
+    return !channel.is_private && channel.channel_type !== "voice";
+  });
 
   // channels array will be empty initially, so we can't use that to detect loading
   // However, the parent component will pass loaded channels
-  const hasChannels = channels && channels.length > 0;
+  const hasChannels = filteredChannels.length > 0;
+
+  const handleSaveEdit = async () => {
+    if (!editingChannel) return;
+    const authToken = getAuthTokenFromCookies() || '';
+    if (!authToken) {
+      showToast({ message: 'Authentication token not found.', tone: 'error', category: 'system' });
+      return;
+    }
+
+    const trimmedName = editForm.channel_name.trim();
+    if (!trimmedName) {
+      showToast({ message: 'Channel name cannot be empty.', tone: 'error', category: 'validation' });
+      return;
+    }
+
+    // Only send fields that actually changed. Sending unchanged
+    // fields would still work, but keeps the audit log noise down and
+    // avoids tripping the name-collision check on the channel's own
+    // current name.
+    const payload: { channel_name?: string; is_private?: boolean } = {};
+    if (trimmedName !== editingChannel.channel_name) {
+      payload.channel_name = trimmedName;
+    }
+    if (!!editForm.is_private !== !!editingChannel.is_private) {
+      payload.is_private = editForm.is_private;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setEditingChannel(null);
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const response = await updateChannel(editingChannel.channel_id, payload, authToken);
+      if (response.success) {
+        logger.ui.info("Channel updated successfully", {
+          channelId: editingChannel.channel_id,
+          fields: Object.keys(payload),
+        });
+        showToast({
+          message: `Channel #${trimmedName} updated successfully.`,
+          tone: 'success',
+          category: 'destructive',
+        });
+
+        const listResponse = await listChannels(authToken);
+        if (listResponse.success && listResponse.data && listResponse.data.channels) {
+          setChannels(listResponse.data.channels);
+        }
+        setEditingChannel(null);
+      } else {
+        logger.ui.error("Failed to update channel", {
+          channelId: editingChannel.channel_id,
+          error: response.error,
+        });
+        showToast({
+          message: response.error?.includes('409') || response.error?.toLowerCase().includes('already exists')
+            ? 'A channel with that name already exists. Choose a different name.'
+            : `Failed to update channel: ${response.error || 'Unknown error'}`,
+          tone: 'error',
+          category: response.error?.toLowerCase().includes('already exists') ? 'validation' : 'system',
+        });
+      }
+    } catch (error) {
+      logger.ui.error("Error updating channel", { channelId: editingChannel.channel_id, error });
+      showToast({
+        message: 'An unexpected error occurred while updating the channel.',
+        tone: 'error',
+        category: 'system',
+      });
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const handleDeleteChannel = async (channel: Channel) => {
     const authToken = getAuthTokenFromCookies() || '';
@@ -75,21 +195,64 @@ export function ChannelsTab({
   };
 
   return (
-    <div className="space-y-6">
-      <div className={controlPanelSectionClass}>
-        <div className="flex items-center justify-between mb-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
+      <div className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col")}>
+        <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-lg font-medium text-[var(--color-text)]">Manage Channels</h2>
-          <button
-            onClick={onOpenChannelModal}
-            className={controlPanelButtonClass('primary')}
-          >
-            Create Channel
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Type filter. Pill segmented control -- same visual
+                language as the other control-panel segments. */}
+            {(
+              [
+                { id: "all", label: "All", count: channels.length },
+                {
+                  id: "text",
+                  label: "Text",
+                  count: channels.filter((c) => !c.is_private && c.channel_type !== "voice").length,
+                },
+                {
+                  id: "voice",
+                  label: "Voice",
+                  count: channels.filter((c) => !c.is_private && c.channel_type === "voice").length,
+                },
+                {
+                  id: "private",
+                  label: "Private",
+                  count: channels.filter((c) => !!c.is_private).length,
+                },
+              ] as const
+            ).map((entry) => {
+              const isActive = typeFilter === entry.id;
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setTypeFilter(entry.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isActive
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+                      : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                  }`}
+                >
+                  {entry.label}
+                  <span className="rounded-full bg-[var(--color-surface-secondary)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                    {entry.count}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              onClick={onOpenChannelModal}
+              className={controlPanelButtonClass('primary')}
+            >
+              Create Channel
+            </button>
+          </div>
         </div>
 
         {hasChannels ? (
-          <div className="space-y-3">
-            {channels.map((channel) => (
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+            {filteredChannels.map((channel) => (
               <div key={channel.channel_id} className={cx(controlPanelRowClass, "flex items-center justify-between p-4")}>
                 <div className="flex items-center space-x-3">
                   <span className="text-[var(--color-text-secondary)]">#</span>
@@ -112,7 +275,11 @@ export function ChannelsTab({
                   )}
                 </div>
                 <div className="flex space-x-2">
-                  <button className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]">
+                  <button
+                    onClick={() => setEditingChannel(channel)}
+                    className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text)]"
+                    title={`Edit ${channel.channel_name}`}
+                  >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
@@ -138,10 +305,129 @@ export function ChannelsTab({
               </svg>
             </div>
             <p className="text-lg font-medium mb-2">No channels found</p>
-            <p className="text-[var(--color-text-muted)]">Create your first channel to get started with discussions.</p>
+            <p className="text-[var(--color-text-muted)]">
+              {typeFilter === "all"
+                ? "Create your first channel to get started with discussions."
+                : `No ${typeFilter} channels yet. Switch the filter or create one.`}
+            </p>
           </div>
         )}
       </div>
+      {/* Edit-channel modal. The channel_type is shown as a fixed
+          badge — switching text<->voice is intentionally not
+          supported (see file-top comment). */}
+      <Modal
+        isOpen={Boolean(editingChannel)}
+        onClose={() => {
+          if (editSaving) return;
+          setEditingChannel(null);
+        }}
+        title={editingChannel ? `Edit #${editingChannel.channel_name}` : "Edit Channel"}
+        widthClassName="max-w-lg"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setEditingChannel(null)}
+              disabled={editSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={editSaving}>
+              {editSaving ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        }
+      >
+        {editingChannel && (
+          <div className="space-y-5">
+            {/* Channel type — read-only. Rendered as the same icon +
+                label pair used in the list so the operator can see at
+                a glance which medium this channel is locked to. */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[var(--color-text)]">
+                Channel Type
+              </label>
+              <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2.5">
+                {editingChannel.channel_type === "voice" ? (
+                  <>
+                    <Mic className="h-4 w-4 text-[var(--color-text-secondary)]" />
+                    <span className="text-sm text-[var(--color-text)]">Voice channel</span>
+                  </>
+                ) : (
+                  <>
+                    <Hash className="h-4 w-4 text-[var(--color-text-secondary)]" />
+                    <span className="text-sm text-[var(--color-text)]">Text channel</span>
+                  </>
+                )}
+                <span className="ml-auto rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+                  Locked
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Switching between text and voice isn't supported — it would orphan messages or
+                participant rows. To change the medium, delete and recreate the channel.
+              </p>
+            </div>
+
+            {/* Channel name */}
+            <div>
+              <label
+                htmlFor="edit-channel-name"
+                className="mb-1 block text-sm font-medium text-[var(--color-text)]"
+              >
+                Channel Name
+              </label>
+              <input
+                id="edit-channel-name"
+                type="text"
+                value={editForm.channel_name}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, channel_name: e.target.value }))}
+                disabled={editSaving}
+                className={controlPanelInputClass}
+                placeholder="channel-name"
+                autoFocus
+              />
+            </div>
+
+            {/* Privacy toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--color-text)]">Private channel</div>
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  Only the server owner, admins, and invited users can see private channels.
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={editForm.is_private}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, is_private: e.target.checked }))
+                    }
+                    disabled={editSaving}
+                  />
+                  <div
+                    className={`h-6 w-11 rounded-full transition-colors ${
+                      editForm.is_private
+                        ? "bg-[var(--color-primary)]"
+                        : "bg-[var(--color-surface-tertiary)]"
+                    }`}
+                  />
+                  <div
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      editForm.is_private ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <ConfirmDialog
         isOpen={Boolean(deleteConfirmChannel)}
         title="Delete Channel"

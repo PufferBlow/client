@@ -124,16 +124,10 @@ export function ChatHeader({
             Jump to unread
           </button>
         )}
-        <button className="pb-icon-btn" title="User details" aria-label="User details">
-          <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-        </button>
+        {/* User-details and More-options buttons were removed -- they
+            had no onClick and the design's gone. The remaining icons
+            (notifications bell, search, members toggle) are all wired
+            and functional. */}
         {!isVoiceChannel && (
           // `relative` wrapper so the floating SearchModal (absolute
           // right:0 top:12) anchors to the search button, matching the
@@ -168,7 +162,7 @@ export function ChatHeader({
         )}
         <button
           onClick={onToggleMembersList}
-          className="pb-icon-btn hidden xl:inline-flex"
+          className="pb-icon-btn hidden lg:inline-flex"
           title="Toggle member list"
           aria-label="Toggle member list"
           aria-pressed={membersListVisible}
@@ -179,20 +173,6 @@ export function ChatHeader({
               strokeLinejoin="round"
               strokeWidth={2}
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-            />
-          </svg>
-        </button>
-        <button
-          className="pb-icon-btn"
-          title="More channel options"
-          aria-label="More channel options"
-        >
-          <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
             />
           </svg>
         </button>

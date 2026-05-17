@@ -19,8 +19,12 @@ import { SecurityTab } from "../settings/tabs/SecurityTab";
 import { AudioTab } from "../settings/tabs/AudioTab";
 import { ProfileTab } from "../settings/tabs/ProfileTab";
 import { AppearanceTab } from "../settings/tabs/AppearanceTab";
+import { useTrackLastRoute } from "../../utils/uiStatePersistence";
 
 export default function Settings() {
+  // Persist /settings as the last-visited route so reloading the app
+  // brings the user back into the same area instead of marketing.
+  useTrackLastRoute("/settings");
   const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
 
   // React Query hooks - must be called before any early returns

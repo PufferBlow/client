@@ -110,4 +110,17 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('window-fullscreen-changed', listener);
     return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
   },
+
+  // ── Hardware acceleration preference ───────────────────────────
+  //
+  // Reads/writes a flag persisted in the main-process settings file.
+  // Default is `false` (disabled): the GPU process isn't used at all
+  // and Electron renders through software. Users can opt in via the
+  // Settings page; a restart is required for the change to take
+  // effect because `app.disableHardwareAcceleration()` only fires at
+  // app startup.
+  getHardwareAcceleration: (): Promise<boolean> =>
+    ipcRenderer.invoke('get-hardware-acceleration'),
+  setHardwareAcceleration: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('set-hardware-acceleration', enabled),
 });

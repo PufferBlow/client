@@ -191,7 +191,7 @@ export function StorageTab({
   const orphanedCount = files.filter(f => f.is_orphaned).length;
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-4">
       {/* Header + Stats */}
       <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
         <div className="flex items-center justify-between px-6 pt-5 pb-4">

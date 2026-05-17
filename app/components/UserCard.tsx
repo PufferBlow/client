@@ -31,6 +31,12 @@ interface UserCardProps {
   joinDate?: string;
   mutualServers?: number;
   mutualFriends?: number;
+  /**
+   * Legacy placeholder for a Discord-style 4-digit tag. No longer
+   * rendered (usernames are unique per instance, so the suffix
+   * disambiguated nothing). Kept on the prop so existing callers
+   * that pass it don't break; safe to drop once those are cleaned up.
+   */
   discriminator?: string;
   onUsernameChange?: (newUsername: string) => void;
   onBioChange?: (newBio: string) => void;
@@ -63,7 +69,9 @@ export function UserCard({
   joinDate,
   mutualServers = 0,
   mutualFriends = 0,
-  discriminator,
+  // discriminator: see prop comment — no longer rendered. Accepted
+  // for backward compatibility with existing callers.
+  discriminator: _discriminator,
   onUsernameChange,
   onBioChange,
   onStatusChange,
@@ -419,11 +427,14 @@ export function UserCard({
                   </button>
                 </div>
               ) : (
+                // Handle is the lowercase, whitespace-stripped form of
+                // the display name. The 4-digit discriminator suffix
+                // was a placeholder (literally `Math.random()` for users
+                // without one) -- usernames are already unique per
+                // instance, so the suffix wasn't disambiguating
+                // anything and dropped a fake new number every render.
                 <p className="text-[var(--color-text-secondary)] text-sm mt-1">
                   @{username.toLowerCase().replace(/\s+/g, '')}
-                  <span className="text-[var(--color-text)] ml-1">
-                    #{discriminator || Math.floor(Math.random() * 9000) + 1000}
-                  </span>
                 </p>
               )}
             </div>

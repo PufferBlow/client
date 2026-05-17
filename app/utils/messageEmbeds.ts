@@ -227,6 +227,109 @@ const resolveIframePreview = (parsed: URL): { provider: string; iframe?: EmbedFr
     };
   }
 
+  // Apple Music — embed.music.apple.com supports iframe for albums,
+  // songs, playlists. Translate any plain music.apple.com URL to the
+  // embed host.
+  if (host === "music.apple.com" || host === "embed.music.apple.com") {
+    const embedHost = "embed.music.apple.com";
+    const embedUrl = new URL(`https://${embedHost}${parsed.pathname}${parsed.search}`);
+    return {
+      provider: "Apple Music",
+      iframe: {
+        src: embedUrl.toString(),
+        title: "Apple Music preview",
+        allow:
+          "autoplay *; encrypted-media *; fullscreen *; clipboard-write",
+        sandbox: "allow-scripts allow-same-origin allow-popups allow-forms",
+        maxWidth: 480,
+        fixedHeight: 175,
+      },
+    };
+  }
+
+  // Twitter / X — there's no first-party iframe endpoint anymore, so
+  // we route through twitframe.com (an open-source proxy widget). If
+  // twitframe is unreachable the iframe stays blank; the surrounding
+  // <MessageEmbeds> handles fade-out via onError (see component).
+  if (host === "twitter.com" || host === "x.com" || host === "mobile.twitter.com") {
+    const match = parsed.pathname.match(/^\/[^/]+\/status\/(\d+)/);
+    if (match) {
+      const tweetUrl = `https://twitter.com${parsed.pathname}`;
+      return {
+        provider: host === "x.com" ? "X" : "Twitter",
+        iframe: {
+          src: `https://twitframe.com/show?url=${encodeURIComponent(tweetUrl)}`,
+          title: "Tweet preview",
+          sandbox: "allow-scripts allow-same-origin allow-popups",
+          maxWidth: 520,
+          fixedHeight: 480,
+        },
+      };
+    }
+  }
+
+  // Instagram — posts, reels, and tv via the /embed/captioned path.
+  // Requires `allow-scripts` for the embed's lazy-loading script.
+  if (host === "instagram.com" || host === "www.instagram.com") {
+    const match = parsed.pathname.match(/^\/(?:p|reel|tv)\/([\w-]+)/);
+    if (match) {
+      const kind = parsed.pathname.split("/")[1];
+      return {
+        provider: "Instagram",
+        iframe: {
+          src: `https://www.instagram.com/${kind}/${match[1]}/embed/captioned`,
+          title: "Instagram preview",
+          sandbox: "allow-scripts allow-same-origin allow-popups",
+          maxWidth: 520,
+          fixedHeight: 720,
+        },
+      };
+    }
+  }
+
+  // GitHub — gists embed via srcdoc loading the gist's JS embed
+  // script. The script writes the gist's HTML into the iframe's
+  // document. For repos / PRs / issues GitHub blocks iframing via
+  // X-Frame-Options:deny, so we don't try those -- the surrounding
+  // MessageEmbeds will just render a link card.
+  if (host === "gist.github.com") {
+    const match = parsed.pathname.match(/^\/[^/]+\/([a-f0-9]+)/);
+    if (match) {
+      const gistJsUrl = `https://gist.github.com${parsed.pathname}.js`;
+      const srcdoc = `<html><body style="margin:0"><script src="${gistJsUrl}"></script></body></html>`;
+      return {
+        provider: "GitHub Gist",
+        iframe: {
+          src: `data:text/html;charset=utf-8,${encodeURIComponent(srcdoc)}`,
+          title: "Gist preview",
+          sandbox: "allow-scripts",
+          maxWidth: 580,
+          fixedHeight: 400,
+        },
+      };
+    }
+  }
+
+  // GitLab — same srcdoc pattern for snippets. GitLab self-hosted
+  // instances vary; we only handle gitlab.com to keep this safe.
+  if (host === "gitlab.com") {
+    const match = parsed.pathname.match(/^\/(?:-\/snippets|.+\/-\/snippets)\/(\d+)/);
+    if (match) {
+      const snippetEmbedUrl = `https://gitlab.com${parsed.pathname}.js`;
+      const srcdoc = `<html><body style="margin:0"><script src="${snippetEmbedUrl}"></script></body></html>`;
+      return {
+        provider: "GitLab Snippet",
+        iframe: {
+          src: `data:text/html;charset=utf-8,${encodeURIComponent(srcdoc)}`,
+          title: "GitLab snippet preview",
+          sandbox: "allow-scripts",
+          maxWidth: 580,
+          fixedHeight: 400,
+        },
+      };
+    }
+  }
+
   return {
     provider: parsed.hostname.replace(/^www\./, ""),
   };

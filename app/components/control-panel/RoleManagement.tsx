@@ -5,11 +5,9 @@ import {
   Lock,
   Pencil,
   Plus,
-  Search,
   Shield,
   Sparkles,
   Trash2,
-  Users,
 } from "lucide-react";
 
 import { Button } from "../Button";
@@ -57,7 +55,10 @@ type RolesTabProps = {
   privileges: InstancePrivilege[];
   roles: InstanceRole[];
   showToast: ShowToast;
-  users: MemberRecord[];
+  // `users` was used by the member-assignment section that used to
+  // live in this tab. That section now lives in MembersTab, so the
+  // prop is no longer needed here. Kept the type intentionally lean
+  // so callers don't have to thread users through just for Roles.
   onRolesChanged: () => Promise<void>;
 };
 
@@ -801,21 +802,16 @@ export function RolesTab({
   privileges,
   roles,
   showToast,
-  users,
   onRolesChanged,
 }: RolesTabProps) {
-  const [searchTerm, setSearchTerm] = useState("");
   const [roleCatalogOpen, setRoleCatalogOpen] = useState(false);
-  const [memberRoleEditorOpen, setMemberRoleEditorOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<MemberRecord | null>(null);
 
-  const filteredUsers = useMemo(
-    () =>
-      users.filter((user) =>
-        searchTerm === "" ? true : user.username.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    [searchTerm, users],
-  );
+  // Member assignment moved out of this tab. The Roles tab is now
+  // strictly about ROLE DEFINITIONS (catalog + permission surface);
+  // assigning roles to specific users happens in the Members tab via
+  // the per-row "Edit Roles" menu item, which keeps the moderator's
+  // context (the roster) intact instead of bouncing them between
+  // tabs to find the same person twice.
 
   const privilegeCategoryCounts = useMemo(
     () =>
@@ -830,74 +826,21 @@ export function RolesTab({
     [privileges],
   );
 
-  const systemRoles = roles.filter((role) => role.is_system);
-  const customRoles = roles.filter((role) => !role.is_system);
-  const totalAssignments = roles.reduce((sum, role) => sum + role.user_count, 0);
-
-  const openRoleEditorForUser = (user: MemberRecord) => {
-    setSelectedUser(user);
-    setMemberRoleEditorOpen(true);
-  };
-
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6">
-      <div
-        className="relative overflow-hidden rounded-[1.75rem] border border-[var(--color-border)] bg-[var(--color-surface)] p-6"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 34%), linear-gradient(140deg, rgba(255,255,255,0.04), transparent 58%)",
-        }}
-      >
-        <div className="relative z-10 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-secondary)]">
-              <Shield className="h-3.5 w-3.5" />
-              Roles And Permissions
-            </div>
-            <h1 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-[var(--color-text)]">
-              Shape access with a cleaner, scroll-safe roles workspace.
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-              Review your built-in roles, compose custom permissions, and assign access to members from one control-panel surface.
-            </p>
-          </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-6">
+      {/* Decorative banner + role/privilege/assignment counter cards
+          were removed. The counts duplicated information already visible
+          in the role list below, and the banner copy ("Shape access
+          with a cleaner, scroll-safe roles workspace") was marketing
+          surface that didn't help moderators do their job. The actual
+          role table starts right here.
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[30rem]">
-            <div className="rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-                <Shield className="h-3.5 w-3.5" />
-                System Roles
-              </div>
-              <div className="mt-3 text-3xl font-semibold text-[var(--color-text)]">{systemRoles.length}</div>
-              <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Built-in roles stay locked and auditable.
-              </div>
-            </div>
-            <div className="rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-                <Sparkles className="h-3.5 w-3.5" />
-                Custom Roles
-              </div>
-              <div className="mt-3 text-3xl font-semibold text-[var(--color-text)]">{customRoles.length}</div>
-              <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Instance-local role presets you can change anytime.
-              </div>
-            </div>
-            <div className="rounded-[1.25rem] border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-                <Users className="h-3.5 w-3.5" />
-                Assignments
-              </div>
-              <div className="mt-3 text-3xl font-semibold text-[var(--color-text)]">{totalAssignments}</div>
-              <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Total role-to-member links active right now.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          The catalog card below grows to fill the full available
+          height of the tab (`flex-1 min-h-0 flex flex-col`), with the
+          role-card grid inside it owning the scroll so the header
+          (title + Manage Roles button) stays pinned. */}
 
-      <div className="rounded-[1.5rem] border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+      <div className="flex min-h-0 flex-1 flex-col rounded-[1.5rem] border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">
@@ -919,7 +862,7 @@ export function RolesTab({
           </div>
         </div>
 
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_19rem]">
+        <div className="mt-6 grid min-h-0 flex-1 gap-5 overflow-y-auto pr-1 xl:grid-cols-[minmax(0,1.35fr)_19rem]">
           <div className="grid gap-4 md:grid-cols-2">
             {roles.map((role) => (
               <div
@@ -989,85 +932,6 @@ export function RolesTab({
         </div>
       </div>
 
-      <div className="rounded-[1.5rem] border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">
-              <Users className="h-3.5 w-3.5" />
-              Member Assignment
-            </div>
-            <h2 className="mt-4 text-xl font-semibold text-[var(--color-text)]">Assign roles without leaving the page</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Search for a member, review their current role mix, then open a focused editor for access changes.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
-          <div className="rounded-[1.25rem] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-5">
-            <label className="block text-sm text-[var(--color-text-secondary)]">
-              Find member
-              <div className="relative mt-2">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                <input
-                  type="text"
-                  placeholder="Search members..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  className="w-full rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] py-2.5 pl-10 pr-3 text-[var(--color-text)] outline-none transition-colors focus:border-[var(--color-primary)]"
-                />
-              </div>
-            </label>
-
-            <div className="mt-5 grid gap-3">
-              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Members</div>
-                <div className="mt-2 text-2xl font-semibold text-[var(--color-text)]">{users.length}</div>
-              </div>
-              <div className="rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">Results</div>
-                <div className="mt-2 text-2xl font-semibold text-[var(--color-text)]">{filteredUsers.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {filteredUsers.map((user) => (
-              <div
-                key={user.user_id}
-                className="flex flex-col gap-4 rounded-[1.25rem] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-4 lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  {user.avatar_url ? (
-                    <img
-                      src={convertToFullStorageUrl(user.avatar_url)}
-                      alt={user.username}
-                      className="h-12 w-12 rounded-2xl border border-[var(--color-border-secondary)] object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-sm font-semibold text-[var(--color-text)]">
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0 space-y-2">
-                    <div className="truncate text-sm font-semibold text-[var(--color-text)]">{user.username}</div>
-                    <RoleBadgeList roleIds={user.roles_ids} roles={roles} />
-                  </div>
-                </div>
-                <Button variant="secondary" onClick={() => openRoleEditorForUser(user)}>
-                  Edit Roles
-                </Button>
-              </div>
-            ))}
-            {filteredUsers.length === 0 ? (
-              <div className="rounded-[1.25rem] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-8 text-sm text-[var(--color-text-secondary)]">
-                No members matched that search.
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
       <RoleCatalogModal
         authToken={authToken}
         isOpen={roleCatalogOpen}
@@ -1075,19 +939,6 @@ export function RolesTab({
         privileges={privileges}
         roles={roles}
         showToast={showToast}
-        onRolesChanged={onRolesChanged}
-      />
-
-      <MemberRoleEditorModal
-        authToken={authToken}
-        isOpen={memberRoleEditorOpen}
-        onClose={() => {
-          setMemberRoleEditorOpen(false);
-          setSelectedUser(null);
-        }}
-        roles={roles}
-        showToast={showToast}
-        user={selectedUser}
         onRolesChanged={onRolesChanged}
       />
     </div>

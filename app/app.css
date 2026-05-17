@@ -88,6 +88,37 @@ body {
   color: var(--color-text);
 }
 
+/*
+ * Disable native drag on images / videos / audio across the whole app.
+ *
+ * Why a global rule rather than per-component `draggable={false}`:
+ *   - Avatars, banners, and message attachments are rendered from many
+ *     places (UserCard, UserPanel, ControlPanelAvatar, AttachmentBubble,
+ *     MarkdownRenderer inline images, etc.) and the drag-to-tab gesture
+ *     is annoying everywhere — not selectively useful anywhere.
+ *   - This is a chat client; users dragging a member's avatar into a new
+ *     tab is virtually never what they meant to do.
+ *   - One global rule beats threading a `draggable={false}` prop through
+ *     a dozen components and keeping new media usages in sync.
+ *
+ * `-webkit-user-drag: none` is the canonical Chromium / Electron-friendly
+ * way to disable the drag-start gesture on images and videos. `user-drag`
+ * is the standardized form (not yet shipped widely but harmless to
+ * include for forward-compat). We deliberately don't touch
+ * `pointer-events` — clicks on avatars / attachments still need to open
+ * profile cards / the media lightbox.
+ *
+ * If a future surface DOES need drag (e.g. file upload "drag a tile out
+ * to copy"), opt back in locally with `style={{ WebkitUserDrag: 'auto' }}`
+ * + `draggable={true}`.
+ */
+img,
+video,
+audio {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 /* Core monochrome utility surfaces */
 .pb-surface-0 {
   background-color: var(--color-background);

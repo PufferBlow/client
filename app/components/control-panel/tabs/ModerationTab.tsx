@@ -31,7 +31,11 @@ export function ModerationTab({
 }: {
   showToast: ShowToast;
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<'reports' | 'users' | 'messages'>('reports');
+  // Subtab union expanded: the old "reports" (which silently filtered to
+  // message_report only) is now "reports" = ALL reports of any kind; the
+  // new "message-reports" subtab focuses on message-type reports and
+  // surfaces the reported message content inline.
+  const [activeSubTab, setActiveSubTab] = useState<'reports' | 'message-reports' | 'users' | 'messages'>('reports');
   const [searchTerm, setSearchTerm] = useState('');
   const [reports, setReports] = useState<Report[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -159,11 +163,14 @@ export function ModerationTab({
   const pendingCount = messageReports.filter(r => r.status === 'pending').length;
 
   return (
-    <div className="space-y-6">
-      <div className={controlPanelSectionClass}>
-        <div className="flex items-center space-x-4 mb-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
+      <div className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col")}>
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <button onClick={() => setActiveSubTab('reports')} className={controlPanelSegmentClass(activeSubTab === 'reports')}>
             Reports {pendingCount > 0 && `(${pendingCount})`}
+          </button>
+          <button onClick={() => setActiveSubTab('message-reports')} className={controlPanelSegmentClass(activeSubTab === 'message-reports')}>
+            Message Reports {messageReports.length > 0 && `(${messageReports.length})`}
           </button>
           <button onClick={() => setActiveSubTab('users')} className={controlPanelSegmentClass(activeSubTab === 'users')}>
             Reported Users {reportedUsers.length > 0 && `(${reportedUsers.length})`}
@@ -173,11 +180,14 @@ export function ModerationTab({
           </button>
         </div>
 
-        {/* Reports sub-tab */}
+        {/* All Reports sub-tab: previously filtered to message_report
+            only, which made the "Reports" label misleading -- user
+            reports were nowhere visible. Now shows every report
+            type in one chronological list. */}
         {activeSubTab === 'reports' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-[var(--color-text)]">Reported Messages</h2>
+              <h2 className="text-lg font-medium text-[var(--color-text)]">All Reports</h2>
               <div className="flex items-center space-x-2">
                 <button onClick={loadReports} disabled={reportsLoading} className={controlPanelButtonClass('ghost')}>
                   {reportsLoading ? 'Loading…' : 'Refresh'}
@@ -202,12 +212,13 @@ export function ModerationTab({
             )}
             {!reportsLoading && !reportsError && (
               <div className="space-y-4">
-                {messageReports
+                {reports
                   .filter(report =>
                     searchTerm === '' ||
                     report.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     (report.reporter?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                     (report.sender?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.target_user?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                     (report.description ?? '').toLowerCase().includes(searchTerm.toLowerCase())
                   )
                   .map((report) => (
@@ -215,7 +226,10 @@ export function ModerationTab({
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-2 flex-wrap gap-y-1">
-                            {report.sender && (
+                            <span className="rounded border border-[var(--color-border-secondary)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                              {report.type === 'message_report' ? 'Message' : 'User'}
+                            </span>
+                            {report.type === 'message_report' && report.sender && (
                               <>
                                 <span className="text-sm font-medium text-[var(--color-error)]">Message by</span>
                                 <span
@@ -223,6 +237,18 @@ export function ModerationTab({
                                   className="cursor-pointer text-sm font-medium text-[var(--color-error)] hover:underline"
                                 >
                                   {report.sender.username}
+                                </span>
+                                <span className="text-[var(--color-text-secondary)]">•</span>
+                              </>
+                            )}
+                            {report.type === 'user_report' && report.target_user && (
+                              <>
+                                <span className="text-sm font-medium text-[var(--color-error)]">User</span>
+                                <span
+                                  onClick={(e) => handleOpenUserProfile(report.target_user!.id, report.target_user!.username, e)}
+                                  className="cursor-pointer text-sm font-medium text-[var(--color-error)] hover:underline"
+                                >
+                                  {report.target_user.username}
                                 </span>
                                 <span className="text-[var(--color-text-secondary)]">•</span>
                               </>
@@ -243,18 +269,21 @@ export function ModerationTab({
                             </span>
                           </div>
 
-                          {/* Message IDs */}
-                          <div
-                            className="mb-2 cursor-pointer rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 transition-colors duration-200 hover:bg-[var(--color-hover)]"
-                            onPointerDown={() => handleMessagePointerDown(report.id)}
-                            onPointerUp={handleMessagePointerUp}
-                            onPointerLeave={handleMessagePointerUp}
-                          >
-                            <p className="text-xs text-[var(--color-text-muted)]">
-                              {(report.message_ids ?? []).length} message{(report.message_ids ?? []).length !== 1 ? 's' : ''} reported
-                              {report.channel_ids && report.channel_ids.length > 0 && ` in ${report.channel_ids.length} channel${report.channel_ids.length !== 1 ? 's' : ''}`}
-                            </p>
-                          </div>
+                          {/* Message IDs hint - only for message reports. */}
+                          {report.type === 'message_report' && (report.message_ids ?? []).length > 0 && (
+                            <div
+                              className="mb-2 cursor-pointer rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 transition-colors duration-200 hover:bg-[var(--color-hover)]"
+                              onPointerDown={() => handleMessagePointerDown(report.id)}
+                              onPointerUp={handleMessagePointerUp}
+                              onPointerLeave={handleMessagePointerUp}
+                            >
+                              <p className="text-xs text-[var(--color-text-muted)]">
+                                {(report.message_ids ?? []).length} message{(report.message_ids ?? []).length !== 1 ? 's' : ''} reported
+                                {report.channel_ids && report.channel_ids.length > 0 && ` in ${report.channel_ids.length} channel${report.channel_ids.length !== 1 ? 's' : ''}`}
+                                {' — switch to the Message Reports tab to see the content.'}
+                              </p>
+                            </div>
+                          )}
 
                           <div className="text-xs text-[var(--color-text-secondary)]">
                             {report.category} • {new Date(report.reported_at).toLocaleString()}
@@ -266,6 +295,151 @@ export function ModerationTab({
                       </div>
                       {report.status === 'pending' && (
                         <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'delete')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('danger')}
+                          >
+                            Delete Message
+                          </button>
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'warn')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('secondary')}
+                          >
+                            Warn User
+                          </button>
+                          <button
+                            onClick={() => handleResolveReport(report.id, 'dismiss')}
+                            disabled={resolvingReportId === report.id}
+                            className={controlPanelButtonClass('ghost')}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                {reports.length === 0 && (
+                  <div className="text-center text-[var(--color-text-secondary)] py-8">No reports</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Message Reports sub-tab: surfaces the actual reported
+            message content. Backend can attach `message_excerpts`
+            inline on the report; if it doesn't, we fall back to
+            showing the bare message IDs so a moderator still knows
+            what's being flagged. */}
+        {activeSubTab === 'message-reports' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-medium text-[var(--color-text)]">Message Reports</h2>
+              <input
+                type="text"
+                placeholder="Search messages..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={cx(controlPanelInputClass, "w-64")}
+              />
+            </div>
+
+            {reportsLoading && (
+              <div className="text-center text-[var(--color-text-secondary)] py-8">Loading reports…</div>
+            )}
+            {reportsError && !reportsLoading && (
+              <div className="py-4">
+                <Notice tone="error" message={reportsError} />
+              </div>
+            )}
+            {!reportsLoading && !reportsError && (
+              <div className="space-y-4">
+                {messageReports
+                  .filter(report =>
+                    searchTerm === '' ||
+                    report.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.reporter?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.sender?.username ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.description ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (report.message_excerpts ?? []).some((m) =>
+                      (m.content ?? '').toLowerCase().includes(searchTerm.toLowerCase()),
+                    )
+                  )
+                  .map((report) => (
+                    <div key={report.id} className={controlPanelRowClass}>
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        {report.sender ? (
+                          <>
+                            <ControlPanelAvatar username={report.sender.username} />
+                            <span
+                              onClick={(e) => handleOpenUserProfile(report.sender!.id, report.sender!.username, e)}
+                              className="cursor-pointer text-sm font-medium text-[var(--color-text)] hover:underline"
+                            >
+                              {report.sender.username}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-[var(--color-text-muted)]">Unknown sender</span>
+                        )}
+                        <span className="text-[var(--color-text-secondary)]">•</span>
+                        <span className="text-xs text-[var(--color-text-secondary)]">
+                          {report.category} · {new Date(report.reported_at).toLocaleString()}
+                        </span>
+                        <span
+                          className={`ml-auto rounded px-2 py-1 text-xs font-medium ${
+                            report.status === 'pending'
+                              ? 'bg-[var(--color-warning)] text-[var(--color-on-warning)]'
+                              : 'bg-[var(--color-success)] text-[var(--color-on-success)]'
+                          }`}
+                        >
+                          {report.status}
+                        </span>
+                      </div>
+
+                      {/* Reported message content. When the backend
+                          attaches `message_excerpts` we render each
+                          one as a chat-style bubble with the actual
+                          text. Otherwise the bare IDs are shown so a
+                          moderator can still trace them. */}
+                      {report.message_excerpts && report.message_excerpts.length > 0 ? (
+                        <div className="mb-3 space-y-2">
+                          {report.message_excerpts.map((msg) => (
+                            <div
+                              key={msg.id}
+                              className="rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3"
+                            >
+                              <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                                {msg.channel_name && <span>#{msg.channel_name}</span>}
+                                {msg.sent_at && (
+                                  <span>
+                                    {new Date(msg.sent_at).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="whitespace-pre-wrap break-words text-sm text-[var(--color-text)]">
+                                {msg.content || <span className="italic text-[var(--color-text-muted)]">(no content / attachment-only)</span>}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mb-3 rounded-lg border border-dashed border-[var(--color-border-secondary)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text-muted)]">
+                          {(report.message_ids ?? []).length === 0
+                            ? 'No message references on this report.'
+                            : `Message IDs: ${(report.message_ids ?? []).join(', ')}`}
+                        </div>
+                      )}
+
+                      {report.description && (
+                        <p className="mb-3 text-xs italic text-[var(--color-text-secondary)]">
+                          Reporter note: "{report.description}"
+                        </p>
+                      )}
+
+                      {report.status === 'pending' && (
+                        <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => handleResolveReport(report.id, 'delete')}
                             disabled={resolvingReportId === report.id}

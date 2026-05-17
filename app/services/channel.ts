@@ -74,8 +74,29 @@ export const createChannel = async (channelData: { channel_name: string; is_priv
   });
 };
 
-export const updateChannel = async (_channelId: string, _channelData: Partial<CreateChannelRequest>, _authToken: string): Promise<ApiResponse<Channel>> => {
-  return unsupportedChannelOperation<Channel>('Updating channels');
+export interface UpdateChannelPayload {
+  channel_name?: string;
+  is_private?: boolean;
+}
+
+/**
+ * Update a channel's mutable metadata (name, privacy).
+ *
+ * Note: `channel_type` is intentionally NOT accepted here — switching
+ * a text channel to voice (or vice versa) would orphan messages or
+ * participant rows depending on direction, so the backend rejects it
+ * and the admin UI surfaces channel type as a fixed badge.
+ */
+export const updateChannel = async (
+  channelId: string,
+  payload: UpdateChannelPayload,
+  authToken: string,
+): Promise<ApiResponse<{ status_code: number; message: string; channel_data: Channel }>> => {
+  const apiClient = createApiClient();
+  const body: Record<string, unknown> = { auth_token: authToken };
+  if (payload.channel_name !== undefined) body.channel_name = payload.channel_name;
+  if (payload.is_private !== undefined) body.is_private = payload.is_private;
+  return apiClient.put(`/api/v1/channels/${channelId}/update`, body);
 };
 
 export const deleteChannel = async (channelId: string, authToken: string): Promise<ApiResponse<void>> => {

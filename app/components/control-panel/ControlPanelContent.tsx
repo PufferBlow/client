@@ -11,6 +11,7 @@ import { LogsTab } from "./tabs/LogsTab";
 import { MembersTab } from "./tabs/MembersTab";
 import { ModerationTab } from "./tabs/ModerationTab";
 import { OverviewTab } from "./tabs/OverviewTab";
+import { RecentActivity } from "./RecentActivity";
 import { SecurityTab } from "./tabs/SecurityTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 import { StorageTab } from "./tabs/StorageTab";
@@ -65,12 +66,17 @@ export function ControlPanelContent({
   const activeTabContent = (
     <>
       {activeTab === "overview" && <OverviewTab onSettingsClick={openConfigurationTab} />}
+      {activeTab === "activity" && <RecentActivity />}
       {activeTab === "moderation" && <ModerationTab showToast={showToast} />}
       {activeTab === "members" && (
         <MembersTab
+          authToken={controlPanelAuthToken}
           roles={controlPanelRoles}
           users={controlPanelUsers}
           onOpenRolesTab={() => setActiveTab("roles")}
+          onRolesChanged={async () => {
+            await fetchControlPanelData(controlPanelAuthToken);
+          }}
           showToast={showToast}
         />
       )}
@@ -79,7 +85,6 @@ export function ControlPanelContent({
           authToken={controlPanelAuthToken}
           privileges={controlPanelPrivileges}
           roles={controlPanelRoles}
-          users={controlPanelUsers}
           onRolesChanged={async () => {
             await fetchControlPanelData(controlPanelAuthToken);
           }}

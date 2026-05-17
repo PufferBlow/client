@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { VoiceChannel, type VoiceSessionActions } from "../VoiceChannel";
 import type { Channel } from "../../models";
 import type { RTCMediaQuality } from "../../services/system";
@@ -39,16 +40,91 @@ interface ChannelListProps {
  *   1. channelsError — shows the design's celebratory error card with a
  *      retry button.
  *   2. channels.length === 0 — empty state with a hint to ask an admin.
- *   3. otherwise — text channels grouped first, then voice channels with
- *      live connection state.
+ *   3. otherwise — three collapsible groups: Text, Voice, Private.
  *
- * Text channels show their unread badge, an unsent-draft indicator, and a
- * lock glyph for private channels. Voice channels delegate their entire
- * row to <VoiceChannel/> which owns connect/disconnect lifecycle; this
- * component only translates VoiceChannel's onConnectionStateChange into
- * an update on `currentVoiceChannel` so the user panel + chat header
- * see the active call.
+ * Channels show a binary unread dot (no count), an unsent-draft pen
+ * icon, and a lock glyph for private channels (in the private group
+ * the lock is redundant; we keep it on the row itself for consistency).
+ * Voice channels delegate their entire row to <VoiceChannel/> which
+ * owns connect/disconnect lifecycle; this component only translates
+ * VoiceChannel's onConnectionStateChange into an update on
+ * `currentVoiceChannel` so the user panel + chat header see the
+ * active call.
+ *
+ * Group collapse state lives in component state (not localStorage) so
+ * collapsed groups reopen on app restart -- intentional default since
+ * a user who collapsed a group probably wants to see new content
+ * surface next session, not stay hidden.
  */
+type GroupKey = "text" | "voice" | "private";
+
+function GroupHeader({
+  label,
+  count,
+  isCollapsed,
+  onToggle,
+}: {
+  label: string;
+  count: number;
+  isCollapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="group/grp flex w-full items-center px-2 mb-1 text-left transition-colors hover:text-[var(--color-text)]"
+      aria-expanded={!isCollapsed}
+    >
+      <svg
+        className={`w-3 h-3 mr-1 text-[var(--color-text-muted)] transition-transform duration-150 ${
+          isCollapsed ? "-rotate-90" : ""
+        }`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+      <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide group-hover/grp:text-[var(--color-text-secondary)]">
+        {label}
+      </span>
+      <span className="ml-auto text-[10px] font-mono text-[var(--color-text-muted)]/60">
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function ChannelGroup({
+  groupKey,
+  label,
+  channels,
+  collapsed,
+  onToggle,
+  renderRow,
+}: {
+  groupKey: GroupKey;
+  label: string;
+  channels: Channel[];
+  collapsed: Record<GroupKey, boolean>;
+  onToggle: (k: GroupKey) => void;
+  renderRow: (channel: Channel) => ReactNode;
+}) {
+  if (channels.length === 0) return null;
+  const isCollapsed = collapsed[groupKey];
+  return (
+    <div className="mb-2">
+      <GroupHeader
+        label={label}
+        count={channels.length}
+        isCollapsed={isCollapsed}
+        onToggle={() => onToggle(groupKey)}
+      />
+      {!isCollapsed && <div className="space-y-0.5">{channels.map(renderRow)}</div>}
+    </div>
+  );
+}
 export function ChannelList({
   channels,
   channelsError,
@@ -79,90 +155,92 @@ export function ChannelList({
     );
   }
 
-  const textChannels = channels.filter((c) => c.channel_type !== "voice");
-  const voiceChannels = channels.filter((c) => c.channel_type === "voice");
+  // Three groups: private is its own bucket (regardless of channel_type),
+  // then text vs voice for the rest. A channel that's both `is_private`
+  // AND voice goes into Private -- the "private" classification is more
+  // informative for sidebar wayfinding than its medium.
+  const privateChannels = channels.filter((c) => c.is_private);
+  const textChannels = channels.filter((c) => !c.is_private && c.channel_type !== "voice");
+  const voiceChannels = channels.filter((c) => !c.is_private && c.channel_type === "voice");
+
+  const [collapsed, setCollapsed] = useState<Record<GroupKey, boolean>>({
+    text: false,
+    voice: false,
+    private: false,
+  });
+  const toggleGroup = (k: GroupKey) =>
+    setCollapsed((prev) => ({ ...prev, [k]: !prev[k] }));
+
+  const renderTextRow = (channel: Channel) => (
+    <TextChannelRow
+      key={channel.channel_id}
+      channel={channel}
+      isSelected={selectedChannel?.channel_id === channel.channel_id}
+      hasUnread={(unreadCountsByChannel[channel.channel_id] || 0) > 0}
+      hasDraft={getMessageDraft(channel.channel_id).trim().length > 0}
+      onSelect={onChannelSelect}
+      onContextMenu={onChannelContextMenu}
+    />
+  );
+  const renderVoiceRow = (channel: Channel) => (
+    <VoiceChannel
+      key={channel.channel_id}
+      channelId={channel.channel_id}
+      channelName={channel.channel_name}
+      isConnected={currentVoiceChannel?.channelId === channel.channel_id}
+      isSelected={selectedChannel?.channel_id === channel.channel_id}
+      onSelect={() => onChannelSelect(channel)}
+      mediaQuality={rtcMediaQuality}
+      onToggleConnection={() => {}}
+      onConnectionStateChange={({ connected, channelId, channelName, participants }) => {
+        if (connected) {
+          setCurrentVoiceChannel({
+            channelId,
+            channelName,
+            participants: participants.length,
+          });
+          return;
+        }
+        setCurrentVoiceChannel((prev) =>
+          prev?.channelId === channelId ? null : prev,
+        );
+      }}
+      onVoiceSessionReady={onVoiceSessionReady}
+      resolveAvatarUrl={resolveAvatarUrl}
+    />
+  );
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-2 py-4">
-        <div className="flex items-center px-2 mb-1">
-          <svg
-            className="w-3 h-3 text-[var(--color-text-secondary)] mr-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-          <span className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-            Channels
-          </span>
-        </div>
-
-        {textChannels.length > 0 && (
-          <div className="space-y-0.5">
-            {textChannels.map((channel) => (
-              <TextChannelRow
-                key={channel.channel_id}
-                channel={channel}
-                isSelected={selectedChannel?.channel_id === channel.channel_id}
-                unreadCount={unreadCountsByChannel[channel.channel_id] || 0}
-                hasDraft={getMessageDraft(channel.channel_id).trim().length > 0}
-                onSelect={onChannelSelect}
-                onContextMenu={onChannelContextMenu}
-              />
-            ))}
-          </div>
-        )}
-
-        {voiceChannels.length > 0 && (
-          <div className="mt-3">
-            <div className="px-2 mb-1">
-              <span className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">
-                Voice Channels
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              {voiceChannels.map((channel) => (
-                <VoiceChannel
-                  key={channel.channel_id}
-                  channelId={channel.channel_id}
-                  channelName={channel.channel_name}
-                  isConnected={currentVoiceChannel?.channelId === channel.channel_id}
-                  isSelected={selectedChannel?.channel_id === channel.channel_id}
-                  onSelect={() => onChannelSelect(channel)}
-                  mediaQuality={rtcMediaQuality}
-                  onToggleConnection={() => {}}
-                  onConnectionStateChange={({
-                    connected,
-                    channelId,
-                    channelName,
-                    participants,
-                  }) => {
-                    if (connected) {
-                      setCurrentVoiceChannel({
-                        channelId,
-                        channelName,
-                        participants: participants.length,
-                      });
-                      return;
-                    }
-                    setCurrentVoiceChannel((prev) =>
-                      prev?.channelId === channelId ? null : prev,
-                    );
-                  }}
-                  onVoiceSessionReady={onVoiceSessionReady}
-                  resolveAvatarUrl={resolveAvatarUrl}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        <ChannelGroup
+          groupKey="text"
+          label="Text Channels"
+          channels={textChannels}
+          collapsed={collapsed}
+          onToggle={toggleGroup}
+          renderRow={renderTextRow}
+        />
+        <ChannelGroup
+          groupKey="voice"
+          label="Voice Channels"
+          channels={voiceChannels}
+          collapsed={collapsed}
+          onToggle={toggleGroup}
+          renderRow={renderVoiceRow}
+        />
+        <ChannelGroup
+          groupKey="private"
+          label="Private Channels"
+          channels={privateChannels}
+          collapsed={collapsed}
+          onToggle={toggleGroup}
+          renderRow={(channel) =>
+            channel.channel_type === "voice"
+              ? renderVoiceRow(channel)
+              : renderTextRow(channel)
+          }
+        />
       </div>
     </div>
   );
@@ -171,14 +249,14 @@ export function ChannelList({
 function TextChannelRow({
   channel,
   isSelected,
-  unreadCount,
+  hasUnread,
   hasDraft,
   onSelect,
   onContextMenu,
 }: {
   channel: Channel;
   isSelected: boolean;
-  unreadCount: number;
+  hasUnread: boolean;
   hasDraft: boolean;
   onSelect: (channel: Channel) => void;
   onContextMenu: (event: React.MouseEvent, channel: Channel) => void;
@@ -192,14 +270,26 @@ function TextChannelRow({
       onContextMenu={(e) => onContextMenu(e, channel)}
     >
       <span className="text-[var(--color-text-secondary)] mr-2">#</span>
-      <span className="text-[var(--color-text-secondary)] text-sm break-words overflow-wrap-anywhere flex-1">
+      <span
+        className={`text-sm break-words overflow-wrap-anywhere flex-1 ${
+          hasUnread && !isSelected
+            ? "text-[var(--color-text)] font-medium"
+            : "text-[var(--color-text-secondary)]"
+        }`}
+      >
         {channel.channel_name}
       </span>
       <div className="flex items-center ml-auto">
-        {unreadCount > 0 && (
-          <span className="mr-1 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-on-primary)]">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
+        {/* Binary unread indicator -- a small primary-color dot, no
+            count. Hidden when the channel is currently selected (no
+            reason to mark unread on the channel the user is reading)
+            and cleared on `handleChannelSelect` in DashboardPage so
+            it doesn't linger after the user opens the channel. */}
+        {hasUnread && !isSelected && (
+          <span
+            className="mr-1 h-2 w-2 rounded-full bg-[var(--color-primary)]"
+            aria-label="Unread messages"
+          />
         )}
         {hasDraft && (
           <div className="flex items-center mr-1" title="Has unsent message">
@@ -239,50 +329,56 @@ function TextChannelRow({
 }
 
 function ChannelsErrorState({ error }: { error: string }) {
+  // Calm, control-panel-style error card. The previous version had
+  // a tilted red gradient slab with a `animate-ping` halo and a
+  // gradient retry button -- those drew far more attention than the
+  // surrounding chrome and stuck out as "alert UI" against the
+  // rest of the design. This card uses the same `pb-status-danger`
+  // tone tokens the other failure surfaces (Logs error,
+  // BlockedIPs error, Control-panel unavailable) already rely on,
+  // so the channel sidebar fits into the rest of the app's
+  // visual language.
   return (
-    <div className="flex flex-col items-center justify-center min-h-96 px-6 py-12">
-      <div className="relative">
-        <div className="absolute inset-0 scale-150 rounded-full bg-gradient-to-br from-[var(--color-error)]/20 to-[var(--color-warning)]/20 blur-xl"></div>
-        <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--color-error)] to-[color:color-mix(in_srgb,var(--color-error)_78%,var(--color-background))] shadow-2xl transition-transform duration-300 transform rotate-3 hover:rotate-0">
-          <svg
-            className="w-10 h-10 text-[var(--color-on-error)] drop-shadow-lg"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.6-.833-2.37 0L3.732 15.5c-.77.833.192 2.5 1.732 2.5z"
-            />
-          </svg>
-          <div className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-[var(--color-warning)] animate-ping"></div>
-          <div className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-[var(--color-warning)]"></div>
-        </div>
+    <div className="flex flex-col items-center justify-center px-4 py-12">
+      <div
+        className="flex h-12 w-12 items-center justify-center rounded-full border"
+        style={{
+          background: "color-mix(in srgb, var(--color-error) 12%, transparent)",
+          borderColor: "color-mix(in srgb, var(--color-error) 35%, transparent)",
+          color: "var(--color-error)",
+        }}
+      >
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
       </div>
-      <div className="text-center max-w-md mb-8">
-        <h3 className="text-xl font-bold text-[var(--color-text)] mb-3 drop-shadow-sm">
-          Channels Unavailable
-        </h3>
-        <p className="text-[var(--color-text-secondary)] leading-relaxed mb-4">{error}</p>
-      </div>
-      <div className="flex items-center justify-center">
-        <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-primary-hover)] hover:from-[var(--color-primary)] hover:to-[var(--color-primary-hover)] text-[var(--color-on-primary)] font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-200 flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <span>Retry</span>
-        </button>
-      </div>
+
+      <h3 className="mt-4 text-sm font-semibold text-[var(--color-text)]">
+        Channels unavailable
+      </h3>
+      <p className="mt-1 max-w-xs text-center text-xs text-[var(--color-text-secondary)]">
+        {error}
+      </p>
+
+      <button
+        onClick={() => window.location.reload()}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        Retry
+      </button>
     </div>
   );
 }

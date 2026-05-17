@@ -18,6 +18,7 @@ import { logger } from "../../../utils/logger";
 import type { ShowToast } from "../../Toast";
 import { Notice } from "../../ui/Notice";
 import {
+  cx,
   controlPanelSectionClass,
   controlPanelInputClass,
   controlPanelTextAreaClass,
@@ -438,8 +439,8 @@ export function SettingsTab({
   }
 
   return (
-    <div className="space-y-6">
-      <div className={controlPanelSectionClass}>
+    <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
+      <div className={cx(controlPanelSectionClass, "flex min-h-0 flex-1 flex-col")}>
         <h2 className="mb-6 text-lg font-medium text-[var(--color-text)]">Server Settings</h2>
 
         {error && (
@@ -448,13 +449,20 @@ export function SettingsTab({
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col space-y-4">
           <div className="flex flex-wrap gap-2">
             <button className={controlPanelSegmentClass(activeSettingsSubTab === 'general')} onClick={() => setActiveSettingsSubTab('general')}>General</button>
             <button className={controlPanelSegmentClass(activeSettingsSubTab === 'appearance')} onClick={() => setActiveSettingsSubTab('appearance')}>Appearance</button>
             <button className={controlPanelSegmentClass(activeSettingsSubTab === 'files')} onClick={() => setActiveSettingsSubTab('files')}>File Uploads</button>
             <button className={controlPanelSegmentClass(activeSettingsSubTab === 'runtime')} onClick={() => setActiveSettingsSubTab('runtime')}>Runtime</button>
           </div>
+          {/* Scrollable subtab body. Wrapping the four panels in a
+              single `flex-1 overflow-y-auto` container makes the
+              SettingsTab fill the available height: the subtab
+              segmented control stays pinned at the top of the card
+              while the long form scrolls beneath it instead of
+              expanding the whole page. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
           {activeSettingsSubTab === 'general' && (
           <div className="space-y-4">
             <h3 className="text-md font-medium text-[var(--color-text)]">Basic Information</h3>
@@ -1027,6 +1035,8 @@ export function SettingsTab({
               </div>
             </div>
           )}
+          </div>
+          {/* /scrollable subtab body */}
 
           <div className="pt-4 border-t border-[var(--color-border)]">
             <button

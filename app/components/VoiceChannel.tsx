@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronRight, MicOff, Volume2 } from 'lucide-react';
 
 import { VoiceParticipantContextMenu } from './VoiceParticipantContextMenu';
 
@@ -715,40 +715,12 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
             </div>
           )}
 
-          {/* Controls when connected */}
-          {isConnected && (
-            <div className="flex items-center gap-1 pt-1 px-1">
-              <button
-                onClick={(e) => { e.stopPropagation(); void toggleMute(); }}
-                className={`flex items-center justify-center w-6 h-6 rounded transition-colors border border-[var(--color-border)] ${
-                  isMuted
-                    ? 'bg-[var(--color-error)] text-[var(--color-on-error)]'
-                    : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-                }`}
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); void toggleDeafen(); }}
-                className={`flex items-center justify-center w-6 h-6 rounded transition-colors border border-[var(--color-border)] ${
-                  isDeafened
-                    ? 'bg-[var(--color-error)] text-[var(--color-on-error)]'
-                    : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
-                }`}
-                title={isDeafened ? 'Undeafen' : 'Deafen'}
-              >
-                <VolumeX className="w-3 h-3" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); void handleLeaveVoiceChannel(); }}
-                className="flex items-center justify-center w-6 h-6 rounded bg-[var(--color-error)]/80 text-[var(--color-on-error)] hover:bg-[var(--color-error)] transition-colors border border-[var(--color-border)]"
-                title="Leave voice channel"
-              >
-                <PhoneOff className="w-3 h-3" />
-              </button>
-            </div>
-          )}
+          {/* Sidebar in-call controls fully removed. Mute / Deafen /
+              Leave all live in the VoiceCallUI control bar in the
+              main panel — keeping any of them here meant two
+              authoritative places for the same action. The channel
+              row itself plus the UserPanel still provide separate
+              disconnect affordances when those are needed. */}
         </div>
       )}
 

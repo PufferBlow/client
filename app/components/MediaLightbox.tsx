@@ -197,12 +197,16 @@ export function MediaLightbox({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] overflow-hidden bg-[#07090d] text-white">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(119,198,255,0.18),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(255,163,92,0.14),transparent_32%),linear-gradient(180deg,rgba(7,9,13,0.92),rgba(3,5,9,0.98))]" />
-        <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:32px_32px]" />
-      </div>
-
+    // Minimal lightbox: flat dark scrim, simple top bar, image fills
+    // the remaining space. No decorative gradients, grids, or pill
+    // badges -- everything informational is collapsed into one line
+    // (filename + size + type). Action buttons match the rest of the
+    // app's icon-button style (primary-color download to match the
+    // file-attachment download button; subtle ghost for close + zoom).
+    <div className="fixed inset-0 z-[80] overflow-hidden bg-black/95 text-white">
+      {/* Full-bleed click-out-to-close backdrop. Sits below the content
+          layer (z-0) so the toolbar / image / nav arrows above receive
+          their own clicks normally. */}
       <button
         type="button"
         aria-label="Close media preview"
@@ -210,106 +214,96 @@ export function MediaLightbox({
         onClick={onClose}
       />
 
-      <div className="relative z-10 flex h-full flex-col p-3 md:p-5">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 md:gap-4">
-          <div className="flex flex-col gap-3 rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,23,31,0.92),rgba(8,11,17,0.84))] px-4 py-4 shadow-[0_20px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl md:flex-row md:items-start md:justify-between md:px-5">
-            <div className="min-w-0 flex-1">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/68">
-                  {mediaLabel}
-                </span>
-                {attachments.length > 1 && (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/52">
-                    {currentIndex + 1} of {attachments.length}
-                  </span>
-                )}
-                {readableSize && (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
-                    {readableSize}
-                  </span>
-                )}
-              </div>
-
-              <h2 className="truncate text-base font-semibold tracking-[0.01em] text-white/92 md:text-lg">
-                {attachment.filename || "Media attachment"}
-              </h2>
-
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/48">
-                <span>Esc to close</span>
-                {attachments.length > 1 && <span>Arrow keys to browse</span>}
-                {image && <span>Double click or +/- to zoom</span>}
-                {readableType && <span className="font-mono uppercase tracking-[0.08em]">{readableType}</span>}
-              </div>
+      <div className="relative z-10 flex h-full flex-col">
+        {/* Top toolbar: filename + size on the left, zoom (images only)
+            + download + close on the right. One row, no badges, no
+            keyboard hints. The bar is transparent so the image reads
+            edge-to-edge; only the buttons have their own backgrounds. */}
+        <div className="flex flex-shrink-0 items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-white/90" title={attachment.filename || undefined}>
+              {attachment.filename || "Media attachment"}
             </div>
-
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
-              {image && (
-                <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl text-white/64 transition-colors hover:bg-white/10 hover:text-white"
-                    title="Zoom out (-)"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetImageView}
-                    className="min-w-[4.25rem] rounded-xl px-3 py-2 text-center text-xs font-semibold tracking-[0.12em] text-white/72 transition-colors hover:bg-white/10 hover:text-white"
-                    title="Reset zoom"
-                  >
-                    {Math.round(zoom * 100)}%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setZoom((prev) => Math.min(4, Number((prev + 0.25).toFixed(2))))}
-                    className="flex h-10 w-10 items-center justify-center rounded-xl text-white/64 transition-colors hover:bg-white/10 hover:text-white"
-                    title="Zoom in (+)"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-
-              <a
-                href={resolvedUrl}
-                download={attachment.filename || undefined}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-medium text-white/84 transition-colors hover:bg-white/14 hover:text-white"
-                title="Download"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                <span className="hidden sm:inline">Download</span>
-              </a>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-medium text-white/84 transition-colors hover:bg-white/14 hover:text-white"
-                title="Close (Esc)"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span className="hidden sm:inline">Close</span>
-              </button>
+            <div className="mt-0.5 text-xs text-white/45">
+              <span className="uppercase tracking-wide">{mediaLabel}</span>
+              {readableSize && <span> · {readableSize}</span>}
+              {readableType && <span className="font-mono"> · {readableType}</span>}
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {image && (
+              <div className="flex items-center rounded-md bg-white/10 text-white">
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-l-md text-white/75 transition-colors hover:bg-white/10 hover:text-white"
+                  title="Zoom out (-)"
+                  aria-label="Zoom out"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={resetImageView}
+                  className="px-3 text-xs font-medium tabular-nums text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+                  title="Reset zoom"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.min(4, Number((prev + 0.25).toFixed(2))))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-r-md text-white/75 transition-colors hover:bg-white/10 hover:text-white"
+                  title="Zoom in (+)"
+                  aria-label="Zoom in"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            {/* Primary-color download icon button -- same visual as the
+                download button on file/audio attachment bubbles. */}
+            <a
+              href={resolvedUrl}
+              download={attachment.filename || undefined}
+              className="pb-focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+              title="Download"
+              aria-label="Download"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </a>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="pb-focus-ring inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/10 text-white/85 transition-colors hover:bg-white/16 hover:text-white"
+              title="Close (Esc)"
+              aria-label="Close"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
 
-        <div className="relative z-10 mx-auto mt-3 flex min-h-0 w-full max-w-[1440px] flex-1 items-center justify-center md:mt-4">
+        {/* Image / video viewport. Fills all remaining vertical space.
+            No decorative chrome -- just the content and its navigation. */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
           {canGoPrevious && (
             <button
               type="button"
               onClick={() => onChangeIndex(currentIndex - 1)}
-              className="absolute left-2 top-1/2 z-20 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(17,24,32,0.92),rgba(8,11,17,0.88))] text-white/78 shadow-[0_16px_48px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all hover:border-white/20 hover:text-white md:flex"
+              className="absolute left-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/85 transition-colors hover:bg-white/16 hover:text-white md:flex"
               aria-label="Previous media"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -322,7 +316,7 @@ export function MediaLightbox({
             <button
               type="button"
               onClick={() => onChangeIndex(currentIndex + 1)}
-              className="absolute right-2 top-1/2 z-20 hidden h-14 w-14 -translate-y-1/2 items-center justify-center rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(17,24,32,0.92),rgba(8,11,17,0.88))] text-white/78 shadow-[0_16px_48px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all hover:border-white/20 hover:text-white md:flex"
+              className="absolute right-3 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/85 transition-colors hover:bg-white/16 hover:text-white md:flex"
               aria-label="Next media"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -331,135 +325,129 @@ export function MediaLightbox({
             </button>
           )}
 
-          <div className="relative flex h-full w-full min-h-0 items-center justify-center overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(11,15,22,0.94),rgba(7,10,15,0.98))] shadow-[0_30px_100px_rgba(0,0,0,0.5)]">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(119,198,255,0.12),transparent_28%),radial-gradient(circle_at_bottom,rgba(255,163,92,0.08),transparent_24%)]" />
-            <div className="relative flex h-full w-full min-h-0 items-center justify-center overflow-hidden p-3 md:p-6">
-              {image ? (
-                <div
-                  className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] border border-white/6 bg-[rgba(255,255,255,0.02)]"
-                  onWheel={handleWheel}
+          {image ? (
+            <div
+              className="flex h-full w-full items-center justify-center overflow-hidden"
+              onWheel={handleWheel}
+            >
+              <img
+                src={resolvedUrl}
+                alt={attachment.filename || "Image attachment"}
+                className={`max-h-full max-w-full select-none object-contain transition-transform duration-150 ${zoom > 1 ? "cursor-grab" : "cursor-zoom-in"} ${isDragging ? "cursor-grabbing" : ""}`}
+                style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={() => setIsDragging(false)}
+                onDoubleClick={() => (zoom > 1 ? resetImageView() : setZoom(2))}
+              />
+            </div>
+          ) : video ? (
+            <div className="flex h-full w-full items-center justify-center">
+              <VideoPlayer
+                src={resolvedUrl}
+                filename={attachment.filename}
+                className="max-h-full w-full max-w-6xl"
+                autoPlay
+              />
+            </div>
+          ) : (
+            <div className="flex max-w-md flex-col items-center px-8 py-10 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-md bg-white/10">
+                <svg className="h-7 w-7 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 11h10M7 15h6M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" />
+                </svg>
+              </div>
+              <p className="text-base font-medium text-white/90">Preview unavailable</p>
+              <p className="mt-1 text-sm text-white/55">
+                This attachment type doesn't support fullscreen preview. Use the download button to save it.
+              </p>
+            </div>
+          )}
+
+          {/* Mobile-only inline nav. The desktop side arrows are
+              positioned absolutely above; below the `md` breakpoint
+              we collapse to a compact prev/index/next pill at the
+              bottom of the viewport. */}
+          {(canGoPrevious || canGoNext) && (
+            <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/10 px-1.5 py-1 text-xs text-white/85 md:hidden">
+              {canGoPrevious && (
+                <button
+                  type="button"
+                  onClick={() => onChangeIndex(currentIndex - 1)}
+                  className="rounded-full px-3 py-1 transition-colors hover:bg-white/15"
+                  aria-label="Previous media"
                 >
-                  <img
-                    src={resolvedUrl}
-                    alt={attachment.filename || "Image attachment"}
-                    className={`max-h-full max-w-full select-none object-contain transition-transform duration-150 ${zoom > 1 ? "cursor-grab" : "cursor-zoom-in"} ${isDragging ? "cursor-grabbing" : ""}`}
-                    style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerCancel={() => setIsDragging(false)}
-                    onDoubleClick={() => (zoom > 1 ? resetImageView() : setZoom(2))}
-                  />
-                </div>
-              ) : video ? (
-                <div className="flex h-full w-full items-center justify-center rounded-[24px] border border-white/6 bg-[rgba(255,255,255,0.02)] p-1 md:p-3">
-                  <VideoPlayer
-                    src={resolvedUrl}
-                    filename={attachment.filename}
-                    className="max-h-full w-full max-w-6xl"
-                    autoPlay
-                  />
-                </div>
-              ) : (
-                <div className="mx-auto flex max-w-md flex-col items-center rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,28,0.94),rgba(8,11,17,0.9))] px-8 py-10 text-center shadow-[0_18px_48px_rgba(0,0,0,0.38)]">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/8">
-                    <svg className="h-8 w-8 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 11h10M7 15h6M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" />
-                    </svg>
-                  </div>
-                  <p className="text-base font-semibold text-white/88">Preview unavailable</p>
-                  <p className="mt-2 text-sm text-white/52">
-                    This attachment type does not support fullscreen preview, but you can still download it.
-                  </p>
-                </div>
+                  Prev
+                </button>
+              )}
+              <span className="px-2 tabular-nums">
+                {currentIndex + 1}/{attachments.length}
+              </span>
+              {canGoNext && (
+                <button
+                  type="button"
+                  onClick={() => onChangeIndex(currentIndex + 1)}
+                  className="rounded-full px-3 py-1 transition-colors hover:bg-white/15"
+                  aria-label="Next media"
+                >
+                  Next
+                </button>
               )}
             </div>
-
-            {(canGoPrevious || canGoNext) && (
-              <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-[rgba(9,12,18,0.72)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/55 backdrop-blur-xl md:hidden">
-                {canGoPrevious && (
-                  <button
-                    type="button"
-                    onClick={() => onChangeIndex(currentIndex - 1)}
-                    className="rounded-full px-2 py-1 transition-colors hover:bg-white/10 hover:text-white"
-                    aria-label="Previous media"
-                  >
-                    Prev
-                  </button>
-                )}
-                <span>
-                  {currentIndex + 1}/{attachments.length}
-                </span>
-                {canGoNext && (
-                  <button
-                    type="button"
-                    onClick={() => onChangeIndex(currentIndex + 1)}
-                    className="rounded-full px-2 py-1 transition-colors hover:bg-white/10 hover:text-white"
-                    aria-label="Next media"
-                  >
-                    Next
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
+        {/* Compact thumbnail strip. No "Filmstrip" / "Browse attachments"
+            captions -- the strip itself is the affordance. Smaller
+            tiles (14x20 vs 16x24) so it doesn't dominate the bottom. */}
         {mediaAttachments.length > 1 && (
-          <div className="relative z-10 mx-auto mt-3 w-full max-w-[1440px] md:mt-4">
-            <div className="flex items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,16,23,0.86),rgba(7,10,15,0.8))] px-3 py-3 shadow-[0_18px_48px_rgba(0,0,0,0.32)] backdrop-blur-xl">
-              <div className="hidden min-w-0 flex-1 text-xs uppercase tracking-[0.22em] text-white/42 md:block">
-                Filmstrip
-              </div>
-              <div className="flex flex-1 justify-start gap-2 overflow-x-auto md:justify-center">
-                {attachments.map((item, index) => {
-                  const itemUrl = resolveAttachmentUrl(item.url);
-                  const itemIsImage = isImageAttachment(item);
-                  const itemIsVideo = isVideoAttachment(item);
-                  const isActive = index === currentIndex;
+          <div className="flex flex-shrink-0 justify-center gap-2 overflow-x-auto px-4 pb-4">
+            {attachments.map((item, index) => {
+              const itemUrl = resolveAttachmentUrl(item.url);
+              const itemIsImage = isImageAttachment(item);
+              const itemIsVideo = isVideoAttachment(item);
+              const isActive = index === currentIndex;
 
-                  return (
-                    <button
-                      key={`${item.url}-${index}`}
-                      type="button"
-                      onClick={() => onChangeIndex(index)}
-                      className={`group relative h-16 w-24 shrink-0 overflow-hidden rounded-2xl border transition-all ${
-                        isActive
-                          ? "border-white/40 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
-                          : "border-white/10 opacity-55 hover:border-white/20 hover:opacity-100"
-                      }`}
-                      title={item.filename || `Attachment ${index + 1}`}
-                    >
-                      {itemIsImage ? (
-                        <img
-                          src={itemUrl}
-                          alt={item.filename || `Attachment ${index + 1}`}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      ) : itemIsVideo ? (
-                        <>
-                          <video src={itemUrl} muted preload="metadata" className="h-full w-full object-cover" />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-                            <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-white/8 px-2 text-center text-[10px] text-white/62">
-                          {item.filename || "File"}
-                        </div>
-                      )}
-                      <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/45 to-transparent" />
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="hidden min-w-0 flex-1 justify-end text-right text-xs uppercase tracking-[0.22em] text-white/38 md:flex">
-                Browse attachments
-              </div>
-            </div>
+              return (
+                <button
+                  key={`${item.url}-${index}`}
+                  type="button"
+                  onClick={() => onChangeIndex(index)}
+                  className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-md transition-all ${
+                    isActive
+                      ? "ring-2 ring-[var(--color-primary)]"
+                      : "opacity-55 hover:opacity-100"
+                  }`}
+                  title={item.filename || `Attachment ${index + 1}`}
+                  aria-label={`Open attachment ${index + 1}`}
+                  aria-current={isActive ? "true" : undefined}
+                >
+                  {itemIsImage ? (
+                    <img
+                      src={itemUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : itemIsVideo ? (
+                    <>
+                      <video src={itemUrl} muted preload="metadata" className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-white/10 px-1 text-center text-[10px] text-white/60">
+                      File
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

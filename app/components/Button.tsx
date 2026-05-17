@@ -27,12 +27,17 @@ const variantClasses: Record<ButtonVariant, string> = {
     "border pb-border bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-secondary)]",
   ghost:
     "border border-transparent bg-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+  // `danger` / `warning` / `success` used to be monochrome (gray surface
+  // with same `--color-text`) which made destructive actions look
+  // identical to neutral ones. Now they use the brand error/warning/
+  // success tokens directly so a "Delete" or "Confirm Ban" button
+  // reads as destructive at a glance.
   danger:
-    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
+    "border border-[var(--color-error)] bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_85%,black)]",
   warning:
-    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
+    "border border-[var(--color-warning)] bg-[var(--color-warning)] text-[var(--color-on-warning,var(--color-background))] hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)]",
   success:
-    "border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-hover)]",
+    "border border-[var(--color-success)] bg-[var(--color-success)] text-[var(--color-on-success,var(--color-background))] hover:bg-[color-mix(in_srgb,var(--color-success)_85%,black)]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

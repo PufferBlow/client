@@ -12,6 +12,13 @@ export function useSettingsAudio({
 }) {
   const [micVolume, setMicVolume] = useState(80);
   const [speakerVolume, setSpeakerVolume] = useState(80);
+  // Global playback volume applied to audio attachments in the message
+  // stream (the inline player in AttachmentBubble). Separate from
+  // speakerVolume because that one drives the live voice-call mix --
+  // mixing those would mean changing one accidentally affects the
+  // other. Persisted in the same localStorage blob so a single
+  // settings page can manage everything audio-related.
+  const [attachmentVolume, setAttachmentVolume] = useState(100);
   const [isTestingMicrophone, setIsTestingMicrophone] = useState(false);
   const [isTestingSpeakers, setIsTestingSpeakers] = useState(false);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -62,6 +69,14 @@ export function useSettingsAudio({
       setEchoCancellation(audioSettings.echoCancellation ?? true);
       setAutoGainControl(audioSettings.autoGainControl ?? true);
       setAudioQuality(audioSettings.audioQuality || "better");
+      // `attachmentVolume` may be missing in pre-migration blobs --
+      // default to 100 (unattenuated) rather than 0 so existing users
+      // don't suddenly play attachments at silence.
+      if (typeof audioSettings.attachmentVolume === "number") {
+        setAttachmentVolume(
+          Math.min(100, Math.max(0, audioSettings.attachmentVolume)),
+        );
+      }
     } catch (error) {
       logger.ui.warn("Failed to load saved audio settings", {
         error: error instanceof Error ? error.message : String(error),
@@ -81,6 +96,7 @@ export function useSettingsAudio({
         selectedOutputDevice,
         micVolume,
         speakerVolume,
+        attachmentVolume,
         sensitivity,
         voiceActivityMode,
         pttKey,
@@ -104,6 +120,7 @@ export function useSettingsAudio({
     selectedOutputDevice,
     micVolume,
     speakerVolume,
+    attachmentVolume,
     sensitivity,
     voiceActivityMode,
     pttKey,
@@ -413,6 +430,8 @@ export function useSettingsAudio({
     setMicVolume,
     speakerVolume,
     setSpeakerVolume,
+    attachmentVolume,
+    setAttachmentVolume,
     isTestingMicrophone,
     setIsTestingMicrophone,
     isTestingSpeakers,

@@ -24,6 +24,8 @@ export function AudioTab({ audio }: AudioTabProps) {
     micVolume,
     setMicVolume,
     speakerVolume,
+    attachmentVolume,
+    setAttachmentVolume,
     setSpeakerVolume,
     isTestingMicrophone,
     setIsTestingMicrophone,
@@ -415,6 +417,40 @@ export function AudioTab({ audio }: AudioTabProps) {
             <ModernSlider
               value={speakerVolume}
               onChange={setSpeakerVolume}
+              min={0}
+              max={100}
+              size="large"
+              color="from-[var(--color-primary)] to-[var(--color-accent)]"
+            />
+
+            <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-3">
+              <span>Muted</span>
+              <span>Moderate</span>
+              <span>Max</span>
+            </div>
+          </div>
+
+          {/* Audio Attachment Volume -- global playback level for the
+              inline audio players in the message stream. Independent of
+              voice-call output so adjusting one doesn't affect the
+              other. The per-player slider in AttachmentBubble writes to
+              the same setting, so changes anywhere update everywhere. */}
+          <div className="bg-[var(--color-background)] rounded-xl p-6 border border-[var(--color-border)] shadow-sm">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 bg-[var(--color-primary)]/10 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text)]">Audio Attachment Volume</h3>
+                <p className="text-sm text-[var(--color-text-secondary)]">Default playback level for audio files shared in chat</p>
+              </div>
+            </div>
+
+            <ModernSlider
+              value={attachmentVolume}
+              onChange={setAttachmentVolume}
               min={0}
               max={100}
               size="large"

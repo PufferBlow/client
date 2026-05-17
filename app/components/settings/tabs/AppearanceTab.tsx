@@ -15,8 +15,26 @@
  * tab doesn't need to know that the rename happens in a Modal at
  * the page level.
  */
+import { useEffect, useState } from "react";
 import { Button } from "../../Button";
+import { ModernToggle } from "../../AudioControls";
 import { themePresets, useTheme } from "../../ThemeProvider";
+
+/**
+ * Subset of `window.electron` we depend on for the hardware-acceleration
+ * toggle. The full bridge type lives elsewhere; we duplicate just these
+ * two methods so the tab compiles cleanly in non-Electron environments
+ * (web build) where `window.electron` is undefined.
+ */
+type ElectronHwAccelBridge = {
+  getHardwareAcceleration?: () => Promise<boolean>;
+  setHardwareAcceleration?: (enabled: boolean) => Promise<void>;
+};
+
+function getElectronHwAccel(): ElectronHwAccelBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { electron?: ElectronHwAccelBridge }).electron;
+}
 
 interface AppearanceTabProps {
   // The whole useTheme return is threaded through so the tab can read
@@ -35,6 +53,50 @@ export function AppearanceTab({
   setMessage,
   onOpenThemeNameModal,
 }: AppearanceTabProps) {
+  // Hardware acceleration is a main-process preference. We load it on
+  // mount and write changes back via the Electron IPC bridge. The
+  // toggle is hidden when the bridge isn't available (web build).
+  // Changes don't take effect until the user restarts the client, so
+  // we surface that fact alongside the toggle.
+  const hwAccelBridge = getElectronHwAccel();
+  const hwAccelSupported = !!(
+    hwAccelBridge?.getHardwareAcceleration && hwAccelBridge?.setHardwareAcceleration
+  );
+  const [hwAccelEnabled, setHwAccelEnabled] = useState<boolean | null>(null);
+  const [hwAccelNeedsRestart, setHwAccelNeedsRestart] = useState(false);
+
+  useEffect(() => {
+    if (!hwAccelSupported || !hwAccelBridge?.getHardwareAcceleration) return;
+    let cancelled = false;
+    void hwAccelBridge.getHardwareAcceleration().then((value) => {
+      if (cancelled) return;
+      setHwAccelEnabled(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hwAccelSupported, hwAccelBridge]);
+
+  const onToggleHwAccel = async (next: boolean) => {
+    if (!hwAccelBridge?.setHardwareAcceleration) return;
+    setHwAccelEnabled(next);
+    setHwAccelNeedsRestart(true);
+    try {
+      await hwAccelBridge.setHardwareAcceleration(next);
+      setMessage({
+        type: "success",
+        text: `Hardware acceleration ${next ? "enabled" : "disabled"}. Restart Pufferblow for the change to take effect.`,
+      });
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Failed to save hardware acceleration preference. Please try again.",
+      });
+      // Roll back the optimistic state since the write failed.
+      setHwAccelEnabled(!next);
+    }
+  };
+
   const {
     appearanceConfig,
     setAppearanceConfig,
@@ -702,6 +764,51 @@ export function AppearanceTab({
           Save Custom Theme
         </button>
       </div>
+
+      {/* Rendering / Performance Section. Only shown in the Electron
+          desktop client; the IPC bridge is undefined in the web build.
+          The hardware-acceleration toggle is a main-process setting --
+          changing it requires a restart, which we surface inline. */}
+      {hwAccelSupported && (
+        <div className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+          <div className="p-6 border-b border-[var(--color-border)]">
+            <h3 className="text-lg font-medium text-[var(--color-text)]">Rendering</h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+              Low-level display options. Changes require a restart.
+            </p>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="flex items-start justify-between gap-4 p-3 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-[var(--color-text)] text-sm">
+                  Hardware acceleration
+                </div>
+                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Off by default. Enable to render through the GPU process
+                  -- smoother animations and video playback on most
+                  machines, but can cause graphical glitches with old or
+                  flaky drivers. Toggle this off if you see rendering
+                  artifacts.
+                </div>
+                {hwAccelNeedsRestart && (
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 px-2 py-1 text-xs text-[var(--color-warning)]">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Restart Pufferblow for this to take effect.
+                  </div>
+                )}
+              </div>
+              <ModernToggle
+                checked={hwAccelEnabled ?? false}
+                onChange={(v) => void onToggleHwAccel(v)}
+                size="medium"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

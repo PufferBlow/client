@@ -1,9 +1,10 @@
 import type { Route } from "./+types/home";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 
 import HomeDashboardPreview from "../components/home/HomeDashboardPreview";
 import { PufferblowBrand } from "../components/PufferblowBrand";
+import { getLastVisitedRoute } from "../utils/uiStatePersistence";
 
 const heroFacts = [
   "Self-hosted & open source",
@@ -61,12 +62,28 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+// Routes the index page is willing to forward an already-signed-in
+// user to. Anything outside this list is ignored so a stale or
+// malformed entry can't redirect to e.g. /signup.
+const RESTORABLE_ROUTES = new Set<string>(["/dashboard", "/control-panel", "/settings"]);
+
 export default function Home() {
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    setIsAuthenticated(isAuthenticatedFromCookies());
-  }, []);
+    const authed = isAuthenticatedFromCookies();
+    setIsAuthenticated(authed);
+    // Auto-resume the last destination an authed user was on. Falls
+    // back to /dashboard if no pointer was persisted, matching the
+    // existing "Open Dashboard" CTA target.
+    if (authed) {
+      const last = getLastVisitedRoute();
+      if (last && RESTORABLE_ROUTES.has(last)) {
+        navigate(last, { replace: true });
+      }
+    }
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)]">
