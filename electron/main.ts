@@ -328,47 +328,113 @@ app.on('before-quit', () => {
 
 // ── Auto-updater ────────────────────────────────────────────────────────────
 //
-// electron-updater fires lifecycle events that we forward into the renderer
-// via IPC so a React component can surface "an update is available" and
-// later "ready to install — restart now". The renderer answers with
-// `install-update` once the user clicks the restart button, at which point
-// we call `quitAndInstall` from the main process (the renderer can't trigger
-// the squirrel restart directly).
+// electron-updater pulls release manifests directly from the project's
+// GitHub Releases (see `publish:` in electron-builder.yml). We forward
+// every lifecycle event into the renderer so a React component (see
+// `UpdateBanner.tsx`) can show "an update is available", a progress bar
+// while it downloads, and finally a "restart now" prompt. The renderer
+// answers with `install-update` to trigger `quitAndInstall` from the
+// main process (the renderer can't drive the squirrel restart directly).
 //
-// Errors are logged but never fatal; a failed update check should not crash
-// the app. Updates only run in packaged builds — `app.isPackaged` guards
-// against pulling a release manifest while developing.
+// All updater failures are non-fatal — a network blip on the GitHub feed
+// must not crash the app. Updates only run in packaged builds; in dev we
+// short-circuit the whole block so `app.isPackaged` doesn't fight a
+// pretend-version like `1.0.0` against the live release feed.
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
+
 if (!isDev) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  // Re-poll the GitHub feed every 6h while the app is running. The
+  // initial check happens immediately on whenReady (below); this
+  // covers long-lived sessions where the user never quits.
+  let periodicCheckTimer: NodeJS.Timeout | null = null;
 
+  // Small helper so every dispatched event has the same shape: a
+  // `type` tag plus an opaque `payload`. Lets the renderer route
+  // through a single subscription if it wants, without juggling six
+  // channel names.
+  const sendUpdateEvent = (channel: string, payload: unknown) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, payload);
+    }
+  };
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateEvent('update-checking', { startedAt: new Date().toISOString() });
+  });
   autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-available', info);
+    sendUpdateEvent('update-available', info);
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    // Useful for a "you're up to date" toast after a manual check.
+    // Auto-checks shouldn't surface this — the renderer decides.
+    sendUpdateEvent('update-not-available', info);
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    // `progress` shape (from electron-updater):
+    //   { percent, transferred, total, bytesPerSecond, delta }
+    sendUpdateEvent('update-download-progress', progress);
   });
   autoUpdater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update-downloaded', info);
+    sendUpdateEvent('update-downloaded', info);
   });
   autoUpdater.on('error', (err) => {
-    // Non-fatal. Use console rather than a logger import so we don't pull
-    // renderer deps into the main bundle.
+    // Non-fatal. Use console rather than a logger import so we don't
+    // pull renderer deps into the main bundle. Forward a minimal
+    // shape — `Error` objects don't survive structured-clone with
+    // their stack intact, and the renderer only needs the message
+    // for its toast/banner.
     console.error('[autoUpdater] error', err);
+    sendUpdateEvent('update-error', {
+      message: err instanceof Error ? err.message : String(err),
+    });
   });
 
   ipcMain.on('install-update', () => {
-    // `quitAndInstall` bypasses our `close → hide to tray` trap because it
-    // calls `app.exit` internally; the `before-quit` handler still runs
-    // first so `quittingForReal` flips on. Belt and suspenders: set it
-    // here too in case Electron skips the lifecycle event.
+    // `quitAndInstall` bypasses our `close → hide to tray` trap
+    // because it calls `app.exit` internally; the `before-quit`
+    // handler still runs first so `quittingForReal` flips on. Belt
+    // and suspenders: set it here too in case Electron skips the
+    // lifecycle event.
     quittingForReal = true;
     autoUpdater.quitAndInstall();
   });
 
-  // Initial check happens once the app is ready. We use `checkForUpdates`
-  // (not `checkForUpdatesAndNotify`) because the renderer now owns the UI;
-  // the built-in OS toast that `…AndNotify` shows would be a duplicate.
+  // Renderer-initiated check (e.g. a "Check for updates" button in
+  // Settings). Wrapped because `checkForUpdates` returns a rejecting
+  // promise on transient network errors and we don't want those
+  // bubbling into an `unhandledRejection` log.
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { ok: true, version: result?.updateInfo?.version ?? null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[autoUpdater] manual check failed', message);
+      return { ok: false, error: message };
+    }
+  });
+
+  // Initial check + periodic poll. Using `checkForUpdates` (not
+  // `checkForUpdatesAndNotify`) because the renderer now owns the
+  // UI; the built-in OS toast that `…AndNotify` shows would be a
+  // duplicate.
   app.whenReady().then(() => {
     autoUpdater.checkForUpdates().catch((err) => {
       console.error('[autoUpdater] initial check failed', err);
     });
+    periodicCheckTimer = setInterval(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('[autoUpdater] periodic check failed', err);
+      });
+    }, UPDATE_CHECK_INTERVAL_MS);
+  });
+
+  app.on('before-quit', () => {
+    if (periodicCheckTimer) {
+      clearInterval(periodicCheckTimer);
+      periodicCheckTimer = null;
+    }
   });
 }

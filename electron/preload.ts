@@ -12,8 +12,43 @@ interface UpdateInfo {
   releaseDate: string;
 }
 
+/**
+ * Mirrors the `download-progress` payload electron-updater emits while
+ * the bundle is being fetched. Replicated here for the same reason as
+ * `UpdateInfo` above — the renderer shouldn't depend on the updater
+ * package just to type its own UI.
+ */
+interface UpdateDownloadProgress {
+  /** Fraction 0..100. */
+  percent: number;
+  /** Bytes downloaded so far. */
+  transferred: number;
+  /** Total bytes in the update bundle. */
+  total: number;
+  /** Throughput at the last tick. */
+  bytesPerSecond: number;
+  /** Bytes since the previous tick. */
+  delta?: number;
+}
+
+interface ManualCheckResult {
+  ok: boolean;
+  version?: string | null;
+  error?: string;
+}
+
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
+  /**
+   * Fires when the updater begins polling the release feed (initial
+   * boot, periodic recheck, manual recheck). Useful for surfacing a
+   * "Checking…" spinner in the Settings page.
+   */
+  onUpdateChecking: (cb: (info: { startedAt: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: { startedAt: string }) => cb(info);
+    ipcRenderer.on('update-checking', listener);
+    return () => ipcRenderer.removeListener('update-checking', listener);
+  },
   /**
    * Fires once an update has been detected on the release feed. The info
    * payload includes the version string — useful for "v1.2.3 is available"
@@ -25,6 +60,27 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('update-available', listener);
   },
   /**
+   * Fires when the feed confirms the app is already on the latest
+   * release. The renderer only uses this for manual checks (so a
+   * "Check for updates" button can say "you're up to date"); the
+   * UpdateBanner ignores it to avoid noise on periodic polls.
+   */
+  onUpdateNotAvailable: (cb: (info: UpdateInfo) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: UpdateInfo) => cb(info);
+    ipcRenderer.on('update-not-available', listener);
+    return () => ipcRenderer.removeListener('update-not-available', listener);
+  },
+  /**
+   * Fires repeatedly while the update bundle is being downloaded.
+   * Use the `percent` field for a progress bar; `bytesPerSecond` is
+   * available for an optional throughput readout.
+   */
+  onUpdateDownloadProgress: (cb: (progress: UpdateDownloadProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: UpdateDownloadProgress) => cb(progress);
+    ipcRenderer.on('update-download-progress', listener);
+    return () => ipcRenderer.removeListener('update-download-progress', listener);
+  },
+  /**
    * Fires once the update bundle has finished downloading in the background.
    * Renderer should now offer the user a "restart to update" action that
    * calls `installUpdate()` below.
@@ -34,6 +90,24 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('update-downloaded', listener);
     return () => ipcRenderer.removeListener('update-downloaded', listener);
   },
+  /**
+   * Fires when the updater hits a network or signature error. Payload
+   * is a plain `{ message }` — full Error objects don't survive the
+   * structured-clone hop, and the renderer only needs the human-
+   * readable message for its toast.
+   */
+  onUpdateError: (cb: (err: { message: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, err: { message: string }) => cb(err);
+    ipcRenderer.on('update-error', listener);
+    return () => ipcRenderer.removeListener('update-error', listener);
+  },
+  /**
+   * Renderer-initiated update check. Returns the same shape the main
+   * handler produces — `{ ok, version? , error? }` — so a Settings-page
+   * "Check for updates" button can show a result inline.
+   */
+  checkForUpdates: (): Promise<ManualCheckResult> =>
+    ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.send('install-update'),
 
   /**

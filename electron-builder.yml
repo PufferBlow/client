@@ -46,7 +46,17 @@ mac:
     - dmg
     - zip
 
+# electron-updater pulls release manifests directly from GitHub
+# Releases. We deliberately set `owner` / `repo` explicitly rather
+# than relying on `package.json#repository` parsing -- some builder
+# versions choke on the `git+https://` prefix, and being explicit
+# also makes it obvious where the update feed lives.
+#
+# `releaseType: release` skips drafts and prereleases. To ship a
+# beta channel later, publish prereleases tagged `v1.2.3-beta.1`
+# and override `channel: beta` in a dedicated build target.
 publish:
-  provider: generic
-  url: https://releases.pufferblow.space
-  channel: latest
+  provider: github
+  owner: PufferBlow
+  repo: client
+  releaseType: release
