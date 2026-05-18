@@ -65,6 +65,46 @@ if (!startupMainSettings.hardwareAccelerationEnabled) {
   app.disableHardwareAcceleration();
 }
 
+// ── Chromium startup switches ───────────────────────────────────────
+//
+// Disable Chromium's Private Network Access (PNA) preflight requirement.
+//
+// Why this is necessary:
+//   In packaged builds the renderer loads from `app://pufferblow/`,
+//   registered as a secure scheme below. From Chromium's point of view
+//   that origin is "secure non-local", so any fetch the renderer makes
+//   to a private-network address (localhost, 127.0.0.1, 10/8, 172.16/12,
+//   192.168/16) first triggers a CORS-preflight `OPTIONS` request with
+//   the header `Access-Control-Request-Private-Network: true`. The
+//   target server has to acknowledge with
+//   `Access-Control-Allow-Private-Network: true` or Chromium silently
+//   drops the actual request — the renderer just sees "Failed to fetch"
+//   with no further detail.
+//
+//   The Pufferblow server's CORS middleware does not emit that header.
+//   In dev this never bites because the renderer itself is loaded from
+//   `http://localhost:5173`, which Chromium classifies as private — and
+//   PNA only fires when the *initiator* is non-private. So the bug only
+//   appears in packaged builds and only when reaching a local-network
+//   instance.
+//
+//   Disabling the feature here lets the request go straight through.
+//   This affects every site the renderer can reach, but the renderer is
+//   only ever loaded from `app://pufferblow/`, which has no third-party
+//   content — there is no scenario in which a malicious page could
+//   exploit the relaxed PNA policy to talk to a local service that
+//   wasn't meant for it.
+//
+//   Long-term, server-side support for the PNA preflight is the right
+//   fix; this switch can go away when every Pufferblow release in the
+//   wild answers the preflight.
+//
+// Must be called before `app.whenReady()`.
+app.commandLine.appendSwitch(
+  'disable-features',
+  'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights',
+);
+
 /**
  * Custom URL scheme registered with the OS so external clients can deep-link
  * into the app (e.g. clicking `pufferblow://m/<message_id>` in a browser or
