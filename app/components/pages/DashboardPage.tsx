@@ -19,7 +19,9 @@ import { AttachmentGrid } from "../../components/AttachmentBubble";
 import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { JoinServerModal } from "../../components/dashboard/JoinServerModal";
+import { PufferblowMark } from "../../components/PufferblowBrand";
 import { ChannelSidebarHeader } from "../../components/dashboard-page/ChannelSidebarHeader";
+import { DirectMessagesPanel } from "../../components/dashboard-page/DirectMessagesPanel";
 import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
 import { ChannelList } from "../../components/dashboard-page/ChannelList";
@@ -258,6 +260,13 @@ export default function Dashboard() {
   // — the home server's response already carries everything we
   // need (it ran the validation probe).
   const [joinModalOpen, setJoinModalOpen] = useState(false);
+  // Direct-messages view toggle. The fixed Pufferblow-logo rail item
+  // at the top of the rail switches this on; clicking the home
+  // server item below it switches it back off. When true, the
+  // channel panel renders a DM surface instead of the server's
+  // channel list — see the `dmsOpen ?` branch in the channel-panel
+  // render block below.
+  const [dmsOpen, setDmsOpen] = useState(false);
   const uploadPickerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -2873,11 +2882,46 @@ export default function Dashboard() {
               rhythm doesn't shift on first multi-join). */}
           <ServerRail>
             <div className="flex h-full flex-col py-2 space-y-2">
+              {/* Fixed Direct-Messages slot — always present at the top
+                  of the rail. Selects a DM-only view of the channel
+                  panel instead of any one server's channel list. The
+                  avatar shows the Pufferblow brand mark instead of an
+                  instance avatar; the same mark renders inside the
+                  splash, the marketing site, and the desktop title
+                  bar, so users recognise it as the "this is the app
+                  itself" affordance, distinct from the per-instance
+                  avatars below it. */}
+              <ServerRailItem
+                label="Direct messages"
+                selected={dmsOpen}
+                onClick={() => setDmsOpen(true)}
+              >
+                {/* The mark inherits stroke color from the avatar
+                    div's `text-*` class, so it switches from
+                    on-primary (dark, against the white selected bg)
+                    to text-secondary (light, against the dark resting
+                    bg) without any explicit theming here. We pass
+                    `surfaceColor="transparent"` so the knockout
+                    circle that normally punches the donut hole out of
+                    the spokes doesn't fight the avatar's bg color
+                    across hover / selected transitions — the spokes
+                    show through the ring at 28px and the result still
+                    reads as the Pufferblow mark. */}
+                <PufferblowMark size={28} surfaceColor="transparent" animated={false} />
+              </ServerRailItem>
+
+              {/* Divider between the DM slot (always-present, app-wide
+                  affordance) and the instance avatars (per-server
+                  state). Same w-8 hairline used between server groups
+                  below. */}
+              <div className="mx-auto w-8 h-px bg-[var(--color-surface-tertiary)] rounded" />
+
               {serverInfo && (
                 <ServerRailItem
                   label={serverInfo.server_name || "Server"}
-                  selected
-                  presenceClassName="bg-[var(--color-success)]"
+                  selected={!dmsOpen}
+                  onClick={() => setDmsOpen(false)}
+                  presenceClassName={dmsOpen ? undefined : "bg-[var(--color-success)]"}
                 >
                   {serverInfo.avatar_url ? (
                     <img
@@ -2908,42 +2952,54 @@ export default function Dashboard() {
             </div>
           </ServerRail>
 
-          {/* Channel Sidebar */}
+          {/* Channel Sidebar — branches on the rail selection. When
+              the fixed DM slot at the top of the rail is active the
+              panel shows the Direct-Messages surface; otherwise it
+              renders the current server's channel list. The DM
+              surface stays in the same ChannelPanel shell so the
+              sidebar width / borders don't shift between the two
+              views. */}
           <ChannelPanel>
-            <ChannelSidebarHeader
-              serverInfo={serverInfo}
-              serverDropdownOpen={serverDropdownOpen}
-              setServerDropdownOpen={setServerDropdownOpen}
-              serverDropdownRef={serverDropdownRef}
-              canCreateInvite={canCreateInvite}
-              canAccessControlPanel={canAccessControlPanel}
-              canDeleteServer={canDeleteServer}
-              canCreateChannels={canCreateChannels}
-              canLeaveServer={canLeaveServer}
-              onInviteActionUnavailable={handleInviteActionUnavailable}
-              onCreateChannel={() => setChannelCreationModalOpen(true)}
-              onMarkAllChannelsRead={handleMarkAllChannelsRead}
-              onMuteServer={handleMuteServer}
-              onLeaveServer={handleLeaveServer}
-              showToast={showToast}
-            />
+            {dmsOpen ? (
+              <DirectMessagesPanel />
+            ) : (
+              <>
+                <ChannelSidebarHeader
+                  serverInfo={serverInfo}
+                  serverDropdownOpen={serverDropdownOpen}
+                  setServerDropdownOpen={setServerDropdownOpen}
+                  serverDropdownRef={serverDropdownRef}
+                  canCreateInvite={canCreateInvite}
+                  canAccessControlPanel={canAccessControlPanel}
+                  canDeleteServer={canDeleteServer}
+                  canCreateChannels={canCreateChannels}
+                  canLeaveServer={canLeaveServer}
+                  onInviteActionUnavailable={handleInviteActionUnavailable}
+                  onCreateChannel={() => setChannelCreationModalOpen(true)}
+                  onMarkAllChannelsRead={handleMarkAllChannelsRead}
+                  onMuteServer={handleMuteServer}
+                  onLeaveServer={handleLeaveServer}
+                  showToast={showToast}
+                />
 
-            <ChannelList
-              channels={channels}
-              channelsError={channelsError}
-              selectedChannel={selectedChannel}
-              getMessageDraft={getMessageDraft}
-              unreadCountsByChannel={unreadCountsByChannel}
-              onChannelSelect={handleChannelSelect}
-              onChannelContextMenu={handleChannelContextMenu}
-              currentVoiceChannel={currentVoiceChannel}
-              setCurrentVoiceChannel={setCurrentVoiceChannel}
-              onVoiceSessionReady={(session) => {
-                setVoiceSessionActions(session);
-              }}
-              rtcMediaQuality={serverInfo?.rtc_media_quality ?? null}
-              resolveAvatarUrl={resolveVoiceParticipantAvatar}
-            />
+                <ChannelList
+                  channels={channels}
+                  channelsError={channelsError}
+                  selectedChannel={selectedChannel}
+                  getMessageDraft={getMessageDraft}
+                  unreadCountsByChannel={unreadCountsByChannel}
+                  onChannelSelect={handleChannelSelect}
+                  onChannelContextMenu={handleChannelContextMenu}
+                  currentVoiceChannel={currentVoiceChannel}
+                  setCurrentVoiceChannel={setCurrentVoiceChannel}
+                  onVoiceSessionReady={(session) => {
+                    setVoiceSessionActions(session);
+                  }}
+                  rtcMediaQuality={serverInfo?.rtc_media_quality ?? null}
+                  resolveAvatarUrl={resolveVoiceParticipantAvatar}
+                />
+              </>
+            )}
       </ChannelPanel>
         </div>
 
