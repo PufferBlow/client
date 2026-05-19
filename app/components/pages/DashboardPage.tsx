@@ -2843,37 +2843,61 @@ export default function Dashboard() {
         <div className="flex min-h-0 flex-1 gap-2">
           {/* Server Sidebar */}
           <ServerRail>
-            <div className="flex flex-col items-center py-2 space-y-2">
-              <div className="w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
+            {/*
+              Discord-style rail: each row is a full-rail-width box (w-16)
+              with the avatar centered and a vertical selection pill on the
+              LEFT edge. The pill is a sibling of the avatar, not a
+              wrapper, so the hover state never visually covers the avatar
+              glyph or its presence dot — only the pill grows. Previously
+              the hover lived on the avatar wrapper itself, which meant
+              the `rounded-lg → rounded-2xl` morph happened on the same
+              element that held the image, and the radius transition
+              looked like the avatar was being eaten.
+            */}
+            <div className="flex flex-col py-2 space-y-2">
+              <div className="mx-auto w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
 
-            {/* Current Server — mirrors the channel-sidebar header
-                avatar: square-ish at rest, radius expands on hover. The
-                wrapper and the inner img/span share a `group` so the
-                shape stays in sync (the wrapper has no visual of its
-                own, but `rounded-*` on both keeps things tidy if a
-                future style adds a background or border to either). */}
-            {serverInfo && (
-              <div className="w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer group relative hover:rounded-2xl">
-                {serverInfo.avatar_url ? (
-                  <img
-                    src={serverInfo.avatar_url}
-                    alt={`${serverInfo.server_name} avatar`}
-                    className="w-12 h-12 rounded-lg object-cover transition-all duration-200 group-hover:rounded-2xl"
+              {serverInfo && (
+                <div className="group relative flex h-12 w-16 items-center justify-center cursor-pointer">
+                  {/* Left-edge selection pill. Single server today, so it's
+                      always "selected" — full height. The group-hover
+                      variant is kept disabled on selected rows in the
+                      preview but harmless here since the static height is
+                      already at its max. */}
+                  <span
+                    aria-hidden
+                    className="absolute left-0 h-9 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200"
                   />
-                ) : (
-                  <span className="text-[var(--color-on-primary)] font-semibold text-lg bg-[var(--color-primary)] w-full h-full flex items-center justify-center rounded-lg transition-all duration-200 group-hover:rounded-2xl">
-                    {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[var(--color-success)] rounded-full border-2 border-[var(--color-border)] opacity-100"></div>
-              </div>
-            )}
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200">
+                    {serverInfo.avatar_url ? (
+                      <img
+                        src={serverInfo.avatar_url}
+                        alt={`${serverInfo.server_name} avatar`}
+                        className="h-12 w-12 rounded-2xl object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center rounded-2xl bg-[var(--color-primary)] text-lg font-semibold text-[var(--color-on-primary)]">
+                        {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-[var(--color-success)] border-2 border-[var(--color-surface)]"></div>
+                  </div>
+                </div>
+              )}
 
-              <AddServerButton
-                disabled
-                title="Additional home instances are not available in this build"
-                ariaLabel="Additional home instances are not available in this build"
-              />
+              {/* AddServerButton stays in the rail flow; its own component
+                  owns the squircle-on-hover styling and `mt-auto` pin. We
+                  wrap it so it sits centered in the same w-16 column as
+                  the avatars above, keeping the pill gutter empty for the
+                  add slot (you can't "select" the add button — there's
+                  nothing to pill). */}
+              <div className="mt-auto flex w-16 items-center justify-center">
+                <AddServerButton
+                  disabled
+                  title="Additional home instances are not available in this build"
+                  ariaLabel="Additional home instances are not available in this build"
+                />
+              </div>
             </div>
           </ServerRail>
 
