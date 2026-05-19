@@ -1393,6 +1393,82 @@ export default function Dashboard() {
    * Attachment-only messages fall back to a friendly placeholder so
    * the clipboard isn't silently empty.
    */
+  /**
+   * Does this message carry media we should offer to download
+   * instead of copy?
+   *
+   * The Copy Message menu entry copies the message's TEXT to the
+   * clipboard. For an image-only / video-only / gif-only / audio-
+   * only message that's a useless action (the binary content
+   * doesn't fit in the clipboard text channel). When the message
+   * carries an attachment with a media MIME, the context menu
+   * swaps Copy Message for Download instead.
+   *
+   * Mixed messages (text + media) also get Download — the
+   * media is almost always the more useful affordance when the
+   * user reached for the context menu on a media-bearing
+   * message.
+   */
+  const messageHasDownloadableMedia = (messageId: string | null): boolean => {
+    if (!messageId) return false;
+    const message = getMessageById(messageId);
+    if (!message?.attachments?.length) return false;
+    return message.attachments.some((attachment) => {
+      const type = (attachment.type || "").toLowerCase();
+      return (
+        type.startsWith("image/")
+        || type.startsWith("video/")
+        || type.startsWith("audio/")
+      );
+    });
+  };
+
+  /**
+   * Download every media attachment on a message. Multi-attachment
+   * messages produce multiple `downloadFileViaBlob` calls in
+   * sequence; the helper handles the auth-refresh retry and the
+   * blob → anchor click trick on its own, so we don't need a
+   * sleep / queue between calls.
+   */
+  const handleMessageDownload = async (messageId: string | null) => {
+    if (!messageId) return;
+    const message = getMessageById(messageId);
+    if (!message?.attachments?.length) {
+      showToast({
+        message: "Nothing to download from this message.",
+        tone: "warning",
+        category: "validation",
+      });
+      return;
+    }
+    const { downloadFileViaBlob } = await import("../../utils/downloadFile");
+    let failed = 0;
+    for (const attachment of message.attachments) {
+      const result = await downloadFileViaBlob({
+        url: createFullUrl(attachment.url) ?? attachment.url,
+        filename: attachment.filename,
+        mimeType: attachment.type,
+      });
+      if (!result.success) {
+        failed += 1;
+        logger.ui.error("Attachment download failed", {
+          filename: attachment.filename,
+          error: result.error,
+        });
+      }
+    }
+    if (failed > 0) {
+      showToast({
+        message:
+          failed === message.attachments.length
+            ? "Failed to download attachment."
+            : `Downloaded ${message.attachments.length - failed} of ${message.attachments.length} attachments.`,
+        tone: "error",
+        category: "system",
+      });
+    }
+  };
+
   const handleMessageCopyText = async (messageId: string | null) => {
     if (!messageId) return;
     const message = getMessageById(messageId);
@@ -3591,9 +3667,50 @@ export default function Dashboard() {
               replyTarget.username
               || usersById.get(replyTarget.sender_user_id)?.username
               || 'Unknown User';
-            const previewText = replyTarget.message || 'Attachment-only message';
+            // Preview is intentionally CAPPED at ~120 chars before
+            // rendering even though the row also has CSS truncate
+            // — the CSS clip handles "visually too long for this
+            // pixel width", and the char cap handles "the source
+            // message is huge and we shouldn't even put all of it
+            // in the DOM". Strips newlines so the single-line
+            // preview doesn't accidentally render with a height
+            // bump.
+            const rawText = replyTarget.message?.replace(/\s+/g, ' ').trim() || '';
+            const PREVIEW_CHAR_CAP = 120;
+            const previewText = rawText
+              ? rawText.length > PREVIEW_CHAR_CAP
+                ? `${rawText.slice(0, PREVIEW_CHAR_CAP).trimEnd()}…`
+                : rawText
+              : 'Attachment-only message';
+            // Try the live users-list entry first (has appearance
+            // fields). Fall back to a deterministic identicon URL
+            // built from the username so deleted / federated /
+            // outside-the-current-list senders still render an
+            // avatar instead of a broken image.
+            const replyUser = usersById.get(replyTarget.sender_user_id);
+            const replyAvatarUrl = replyUser
+              ? resolveAvatarUrl(replyUser, replyUser.avatar_url ?? undefined)
+              : createFallbackAvatarUrl(replyToUsername);
             return (
-              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5">
+              <div
+                // Whole pill is clickable except for the close
+                // button. Clicking scrolls the message list to the
+                // target message and applies the ~1.6s highlight
+                // ring via the existing scrollToMessage helper.
+                // role=button + Enter / Space keyboard support so
+                // the affordance is reachable without a pointer.
+                role="button"
+                tabIndex={0}
+                onClick={() => scrollToMessage(replyTarget.message_id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    scrollToMessage(replyTarget.message_id);
+                  }
+                }}
+                title="Jump to message"
+                className="group flex cursor-pointer items-center gap-2 rounded-t-xl border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5 transition-colors hover:bg-[var(--color-hover)]"
+              >
                 <svg
                   className="h-3.5 w-3.5 shrink-0 -scale-x-100 text-[var(--color-text-muted)]"
                   fill="none"
@@ -3607,6 +3724,16 @@ export default function Dashboard() {
                   <polyline points="9 14 4 9 9 4" />
                   <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                 </svg>
+                {/* Avatar of the user being replied to. Sized to
+                    match the row's font weight visually — smaller
+                    than a normal message avatar (~h-9) since the
+                    row is tight, but big enough to read the
+                    identicon's accent color. */}
+                <img
+                  src={replyAvatarUrl}
+                  alt=""
+                  className="h-5 w-5 shrink-0 rounded-full object-cover"
+                />
                 <span className="text-xs font-semibold text-[var(--color-text)] truncate max-w-[10rem]">
                   {replyToUsername}
                 </span>
@@ -3614,8 +3741,13 @@ export default function Dashboard() {
                   {previewText}
                 </span>
                 <button
-                  onClick={() => setReplyTarget(null)}
-                  className="shrink-0 rounded-full p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                  // Stop propagation so cancel doesn't also fire
+                  // the parent's scroll-to-message click.
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReplyTarget(null);
+                  }}
+                  className="shrink-0 rounded-full p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-error)]/15 hover:text-[var(--color-error)]"
                   title="Cancel reply"
                   aria-label="Cancel reply"
                 >
@@ -4185,7 +4317,20 @@ export default function Dashboard() {
             // policy is "every shown option must work". Omitting the
             // handler hides the row entirely; the option will come
             // back the moment the DM composer ships.
-            onCopyMessage={() => handleMessageCopyText(currentMenuMessageId)}
+            // Media-bearing messages swap Copy Message for Download.
+            // Text-only messages keep Copy Message. The menu enforces
+            // mutual exclusion: passing both would short-circuit
+            // and only render Download.
+            onCopyMessage={
+              messageHasDownloadableMedia(currentMenuMessageId)
+                ? undefined
+                : () => handleMessageCopyText(currentMenuMessageId)
+            }
+            onDownload={
+              messageHasDownloadableMedia(currentMenuMessageId)
+                ? () => void handleMessageDownload(currentMenuMessageId)
+                : undefined
+            }
             // Per-invocation override (e.g. the message-group menu sets
             // a multi-ID copy handler + plural label). Fall back to the
             // single-message handler when no override is supplied.
