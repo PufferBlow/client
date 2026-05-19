@@ -38,6 +38,13 @@ interface MessageContextMenuProps {
   // ── Clipboard ───────────────────────────────────────────────────────
   /** Copies the message's text content to the clipboard. */
   onCopyMessage?: () => void;
+  /** Downloads the message's media attachments. When set this row
+   *  REPLACES `onCopyMessage` — for media-only messages (image /
+   *  video / gif / audio with no text) the text-copy is useless,
+   *  and the more useful affordance is a Download row in the same
+   *  slot. Caller decides which to pass based on whether the
+   *  message carries media. */
+  onDownload?: () => void;
   /** Copies the message's UUID to the clipboard. */
   onCopyMessageId?: () => void;
   /** Copies a deep link to the message. Optional -- not all surfaces
@@ -102,6 +109,7 @@ export function MessageContextMenu({
   onReply,
   onReplyInDM,
   onCopyMessage,
+  onDownload,
   onCopyMessageId,
   onCopyMessageLink,
   onEdit,
@@ -163,7 +171,19 @@ export function MessageContextMenu({
 
   // Group 2: Clipboard
   pushSeparator("sep-clipboard");
-  if (onCopyMessage) {
+  // Download REPLACES Copy Message when the parent set onDownload.
+  // The choice is the parent's: messages with media attachments
+  // pass onDownload (text-copy is useless when the primary content
+  // is binary); text-only messages pass onCopyMessage. The two
+  // never co-exist in the same slot — they occupy the same line.
+  if (onDownload) {
+    pushAction({
+      id: "download",
+      label: "Download",
+      icon: icon("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10 12 15 17 10 M12 15V3"),
+      onSelect: onDownload,
+    });
+  } else if (onCopyMessage) {
     pushAction({
       id: "copy-message",
       label: "Copy Message",

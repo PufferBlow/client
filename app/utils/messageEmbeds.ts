@@ -343,7 +343,20 @@ export const extractMessageEmbeds = (
     return [];
   }
 
-  const matches = content.match(URL_PATTERN) || [];
+  // Strip markdown-blockquote lines BEFORE scanning for URLs.
+  // The reply composer wraps the original message's text as a
+  // blockquote ("> Replying to @x\n> <quoted text>\n\n<reply>"),
+  // and any link inside the quoted text gets pulled into a full
+  // iframe embed when the reply renders — which is exactly the
+  // "loading iframes of a link we are replying to" behavior we
+  // want to suppress. Links the user typed in their own reply
+  // body (outside the blockquote) still embed normally.
+  const visibleContent = content
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith(">"))
+    .join("\n");
+
+  const matches = visibleContent.match(URL_PATTERN) || [];
   const uniqueUrls = new Set<string>();
   const previews: MessageEmbedPreview[] = [];
 

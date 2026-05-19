@@ -80,14 +80,23 @@ function EmbedCard({ embed }: { embed: MessageEmbedPreview }) {
 
   return (
     <div
-      // `max-w-full` is the responsive cap; the inline rule uses
-      // CSS `min(native, 100%)` so the embed's declared natural
-      // width acts as a CEILING but the container always shrinks
-      // when the surrounding pane does. Previously the inline
-      // `maxWidth: <native>` left the embed pinned at, say, 1280px,
-      // so when the members panel opened and the message column
-      // shrunk, the iframe overflowed instead of reflowing.
-      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_88%,transparent)] shadow-sm max-w-full"
+      // Width caps work in three layers:
+      //   - `max-w-[28rem]` is the absolute ceiling. An embed never
+      //     gets wider than ~448 px regardless of how wide the
+      //     surrounding message pane is. Without this, a YouTube
+      //     embed at its native 1280 px would dominate any
+      //     wide-window conversation and crowd out subsequent
+      //     messages.
+      //   - `max-w-full` is the responsive cap underneath: shrinks
+      //     to the message column's actual width when the pane is
+      //     narrower than 28rem (e.g. members panel open on a
+      //     small monitor).
+      //   - The inline `min(<native>, 100%)` rule lets the embed's
+      //     declared natural width pull SHORTER than 28rem when
+      //     that's appropriate (a small Tweet card shouldn't
+      //     stretch to the full 28rem if its native size is
+      //     400 px).
+      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_88%,transparent)] shadow-sm max-w-[28rem]"
       style={
         embed.iframe?.maxWidth
           ? { maxWidth: `min(${embed.iframe.maxWidth}, 100%)` }
