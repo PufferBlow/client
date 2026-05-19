@@ -19,10 +19,16 @@ type UseDashboardDataOptions = {
   showToast: ShowToast;
 };
 
+// "Manual" presence states are the ones a user can intentionally
+// announce in the picker. They lock the value against the activity
+// loop — once locked, the loop won't auto-flip the user to online or
+// idle on input. `offline` used to be in this list, but it's now
+// strictly system-determined (set on disconnect, never user-picked),
+// so the lock no longer covers it.
 const isManualPresenceStatus = (
   status: unknown,
-): status is "dnd" | "afk" | "offline" =>
-  status === "dnd" || status === "afk" || status === "offline";
+): status is "dnd" | "afk" =>
+  status === "dnd" || status === "afk";
 
 export function useDashboardData({ currentUser, navigate, location, showToast }: UseDashboardDataOptions) {
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
@@ -328,7 +334,11 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
         }
 
         if (options?.lockMode === "set") {
-          setManualPresenceLock(status === "dnd" || status === "afk" || status === "offline" ? status : null);
+          // Mirror `isManualPresenceStatus`: only the intentional
+          // availability states (DND / AFK) pin the lock. Anything
+          // else clears it so the activity loop can resume managing
+          // online ↔ idle.
+          setManualPresenceLock(status === "dnd" || status === "afk" ? status : null);
         } else if (options?.lockMode === "clear") {
           setManualPresenceLock(null);
         }

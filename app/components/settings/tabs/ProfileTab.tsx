@@ -163,16 +163,28 @@ export function ProfileTab({
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
                     Status
                   </label>
+                  {/*
+                    Manual status picker — split between two axes:
+                      - AUTO (system-determined): online ↔ idle while
+                        the dashboard is open and active; offline on
+                        disconnect. Users can't pick these because
+                        the activity loop would immediately fight any
+                        manual choice.
+                      - MANUAL (intentional availability): AFK, DND.
+                        These get pinned by `manualPresenceLock` so
+                        the activity loop won't bump them back to
+                        online or idle.
+                    Idle isn't in the manual picker because it's the
+                    system's "away from keyboard" signal, not an
+                    intent the user is announcing.
+                  */}
                   <select
-                    value={userStatus}
-                    onChange={(e) => setUserStatus(e.target.value as 'online' | 'offline' | 'idle' | 'afk' | 'dnd')}
+                    value={(['afk', 'dnd'] as const).includes(userStatus as any) ? userStatus : 'afk'}
+                    onChange={(e) => setUserStatus(e.target.value as 'afk' | 'dnd')}
                     className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] transition-colors focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
                   >
-                    <option value="online">Online</option>
                     <option value="afk">AFK</option>
-                    <option value="idle">Idle</option>
                     <option value="dnd">Do Not Disturb</option>
-                    <option value="offline">Invisible</option>
                   </select>
                 </div>
               </div>
