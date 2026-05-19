@@ -9,6 +9,17 @@ interface ElectronWindowBridge {
   windowIsMaximized?: () => Promise<boolean>;
   onWindowMaximizeChanged?: (cb: (isMaximized: boolean) => void) => () => void;
   onWindowFullscreenChanged?: (cb: (isFullscreen: boolean) => void) => () => void;
+
+  // Update affordances surfaced inline in the title bar when
+  // auto-update is OFF. When ON, the same events still fire but the
+  // bar leaves them to the UpdateBanner instead.
+  getAutoUpdateEnabled?: () => Promise<boolean>;
+  onAutoUpdateEnabledChanged?: (cb: (enabled: boolean) => void) => () => void;
+  onUpdateAvailable?: (cb: (info: { version: string }) => void) => () => void;
+  onUpdateDownloadProgress?: (cb: (progress: { percent: number }) => void) => () => void;
+  onUpdateDownloaded?: (cb: (info: { version: string }) => void) => () => void;
+  downloadUpdate?: () => Promise<{ ok: boolean; error?: string }>;
+  installUpdate?: () => void;
 }
 
 const getElectron = (): ElectronWindowBridge | undefined => {
@@ -123,6 +134,106 @@ function WinControls({ isMaximized }: { isMaximized: boolean }) {
 
 // ── Title bar ────────────────────────────────────────────────────────────────
 
+// Small state machine for the inline title-bar update button.
+//   - 'idle'        — auto-update is ON, or no release detected yet.
+//                     Nothing renders.
+//   - 'available'   — auto-update is OFF and a release exists; the
+//                     user has to click to start the download.
+//   - 'downloading' — download in flight; the button shows percent
+//                     and is non-interactive.
+//   - 'ready'       — bundle on disk; clicking restarts to install.
+type UpdateButtonState = "idle" | "available" | "downloading" | "ready";
+
+function UpdateTitleBarButton() {
+  const el = getElectron();
+  const [autoUpdate, setAutoUpdate] = useState<boolean | null>(null);
+  const [state, setState] = useState<UpdateButtonState>("idle");
+  const [version, setVersion] = useState<string | null>(null);
+  const [percent, setPercent] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!el) return;
+    el.getAutoUpdateEnabled?.().then((value) => setAutoUpdate(!!value));
+    const offToggle = el.onAutoUpdateEnabledChanged?.((value) => setAutoUpdate(value));
+
+    const offAvail = el.onUpdateAvailable?.((info) => {
+      setVersion(info?.version ?? null);
+      setState((cur) => (cur === "downloading" || cur === "ready" ? cur : "available"));
+    });
+    const offProg = el.onUpdateDownloadProgress?.((p) => {
+      setPercent(Math.max(0, Math.min(100, p.percent)));
+      setState((cur) => (cur === "ready" ? cur : "downloading"));
+    });
+    const offDone = el.onUpdateDownloaded?.((info) => {
+      setVersion(info?.version ?? null);
+      setState("ready");
+    });
+
+    return () => {
+      offToggle?.();
+      offAvail?.();
+      offProg?.();
+      offDone?.();
+    };
+  }, [el]);
+
+  // Render rule: auto-update OFF surfaces the button on every state
+  // EXCEPT idle. When auto-update is ON the UpdateBanner handles the
+  // workflow end-to-end and the title bar stays clean.
+  if (autoUpdate === null || autoUpdate === true || state === "idle") return null;
+
+  const onClick = () => {
+    if (state === "ready") {
+      el?.installUpdate?.();
+      return;
+    }
+    if (state === "available") {
+      el?.downloadUpdate?.();
+    }
+  };
+
+  const label =
+    state === "ready"
+      ? `Restart to install ${version ?? "update"}`
+      : state === "downloading"
+        ? `Downloading${percent !== null ? ` ${Math.round(percent)}%` : "…"}`
+        : `Download ${version ?? "update"}`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={state === "downloading"}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      style={{ WebkitAppRegion: "no-drag" } as any}
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center gap-1.5 self-stretch px-3 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-hover)] disabled:cursor-not-allowed disabled:opacity-70 transition-colors"
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      {state === "downloading" && percent !== null
+        ? `${Math.round(percent)}%`
+        : state === "ready"
+          ? "Restart"
+          : "Update"}
+    </button>
+  );
+}
+
 export function TitleBar() {
   const { serverName } = useTitleBar();
   const [isMaximized, setIsMaximized] = useState(false);
@@ -193,8 +304,10 @@ export function TitleBar() {
         </div>
       )}
 
-      {/* Right — window controls (Win/Linux) */}
+      {/* Right — update button (only visible when auto-update is OFF and a
+          release exists) + window controls (Win/Linux). */}
       <div className="ml-auto flex items-center h-full z-10 shrink-0">
+        <UpdateTitleBarButton />
         {!isMac && <WinControls isMaximized={isMaximized} />}
       </div>
     </div>

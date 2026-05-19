@@ -21,6 +21,8 @@ interface ElectronUpdateBridge {
   onUpdateDownloaded?: (cb: (info: UpdateInfo) => void) => () => void;
   onUpdateError?: (cb: (err: { message: string }) => void) => () => void;
   installUpdate?: () => void;
+  getAutoUpdateEnabled?: () => Promise<boolean>;
+  onAutoUpdateEnabledChanged?: (cb: (enabled: boolean) => void) => () => void;
 }
 
 const getBridge = (): ElectronUpdateBridge | undefined => {
@@ -59,6 +61,20 @@ export function UpdateBanner() {
   const [progress, setProgress] = useState<UpdateDownloadProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  // When auto-update is OFF the title bar owns the update UI — a
+  // download button on `available`, a percent readout while
+  // `downloading`, a restart prompt on `ready`. The banner would
+  // duplicate that surface, so we suppress it entirely until the
+  // preference flips back on.
+  const [autoUpdate, setAutoUpdate] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    bridge.getAutoUpdateEnabled?.().then((value) => setAutoUpdate(!!value));
+    const off = bridge.onAutoUpdateEnabledChanged?.((enabled) => setAutoUpdate(enabled));
+    return () => off?.();
+  }, []);
 
   useEffect(() => {
     const bridge = getBridge();
@@ -120,6 +136,10 @@ export function UpdateBanner() {
   }, []);
 
   if (status === 'idle' || dismissed) return null;
+  // Hide entirely when auto-update is disabled — the title bar
+  // surface takes over. (autoUpdate === null is the bridge-not-ready
+  // case; defaulting to showing the banner is the safe choice there.)
+  if (autoUpdate === false) return null;
 
   const isReady = status === 'downloaded';
   const isDownloading = status === 'downloading';

@@ -27,6 +27,19 @@ interface MainSettings {
    * app restart; the renderer surfaces that.
    */
   hardwareAccelerationEnabled?: boolean;
+  /**
+   * `true` (default) -> the auto-updater downloads new releases in
+   * the background as soon as they appear in the release feed. The
+   * splash shows the download progress at boot and the UpdateBanner
+   * surfaces "restart now" when the bundle is ready.
+   *
+   * `false` -> we keep CHECKING (the feed needs to surface "an
+   * update exists" to the renderer) but we do NOT call
+   * `autoUpdater.downloadUpdate()` automatically. The renderer's
+   * title bar exposes a download button so the user opts in
+   * explicitly per release.
+   */
+  autoUpdateEnabled?: boolean;
 }
 
 const mainSettingsFilePath = path.join(app.getPath('userData'), 'main-settings.json');
@@ -248,6 +261,24 @@ function setSplashStatus(text: string): void {
   const safe = text.replace(/[\\'"]/g, ' ');
   splashWindow.webContents
     .executeJavaScript(`window.__pbSetSplashStatus && window.__pbSetSplashStatus('${safe}')`)
+    .catch(() => {
+      // Swallow — splash may have already been destroyed.
+    });
+}
+
+/**
+ * Push a progress percent into the splash window's progress bar.
+ *
+ * Pass `null` to revert to the indeterminate animation (the comet
+ * sliding across the track). Pass 0..100 for a determinate fill.
+ * Safe to call on every download-progress tick — the splash's CSS
+ * transition keeps the bar from jittering.
+ */
+function setSplashProgress(percent: number | null): void {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const arg = percent === null || percent === undefined ? 'null' : Number(percent);
+  splashWindow.webContents
+    .executeJavaScript(`window.__pbSetSplashProgress && window.__pbSetSplashProgress(${arg})`)
     .catch(() => {
       // Swallow — splash may have already been destroyed.
     });
@@ -521,6 +552,41 @@ app.whenReady().then(() => {
     writeMainSettings(settings);
   });
 
+  // Auto-update preference. Default is ON (autoUpdate enabled) so an
+  // unmodified install keeps itself current. The Settings page can
+  // flip it OFF, after which the user has to click the title-bar
+  // download button per release. The handler also flips
+  // `autoUpdater.autoDownload` live so a toggle during the same
+  // session takes effect without requiring a restart.
+  ipcMain.handle('get-auto-update-enabled', () => {
+    return readMainSettings().autoUpdateEnabled ?? true;
+  });
+  ipcMain.handle('set-auto-update-enabled', (_event, enabled: boolean) => {
+    const settings = readMainSettings();
+    settings.autoUpdateEnabled = !!enabled;
+    writeMainSettings(settings);
+    autoUpdater.autoDownload = !!enabled;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auto-update-enabled-changed', !!enabled);
+    }
+  });
+
+  // Renderer-driven manual download. Only meaningful when
+  // autoUpdate is OFF — when it's ON, autoUpdater.downloadUpdate
+  // has already kicked off in the background. The handler is
+  // tolerant about being called either way (the second
+  // downloadUpdate is a no-op when one is in flight).
+  ipcMain.handle('download-update', async () => {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[autoUpdater] manual downloadUpdate failed', message);
+      return { ok: false, error: message };
+    }
+  });
+
   // macOS: clicking the dock icon when the app has no visible windows
   // should re-show the existing window (or create one if it was fully
   // closed). This is the canonical Electron pattern.
@@ -561,7 +627,12 @@ app.on('before-quit', () => {
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 
 if (!isDev) {
-  autoUpdater.autoDownload = true;
+  // Auto-download tracks the user's preference. ON by default (a
+  // fresh install keeps itself current); the renderer can flip it
+  // OFF via `set-auto-update-enabled`, at which point new releases
+  // arrive as a title-bar "download" button instead of a silent
+  // background fetch.
+  autoUpdater.autoDownload = readMainSettings().autoUpdateEnabled ?? true;
   autoUpdater.autoInstallOnAppQuit = true;
   // Re-poll the GitHub feed every 6h while the app is running. The
   // initial check happens immediately on whenReady (below); this
@@ -587,6 +658,13 @@ if (!isDev) {
   autoUpdater.on('update-available', (info) => {
     sendUpdateEvent('update-available', info);
     setSplashStatus(`Update ${info?.version ?? ''} available`);
+    // When auto-update is OFF the user has to click the title-bar
+    // download button. Until they do, the splash shouldn't try to
+    // show a download percent (there is no download), so reset to
+    // indeterminate so the bar's comet animation keeps rolling.
+    if (!autoUpdater.autoDownload) {
+      setSplashProgress(null);
+    }
   });
   autoUpdater.on('update-not-available', (info) => {
     // Useful for a "you're up to date" toast after a manual check.
@@ -600,6 +678,7 @@ if (!isDev) {
     sendUpdateEvent('update-download-progress', progress);
     if (progress && typeof progress.percent === 'number') {
       setSplashStatus(`Downloading update  ${Math.round(progress.percent)}%`);
+      setSplashProgress(progress.percent);
     }
   });
   autoUpdater.on('update-downloaded', (info) => {

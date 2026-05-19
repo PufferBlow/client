@@ -110,6 +110,37 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.send('install-update'),
 
+  // ── Auto-update preference ───────────────────────────────────
+  //
+  // When the preference is ON (default), the updater downloads new
+  // releases in the background and the UpdateBanner surfaces a
+  // "restart now" once the bundle is on disk. When OFF, releases
+  // are still DETECTED — the renderer's title bar shows a download
+  // button so the user opts in per release.
+  getAutoUpdateEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('get-auto-update-enabled'),
+  setAutoUpdateEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('set-auto-update-enabled', enabled),
+  /**
+   * Listen for live changes to the preference (e.g. flipped in
+   * Settings) so the title bar's download button can appear /
+   * disappear without a reload. Returns a disposer.
+   */
+  onAutoUpdateEnabledChanged: (cb: (enabled: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, enabled: boolean) => cb(enabled);
+    ipcRenderer.on('auto-update-enabled-changed', listener);
+    return () => ipcRenderer.removeListener('auto-update-enabled-changed', listener);
+  },
+  /**
+   * Renderer-initiated manual download. Use after seeing the
+   * "update available" event when auto-update is OFF. Resolves
+   * once `autoUpdater.downloadUpdate()` returns (which is when the
+   * download has STARTED, not finished — progress arrives via
+   * onUpdateDownloadProgress).
+   */
+  downloadUpdate: (): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('download-update'),
+
   /**
    * Subscribe to `pufferblow://` activations forwarded from the main
    * process. The URL is the raw string the OS handed us — the renderer
