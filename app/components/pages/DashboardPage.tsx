@@ -18,6 +18,7 @@ import { UserCard } from "../../components/UserCard";
 import { AttachmentGrid } from "../../components/AttachmentBubble";
 import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
+import { JoinServerModal } from "../../components/dashboard/JoinServerModal";
 import { ChannelSidebarHeader } from "../../components/dashboard-page/ChannelSidebarHeader";
 import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
@@ -251,6 +252,12 @@ export default function Dashboard() {
   // used for the "File" entry as a true catch-all. All four inputs
   // share `handleFileUpload`, so the pipeline downstream is unchanged.
   const [uploadPickerOpen, setUploadPickerOpen] = useState(false);
+  // Join-server modal. Triggered by the rail's "+" button. The
+  // success callback splices the new server's metadata into a local
+  // map so the rail can render its avatar / name without a refetch
+  // — the home server's response already carries everything we
+  // need (it ran the validation probe).
+  const [joinModalOpen, setJoinModalOpen] = useState(false);
   const uploadPickerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -2893,9 +2900,9 @@ export default function Dashboard() {
                   reads as a vertical column of rectangles. */}
               <div className="mt-auto flex w-16 items-center justify-center">
                 <AddServerButton
-                  disabled
-                  title="Additional home instances are not available in this build"
-                  ariaLabel="Additional home instances are not available in this build"
+                  onClick={() => setJoinModalOpen(true)}
+                  title="Join a Pufferblow server"
+                  ariaLabel="Join a Pufferblow server"
                 />
               </div>
             </div>
@@ -3874,6 +3881,24 @@ export default function Dashboard() {
         isOpen={channelCreationModalOpen}
         onClose={() => setChannelCreationModalOpen(false)}
         onCreateChannel={handleCreateChannel}
+      />
+
+      <JoinServerModal
+        open={joinModalOpen}
+        onClose={() => setJoinModalOpen(false)}
+        onJoined={(server) => {
+          // For v1.0 we don't keep a local rail-side cache of
+          // joined server metadata — the rail still only renders
+          // serverInfo (the home instance). A toast tells the user
+          // the join landed; subsequent connect-to-joined-server
+          // affordances arrive when the rail starts rendering more
+          // than one slot.
+          showToast({
+            message: `Joined ${server.server_name}.`,
+            tone: "success",
+            category: "system",
+          });
+        }}
       />
 
       {/* SearchModal used to be mounted globally here as a centered
