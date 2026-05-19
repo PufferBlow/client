@@ -59,6 +59,7 @@ import { DashboardOverlays } from "../dashboard-page/DashboardOverlays";
 import { MembersPanel } from "../dashboard-page/MembersPanel";
 import { MessagePane } from "../dashboard-page/MessagePane";
 import { ServerRail } from "../dashboard-page/ServerRail";
+import { ServerRailItem } from "../dashboard-page/ServerRailItem";
 import { useTitleBar } from "../../context/TitleBarContext";
 import type { DisplayUser } from "../dashboard-page/types";
 import { getAttachmentCategory, normalizeExtensions } from "../dashboard-page/types";
@@ -2841,56 +2842,43 @@ export default function Dashboard() {
       <div className="flex h-full shrink-0 flex-col gap-2">
         {/* Server and Channel Sidebars Row */}
         <div className="flex min-h-0 flex-1 gap-2">
-          {/* Server Sidebar */}
+          {/* Server Sidebar — one row per joined server. Each row is a
+              `ServerRailItem`: w-16 (rail-width) box, avatar centered,
+              vertical selection pill on the LEFT edge. The pill is a
+              sibling of the avatar so hover / selection visuals never
+              animate across the avatar's own pixels — the avatar shape
+              stays rectangular (rounded-lg) on every state. The
+              divider separates the current home instance from
+              externally-joined servers (only the current shows until
+              multi-server lands; the divider is kept so the visual
+              rhythm doesn't shift on first multi-join). */}
           <ServerRail>
-            {/*
-              Discord-style rail: each row is a full-rail-width box (w-16)
-              with the avatar centered and a vertical selection pill on the
-              LEFT edge. The pill is a sibling of the avatar, not a
-              wrapper, so the hover state never visually covers the avatar
-              glyph or its presence dot — only the pill grows. Previously
-              the hover lived on the avatar wrapper itself, which meant
-              the `rounded-lg → rounded-2xl` morph happened on the same
-              element that held the image, and the radius transition
-              looked like the avatar was being eaten.
-            */}
-            <div className="flex flex-col py-2 space-y-2">
-              <div className="mx-auto w-8 h-px bg-[var(--color-surface-tertiary)] rounded mb-2"></div>
-
+            <div className="flex h-full flex-col py-2 space-y-2">
               {serverInfo && (
-                <div className="group relative flex h-12 w-16 items-center justify-center cursor-pointer">
-                  {/* Left-edge selection pill. Single server today, so it's
-                      always "selected" — full height. The group-hover
-                      variant is kept disabled on selected rows in the
-                      preview but harmless here since the static height is
-                      already at its max. */}
-                  <span
-                    aria-hidden
-                    className="absolute left-0 h-9 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200"
-                  />
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-lg">
-                    {serverInfo.avatar_url ? (
-                      <img
-                        src={serverInfo.avatar_url}
-                        alt={`${serverInfo.server_name} avatar`}
-                        className="h-12 w-12 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center rounded-lg bg-[var(--color-primary)] text-lg font-semibold text-[var(--color-on-primary)]">
-                        {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-[var(--color-success)] border-2 border-[var(--color-surface)]"></div>
-                  </div>
-                </div>
+                <ServerRailItem
+                  label={serverInfo.server_name || "Server"}
+                  selected
+                  presenceClassName="bg-[var(--color-success)]"
+                >
+                  {serverInfo.avatar_url ? (
+                    <img
+                      src={serverInfo.avatar_url}
+                      alt={`${serverInfo.server_name} avatar`}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
+                  ) : (
+                    (serverInfo.server_name || "S").charAt(0).toUpperCase()
+                  )}
+                </ServerRailItem>
               )}
 
-              {/* AddServerButton stays in the rail flow; its own component
-                  owns the squircle-on-hover styling and `mt-auto` pin. We
-                  wrap it so it sits centered in the same w-16 column as
-                  the avatars above, keeping the pill gutter empty for the
-                  add slot (you can't "select" the add button — there's
-                  nothing to pill). */}
+              <div className="mx-auto w-8 h-px bg-[var(--color-surface-tertiary)] rounded" />
+
+              {/* Add-server slot — its own button component owns the
+                  shape + hover styling. The mt-auto pushes it to the
+                  bottom of the rail; the wrapper keeps it centered in
+                  the same 64px column the avatars use, so the rail
+                  reads as a vertical column of rectangles. */}
               <div className="mt-auto flex w-16 items-center justify-center">
                 <AddServerButton
                   disabled
