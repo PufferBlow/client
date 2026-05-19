@@ -58,7 +58,6 @@ type UpdateStatus = 'idle' | 'available' | 'downloading' | 'downloaded' | 'error
 export function UpdateBanner() {
   const [status, setStatus] = useState<UpdateStatus>('idle');
   const [version, setVersion] = useState<string | null>(null);
-  const [progress, setProgress] = useState<UpdateDownloadProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   // When auto-update is OFF the title bar owns the update UI — a
@@ -100,8 +99,13 @@ export function UpdateBanner() {
     }
     if (bridge.onUpdateDownloadProgress) {
       disposers.push(
-        bridge.onUpdateDownloadProgress((p) => {
-          setProgress(p);
+        bridge.onUpdateDownloadProgress(() => {
+          // Tick `downloading` state for the brief moment between
+          // the first progress event and the `downloaded` event so
+          // anything that consults `status` knows a fetch is in
+          // flight. The progress payload itself is intentionally
+          // ignored — auto-update mode keeps downloads silent and
+          // we don't surface a percent in the renderer.
           setStatus((current) => (current === 'downloaded' ? current : 'downloading'));
         }),
       );
@@ -140,33 +144,23 @@ export function UpdateBanner() {
   // surface takes over. (autoUpdate === null is the bridge-not-ready
   // case; defaulting to showing the banner is the safe choice there.)
   if (autoUpdate === false) return null;
+  // Auto-update ON: keep the download silent. The whole point of the
+  // 'auto' mode is that releases land in the background without
+  // pulling the user out of what they're doing — a bottom-right
+  // banner with a live progress bar is exactly the kind of
+  // interruption the preference is meant to avoid. We surface only
+  // the actionable states: `downloaded` (the user can restart) and
+  // `error` (the user might want to know auto-update is broken).
+  if (status === 'available' || status === 'downloading') return null;
 
   const isReady = status === 'downloaded';
-  const isDownloading = status === 'downloading';
   const isError = status === 'error';
 
-  const title = isError
-    ? 'Update check failed'
-    : isReady
-      ? 'Update ready'
-      : isDownloading
-        ? 'Downloading update'
-        : 'Update available';
+  const title = isError ? 'Update check failed' : 'Update ready';
 
   const body = isError
     ? errorMessage || 'Pufferblow could not reach the release feed. We will retry automatically.'
-    : isReady
-      ? `Pufferblow ${version ?? ''} is ready. Restart to apply.`
-      : isDownloading
-        ? `Pufferblow ${version ?? ''} is downloading…`
-        : `Pufferblow ${version ?? ''} was found — download starting…`;
-
-  // Clamp + round so a flaky network can't push the bar above 100.
-  // electron-updater occasionally reports >100 on the final tick.
-  const percent =
-    progress && Number.isFinite(progress.percent)
-      ? Math.max(0, Math.min(100, progress.percent))
-      : null;
+    : `Pufferblow ${version ?? ''} is ready. Restart to apply.`;
 
   return (
     <div
@@ -192,31 +186,11 @@ export function UpdateBanner() {
         </button>
       </div>
 
-      {/* Progress bar — visible only while the bundle is being fetched.
-          We hide it for the "downloaded" and "available" states so the
-          banner doesn't show a frozen 100% bar after install is ready. */}
-      {isDownloading && percent !== null && (
-        <div className="mt-3">
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-secondary)]"
-            role="progressbar"
-            aria-valuenow={Math.round(percent)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="h-full rounded-full bg-[var(--color-primary)] transition-[width] duration-200"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--color-text-muted)] tabular-nums">
-            <span>{Math.round(percent)}%</span>
-            {progress && progress.bytesPerSecond > 0 && (
-              <span>{formatBytesPerSecond(progress.bytesPerSecond)}</span>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Download progress is intentionally not surfaced anywhere
+          in the renderer when auto-update is ON — the banner only
+          renders for `downloaded` and `error`. The progress fires
+          internally so the splash bar can track it on cold boot,
+          but during a live session it stays silent. */}
 
       {isReady && (
         <div className="mt-3 flex justify-end">
@@ -233,13 +207,3 @@ export function UpdateBanner() {
   );
 }
 
-/**
- * Format a B/s value as KB/s or MB/s for the progress readout. Kept
- * inline (not a util) because no other surface needs this.
- */
-function formatBytesPerSecond(bytesPerSecond: number): string {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '';
-  const kb = bytesPerSecond / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB/s`;
-  return `${(kb / 1024).toFixed(2)} MB/s`;
-}
