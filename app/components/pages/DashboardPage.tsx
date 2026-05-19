@@ -3028,31 +3028,42 @@ export default function Dashboard() {
                 // pill behavior is unchanged here.
                 lockRestingPalette
               >
-                {/* Message-bubble icon with two horizontal skeleton
-                    lines inside — the conventional "this is the
-                    direct-messages affordance" glyph. Stroke is
-                    `currentColor` so the icon inherits whatever
-                    text color the avatar div is using (the avatar
-                    here is locked to the resting palette, so the
-                    icon always renders in text-secondary). The
-                    short bottom line is deliberately shorter than
-                    the top one — that's the visual trope for "a
-                    message with text in it" rather than an empty
-                    bubble.
-                */}
+                {/* Three stacked horizontal bars — a "list of message
+                    rows" glyph for the DM affordance. Reads as a
+                    skeleton/list rather than a single bubble, which
+                    is what the user wants this slot to communicate:
+                    "go to your direct conversations", i.e. an inbox
+                    rather than one specific message.
+
+                    Layout decisions:
+                      - Lines are the same length (x1=5 → x2=19) so
+                        the three rows read as a uniform stack — no
+                        accidental "checklist" interpretation.
+                      - Even vertical spacing: y=7, 12, 17. The 5-unit
+                        gap is identical between every pair, which is
+                        what "fixed gap" calls for.
+                      - `strokeLinecap="round"` gives the bars
+                        soft, pill-shaped ends so they read as
+                        skeleton placeholder bars instead of crisp
+                        rulers. `strokeWidth=2.4` keeps them weighty
+                        without crowding the gaps at 28×28 px.
+                      - `currentColor` is preserved so the icon
+                        inherits the locked resting palette's
+                        text-secondary color, same as the previous
+                        glyph. */}
                 <svg
                   className="h-7 w-7"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth={2}
+                  strokeWidth={2.4}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  <line x1="8" y1="9" x2="16" y2="9" />
-                  <line x1="8" y1="13" x2="13" y2="13" />
+                  <line x1="5" y1="7" x2="19" y2="7" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <line x1="5" y1="17" x2="19" y2="17" />
                 </svg>
               </ServerRailItem>
 
