@@ -235,7 +235,7 @@ function UpdateTitleBarButton() {
 }
 
 export function TitleBar() {
-  const { serverName } = useTitleBar();
+  const { serverName, serverAvatarUrl, channelName } = useTitleBar();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   // `mounted` is the SSR-safety latch. SSR has no `window`, so isElectron()
@@ -295,12 +295,62 @@ export function TitleBar() {
         </span>
       </div>
 
-      {/* Center — current server / instance name, absolutely centered in the bar */}
+      {/* Center — current location breadcrumb: server avatar + server
+          name + channel name. Absolutely centered in the bar so the
+          left/right clusters can grow without pushing it around.
+
+          Layout: [ avatar ] [ server name ] · [ # channel ]
+          The avatar uses the same `rounded-lg` rectangle the rail
+          uses (just smaller — 18px to fit the 36px-tall bar),
+          falling back to a letter chip if the instance hasn't set
+          one. The channel half is suppressed when DMs are open or
+          when nothing is selected — handled by the dashboard
+          clearing `channelName` in those modes.
+
+          pointer-events stay on so the avatar and labels are
+          tooltip-able, but the wrapper preserves `WebkitAppRegion:
+          drag` from the parent so the bar still acts as a drag
+          handle in the gaps between elements. */}
       {serverName && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span className="text-[11px] font-medium text-[var(--color-text-muted)] tracking-wide truncate max-w-[40%]">
-            {serverName}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0 max-w-[60%] px-2">
+            {serverAvatarUrl ? (
+              <img
+                src={serverAvatarUrl}
+                alt=""
+                className="h-[18px] w-[18px] shrink-0 rounded-md object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-secondary)] text-[9px] font-semibold text-[var(--color-text-secondary)]"
+              >
+                {(serverName || "S").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span
+              className="text-[11px] font-medium text-[var(--color-text)] tracking-wide truncate"
+              title={serverName}
+            >
+              {serverName}
+            </span>
+            {channelName && (
+              <>
+                <span
+                  aria-hidden
+                  className="text-[11px] text-[var(--color-text-tertiary)] shrink-0"
+                >
+                  ·
+                </span>
+                <span
+                  className="text-[11px] font-medium text-[var(--color-text-muted)] tracking-wide truncate"
+                  title={`#${channelName}`}
+                >
+                  #{channelName}
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
 

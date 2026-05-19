@@ -77,7 +77,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const showToast = useToast();
-  const { setServerName } = useTitleBar();
+  const { setServerName, setServerAvatarUrl, setChannelName } = useTitleBar();
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
   const {
@@ -213,11 +213,19 @@ export default function Dashboard() {
     serverInfo,
     normalizeExtensions,
   });
-  // Keep the title bar in sync with the current server name.
+  // Keep the title bar's center breadcrumb in sync with whichever
+  // server the dashboard is currently showing. Reset on unmount so
+  // non-dashboard pages don't inherit stale chrome. The channel
+  // half of the breadcrumb is wired up further down, after
+  // `dmsOpen` is declared.
   useEffect(() => {
     setServerName(serverInfo?.server_name ?? null);
-    return () => setServerName(null);
-  }, [serverInfo?.server_name, setServerName]);
+    setServerAvatarUrl(serverInfo?.avatar_url ?? null);
+    return () => {
+      setServerName(null);
+      setServerAvatarUrl(null);
+    };
+  }, [serverInfo?.server_name, serverInfo?.avatar_url, setServerName, setServerAvatarUrl]);
 
   // @mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -266,6 +274,20 @@ export default function Dashboard() {
   // channel list — see the `dmsOpen ?` branch in the channel-panel
   // render block below.
   const [dmsOpen, setDmsOpen] = useState(false);
+
+  // Channel half of the title-bar breadcrumb. Tracks the active
+  // channel only; suppressed entirely while the DM panel is open
+  // since "channel" doesn't apply to DMs. Cleared on unmount so
+  // non-dashboard pages start clean.
+  useEffect(() => {
+    if (dmsOpen) {
+      setChannelName(null);
+      return;
+    }
+    setChannelName(selectedChannel?.channel_name ?? null);
+    return () => setChannelName(null);
+  }, [dmsOpen, selectedChannel?.channel_name, setChannelName]);
+
   const uploadPickerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
