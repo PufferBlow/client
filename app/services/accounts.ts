@@ -27,6 +27,17 @@ export interface SavedAccount {
   authToken: string;
   /** Optional refresh token, if the auth flow returned one. */
   refreshToken?: string;
+  /**
+   * ISO timestamp at which the stored `authToken` expires. Used by the
+   * multi-account refresher so a backgrounded account can be kept alive
+   * without the user switching to it first. Optional because pre-v1.0
+   * SavedAccount rows wrote token strings without expiry metadata.
+   */
+  authTokenExpireTime?: string;
+  /** ISO timestamp at which the stored `refreshToken` expires. */
+  refreshTokenExpireTime?: string;
+  /** OAuth-style token type (Bearer, etc.), echoed by the refresh endpoint. */
+  tokenType?: string;
   /** Snapshot avatar URL, may be relative. */
   avatarUrl?: string | null;
   /** Snapshot status at save time. Purely cosmetic. */
@@ -132,6 +143,9 @@ export const rememberAccount = (
     username: input.username,
     authToken: input.authToken,
     refreshToken: input.refreshToken,
+    authTokenExpireTime: input.authTokenExpireTime,
+    refreshTokenExpireTime: input.refreshTokenExpireTime,
+    tokenType: input.tokenType,
     avatarUrl: input.avatarUrl ?? null,
     status: input.status,
     lastUsedAt,
@@ -146,6 +160,40 @@ export const rememberAccount = (
 
   setActiveAccountId(id);
   return merged;
+};
+
+/**
+ * In-place rewrite of an account's token fields after a successful
+ * refresh. Used by the multi-account refresher to update tokens for a
+ * non-active account without touching its `lastUsedAt` (which would
+ * incorrectly bump the dropdown ordering).
+ *
+ * No-op if the id isn't in storage.
+ */
+export const updateAccountTokens = (
+  id: string,
+  tokens: {
+    authToken: string;
+    refreshToken?: string;
+    authTokenExpireTime?: string;
+    refreshTokenExpireTime?: string;
+    tokenType?: string;
+  },
+): void => {
+  const accounts = readAccountsFromStorage();
+  const index = accounts.findIndex((account) => account.id === id);
+  if (index < 0) return;
+  accounts[index] = {
+    ...accounts[index],
+    authToken: tokens.authToken,
+    refreshToken: tokens.refreshToken ?? accounts[index].refreshToken,
+    authTokenExpireTime:
+      tokens.authTokenExpireTime ?? accounts[index].authTokenExpireTime,
+    refreshTokenExpireTime:
+      tokens.refreshTokenExpireTime ?? accounts[index].refreshTokenExpireTime,
+    tokenType: tokens.tokenType ?? accounts[index].tokenType,
+  };
+  writeAccountsToStorage(accounts);
 };
 
 /** Remove an account from the registry. Clears the active pointer if it was active. */

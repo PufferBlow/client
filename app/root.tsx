@@ -28,6 +28,7 @@ import { persistQueryClient } from '@tanstack/react-query-persist-client';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { getAuthTokenFromCookies } from "./services/user";
 import { startBackgroundAuthRefresh } from "./services/authSession";
+import { startBackgroundAccountTokenRefresh } from "./services/multiAccountRefresh";
 import { buildAuthRedirectPath, resolvePostAuthRedirect } from "./utils/authRedirect";
 
 const CACHE_KEY = 'PUFFERBLOW_QUERY_CACHE';
@@ -102,7 +103,7 @@ export default function App() {
   const location = useLocation();
 
   useEffect(() => {
-    return startBackgroundAuthRefresh(() => {
+    const stopActive = startBackgroundAuthRefresh(() => {
       // Clear both in-memory and persisted cache on auth expiry so stale
       // user data doesn't leak into the next session.
       queryClient.clear();
@@ -120,6 +121,17 @@ export default function App() {
         );
       }
     });
+    // Keep dormant accounts' auth tokens alive in the background.
+    // The active session's refresh is owned by startBackgroundAuthRefresh
+    // above; this one walks the SavedAccount registry and re-arms any
+    // non-active account whose token is within REFRESH_BUFFER_MS of
+    // expiring. Without it, switching to an account that's been idle
+    // for >15min immediately bounces the user to the login screen.
+    const stopAccounts = startBackgroundAccountTokenRefresh();
+    return () => {
+      stopActive();
+      stopAccounts();
+    };
   }, []);
 
   const authToken = getAuthTokenFromCookies();

@@ -114,6 +114,27 @@ const getRefreshExpireTime = (): string | null => {
   return getStorageValue(STORAGE_KEYS.refreshExpireAt);
 };
 
+/**
+ * Snapshot of the active session's refresh-token bundle for callers
+ * outside this module (notably DashboardPage's account-registry sync,
+ * which needs the refresh token + expiry strings to persist them
+ * onto the SavedAccount row so the multi-account refresher can keep
+ * the dormant identity alive after a switch).
+ *
+ * Returns null fields where storage has nothing yet.
+ */
+export const getActiveSessionSnapshot = (): {
+  refreshToken: string | null;
+  authTokenExpireTime: string | null;
+  refreshTokenExpireTime: string | null;
+  tokenType: string | null;
+} => ({
+  refreshToken: getRefreshToken(),
+  authTokenExpireTime: getAuthExpireTime(),
+  refreshTokenExpireTime: getRefreshExpireTime(),
+  tokenType: getStorageValue(STORAGE_KEYS.tokenType),
+});
+
 const isExpired = (expiresAt: string | null): boolean => {
   if (!expiresAt) return false;
   const expiresAtMs = Date.parse(expiresAt);

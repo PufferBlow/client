@@ -35,6 +35,7 @@ import { listChannels, createChannel, deleteChannel, updateChannel } from "../..
 import { Modal } from "../../components/ui/Modal";
 import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
 import { rememberAccount } from "../../services/accounts";
+import { getActiveSessionSnapshot } from "../../services/authSession";
 import { AccountSwitcher } from "../../components/AccountSwitcher";
 import {
   dispatchDesktopNotification,
@@ -476,12 +477,23 @@ export default function Dashboard() {
     const authToken = getAuthTokenFromCookies();
     const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
     if (!authToken || !hostPort) return;
+    // Pull the refresh bundle alongside the auth token so the
+    // SavedAccount row carries everything the multi-account refresher
+    // needs. Without these the dormant-account refresh path falls
+    // back to a no-op the moment the user switches away from this
+    // identity, which is exactly the regression we're trying to
+    // avoid.
+    const sessionSnapshot = getActiveSessionSnapshot();
     try {
       rememberAccount({
         hostPort,
         userId: currentUser.user_id,
         username: currentUser.username || "",
         authToken,
+        refreshToken: sessionSnapshot.refreshToken ?? undefined,
+        authTokenExpireTime: sessionSnapshot.authTokenExpireTime ?? undefined,
+        refreshTokenExpireTime: sessionSnapshot.refreshTokenExpireTime ?? undefined,
+        tokenType: sessionSnapshot.tokenType ?? undefined,
         avatarUrl: currentUser.avatar || null,
         status: currentUserLiveStatus,
       });
