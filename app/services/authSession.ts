@@ -200,7 +200,22 @@ export const persistSessionTokens = (tokens: PersistedSessionTokens): void => {
   if (typeof window === 'undefined') return;
   const rememberMe = tokens.rememberMe ?? getRememberMe();
 
-  setCookie(AUTH_COOKIE_KEY, tokens.authToken, tokens.authTokenExpireTime);
+  // Cookie expiry is the SERVER lifetime of the cookie in the browser
+  // jar, NOT the validity of the JWT inside. With Remember Me on we
+  // want the cookie to stick around for as long as the refresh token
+  // is valid: the access token JWT will expire long before then
+  // (15 min default) but the background refresher swaps it in place
+  // on next launch. Without this, the cookie was being written with
+  // the 15-minute access-token expiry, evaporated by the time the
+  // user reopened the app, and Remember Me looked silently broken.
+  //
+  // Without Remember Me we keep the original behavior — cookie expiry
+  // matches the access token so closing the app actually logs the
+  // user out.
+  const cookieExpiry = rememberMe
+    ? tokens.refreshTokenExpireTime ?? tokens.authTokenExpireTime
+    : tokens.authTokenExpireTime;
+  setCookie(AUTH_COOKIE_KEY, tokens.authToken, cookieExpiry);
   if (tokens.hostPort) {
     const normalizedHost = normalizeInstance(tokens.hostPort);
     setStorageValue(HOST_COOKIE_KEY, normalizedHost, rememberMe);
