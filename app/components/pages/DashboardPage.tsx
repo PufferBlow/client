@@ -19,7 +19,6 @@ import { AttachmentGrid } from "../../components/AttachmentBubble";
 import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { JoinServerModal } from "../../components/dashboard/JoinServerModal";
-import { PufferblowMark } from "../../components/PufferblowBrand";
 import { ChannelSidebarHeader } from "../../components/dashboard-page/ChannelSidebarHeader";
 import { DirectMessagesPanel } from "../../components/dashboard-page/DirectMessagesPanel";
 import { MembersList } from "../../components/dashboard-page/MembersList";
@@ -2906,18 +2905,32 @@ export default function Dashboard() {
                 // pill behavior is unchanged here.
                 lockRestingPalette
               >
-                {/* The mark inherits stroke color from the avatar
-                    div's `text-*` class, so it switches from
-                    on-primary (dark, against the white selected bg)
-                    to text-secondary (light, against the dark resting
-                    bg) without any explicit theming here. We pass
-                    `surfaceColor="transparent"` so the knockout
-                    circle that normally punches the donut hole out of
-                    the spokes doesn't fight the avatar's bg color
-                    across hover / selected transitions — the spokes
-                    show through the ring at 28px and the result still
-                    reads as the Pufferblow mark. */}
-                <PufferblowMark size={28} surfaceColor="transparent" animated={false} />
+                {/* Message-bubble icon with two horizontal skeleton
+                    lines inside — the conventional "this is the
+                    direct-messages affordance" glyph. Stroke is
+                    `currentColor` so the icon inherits whatever
+                    text color the avatar div is using (the avatar
+                    here is locked to the resting palette, so the
+                    icon always renders in text-secondary). The
+                    short bottom line is deliberately shorter than
+                    the top one — that's the visual trope for "a
+                    message with text in it" rather than an empty
+                    bubble.
+                */}
+                <svg
+                  className="h-7 w-7"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  <line x1="8" y1="9" x2="16" y2="9" />
+                  <line x1="8" y1="13" x2="13" y2="13" />
+                </svg>
               </ServerRailItem>
 
               {/* Divider between the DM slot (always-present, app-wide
