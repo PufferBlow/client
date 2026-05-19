@@ -143,6 +143,58 @@ export const resolveAvatarUrl = (
 };
 
 /**
+ * Unified avatar URL resolver for "sender-ish" entries — the kind we
+ * carry in the dashboard's `usersById` map, in a `Message` row's
+ * `sender_*` fields, and in search-result payloads.
+ *
+ * These shapes don't carry the full `AppearanceFields` set (no
+ * `avatar_kind`, `avatar_seed`, `accent_color`), so calling
+ * `resolveAvatarUrl` against them silently falls through to the
+ * identicon branch even when the user has a real uploaded avatar.
+ * That was the root cause of the reply-pill bug where avatars never
+ * loaded — and of inconsistent rendering between message rows,
+ * search results, and the reply pill, each of which inlined slightly
+ * different fallback logic.
+ *
+ * Rules:
+ *   - If the user (or fallback URL) has an `avatar_url`, prepend the
+ *     active instance origin via `createFullUrl`. Relative paths like
+ *     `/files/avatars/abc.png` get hoisted to a fully-qualified URL
+ *     so the `<img>` actually loads.
+ *   - If `createFullUrl` returns undefined (no configured instance),
+ *     OR the user has no avatar_url at all, fall back to a
+ *     deterministic identicon seeded from the best available
+ *     identifier (username → user_id → 'user').
+ *
+ * The seed-pick prefers username over user_id because identicons
+ * derived from a UUID look chaotic to humans — same user shows the
+ * same face cross-session if we anchor on the (stable) username.
+ */
+export interface SenderAvatarInput {
+  user_id?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+}
+
+export const resolveSenderAvatarUrl = (
+  sender: SenderAvatarInput | null | undefined,
+  fallbackAvatarUrl?: string | null,
+  fallbackUsername?: string | null,
+): string => {
+  const directUrl = sender?.avatar_url ?? fallbackAvatarUrl ?? null;
+  if (directUrl) {
+    const full = createFullUrl(directUrl);
+    if (full) return full;
+  }
+  const seed =
+    sender?.username ||
+    fallbackUsername ||
+    sender?.user_id ||
+    'user';
+  return createFallbackAvatarUrl(seed);
+};
+
+/**
  * Resolve the banner rendering decision for a profile.
  *
  * Returns one of:

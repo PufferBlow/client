@@ -32,7 +32,7 @@ import { extractMentionQuery, insertMentionAtCursor, parseMentions } from "../..
 import { findEmojiAliasMatches } from "../../utils/emojiAliases";
 import { sendPing } from "../../services/ping";
 import { logger } from "../../utils/logger";
-import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner } from "../../services/user";
+import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner, resolveSenderAvatarUrl } from "../../services/user";
 import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
 import { Modal } from "../../components/ui/Modal";
 import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
@@ -945,17 +945,22 @@ export default function Dashboard() {
 
     // Shared avatar lookup -- mirrors how the messages list resolves
     // sender avatars so a search result and the actual message row
-    // show the same face. Falls back to the message's own
-    // `sender_avatar_url` (server-attached) before giving up.
-    const resolveSenderAvatar = (senderUserId: string, fallback?: string | null): string | undefined => {
+    // show the same face. Delegates to the unified
+    // `resolveSenderAvatarUrl` helper so all three surfaces
+    // (message list, search results, reply pill) render the exact
+    // same image for a given sender, including the identicon
+    // fallback for users we have no upload for.
+    const resolveSenderAvatar = (
+      senderUserId: string,
+      fallback?: string | null,
+      fallbackUsername?: string | null,
+    ): string => {
       const cached = usersById.get(senderUserId);
-      if (cached?.avatar_url) {
-        return createFullUrl(cached.avatar_url) ?? undefined;
-      }
-      if (fallback) {
-        return createFullUrl(fallback) ?? undefined;
-      }
-      return undefined;
+      return resolveSenderAvatarUrl(
+        cached ?? { user_id: senderUserId, username: fallbackUsername ?? undefined },
+        fallback,
+        fallbackUsername ?? cached?.username ?? senderUserId,
+      );
     };
 
     // Local cache: messages already loaded for the active channel.
@@ -971,7 +976,11 @@ export default function Dashboard() {
         content: message.message,
         timestamp: message.sent_at,
         channel_id: message.channel_id || undefined,
-        avatar: resolveSenderAvatar(message.sender_user_id, message.sender_avatar_url),
+        avatar: resolveSenderAvatar(
+          message.sender_user_id,
+          message.sender_avatar_url,
+          sender?.username || message.username,
+        ),
       });
       seenMessageIds.add(message.message_id);
     }
@@ -1006,7 +1015,11 @@ export default function Dashboard() {
               content: message.message,
               timestamp: message.sent_at,
               channel_id: currentChannelId,
-              avatar: resolveSenderAvatar(message.sender_user_id, message.sender_avatar_url),
+              avatar: resolveSenderAvatar(
+                message.sender_user_id,
+                message.sender_avatar_url,
+                sender?.username || message.username,
+              ),
             });
             seenMessageIds.add(message.message_id);
           }
@@ -3293,7 +3306,7 @@ export default function Dashboard() {
                   messageUser = {
                     id: foundUser.user_id,
                     username: foundUser.username,
-                    avatar: foundUser.avatar_url ? createFullUrl(foundUser.avatar_url) || createFallbackAvatarUrl(foundUser.username) : createFallbackAvatarUrl(foundUser.username),
+                    avatar: resolveSenderAvatarUrl(foundUser, foundUser.avatar_url, foundUser.username),
                     banner: undefined,
                     accentColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
                     bannerColor: foundUser.is_owner ? 'var(--color-info)' : foundUser.is_admin ? 'var(--color-error)' : 'var(--color-primary)',
@@ -3327,7 +3340,15 @@ export default function Dashboard() {
                   messageUser = {
                     id: firstMessage.sender_user_id,
                     username: firstMessage.username || 'Unknown User',
-                    avatar: firstMessage.sender_avatar_url ? createFullUrl(firstMessage.sender_avatar_url) : createFallbackAvatarUrl(firstMessage.username || firstMessage.sender_user_id),
+                    avatar: resolveSenderAvatarUrl(
+                      {
+                        user_id: firstMessage.sender_user_id,
+                        username: firstMessage.username,
+                        avatar_url: firstMessage.sender_avatar_url,
+                      },
+                      firstMessage.sender_avatar_url,
+                      firstMessage.username,
+                    ),
                     banner: undefined,
                     accentColor: 'var(--color-accent)',
                     bannerColor: undefined,
@@ -3355,7 +3376,25 @@ export default function Dashboard() {
 
                 // Use actual user profile data (fallback to message data if user not found)
                 const displayName = messageUser.username || firstMessage.username || 'Unknown User';
-                const displayAvatar = messageUser.avatar || firstMessage.sender_avatar_url || '/pufferblow-art-pixel-32x32.png';
+                // `messageUser.avatar` is already a fully-resolved URL
+                // (resolveSenderAvatarUrl runs above), but it can be
+                // empty for messages whose sender data is incomplete —
+                // in that case we still want a working <img> rather
+                // than a broken one. Re-running the unified resolver
+                // with whatever's on `firstMessage` gives us either a
+                // hoisted absolute URL or a deterministic identicon,
+                // never the bare relative path the bug was caused by.
+                const displayAvatar =
+                  messageUser.avatar ||
+                  resolveSenderAvatarUrl(
+                    {
+                      user_id: firstMessage.sender_user_id,
+                      username: firstMessage.username,
+                      avatar_url: firstMessage.sender_avatar_url,
+                    },
+                    firstMessage.sender_avatar_url,
+                    firstMessage.username || displayName,
+                  );
 
               return (
                 <React.Fragment key={firstMessage.message_id}>
@@ -3682,15 +3721,31 @@ export default function Dashboard() {
                 ? `${rawText.slice(0, PREVIEW_CHAR_CAP).trimEnd()}…`
                 : rawText
               : 'Attachment-only message';
-            // Try the live users-list entry first (has appearance
-            // fields). Fall back to a deterministic identicon URL
-            // built from the username so deleted / federated /
-            // outside-the-current-list senders still render an
-            // avatar instead of a broken image.
+            // Try the live users-list entry first. Fall back to the
+            // message's own `sender_avatar_url` (server-attached on
+            // the message payload), then to a deterministic
+            // identicon seeded from the username. Goes through the
+            // shared `resolveSenderAvatarUrl` helper so the reply
+            // pill, message list row, and search results all
+            // resolve to the EXACT same image for a given sender —
+            // crucially including the `createFullUrl` hop that turns
+            // relative upload paths like `/files/avatars/abc.png`
+            // into fully-qualified URLs the <img> can actually
+            // load. (The previous version called `resolveAvatarUrl`
+            // directly, but the users-list shape lacks
+            // `avatar_kind`, so that helper always fell through to
+            // the identicon branch even for users with real
+            // uploads.)
             const replyUser = usersById.get(replyTarget.sender_user_id);
-            const replyAvatarUrl = replyUser
-              ? resolveAvatarUrl(replyUser, replyUser.avatar_url ?? undefined)
-              : createFallbackAvatarUrl(replyToUsername);
+            const replyAvatarUrl = resolveSenderAvatarUrl(
+              replyUser ?? {
+                user_id: replyTarget.sender_user_id,
+                username: replyToUsername,
+                avatar_url: replyTarget.sender_avatar_url ?? undefined,
+              },
+              replyTarget.sender_avatar_url ?? undefined,
+              replyToUsername,
+            );
             return (
               <div
                 // Whole pill is clickable except for the close
