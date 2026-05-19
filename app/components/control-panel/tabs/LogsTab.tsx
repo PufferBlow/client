@@ -262,7 +262,7 @@ export function LogsTab({
     // explicit ANSI takes precedence over the heuristic span.
     safe = safe.replace(
       /\b(CRITICAL|ERROR|WARNING|WARN|INFO|DEBUG|TRACE)\b/g,
-      (match) => {
+      (match: string) => {
         const upper = match.toUpperCase();
         const colour =
           upper === 'CRITICAL' || upper === 'ERROR'

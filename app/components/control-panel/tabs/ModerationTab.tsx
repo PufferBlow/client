@@ -372,7 +372,10 @@ export function ModerationTab({
                       <div className="mb-3 flex items-center gap-2 flex-wrap">
                         {report.sender ? (
                           <>
-                            <ControlPanelAvatar username={report.sender.username} />
+                            <ControlPanelAvatar
+                              username={report.sender.username}
+                              className="h-8 w-8 rounded-full"
+                            />
                             <span
                               onClick={(e) => handleOpenUserProfile(report.sender!.id, report.sender!.username, e)}
                               className="cursor-pointer text-sm font-medium text-[var(--color-text)] hover:underline"
