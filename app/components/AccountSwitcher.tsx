@@ -15,6 +15,7 @@ import {
   setHostPortToStorage,
 } from "../services/user";
 import { logger } from "../utils/logger";
+import { SwitchAccountSplash } from "./SwitchAccountSplash";
 
 interface AccountSwitcherProps {
   className?: string;
@@ -81,19 +82,27 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
 
   const handleSwitch = async (account: SavedAccount) => {
     if (account.id === activeId || switching) return;
+    // `setSwitching(true)` arms the SwitchAccountSplash overlay (the
+    // render block at the bottom of this component). The overlay
+    // paints immediately so the user sees the splash _before_ we
+    // hard-reload — without the early flip, the reload triggers
+    // before React has a chance to paint anything.
     setSwitching(true);
+    setOpen(false);
     try {
-      // Mirror the rest of the codebase: persist as "remember me" (localStorage)
-      // so a switched account survives across desktop / web sessions.
       await setHostPortToStorage(account.hostPort, true);
       await setAuthTokenInStorage(account.authToken);
       setActiveAccountId(account.id);
       touchAccount(account.id);
       logger.ui.info("Switched account", { accountId: account.id });
-      // Hard reload so every cached fetch / WebSocket / store is rebuilt
-      // against the new identity. Mirrors what logging out + back in does.
+      // Brief delay so the overlay actually paints a frame before
+      // the renderer is torn down by the reload. 350ms is short
+      // enough that the user perceives "rapid restart" but long
+      // enough that the splash is unmistakable rather than a flash.
       if (typeof window !== "undefined") {
-        window.location.assign("/dashboard");
+        window.setTimeout(() => {
+          window.location.assign("/dashboard");
+        }, 350);
       }
     } catch (error) {
       logger.ui.error("Failed to switch account", {
@@ -121,6 +130,8 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
   }
 
   return (
+    <>
+      {switching && <SwitchAccountSplash />}
     <div ref={containerRef} className={`relative ${className}`}>
       <button
         type="button"
@@ -206,5 +217,6 @@ export function AccountSwitcher({ className = "", currentDisplay }: AccountSwitc
         </div>
       ) : null}
     </div>
+    </>
   );
 }

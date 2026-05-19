@@ -4,22 +4,23 @@
   <meta charset="utf-8" />
   <title>Pufferblow</title>
   <!--
-    Splash screen shown immediately on app launch while:
-      1. The renderer bundle is loaded (Electron's default behaviour
-         is a blank window for ~500ms-1.5s while the React tree
-         mounts; this fills that gap with brand-correct chrome).
-      2. The auto-updater performs its initial GitHub release check.
+    Splash screen shown while:
+      1. The renderer bundle parses + the React tree mounts at app
+         launch.
+      2. The auto-updater downloads a release in the background; the
+         progress bar tracks the download.
+      3. The user switches accounts in the renderer (the renderer
+         opens this same splash markup as an in-window overlay; main
+         doesn't repaint a separate splash window for switches).
 
     Constraints kept tight on purpose:
-      - No external assets (fonts, network requests). The window is
-        going to live ~1s in the common case; even a Google Fonts
-        load would flash uglier than no font swap at all.
-      - All CSS / SVG / motion inline. No script tag — the splash
-        is purely informational, the main process owns its lifetime.
-      - Transparent frameless window in main.ts, so the body is the
-        only thing painted; we keep it as a centered card on a
-        translucent background so the splash works on both light
-        and dark desktops without depending on a theme system.
+      - No external assets (fonts, network requests). Even Google
+        Fonts would flash uglier than no font swap at all.
+      - All CSS / SVG / motion inline. The only JS is the
+        `__pbSetSplashStatus` shim + the progress bar setter that
+        main.ts calls via `executeJavaScript`.
+      - Transparent frameless window in main.ts, body is the only
+        painted element.
   -->
   <style>
     :root {
@@ -39,12 +40,6 @@
       font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
 
-    /*
-     * Centered card. Keeps a small footprint so the splash window
-     * itself is small (320x320 in main.ts) — large enough to read
-     * the wordmark, small enough not to look like a "real" window
-     * the user might try to drag or resize.
-     */
     .pb-splash-shell {
       width: 100%;
       height: 100%;
@@ -52,7 +47,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 20px;
+      gap: 18px;
+      padding: 0 28px;
       background:
         radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.04), transparent 65%),
         #0a0a0a;
@@ -63,18 +59,13 @@
     }
 
     /*
-     * Logo mark. Same geometry as PufferblowMark in the renderer
-     * (`app/components/PufferblowBrand.tsx`) so the splash and the
-     * post-mount logo line up perfectly — no jarring "redraw" when
-     * we transition the user from splash to the main window.
-     *
-     * The looping animation is a slow breathe + a subtle rotation
-     * on the spoke ring. Two separate animations on overlapping
-     * elements so neither feels mechanical.
+     * Same geometry as PufferblowMark in the renderer
+     * (`app/components/PufferblowBrand.tsx`) so splash and post-mount
+     * logo line up perfectly.
      */
     .pb-splash-logo {
-      width: 96px;
-      height: 96px;
+      width: 88px;
+      height: 88px;
       animation: pbSplashBreathe 2.6s ease-in-out infinite;
     }
 
@@ -114,32 +105,80 @@
       animation: pbSplashDot 2.6s ease-in-out infinite;
     }
 
-    .pb-splash-text {
-      font-size: 13px;
+    /* Wordmark stays small. The slogan below is the headline. */
+    .pb-splash-wordmark {
+      font-size: 11px;
       letter-spacing: 0.32em;
       text-transform: uppercase;
-      color: rgba(250, 250, 250, 0.72);
+      color: rgba(250, 250, 250, 0.55);
     }
 
-    /* Status line — main.ts updates this via DOM manipulation
-       through a small IPC handshake; defaults to a neutral
-       "Loading" so the user always sees readable copy. */
-    .pb-splash-status {
+    /*
+     * Slogan replaces the old "Loading" status line. It's persistent
+     * brand copy — the progress bar carries the "we're working" signal
+     * on its own, so the text doesn't need to flicker through state.
+     */
+    .pb-splash-slogan {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fafafa;
+      text-align: center;
+      line-height: 1.15;
+    }
+
+    /*
+     * Progress bar. Two modes:
+     *   1. Indeterminate (default): a small "comet" slides
+     *      left-to-right inside the track while the React tree mounts.
+     *      `__pbSetSplashProgress(null)` brings this back if main has
+     *      no concrete percent.
+     *   2. Determinate: a normal left-anchored fill grows toward the
+     *      right based on `--progress` (0..100). Used by the
+     *      auto-updater while a release downloads.
+     *
+     * The track sits in a fixed-width frame so the visual rhythm
+     * doesn't shift as the splash window's content height changes.
+     */
+    .pb-splash-progress {
+      width: 220px;
+      height: 4px;
+      border-radius: 9999px;
+      background: rgba(250, 250, 250, 0.12);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pb-splash-progress-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--progress, 0%);
+      background: #fafafa;
+      border-radius: 9999px;
+      transition: width 200ms ease;
+    }
+
+    /* Indeterminate "comet" — visible only when the parent has the
+       `indeterminate` class. Animates a narrow chip across the bar so
+       the user sees motion even before main reports a concrete
+       percent. */
+    .pb-splash-progress.indeterminate .pb-splash-progress-fill {
+      animation: pbSplashIndeterminate 1.4s ease-in-out infinite;
+      width: 35%;
+    }
+
+    /* Detail line under the bar: download throughput, version, etc.
+       Reserved height so the slogan never jumps. */
+    .pb-splash-detail {
       font-size: 11px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: rgba(250, 250, 250, 0.42);
+      letter-spacing: 0.06em;
+      color: rgba(250, 250, 250, 0.45);
       min-height: 14px;
-      transition: opacity 200ms ease;
+      tab-size: 2;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
     }
 
-    /* Animations.
-       - breathe: gentle scale pulse, mirrors `pbLogoBreathe` in app.css
-         so visual identity is consistent.
-       - rotate: very slow spoke wheel, idle motion that proves the
-         app isn't frozen.
-       - dot: alpha pulse on the center dot, anchored against the
-         rotating spokes so the eye has a still focal point. */
     @keyframes pbSplashBreathe {
       0%, 100% { transform: scale(1); }
       50%      { transform: scale(1.04); }
@@ -154,13 +193,16 @@
       50%      { opacity: 0.55; transform: scale(0.85); }
     }
 
-    /* Honour user motion preferences. The breathe + rotation are
-       decorative; falling back to a still logo is more polite than
-       forcing motion on someone who has it disabled. */
+    @keyframes pbSplashIndeterminate {
+      0%   { left: -35%; }
+      100% { left: 100%; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .pb-splash-logo,
       .pb-splash-spokes,
-      .pb-splash-mark .pb-splash-dot {
+      .pb-splash-mark .pb-splash-dot,
+      .pb-splash-progress.indeterminate .pb-splash-progress-fill {
         animation: none !important;
       }
     }
@@ -186,18 +228,43 @@
       </svg>
     </div>
 
-    <div class="pb-splash-text">Pufferblow</div>
-    <div id="pb-splash-status" class="pb-splash-status">Loading</div>
+    <div class="pb-splash-wordmark">Pufferblow</div>
+    <div class="pb-splash-slogan">Create space</div>
+
+    <div id="pb-splash-progress" class="pb-splash-progress indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+      <div class="pb-splash-progress-fill"></div>
+    </div>
+    <div id="pb-splash-detail" class="pb-splash-detail"></div>
   </div>
 
   <script>
-    // Tiny IPC-less status updater: main.ts injects status text by
-    // calling `executeJavaScript` on the splash window. Keeping the
-    // script side small (no preload, no listeners) means the splash
-    // window can stay context-isolated with nothing exposed.
+    // Status copy still goes to a hidden text element — main.ts and the
+    // renderer overlay both use `__pbSetSplashStatus` to push a one-line
+    // hint (download speed, mount step). Kept on the dedicated detail
+    // line so the slogan never moves.
     window.__pbSetSplashStatus = function (text) {
-      var el = document.getElementById('pb-splash-status');
+      var el = document.getElementById('pb-splash-detail');
       if (el) el.textContent = String(text || '');
+    };
+
+    // Progress setter. Pass a percent 0..100 to switch to determinate
+    // mode; pass null to revert to indeterminate (the comet animation).
+    // ARIA's `aria-valuenow` is updated alongside the visual fill so
+    // assistive tech tracks the same value.
+    window.__pbSetSplashProgress = function (percent) {
+      var track = document.getElementById('pb-splash-progress');
+      var fill = track ? track.querySelector('.pb-splash-progress-fill') : null;
+      if (!track || !fill) return;
+      if (percent === null || percent === undefined || isNaN(percent)) {
+        track.classList.add('indeterminate');
+        track.removeAttribute('aria-valuenow');
+        fill.style.removeProperty('--progress');
+        return;
+      }
+      var clamped = Math.max(0, Math.min(100, Number(percent)));
+      track.classList.remove('indeterminate');
+      track.setAttribute('aria-valuenow', String(Math.round(clamped)));
+      fill.style.setProperty('--progress', clamped + '%');
     };
   </script>
 </body>
