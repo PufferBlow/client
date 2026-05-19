@@ -210,9 +210,27 @@ export function ChannelList({
     />
   );
 
+  // Render order is Private → Text → Voice. Private rooms are the
+  // smallest, most attention-grabbing bucket — putting them at the
+  // top means a member who's in a sensitive DM-style room never has
+  // to scroll past the public buckets to find it. Text and Voice
+  // follow because they're the broad-audience surfaces; their order
+  // between themselves matches the previous layout.
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-2 py-4">
+        <ChannelGroup
+          groupKey="private"
+          label="Private Channels"
+          channels={privateChannels}
+          collapsed={collapsed}
+          onToggle={toggleGroup}
+          renderRow={(channel) =>
+            channel.channel_type === "voice"
+              ? renderVoiceRow(channel)
+              : renderTextRow(channel)
+          }
+        />
         <ChannelGroup
           groupKey="text"
           label="Text Channels"
@@ -228,18 +246,6 @@ export function ChannelList({
           collapsed={collapsed}
           onToggle={toggleGroup}
           renderRow={renderVoiceRow}
-        />
-        <ChannelGroup
-          groupKey="private"
-          label="Private Channels"
-          channels={privateChannels}
-          collapsed={collapsed}
-          onToggle={toggleGroup}
-          renderRow={(channel) =>
-            channel.channel_type === "voice"
-              ? renderVoiceRow(channel)
-              : renderTextRow(channel)
-          }
         />
       </div>
     </div>
