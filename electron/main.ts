@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, session } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, net, session, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import path from 'path';
@@ -305,6 +305,62 @@ function createWindow() {
   } else {
     mainWindow.loadURL('app://pufferblow/');
   }
+
+  // External-link policy:
+  //
+  // Anything that isn't part of the app — a link to a docs page,
+  // someone's profile, a YouTube embed — should open in the user's
+  // default browser rather than swallowing it inside an Electron
+  // BrowserWindow. Two surfaces leak otherwise:
+  //
+  //   1. `<a target="_blank">` and `window.open(...)` ask Electron to
+  //      pop a new BrowserWindow. We intercept those with
+  //      `setWindowOpenHandler` and hand the URL to the OS shell.
+  //
+  //   2. A regular `<a href="https://…">` click without a target tries
+  //      to navigate the renderer itself away from app:// to the
+  //      external origin. The `will-navigate` listener cancels that
+  //      and routes the URL externally instead, so the renderer stays
+  //      on the Pufferblow app.
+  //
+  // The whitelist treats `app://`, `http://localhost`, and
+  // `http://127.0.0.1` as "in-app" so the dev server reload and
+  // future in-app navigations still work. Everything else goes to
+  // the OS browser. `pufferblow://` deep links are skipped — they're
+  // handled by the protocol registration further up and shouldn't
+  // round-trip through the OS.
+  const isInternalUrl = (url: string): boolean => {
+    if (!url) return false;
+    if (url.startsWith('app://')) return true;
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+      return true;
+    }
+    if (url.startsWith(`${PROTOCOL}://`)) return true;
+    return false;
+  };
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+      shell.openExternal(url).catch((err) => {
+        console.error('[external-link] failed to open', url, err);
+      });
+    }
+    // Never let Electron create a child BrowserWindow for popups —
+    // we either delegated to the OS or silently dropped a scheme we
+    // don't recognize (file://, javascript:, etc.) rather than
+    // popping a hostile window.
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isInternalUrl(url)) return;
+    if (/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch((err) => {
+        console.error('[external-link] failed to open', url, err);
+      });
+    }
+  });
 
   // `ready-to-show` fires after the renderer has painted at least
   // one frame -- the canonical Electron signal that it's safe to
