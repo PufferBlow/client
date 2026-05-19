@@ -80,8 +80,19 @@ function EmbedCard({ embed }: { embed: MessageEmbedPreview }) {
 
   return (
     <div
-      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_88%,transparent)] shadow-sm"
-      style={embed.iframe?.maxWidth ? { maxWidth: embed.iframe.maxWidth } : undefined}
+      // `max-w-full` is the responsive cap; the inline rule uses
+      // CSS `min(native, 100%)` so the embed's declared natural
+      // width acts as a CEILING but the container always shrinks
+      // when the surrounding pane does. Previously the inline
+      // `maxWidth: <native>` left the embed pinned at, say, 1280px,
+      // so when the members panel opened and the message column
+      // shrunk, the iframe overflowed instead of reflowing.
+      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_88%,transparent)] shadow-sm max-w-full"
+      style={
+        embed.iframe?.maxWidth
+          ? { maxWidth: `min(${embed.iframe.maxWidth}, 100%)` }
+          : undefined
+      }
     >
       {embed.iframe ? (
         embed.iframe.fixedHeight ? (

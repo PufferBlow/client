@@ -3264,7 +3264,19 @@ export default function Dashboard() {
                           });
                           const isContinuation = messageIndex > 0;
                           return (
-                          <div key={message.message_id} className="group/msg relative">
+                          <div key={message.message_id} className="group/msg relative min-w-0">
+                            {/*
+                              `min-w-0` is what lets the message column
+                              reflow when the surrounding pane shrinks
+                              (e.g. opening the members panel). Without
+                              it a child with intrinsic width — most
+                              commonly a video iframe at its native
+                              1280px — drives the flex column up to
+                              its own content width, the message
+                              column stops shrinking, and the iframe
+                              looks "stuck stretched" while the panel
+                              animates in.
+                            */}
                             {isContinuation && (
                               <span
                                 className="pointer-events-none absolute -left-[3.25rem] top-0.5 text-[10px] tabular-nums text-[var(--color-text-muted)] opacity-0 transition-opacity group-hover/msg:opacity-100"
@@ -3341,28 +3353,66 @@ export default function Dashboard() {
 
         {/* Message Input */}
         <div className="p-4">
-          {replyTarget && (
-            <div className="mb-3 flex items-start justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
-                  Replying to {replyTarget.username || usersById.get(replyTarget.sender_user_id)?.username || 'Unknown User'}
-                </div>
-                <div className="mt-1 line-clamp-2 text-sm text-[var(--color-text-muted)]">
-                  {replyTarget.message || 'Attachment-only message'}
-                </div>
-              </div>
-              <button
-                onClick={() => setReplyTarget(null)}
-                className="ml-4 rounded-md p-1 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
-                title="Cancel reply"
-                aria-label="Cancel reply"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          {/* Reply target — slim inline pill attached to the top edge of
+              the composer. Previous version was a separate card with a
+              bold uppercase "Replying to NAME" header and a two-line
+              preview — visually bulky for what's effectively a
+              two-token signal (whom + what). The pill compresses both
+              onto one line, uses a reply-arrow glyph to communicate
+              the relationship without dedicated copy, and shares the
+              composer's bottom rounding so the two elements read as a
+              connected unit instead of stacked cards. */}
+          {replyTarget && (() => {
+            const replyToUsername =
+              replyTarget.username
+              || usersById.get(replyTarget.sender_user_id)?.username
+              || 'Unknown User';
+            const previewText = replyTarget.message || 'Attachment-only message';
+            return (
+              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5">
+                <svg
+                  className="h-3.5 w-3.5 shrink-0 -scale-x-100 text-[var(--color-text-muted)]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 14 4 9 9 4" />
+                  <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                 </svg>
-              </button>
-            </div>
-          )}
+                <span className="text-xs font-semibold text-[var(--color-text)] truncate max-w-[10rem]">
+                  {replyToUsername}
+                </span>
+                <span className="text-xs text-[var(--color-text-muted)] truncate min-w-0 flex-1">
+                  {previewText}
+                </span>
+                <button
+                  onClick={() => setReplyTarget(null)}
+                  className="shrink-0 rounded-full p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                  title="Cancel reply"
+                  aria-label="Cancel reply"
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Attachments Preview */}
           {messageAttachments.length > 0 && (
