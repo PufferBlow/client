@@ -97,7 +97,14 @@ export function RecentActivity() {
         setActivities(formattedActivities);
         setError(null);
       } else {
-        setError('Failed to load recent activity');
+        // Surface the actual server error rather than burying it
+        // behind a generic copy — previously a 422 (e.g. the
+        // limit-too-high bug) showed the same "Failed to load
+        // recent activity" message a transport failure would, and
+        // there was no way to tell them apart from the UI.
+        const detail = response.error?.trim();
+        setError(detail ? `Failed to load recent activity: ${detail}` : "Failed to load recent activity");
+        logger.api.error("getRecentActivity returned !success", { error: response.error });
       }
     } catch (err) {
       setError('Failed to fetch recent activity');

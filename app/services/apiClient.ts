@@ -140,7 +140,29 @@ export class ApiClient {
         try {
           const errorJson = await response.json();
           if (errorJson.detail) {
-            errorMessage = errorJson.detail;
+            // FastAPI uses `detail` in two shapes:
+            //   - String, when the route raised `HTTPException(detail=...)`
+            //   - Array of `{loc, msg, type, ...}` objects, when a
+            //     request-body Pydantic validator failed (422).
+            // Stringifying an array of objects gave us
+            // `[object Object]` in the UI — useless for the user
+            // and useless for diagnosing the underlying cause.
+            // Flatten it to a readable, one-line summary.
+            if (typeof errorJson.detail === "string") {
+              errorMessage = errorJson.detail;
+            } else if (Array.isArray(errorJson.detail)) {
+              errorMessage = errorJson.detail
+                .map((item: { loc?: unknown; msg?: string }) => {
+                  const locPart = Array.isArray(item.loc)
+                    ? item.loc.filter((s) => s !== "body").join(".")
+                    : "";
+                  const msgPart = item.msg || "validation error";
+                  return locPart ? `${locPart}: ${msgPart}` : msgPart;
+                })
+                .join("; ");
+            } else {
+              errorMessage = JSON.stringify(errorJson.detail);
+            }
           } else if (errorJson.error) {
             errorMessage = errorJson.error;
           }
