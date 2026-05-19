@@ -1,11 +1,23 @@
-import type { ReactNode } from "react";
+import {
+  autoUpdate,
+  FloatingPortal,
+  offset,
+  shift,
+  useDismiss,
+  useFloating,
+  useFocus,
+  useHover,
+  useInteractions,
+  useRole,
+} from "@floating-ui/react";
+import { useState, type ReactNode } from "react";
 
 /**
  * Render one entry in the server rail.
  *
  * Visual structure:
  *
- *   | pill |   ( avatar )   |
+ *   | pill |   ( avatar )   |   < tooltip on hover, portaled to body
  *
  * The pill is a sibling of the avatar (not a wrapper) so hover and
  * selection visuals never animate across the avatar's own pixels —
@@ -13,19 +25,27 @@ import type { ReactNode } from "react";
  * communicate state. Three pill states:
  *
  *   - selected:  full-height (h-9), persistent. The active server.
- *   - unread:    short (h-2), persistent. There's new activity
- *                here you haven't seen.
+ *   - unread:    short (h-2), persistent. There's new activity here
+ *                you haven't seen.
  *   - hovering:  mid-height (h-7), only while the pointer is over
  *                the row. Suppressed on selected rows so the pill
  *                doesn't shrink under the pointer.
  *
  * The avatar itself is a stable `rounded-lg` rectangle on every
  * state — no radius morph on hover. The color of the avatar
- * communicates selected vs. resting; the pill communicates
- * "where you are in the list."
+ * communicates selected vs. resting; the pill communicates "where
+ * you are in the list."
+ *
+ * Tooltip:
+ *
+ *   The server name floats to the right of the avatar on hover or
+ *   keyboard focus, using @floating-ui/react's portal so it escapes
+ *   the rail's `overflow-y-auto` clip. Native `title` is
+ *   intentionally NOT set — the OS's unstyled yellow tooltip would
+ *   race with this one and contradict the rest of the design.
  */
 export interface ServerRailItemProps {
-  /** Slot label / tooltip. */
+  /** Slot label shown in the tooltip and used as aria-label. */
   label: string;
   /** Children render inside the 48×48 avatar surface (typically an <img> or a letter). */
   children: ReactNode;
@@ -62,30 +82,74 @@ export function ServerRailItem({
     ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
     : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] group-hover:bg-[var(--color-primary)] group-hover:text-[var(--color-on-primary)]";
 
+  // Tooltip plumbing. `useFloating` returns a `floatingStyles` object
+  // we spread onto the tooltip; positioning is handled by
+  // floating-ui via `placement: 'right'` + a small offset so the
+  // tooltip sits in the gutter to the right of the rail.
+  // `autoUpdate` keeps the position correct as the user scrolls the
+  // rail body (the button's viewport coordinates change).
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const { refs, floatingStyles, context } = useFloating({
+    open: tooltipOpen,
+    onOpenChange: setTooltipOpen,
+    placement: "right",
+    middleware: [offset(12), shift({ padding: 8 })],
+    whileElementsMounted: autoUpdate,
+  });
+  // Hover (`restMs` = brief delay so a fast pass over the rail
+  // doesn't flicker tooltips for every adjacent row) + keyboard
+  // focus + Escape-to-dismiss + correct ARIA role.
+  const hover = useHover(context, { restMs: 60 });
+  const focus = useFocus(context);
+  const dismiss = useDismiss(context);
+  const role = useRole(context, { role: "tooltip" });
+  const { getReferenceProps, getFloatingProps } = useInteractions([
+    hover,
+    focus,
+    dismiss,
+    role,
+  ]);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      aria-current={selected ? "true" : undefined}
-      className="group pb-focus-ring relative flex h-12 w-16 items-center justify-center cursor-pointer"
-    >
-      <span
-        aria-hidden
-        className={`absolute left-0 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200 ${pillStatic} ${pillHover}`}
-      />
-      <div
-        className={`relative flex h-12 w-12 items-center justify-center rounded-lg text-lg font-semibold transition-colors duration-200 ${avatarColors}`}
+    <>
+      <button
+        ref={refs.setReference}
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-current={selected ? "true" : undefined}
+        className="group pb-focus-ring relative flex h-12 w-16 items-center justify-center cursor-pointer"
+        {...getReferenceProps()}
       >
-        {children}
-        {presenceClassName && (
-          <span
-            aria-hidden
-            className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[var(--color-surface)] ${presenceClassName}`}
-          />
-        )}
-      </div>
-    </button>
+        <span
+          aria-hidden
+          className={`absolute left-0 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200 ${pillStatic} ${pillHover}`}
+        />
+        <div
+          className={`relative flex h-12 w-12 items-center justify-center rounded-lg text-lg font-semibold transition-colors duration-200 ${avatarColors}`}
+        >
+          {children}
+          {presenceClassName && (
+            <span
+              aria-hidden
+              className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[var(--color-surface)] ${presenceClassName}`}
+            />
+          )}
+        </div>
+      </button>
+
+      {tooltipOpen && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            className="pointer-events-none z-50 whitespace-nowrap rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-2.5 py-1 text-sm font-medium text-[var(--color-text)] shadow-[var(--shadow-popover)]"
+            {...getFloatingProps()}
+          >
+            {label}
+          </div>
+        </FloatingPortal>
+      )}
+    </>
   );
 }
