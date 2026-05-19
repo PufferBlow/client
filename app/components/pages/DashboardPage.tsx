@@ -1240,7 +1240,13 @@ export default function Dashboard() {
 
   const handleMessageReact = (messageId: string) => {
     logger.ui.debug("Reaction action selected", { messageId });
+    // Two-step in one call: aim the emoji picker at the target
+    // message AND open the picker. The previous version only aimed
+    // it; opening had to happen via the context menu's onReaction
+    // path. With the new hover action bar firing this handler
+    // directly, the open step has to live here too.
     setReactionTargetMessageId(messageId);
+    setIsEmojiPickerOpen(true);
   };
 
   const handleMessageReport = (messageId: string | null) => {
@@ -3388,9 +3394,17 @@ export default function Dashboard() {
                               <AttachmentGrid attachments={message.attachments} />
                             )}
 
-                            {/* Reaction pills — clicking a pill toggles the viewer's reaction. */}
+                            {/* Reaction pills — clicking a pill toggles the
+                                viewer's reaction. The trailing "+" button is
+                                a discoverable add-another-reaction
+                                affordance that avoids forcing the user back
+                                up to the hover action cluster (which only
+                                appears while the pointer is over the
+                                message). Hidden when the row is empty —
+                                first-time reactions go through the hover
+                                cluster's smiley button. */}
                             {message.reactions && message.reactions.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
                                 {message.reactions.map((reaction) => (
                                   <button
                                     key={reaction.emoji}
@@ -3407,18 +3421,122 @@ export default function Dashboard() {
                                     aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.viewer_reacted ? ", you reacted" : ""}`}
                                   >
                                     <span>{reaction.emoji}</span>
-                                    <span>{reaction.count}</span>
+                                    <span className="tabular-nums">{reaction.count}</span>
                                   </button>
                                 ))}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMessageReact(message.message_id);
+                                  }}
+                                  className="flex h-[22px] items-center gap-1 rounded-full border border-dashed border-[var(--color-border)] bg-transparent px-2 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-primary)]"
+                                  title="Add another reaction"
+                                  aria-label="Add another reaction"
+                                >
+                                  <svg
+                                    className="h-3 w-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2.5}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                  >
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                </button>
                               </div>
                             )}
                           </div>
                           );
                         })}
                       </div>
-                      {/* Hover Menu Button */}
-                      <div className={`absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity ${hoveredMessageId === firstMessage.message_id ? "opacity-100" : ""}`}>
+                      {/* Hover action cluster — a small floating
+                          card with three buttons (react / reply /
+                          more). Replaces the previous single
+                          three-dot button so the two most-common
+                          message actions (adding a reaction,
+                          replying) are one click away instead of
+                          two. The cluster sits flush to the top-
+                          right of the message group, slightly
+                          overhanging the row — Discord's
+                          convention — so it never pushes the
+                          message text down and doesn't take any
+                          vertical space when no message is
+                          hovered. */}
+                      <div
+                        className={`absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-0.5 py-0.5 shadow-[var(--shadow-popover)] opacity-0 group-hover:opacity-100 transition-opacity ${
+                          hoveredMessageId === firstMessage.message_id ? "opacity-100" : ""
+                        }`}
+                      >
+                        {/* Add reaction. Opens the emoji picker
+                            aimed at this message; the picker's
+                            onSelect path will toggle the chosen
+                            emoji via applyReactionToMessage. */}
                         <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMessageReact(firstMessage.message_id);
+                          }}
+                          className="pb-icon-btn h-7 w-7 border-0 hover:bg-[var(--color-hover)]"
+                          title="Add reaction"
+                          aria-label="Add reaction"
+                        >
+                          <svg
+                            className="pb-icon"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                            <line x1="9" y1="9" x2="9.01" y2="9" />
+                            <line x1="15" y1="9" x2="15.01" y2="9" />
+                            {/* Plus mark in the corner cueing
+                                'add' rather than just react */}
+                            <path d="M19 5v4M17 7h4" />
+                          </svg>
+                        </button>
+
+                        {/* Reply. Sets the reply target and focuses
+                            the composer; the slim reply pill above
+                            the composer renders the target. */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMessageReply(firstMessage.message_id);
+                          }}
+                          className="pb-icon-btn h-7 w-7 border-0 hover:bg-[var(--color-hover)]"
+                          title="Reply"
+                          aria-label="Reply"
+                        >
+                          <svg
+                            className="pb-icon -scale-x-100"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <polyline points="9 14 4 9 9 4" />
+                            <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                          </svg>
+                        </button>
+
+                        {/* More — the existing context menu. */}
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setCurrentMenuMessageId(firstMessage.message_id);
@@ -3426,15 +3544,26 @@ export default function Dashboard() {
                               isOpen: true,
                               position: { x: e.clientX, y: e.clientY },
                               onCopyLink: () => handleMessageCopy(firstMessage.message_id),
-                              onReport: () => handleMessageReport(firstMessage.message_id)
+                              onReport: () => handleMessageReport(firstMessage.message_id),
                             });
                           }}
-                          className="pb-icon-btn mr-2 bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)] text-[var(--color-text)] hover:text-[var(--color-text)]"
+                          className="pb-icon-btn h-7 w-7 border-0 hover:bg-[var(--color-hover)]"
                           title="More options"
                           aria-label="Message options"
                         >
-                          <svg className="pb-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6h.01M12 12h.01M12 18h.01" />
+                          <svg
+                            className="pb-icon"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6h.01M12 12h.01M12 18h.01"
+                            />
                           </svg>
                         </button>
                       </div>
