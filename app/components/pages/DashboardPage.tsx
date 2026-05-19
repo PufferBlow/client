@@ -2895,15 +2895,16 @@ export default function Dashboard() {
                 label="Direct messages"
                 selected={dmsOpen}
                 onClick={() => setDmsOpen(true)}
-                // `suppressHoverHighlight` keeps the avatar on the
-                // dark resting surface even when the pointer is
-                // over it. Without it, the standard rail hover
-                // would flip the avatar to the white primary
-                // palette and the Pufferblow mark's own white
-                // strokes would collapse into the background, so
-                // the logo briefly disappears on every cursor
-                // pass.
-                suppressHoverHighlight
+                // `lockRestingPalette` keeps the avatar on the dark
+                // resting surface across hover AND selected. The
+                // Pufferblow mark draws in white strokes via
+                // currentColor; against the standard selected /
+                // hover palette (white bg, on-primary text) the
+                // strokes would land white-on-white and the logo
+                // would collapse. Selection is still communicated —
+                // the full-height left pill is the cue, and the
+                // pill behavior is unchanged here.
+                lockRestingPalette
               >
                 {/* The mark inherits stroke color from the avatar
                     div's `text-*` class, so it switches from
@@ -2944,13 +2945,16 @@ export default function Dashboard() {
                 </ServerRailItem>
               )}
 
-              <div className="mx-auto w-8 h-px bg-[var(--color-surface-tertiary)] rounded" />
-
               {/* Add-server slot — its own button component owns the
                   shape + hover styling. The mt-auto pushes it to the
                   bottom of the rail; the wrapper keeps it centered in
                   the same 64px column the avatars use, so the rail
-                  reads as a vertical column of rectangles. */}
+                  reads as a vertical column of rectangles.
+                  No divider above this button — the only hairline in
+                  the rail separates the fixed DM affordance from the
+                  joined-instance avatars. Dividing between every
+                  server entry would clutter the column once
+                  multi-server lands. */}
               <div className="mt-auto flex w-16 items-center justify-center">
                 <AddServerButton
                   onClick={() => setJoinModalOpen(true)}
