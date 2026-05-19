@@ -2880,7 +2880,13 @@ export default function Dashboard() {
               multi-server lands; the divider is kept so the visual
               rhythm doesn't shift on first multi-join). */}
           <ServerRail>
-            <div className="flex h-full flex-col py-2 space-y-2">
+            {/* No `py-2` on the inner container — the rail's own
+                outer `py-2` already provides vertical breathing room.
+                Doubling them made the inner's `h-full` (which
+                evaluates to the rail's content-box height) add its
+                own padding on top, blowing the inner ~16 px past the
+                available height and tripping `overflow-y-auto`. */}
+            <div className="flex h-full flex-col space-y-2">
               {/* Fixed Direct-Messages slot — always present at the top
                   of the rail. Selects a DM-only view of the channel
                   panel instead of any one server's channel list. The
