@@ -2895,6 +2895,15 @@ export default function Dashboard() {
                 label="Direct messages"
                 selected={dmsOpen}
                 onClick={() => setDmsOpen(true)}
+                // `suppressHoverHighlight` keeps the avatar on the
+                // dark resting surface even when the pointer is
+                // over it. Without it, the standard rail hover
+                // would flip the avatar to the white primary
+                // palette and the Pufferblow mark's own white
+                // strokes would collapse into the background, so
+                // the logo briefly disappears on every cursor
+                // pass.
+                suppressHoverHighlight
               >
                 {/* The mark inherits stroke color from the avatar
                     div's `text-*` class, so it switches from

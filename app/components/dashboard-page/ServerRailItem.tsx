@@ -57,6 +57,16 @@ export interface ServerRailItemProps {
   presenceClassName?: string;
   /** Click handler — switch active server. */
   onClick?: () => void;
+  /**
+   * Skip the "preview the selected look on hover" color flip on the
+   * avatar. When true, an unselected avatar stays in its resting
+   * palette regardless of hover; only the left pill grows. Used for
+   * slots whose avatar carries its own visual identity (the fixed
+   * Direct-Messages slot uses the Pufferblow brand mark and is
+   * meant to stay on the dark surface — flickering to white on
+   * hover competed with the logo's white strokes).
+   */
+  suppressHoverHighlight?: boolean;
 }
 
 export function ServerRailItem({
@@ -66,6 +76,7 @@ export function ServerRailItem({
   unread = false,
   presenceClassName,
   onClick,
+  suppressHoverHighlight = false,
 }: ServerRailItemProps) {
   // Pill height in two parts:
   //   - `pillStatic`  — the height the pill sits at when not being
@@ -78,9 +89,20 @@ export function ServerRailItem({
   const pillStatic = selected ? "h-9" : unread ? "h-2" : "h-0";
   const pillHover = selected ? "" : "group-hover:h-7";
 
+  // Resting (unselected) avatar palette + the "preview selection on
+  // hover" flip to the primary palette. The hover variant is dropped
+  // when the slot opts out via suppressHoverHighlight — typically a
+  // slot whose avatar already carries a strong visual (the DM slot's
+  // brand mark) and looks worse when the surface flips light beneath
+  // it.
+  const restingPalette =
+    "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]";
+  const hoverFlipPalette = suppressHoverHighlight
+    ? ""
+    : "group-hover:bg-[var(--color-primary)] group-hover:text-[var(--color-on-primary)]";
   const avatarColors = selected
     ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-    : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] group-hover:bg-[var(--color-primary)] group-hover:text-[var(--color-on-primary)]";
+    : `${restingPalette} ${hoverFlipPalette}`.trim();
 
   // Tooltip plumbing. `useFloating` returns a `floatingStyles` object
   // we spread onto the tooltip; positioning is handled by
