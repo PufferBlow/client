@@ -2868,15 +2868,15 @@ export default function Dashboard() {
                     aria-hidden
                     className="absolute left-0 h-9 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200"
                   />
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-200">
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-lg">
                     {serverInfo.avatar_url ? (
                       <img
                         src={serverInfo.avatar_url}
                         alt={`${serverInfo.server_name} avatar`}
-                        className="h-12 w-12 rounded-2xl object-cover"
+                        className="h-12 w-12 rounded-lg object-cover"
                       />
                     ) : (
-                      <span className="flex h-full w-full items-center justify-center rounded-2xl bg-[var(--color-primary)] text-lg font-semibold text-[var(--color-on-primary)]">
+                      <span className="flex h-full w-full items-center justify-center rounded-lg bg-[var(--color-primary)] text-lg font-semibold text-[var(--color-on-primary)]">
                         {(serverInfo.server_name || 'S').charAt(0).toUpperCase()}
                       </span>
                     )}

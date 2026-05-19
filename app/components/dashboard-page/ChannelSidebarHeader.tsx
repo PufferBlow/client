@@ -156,19 +156,23 @@ export function ChannelSidebarHeader({
       {/* Avatar + Dropdown Row */}
       <div className="px-3 pb-2">
         <div className="flex items-end justify-between">
-          {/* Server Avatar — square at rest with a small radius; the
-              radius expands on hover for a subtle "settling into a
-              pill" feel. The transition is on `border-radius` only;
-              size + shadow stay stable so the layout doesn't shift. */}
+          {/* Server avatar — rectangular with a rounded-lg radius. The
+              previous hover state morphed the radius to rounded-2xl
+              (squircle) which both fought the rest of the design
+              language (every other surface keeps a stable shape on
+              hover) and visually deformed the avatar's own pixels
+              during the transition. Shape is now stable; the rail's
+              left pill is the affordance for "this server is
+              active/hovered." */}
           <div className="-mt-6 flex-shrink-0">
             {serverInfo?.avatar_url ? (
               <img
                 src={serverInfo.avatar_url}
                 alt={serverInfo?.server_name || "Server"}
-                className="h-12 w-12 rounded-lg border-2 border-[var(--color-background)] object-cover shadow-lg transition-all duration-200 hover:rounded-2xl"
+                className="h-12 w-12 rounded-lg border-2 border-[var(--color-background)] object-cover shadow-lg"
               />
             ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-[var(--color-background)] bg-[var(--color-primary)] shadow-lg transition-all duration-200 hover:rounded-2xl">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-[var(--color-background)] bg-[var(--color-primary)] shadow-lg">
                 <span className="text-lg font-bold text-[var(--color-on-primary)]">
                   {serverInfo?.server_name?.charAt(0)?.toUpperCase() || "?"}
                 </span>
