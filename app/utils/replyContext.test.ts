@@ -57,6 +57,20 @@ describe("parseReplyContext", () => {
       "first paragraph\n\nsecond paragraph",
     );
   });
+
+  it("extracts the visible body even when the target itself was a reply (no nested history)", () => {
+    // This is the input shape we feed back into the excerpt
+    // builder when replying to a reply — the parse should return
+    // the inner reply's own body so the next-generation reply
+    // quotes what was actually said, not the chain.
+    const content = [
+      "> Replying to @alice",
+      "> hey what's up",
+      "",
+      "lol nice",
+    ].join("\n");
+    expect(parseReplyContext(content)?.body).toBe("lol nice");
+  });
 });
 
 describe("findReplyParent", () => {

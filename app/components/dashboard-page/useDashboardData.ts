@@ -7,6 +7,7 @@ import { usePersistedUIState } from "../../utils/uiStatePersistence";
 import { type ListUsersResponse } from "../../services/user";
 import type { GlobalWebSocket } from "../../services/websocket";
 import { buildAuthRedirectPath } from "../../utils/authRedirect";
+import { parseReplyContext } from "../../utils/replyContext";
 import type { ShowToast } from "../Toast";
 import type { ServerInfo } from "../../services/system";
 import type { DisplayUser } from "./types";
@@ -255,7 +256,18 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
       }
 
       const author = target.username || usersById.get(target.sender_user_id)?.username || "Unknown User";
-      const excerpt = (target.message || "")
+      // If the message we're replying to is ITSELF a reply (i.e. its
+      // body starts with our reply marker), strip out the nested
+      // reply header before extracting the excerpt. Otherwise the
+      // excerpt would include "> Replying to @<grandparent> > <grand-
+      // parent excerpt>" and reply chains would visually balloon
+      // each generation, restating the entire history in every new
+      // reply. We only want to quote what the target actually
+      // SAID, not who they were replying to.
+      const parsedTarget = parseReplyContext(target.message || "");
+      const targetVisibleBody =
+        parsedTarget ? parsedTarget.body : (target.message || "");
+      const excerpt = targetVisibleBody
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)

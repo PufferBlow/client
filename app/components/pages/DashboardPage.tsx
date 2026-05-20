@@ -3431,6 +3431,25 @@ export default function Dashboard() {
                     firstMessage.username || displayName,
                   );
 
+              // Parse the FIRST message's reply context once per
+              // group so the strip can render ABOVE the avatar +
+              // username row (matches the user's request, and is
+              // the standard Discord-style placement). Continuation
+              // messages handle their own (rare) reply context
+              // inline below. We compute parent + avatar URL up
+              // here so the JSX downstream stays focused on layout.
+              const firstReplyParsed = parseReplyContext(firstMessage.message);
+              const firstReplyParent = firstReplyParsed
+                ? findReplyParent(
+                    messages,
+                    firstReplyParsed.author,
+                    firstReplyParsed.excerpt,
+                    (id) => usersById.get(id)?.username,
+                  )
+                : null;
+              const firstReplyAvatar = firstReplyParsed
+                ? buildReplyParentAvatarUrl(firstReplyParent, usersById, firstReplyParsed.author)
+                : null;
               return (
                 <React.Fragment key={firstMessage.message_id}>
                   {unreadMarker?.channelId === selectedChannel?.channel_id &&
@@ -3443,6 +3462,26 @@ export default function Dashboard() {
                         <div className="h-px flex-1 bg-[var(--color-border)]" />
                       </div>
                     )}
+                  {/* Reply context strip — sits ABOVE the avatar +
+                      username row so the visual flow matches what
+                      a reader expects: first "this message replies
+                      to ...", then the speaker's avatar / name, then
+                      the body. The strip is left-indented to line
+                      up with the message column (not the avatar
+                      gutter), which is also Discord's convention
+                      and keeps the avatar visually anchored to its
+                      own message. */}
+                  {firstReplyParsed && firstReplyAvatar !== null && (
+                    <div className="px-2 pl-[3.5rem]">
+                      <MessageReplyContext
+                        author={firstReplyParsed.author}
+                        excerpt={firstReplyParsed.excerpt}
+                        parent={firstReplyParent}
+                        parentAvatar={firstReplyAvatar}
+                        onJump={scrollToMessage}
+                      />
+                    </div>
+                  )}
                   <div
                     id={`msg-${firstMessage.message_id}`}
                     // Hover background removed -- the row no longer lights
@@ -3542,23 +3581,35 @@ export default function Dashboard() {
                               // to @X\n> <excerpt>`) followed by the
                               // reply body — there's no typed
                               // reply-edge on the server. Detect that
-                              // pattern at render time and swap it
-                              // out for a polished reply card with
-                              // the parent's avatar + a jump-to-
-                              // parent click target. The rest of the
-                              // body (everything past the blockquote)
-                              // is rendered normally below.
+                              // pattern at render time and:
                               //
-                              // Non-reply messages fall through to
-                              // the original single-renderer path so
-                              // nothing about plain-message rendering
-                              // changes.
+                              //   - For the FIRST message in the group
+                              //     the reply context strip was
+                              //     already rendered ABOVE the row
+                              //     (see above). Here we just strip
+                              //     the header out of the body so
+                              //     the blockquote doesn't render
+                              //     twice (once as the strip, once
+                              //     as raw markdown).
+                              //
+                              //   - For continuation messages the
+                              //     strip renders inline above the
+                              //     body — same logic the original
+                              //     site used.
                               const parsed = parseReplyContext(message.message);
                               if (!parsed) {
                                 return (
                                   <>
                                     <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
                                     <MessageEmbeds content={message.message} />
+                                  </>
+                                );
+                              }
+                              if (!isContinuation) {
+                                return (
+                                  <>
+                                    <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                    <MessageEmbeds content={parsed.body} />
                                   </>
                                 );
                               }
@@ -3798,7 +3849,13 @@ export default function Dashboard() {
             // in the DOM". Strips newlines so the single-line
             // preview doesn't accidentally render with a height
             // bump.
-            const rawText = replyTarget.message?.replace(/\s+/g, ' ').trim() || '';
+            // If the target is itself a reply, strip its embedded
+            // reply header before previewing — we want to show what
+            // the user actually SAID, not the chain of who they
+            // were replying to.
+            const parsedTarget = parseReplyContext(replyTarget.message || '');
+            const visibleTargetText = parsedTarget ? parsedTarget.body : (replyTarget.message || '');
+            const rawText = visibleTargetText.replace(/\s+/g, ' ').trim();
             const PREVIEW_CHAR_CAP = 120;
             const previewText = rawText
               ? rawText.length > PREVIEW_CHAR_CAP
