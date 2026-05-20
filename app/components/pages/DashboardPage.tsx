@@ -12,6 +12,8 @@ import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { MessageReportModal } from "../../components/MessageReportModal";
 import { MessageContextMenu } from "../../components/MessageContextMenu";
 import { MessageEmbeds } from "../../components/MessageEmbeds";
+import { MessageReplyContext, buildReplyParentAvatarUrl } from "../../components/MessageReplyContext";
+import { findReplyParent, parseReplyContext } from "../../utils/replyContext";
 import { NotificationMenu, type NotificationItem } from "../../components/NotificationMenu";
 import { useToast } from "../../components/Toast";
 import { UserCard } from "../../components/UserCard";
@@ -3534,8 +3536,57 @@ export default function Dashboard() {
                                 {messageTime}
                               </span>
                             )}
-                            <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
-                            <MessageEmbeds content={message.message} />
+                            {(() => {
+                              // Replies are encoded over the wire as a
+                              // markdown blockquote header (`> Replying
+                              // to @X\n> <excerpt>`) followed by the
+                              // reply body — there's no typed
+                              // reply-edge on the server. Detect that
+                              // pattern at render time and swap it
+                              // out for a polished reply card with
+                              // the parent's avatar + a jump-to-
+                              // parent click target. The rest of the
+                              // body (everything past the blockquote)
+                              // is rendered normally below.
+                              //
+                              // Non-reply messages fall through to
+                              // the original single-renderer path so
+                              // nothing about plain-message rendering
+                              // changes.
+                              const parsed = parseReplyContext(message.message);
+                              if (!parsed) {
+                                return (
+                                  <>
+                                    <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                                    <MessageEmbeds content={message.message} />
+                                  </>
+                                );
+                              }
+                              const parent = findReplyParent(
+                                messages,
+                                parsed.author,
+                                parsed.excerpt,
+                                (id) => usersById.get(id)?.username,
+                              );
+                              const parentAvatar = buildReplyParentAvatarUrl(
+                                parent,
+                                usersById,
+                                parsed.author,
+                              );
+                              return (
+                                <>
+                                  <MessageReplyContext
+                                    author={parsed.author}
+                                    excerpt={parsed.excerpt}
+                                    parent={parent}
+                                    parentAvatar={parentAvatar}
+                                    onJump={scrollToMessage}
+                                  />
+                                  <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                  <MessageEmbeds content={parsed.body} />
+                                </>
+                              );
+                            })()}
 
                             {/* Render attachments with Discord-style bubble layout */}
                             {message.attachments && message.attachments.length > 0 && (
