@@ -4355,7 +4355,19 @@ export default function Dashboard() {
                   aria-label="Send message"
                 >
                   {isSendingMessage ? (
-                    <span className="px-1 text-xs font-medium">Sending...</span>
+                    // Spinning ring loader — replaces the previous
+                    // "Sending..." text. Same visual footprint as
+                    // the send icon so the button doesn't resize
+                    // mid-action; `animate-spin` rotates the ring
+                    // continuously, the gap (`border-t-transparent`)
+                    // is what produces the spinning appearance.
+                    // `currentColor` so it stays in the on-primary
+                    // palette without an extra inline color rule.
+                    <span
+                      role="status"
+                      aria-label="Sending"
+                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                    />
                   ) : (
                     <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
