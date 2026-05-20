@@ -119,6 +119,53 @@ audio {
   user-drag: none;
 }
 
+/*
+ * Global cursor affordances.
+ *
+ * Browsers default `<button>` to the arrow cursor, which makes
+ * clickable elements feel inert — the user has no signal that the
+ * target is interactive until something happens on click. We
+ * override the defaults globally so every interactive primitive
+ * communicates "this is a click target" on hover:
+ *
+ *   - button / [role=button] / summary  → pointer
+ *   - a (any anchor)                     → pointer
+ *   - label[for] (clickable form labels) → pointer
+ *   - [aria-disabled=true] / :disabled   → not-allowed (overrides the
+ *                                          above; takes precedence over
+ *                                          the pointer rule because it
+ *                                          comes after)
+ *
+ * Text inputs and textareas already default to the I-beam cursor in
+ * every browser, so we leave them alone. The `cursor-pointer` /
+ * `cursor-text` Tailwind utilities already sprinkled throughout the
+ * codebase are still honored — those are component-local overrides
+ * with higher specificity inside their own utility layer.
+ */
+button,
+[role="button"],
+summary,
+a[href],
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/*
+ * Avatars + member rows + reaction pills carry click handlers but
+ * are usually `<div>` / `<img>`, not `<button>`, so the above rules
+ * don't apply. We can't blanket-rule on `[onClick]` (there's no CSS
+ * selector for it), so individual components opt into `cursor-pointer`
+ * inline. This is fine — the global rules above cover the long tail
+ * of native-element click targets, which is where the "feels dead"
+ * problem actually showed up.
+ */
+
 /* Core monochrome utility surfaces */
 .pb-surface-0 {
   background-color: var(--color-background);
