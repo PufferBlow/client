@@ -91,7 +91,12 @@ describe("AttachmentBubble download actions", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    // The download button's accessible name carries the filename
+    // ("Download voice.mp3") so distinct buttons in a future
+    // multi-attachment surface stay distinguishable. Match the
+    // "Download" prefix loosely so the test doesn't have to track
+    // the filename verbatim.
+    fireEvent.click(screen.getByRole("button", { name: /^Download/ }));
     await waitFor(() => {
       expect(downloadFileViaBlob).toHaveBeenCalledTimes(1);
     });
@@ -105,7 +110,12 @@ describe("AttachmentBubble download actions", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    // The download button's accessible name carries the filename
+    // ("Download voice.mp3") so distinct buttons in a future
+    // multi-attachment surface stay distinguishable. Match the
+    // "Download" prefix loosely so the test doesn't have to track
+    // the filename verbatim.
+    fireEvent.click(screen.getByRole("button", { name: /^Download/ }));
 
     await waitFor(() => {
       expect(downloadFileViaBlob).toHaveBeenCalledTimes(2);

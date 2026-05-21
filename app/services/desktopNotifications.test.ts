@@ -48,9 +48,26 @@ const makeMessage = (
   },
 });
 
+// The active-channel suppression rule reads `document.hasFocus()` and
+// `document.hidden` to decide whether to toast. jsdom's defaults are
+// version-dependent — older jsdom returned `true` for hasFocus(),
+// newer versions return `false` — so the suppression tests can't rely
+// on the runtime default. Stub the two probes explicitly per-test
+// via this helper so each scenario expresses its intent.
+const setFocusState = (focused: boolean, hidden = false): void => {
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => hidden,
+  });
+  document.hasFocus = () => focused;
+};
+
 beforeEach(() => {
   // jsdom doesn't provide Notification by default.
   delete (globalThis as unknown as { Notification?: unknown }).Notification;
+  // Default to the "user IS looking at the page" state. Individual
+  // tests that want the unfocused / hidden state override below.
+  setFocusState(true, false);
 });
 
 afterEach(() => {
@@ -95,12 +112,37 @@ describe("dispatchDesktopNotification", () => {
 
   it("suppresses when the viewer is focused on the active channel", () => {
     const { ctor } = installFakeNotification("granted");
-    // jsdom: hasFocus defaults to true, document.hidden is false.
+    // Default `setFocusState(true, false)` in beforeEach matches the
+    // "user is looking at this page right now" state, which is the
+    // scenario the suppression rule guards against.
     dispatchDesktopNotification(makeMessage({ channel_id: "ch-1" }), {
       actorUsername: "alice",
       activeChannelId: "ch-1",
     });
     expect(ctor).not.toHaveBeenCalled();
+  });
+
+  it("does NOT suppress when the viewer is on the active channel but the window is unfocused", () => {
+    const { ctor } = installFakeNotification("granted");
+    // User has the right channel selected but the app is in the
+    // background. A toast IS the right surface here — they wouldn't
+    // see the in-page message otherwise.
+    setFocusState(false, false);
+    dispatchDesktopNotification(makeMessage({ channel_id: "ch-1" }), {
+      actorUsername: "alice",
+      activeChannelId: "ch-1",
+    });
+    expect(ctor).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT suppress when the page is hidden even if the right channel is selected", () => {
+    const { ctor } = installFakeNotification("granted");
+    setFocusState(true, true);
+    dispatchDesktopNotification(makeMessage({ channel_id: "ch-1" }), {
+      actorUsername: "alice",
+      activeChannelId: "ch-1",
+    });
+    expect(ctor).toHaveBeenCalledOnce();
   });
 
   it("does NOT suppress when the viewer is on a different channel", () => {
