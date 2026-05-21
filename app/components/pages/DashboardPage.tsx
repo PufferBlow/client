@@ -452,10 +452,23 @@ export default function Dashboard() {
     currentUser.origin_server !== homeHostPort;
 
   // Tracks whether the emoji picker is currently aimed at the message input
-  // (default) or at adding a reaction to a specific message. We can't reuse
-  // `currentMenuMessageId` alone for this because that ID lingers after the
-  // context menu closes and the picker is also opened from the input toolbar.
-  const [reactionTargetMessageId, setReactionTargetMessageId] = useState<string | null>(null);
+  // (default) or at adding a reaction to a specific message.
+  //
+  // This used to be a useState pair with `isEmojiPickerOpen`, which created a
+  // subtle race: the two states were set in two separate calls (e.g.
+  // `setReactionTargetMessageId(id); setIsEmojiPickerOpen(true)`), and if any
+  // intervening render or close path cleared one but not the other, the
+  // picker would render in "compose" mode and the chosen emoji would get
+  // typed into the message input instead of attached as a reaction. The
+  // user reported exactly this symptom.
+  //
+  // The ref doesn't depend on render cadence or closure capture — it's
+  // written synchronously the same tick as `setIsEmojiPickerOpen(true)`
+  // and read synchronously inside `handleEmojiSelect`, so the two signals
+  // can't get out of order. The composer-driven open path explicitly
+  // clears it so a stale reaction target from a previous flow can't
+  // accidentally fire when the user is just typing.
+  const reactionTargetRef = useRef<string | null>(null);
 
   // Ask the OS for permission to show desktop notifications once the
   // dashboard mounts. ensureNotificationPermission is idempotent: it returns
@@ -1239,12 +1252,18 @@ export default function Dashboard() {
 
   const handleMessageReact = (messageId: string) => {
     logger.ui.debug("Reaction action selected", { messageId });
-    // Two-step in one call: aim the emoji picker at the target
-    // message AND open the picker. The previous version only aimed
-    // it; opening had to happen via the context menu's onReaction
-    // path. With the new hover action bar firing this handler
-    // directly, the open step has to live here too.
-    setReactionTargetMessageId(messageId);
+    // Aim the picker at the target message AND open it. The ref
+    // write is synchronous, so by the time the picker mounts and
+    // the user clicks an emoji, `handleEmojiSelect` reading
+    // `reactionTargetRef.current` is guaranteed to see this value.
+    // Guard against empty IDs — if the caller somehow handed us
+    // an empty string, treat it as a no-op rather than opening
+    // the picker in a "dangling reaction target" state.
+    if (!messageId) {
+      logger.ui.warn("handleMessageReact called without a messageId");
+      return;
+    }
+    reactionTargetRef.current = messageId;
     setIsEmojiPickerOpen(true);
   };
 
@@ -2432,18 +2451,28 @@ export default function Dashboard() {
 
   const handleEmojiClick = (event: React.MouseEvent) => {
     event.preventDefault();
-
+    // The composer's smiley button always opens the picker in
+    // "compose" mode — emoji clicks should type into the message
+    // input, NOT react to anything. Explicitly clear any
+    // lingering reaction target a previous flow may have left
+    // behind, so the picker's two modes can't bleed into each
+    // other.
+    reactionTargetRef.current = null;
     setIsEmojiPickerOpen(!isEmojiPickerOpen);
     logger.ui.debug("Emoji picker toggled", { isOpen: !isEmojiPickerOpen });
   };
 
   const handleEmojiSelect = (emoji: string) => {
-    // Picker has two roles: insertion into the message input, or applying a
-    // reaction to a specific message. The reaction target is set just before
-    // the picker is opened from the message context menu (see onReact below).
-    if (reactionTargetMessageId) {
-      const targetId = reactionTargetMessageId;
-      setReactionTargetMessageId(null);
+    // Picker has two roles: insertion into the message input, or
+    // applying a reaction to a specific message. The reaction
+    // target is set on the ref just before the picker is opened
+    // from a message hover button or the message context menu.
+    // Reading from a ref (not a state) means there's no batching
+    // race with `setIsEmojiPickerOpen` — the two signals can't
+    // get out of order.
+    const targetId = reactionTargetRef.current;
+    if (targetId) {
+      reactionTargetRef.current = null;
       setIsEmojiPickerOpen(false);
       void applyReactionToMessage(targetId, emoji);
       return;
@@ -4421,7 +4450,7 @@ export default function Dashboard() {
               // If the user dismissed the picker without choosing an emoji we
               // must drop the reaction intent, otherwise the next message-input
               // emoji selection would accidentally fire a reaction.
-              setReactionTargetMessageId(null);
+              reactionTargetRef.current = null;
             }}
             onEmojiSelect={handleEmojiSelect}
             onGifSelect={handleGifSelect}
@@ -4526,9 +4555,16 @@ export default function Dashboard() {
                 y = gap;
               }
 
-              if (currentMenuMessageId) {
-                setReactionTargetMessageId(currentMenuMessageId);
+              // Opening the picker without an aim is a bug — would
+              // make the next emoji click type into the input
+              // instead of reacting. Bail out if we don't have a
+              // target rather than show a misbehaving picker.
+              if (!currentMenuMessageId) {
+                logger.ui.warn("Context-menu reaction triggered without a message");
+                setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+                return;
               }
+              reactionTargetRef.current = currentMenuMessageId;
               setIsEmojiPickerOpen(true);
               setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
             }}
