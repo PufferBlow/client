@@ -39,9 +39,6 @@ import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage
 import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
 import { Modal } from "../../components/ui/Modal";
 import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
-import { rememberAccount } from "../../services/accounts";
-import { getActiveSessionSnapshot } from "../../services/authSession";
-import { AccountSwitcher } from "../../components/AccountSwitcher";
 import {
   dispatchDesktopNotification,
   ensureNotificationPermission,
@@ -507,42 +504,6 @@ export default function Dashboard() {
     );
     setUnreadBadge(total);
   }, [unreadCountsByChannel]);
-
-  // Remember the active identity in the multi-account registry whenever we
-  // have a fresh (currentUser, authToken, hostPort) triple. `rememberAccount`
-  // is idempotent on `${hostPort}::${userId}`, so this no-ops for return
-  // visits and refreshes username/avatar/token on every sign-in.
-  useEffect(() => {
-    if (!currentUser?.user_id) return;
-    const authToken = getAuthTokenFromCookies();
-    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
-    if (!authToken || !hostPort) return;
-    // Pull the refresh bundle alongside the auth token so the
-    // SavedAccount row carries everything the multi-account refresher
-    // needs. Without these the dormant-account refresh path falls
-    // back to a no-op the moment the user switches away from this
-    // identity, which is exactly the regression we're trying to
-    // avoid.
-    const sessionSnapshot = getActiveSessionSnapshot();
-    try {
-      rememberAccount({
-        hostPort,
-        userId: currentUser.user_id,
-        username: currentUser.username || "",
-        authToken,
-        refreshToken: sessionSnapshot.refreshToken ?? undefined,
-        authTokenExpireTime: sessionSnapshot.authTokenExpireTime ?? undefined,
-        refreshTokenExpireTime: sessionSnapshot.refreshTokenExpireTime ?? undefined,
-        tokenType: sessionSnapshot.tokenType ?? undefined,
-        avatarUrl: currentUser.avatar || null,
-        status: currentUserLiveStatus,
-      });
-    } catch (error) {
-      logger.ui.warn("Failed to record account in switcher registry", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [currentUser?.user_id, currentUser?.username, currentUser?.avatar, currentUserLiveStatus]);
 
   // Handle loading timeout - prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -3174,14 +3135,7 @@ export default function Dashboard() {
         </div>
 
         {currentUser && (
-          <div className="w-full space-y-2">
-            <AccountSwitcher
-              currentDisplay={{
-                username: currentUser.username,
-                avatarUrl: currentUser.avatar,
-                hostPort: getHostPortFromStorage() || getHostPortFromCookies() || undefined,
-              }}
-            />
+          <div className="w-full">
             <UserPanel
               username={currentUser.username || ''}
               avatar={currentUser.avatar || ''}
