@@ -27,6 +27,7 @@ import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
 import { ChannelList } from "../../components/dashboard-page/ChannelList";
 import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
@@ -3083,10 +3084,17 @@ export default function Dashboard() {
                   presenceClassName={dmsOpen ? undefined : "bg-[var(--color-success)]"}
                 >
                   {serverInfo.avatar_url ? (
-                    <img
+                    <ProgressiveImage
                       src={serverInfo.avatar_url}
+                      placeholderSrc={serverInfo.avatar_lqip_url ?? null}
                       alt={`${serverInfo.server_name} avatar`}
-                      className="h-12 w-12 rounded-lg object-cover"
+                      wrapperClassName="h-12 w-12 rounded-lg"
+                      className="rounded-lg"
+                      fallback={
+                        <div className="flex h-full w-full items-center justify-center rounded-lg bg-[var(--color-surface-secondary)] text-lg font-semibold text-[var(--color-text)]">
+                          {(serverInfo.server_name || "S").charAt(0).toUpperCase()}
+                        </div>
+                      }
                     />
                   ) : (
                     (serverInfo.server_name || "S").charAt(0).toUpperCase()
@@ -3430,6 +3438,15 @@ export default function Dashboard() {
                     firstMessage.sender_avatar_url,
                     firstMessage.username || displayName,
                   );
+                // Low-quality placeholder URL for the sender's
+                // avatar. Server emits it on every message read
+                // via `sender_avatar_lqip_url`; we just normalize
+                // through `createFullUrl` so a relative path
+                // resolves to the active instance origin. Null
+                // means no placeholder available — ProgressiveImage
+                // falls back to a circular skeleton.
+                const displayAvatarLqip =
+                  createFullUrl(firstMessage.sender_avatar_lqip_url ?? undefined) ?? null;
 
               // Parse the FIRST message's reply context once per
               // group so the strip can render ABOVE the avatar +
@@ -3505,14 +3522,32 @@ export default function Dashboard() {
                     onMouseLeave={() => setHoveredMessageId(null)}
                     onContextMenu={(e) => handleMessageGroupContextMenu(groupMessageIds, e)}
                   >
-                    {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full flex-shrink-0 relative">
-                      <img
+                    {/* Avatar — ProgressiveImage paints a circular
+                        skeleton (or the LQIP-blur preview) before
+                        the full avatar finishes downloading, then
+                        crossfades. Wrapped in a button-y div so
+                        the existing click + context-menu handlers
+                        keep working without bubbling through the
+                        component's internal img layer. */}
+                    <div
+                      className="w-10 h-10 rounded-full flex-shrink-0 relative cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
+                      onContextMenu={(e) => openUserContextMenu(firstMessage.sender_user_id, displayName, e, 'messages')}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${displayName}'s avatar`}
+                    >
+                      <ProgressiveImage
                         src={displayAvatar}
+                        placeholderSrc={displayAvatarLqip}
                         alt={displayName}
-                        className="w-full h-full rounded-full cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={(e) => handleUserClick(firstMessage.sender_user_id, displayName, e, 'messages')}
-                        onContextMenu={(e) => openUserContextMenu(firstMessage.sender_user_id, displayName, e, 'messages')}
+                        wrapperClassName="w-full h-full rounded-full"
+                        className="rounded-full"
+                        fallback={
+                          <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--color-surface-secondary)] text-sm font-semibold text-[var(--color-text)]">
+                            {displayName.charAt(0).toUpperCase()}
+                          </div>
+                        }
                       />
                     </div>
                     <div className="flex-1">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserRole, USER_ROLES, createFallbackAvatarUrl, getPrimaryRole } from '../services/user';
+import { ProgressiveImage } from './ui/ProgressiveImage';
 
 interface ExternalLink {
   platform: string;
@@ -20,7 +21,16 @@ interface UserCardProps {
   roles?: UserRole[];
   originServer?: string;
   avatarUrl?: string;
+  /**
+   * Low-quality placeholder URL for the avatar. Painted blurred
+   * underneath while `avatarUrl` finishes downloading. Optional —
+   * if absent the avatar slot shows a skeleton until the full
+   * image arrives.
+   */
+  avatarLqipUrl?: string | null;
   backgroundUrl?: string;
+  /** LQIP equivalent of `backgroundUrl`. Same semantics as avatarLqipUrl. */
+  backgroundLqipUrl?: string | null;
   accentColor?: string;
   bannerColor?: string;
   status?: 'active' | 'offline' | 'dnd' | 'idle';
@@ -58,7 +68,9 @@ export function UserCard({
   roles,
   originServer,
   avatarUrl,
+  avatarLqipUrl,
   backgroundUrl,
+  backgroundLqipUrl,
   accentColor = "var(--color-accent)",
   bannerColor,
   status = 'active',
@@ -210,10 +222,17 @@ export function UserCard({
         {/* Avatar with status */}
         <div className="relative flex-shrink-0">
           <div className="w-12 h-12 rounded-full border-2 border-[var(--color-border-secondary)] overflow-hidden bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] p-0.5">
-            <img
+            <ProgressiveImage
               src={displayAvatarUrl}
+              placeholderSrc={avatarLqipUrl}
               alt={`${currentUsername}'s avatar`}
-              className="w-full h-full rounded-full object-cover bg-[var(--color-surface-secondary)]"
+              wrapperClassName="w-full h-full rounded-full"
+              className="rounded-full bg-[var(--color-surface-secondary)]"
+              fallback={
+                <div className="w-full h-full rounded-full bg-[var(--color-surface-secondary)] flex items-center justify-center text-sm font-bold text-[var(--color-text)]">
+                  {currentUsername.charAt(0).toUpperCase()}
+                </div>
+              }
             />
           </div>
           {showOnlineIndicator && (
@@ -297,10 +316,11 @@ export function UserCard({
           }}
         >
           {displayBannerUrl && (
-            <img
+            <ProgressiveImage
               src={displayBannerUrl}
+              placeholderSrc={backgroundLqipUrl}
               alt="Profile banner"
-              className="w-full h-full object-cover"
+              wrapperClassName="absolute inset-0"
             />
           )}
 
@@ -346,16 +366,28 @@ export function UserCard({
                 className="w-32 h-32 rounded-full border-8 border-[var(--color-surface)] overflow-hidden shadow-2xl"
               >
                 <div className="w-full h-full bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] flex items-center justify-center">
+                  {/*
+                    The `avatarLoadFailed` state still exists for
+                    callers that may flip it externally, but the
+                    error path now lives inside ProgressiveImage
+                    itself (via the `fallback` prop). Both routes
+                    converge on the initial-letter chip.
+                  */}
                   {avatarLoadFailed ? (
                     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] text-4xl font-bold text-[var(--color-text)]">
                       {currentUsername.charAt(0).toUpperCase()}
                     </div>
                   ) : (
-                    <img
+                    <ProgressiveImage
                       src={displayAvatarUrl}
+                      placeholderSrc={avatarLqipUrl}
                       alt={`${currentUsername}'s avatar`}
-                      className="w-full h-full object-cover"
-                      onError={() => setAvatarLoadFailed(true)}
+                      wrapperClassName="w-full h-full"
+                      fallback={
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[var(--color-surface-secondary)] to-[var(--color-surface-tertiary)] text-4xl font-bold text-[var(--color-text)]">
+                          {currentUsername.charAt(0).toUpperCase()}
+                        </div>
+                      }
                     />
                   )}
                 </div>

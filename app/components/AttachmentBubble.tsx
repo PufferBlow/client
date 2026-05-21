@@ -6,6 +6,7 @@ import { MediaLightbox } from './MediaLightbox';
 import { downloadFileViaBlob } from '../utils/downloadFile';
 import { renderFileTypeIcon } from '../utils/fileTypeMeta';
 import { createFullUrl } from '../services/user';
+import { ProgressiveImage } from './ui/ProgressiveImage';
 
 interface AttachmentBubbleProps extends MessageAttachment {
   onClick?: () => void;
@@ -93,6 +94,7 @@ const formatAudioTime = (seconds: number): string => {
 
 export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   url,
+  lqip_url,
   filename,
   type,
   size,
@@ -178,6 +180,14 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
   };
 
   const resolvedUrl = useMemo(() => resolveAttachmentUrl(url), [url]);
+  // LQIP URL is server-relative just like `url`. Run it through
+  // the same resolver so the placeholder fetch hits the active
+  // home instance origin. Falls through to undefined when the
+  // server didn't generate a placeholder for this attachment.
+  const resolvedLqipUrl = useMemo(
+    () => (lqip_url ? resolveAttachmentUrl(lqip_url) : null),
+    [lqip_url],
+  );
   const inferredType = useMemo(
     () => inferAttachmentType(type, filename, resolvedUrl),
     [type, filename, resolvedUrl],
@@ -440,8 +450,15 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
             </svg>
           </button>
 
-          {/* Loading skeleton */}
-          {imageLoading && (
+          {/*
+            Loading skeleton — still present for GIF previews
+            because the GIF branch below has its own load-tracking
+            via the hidden capture-frame <img>. Non-GIFs now go
+            through ProgressiveImage, which renders its own
+            skeleton/LQIP/full sequence inline; no outer overlay
+            needed.
+          */}
+          {imageLoading && isGif && (
             <div className="absolute inset-0 flex animate-pulse items-center justify-center bg-[var(--color-surface-tertiary)]">
               <div className="text-center">
                 <div className="mx-auto mb-3 h-12 w-12 animate-spin rounded-full border-4 border-[var(--color-border-secondary)] border-t-[var(--color-primary)]"></div>
@@ -496,18 +513,27 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
               />
             </>
           ) : (
-            <img
+            <ProgressiveImage
               src={resolvedUrl}
+              placeholderSrc={resolvedLqipUrl}
               alt={filename || 'Attachment'}
-              className={`h-auto max-h-96 max-w-full object-contain transition-opacity duration-300 ${
-                imageLoading ? 'opacity-0' : 'opacity-100'
-              }`}
-              onLoad={() => setImageLoading(false)}
-              onError={() => {
-                setImageLoading(false);
-                setImageError(true);
-              }}
+              sizing="intrinsic"
+              intrinsicImgClassName="h-auto max-h-96 max-w-full object-contain"
+              fit="contain"
               loading="lazy"
+              // The loading skeleton overlay above is now driven
+              // by ProgressiveImage itself (skeleton when no
+              // LQIP, LQIP blur when one's available). We still
+              // keep `setImageLoading` happy by piggy-backing on
+              // the wrapper's onLoad / onError so the
+              // surrounding code's `imageLoading` state machine
+              // continues to work.
+              wrapperClassName="w-full"
+              fallback={
+                <div className="h-32 w-full flex items-center justify-center text-sm text-[var(--color-text-muted)]">
+                  Could not load image
+                </div>
+              }
             />
           )}
 
