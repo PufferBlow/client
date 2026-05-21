@@ -402,6 +402,10 @@ export interface GetUserProfileResponse {
     about?: string;
     avatar_url?: string;
     banner_url?: string;
+    /** LQIP URL for the avatar — see `User.avatar_lqip_url`. */
+    avatar_lqip_url?: string | null;
+    /** LQIP URL for the banner. */
+    banner_lqip_url?: string | null;
     status: 'online' | 'offline' | 'idle' | 'afk' | 'dnd';
     origin_server: string;
     inbox_id?: string;
@@ -991,6 +995,13 @@ export const useCurrentUserProfile = () => {
       // Create full URLs for avatar and banner from server-relative paths
       const fullAvatarUrl = createFullUrl(userData.avatar_url);
       const fullBannerUrl = createFullUrl(userData.banner_url);
+      // LQIP variants. These are server-relative `/storage/{hash}
+      // ?variant=lqip` URLs; same `createFullUrl` prepends the
+      // active home instance origin. Pass them through verbatim
+      // when the server didn't generate one (null) so consumers
+      // can branch on absence.
+      const fullAvatarLqipUrl = createFullUrl(userData.avatar_lqip_url) ?? null;
+      const fullBannerLqipUrl = createFullUrl(userData.banner_lqip_url) ?? null;
 
       // Use avatar_url if available, otherwise generate one
       const finalAvatarUrl = fullAvatarUrl || avatarUrl;
@@ -1006,6 +1017,8 @@ export const useCurrentUserProfile = () => {
         about: userData.about,
         avatar_url: fullAvatarUrl,
         banner_url: fullBannerUrl,
+        avatar_lqip_url: fullAvatarLqipUrl,
+        banner_lqip_url: fullBannerLqipUrl,
         inbox_id: userData.inbox_id,
         origin_server: userData.origin_server,
         status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',
@@ -1270,6 +1283,8 @@ export const useUserProfile = (userId: string) => {
       // Create full URLs for avatar and banner from server-relative paths
       const fullAvatarUrl = createFullUrl(userData.avatar_url);
       const fullBannerUrl = createFullUrl(userData.banner_url);
+      const fullAvatarLqipUrl = createFullUrl(userData.avatar_lqip_url) ?? null;
+      const fullBannerLqipUrl = createFullUrl(userData.banner_lqip_url) ?? null;
 
       // Parse roles from API response
       const userRoles = getUserRoles(userData.roles_ids);
@@ -1282,6 +1297,8 @@ export const useUserProfile = (userId: string) => {
         about: userData.about,
         avatar_url: fullAvatarUrl,
         banner_url: fullBannerUrl,
+        avatar_lqip_url: fullAvatarLqipUrl,
+        banner_lqip_url: fullBannerLqipUrl,
         inbox_id: userData.inbox_id,
         origin_server: userData.origin_server,
         status: userData.status as 'online' | 'idle' | 'afk' | 'dnd' | 'offline',

@@ -139,6 +139,16 @@ export interface ServerInfo {
   creation_date: string | null;
   avatar_url?: string;
   banner_url?: string;
+  /**
+   * LQIP URL for the server avatar. Server-relative
+   * `/storage/{hash}?variant=lqip`. Null / undefined when the
+   * server didn't generate a placeholder (no avatar, or LQIP
+   * generation failed). Used by ProgressiveImage to paint a
+   * blurred preview before the full avatar loads.
+   */
+  avatar_lqip_url?: string | null;
+  /** Same shape as `avatar_lqip_url`, but for the banner. */
+  banner_lqip_url?: string | null;
   welcome_message?: string;
   members_count?: number;
   online_members?: number;

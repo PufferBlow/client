@@ -6,6 +6,15 @@
 export interface MessageAttachment {
   /** Full URL to the attachment */
   url: string;
+  /**
+   * Low-quality image placeholder URL — `/storage/{hash}?variant=lqip`.
+   * Only populated for image attachments where the server
+   * successfully generated a placeholder. `null` / undefined means
+   * the consumer should render a skeleton until the full image
+   * loads. Other attachment kinds (video, audio, document) always
+   * leave this null.
+   */
+  lqip_url?: string | null;
   /** Original filename of the attachment */
   filename: string;
   /** MIME type of the attachment */
@@ -47,6 +56,12 @@ export interface Message {
 
   /** Banner URL of the message sender */
   sender_banner_url?: string | null;
+
+  /** LQIP variant of `sender_avatar_url`. Same semantics as MessageAttachment.lqip_url. */
+  sender_avatar_lqip_url?: string | null;
+
+  /** LQIP variant of `sender_banner_url`. */
+  sender_banner_lqip_url?: string | null;
 
   /** Current status of the message sender */
   sender_status?: string;

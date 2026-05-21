@@ -20,6 +20,22 @@ export interface User {
   /** User's banner URL */
   banner_url?: string | null;
 
+  /**
+   * Low-quality image placeholder URL for the avatar.
+   *
+   * A ~32 px WebP version served from `/storage/{hash}?variant=lqip`.
+   * Used by `<ProgressiveImage>` to paint something blurred on the
+   * very first render before the full avatar finishes downloading.
+   * `null` / undefined means the server has no placeholder for this
+   * avatar (non-image avatar, or LQIP generation failed) — the
+   * client should fall back to a skeleton until the full image
+   * loads.
+   */
+  avatar_lqip_url?: string | null;
+
+  /** Same shape as `avatar_lqip_url`, but for the user's banner. */
+  banner_lqip_url?: string | null;
+
   /** User's inbox ID (UUID) */
   inbox_id?: string | null;
 
