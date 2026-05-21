@@ -3148,8 +3148,32 @@ export default function Dashboard() {
                 channelName: currentVoiceChannel.channelName,
                 participants: currentVoiceChannel.participants,
                 onDisconnect: () => {
-                  // Handle voice channel disconnect
-                  setCurrentVoiceChannel(null);
+                  // Leave the voice call properly:
+                  //
+                  //   1. Call `voiceSessionActions.leave()` so the
+                  //      server's `/leave-audio` endpoint runs, the
+                  //      WebRTC transport disconnects, and the
+                  //      registry slot is released. `leave()` already
+                  //      fires the connection-state change callback
+                  //      that flips `currentVoiceChannel` to null on
+                  //      our side — so we don't need to clear it
+                  //      explicitly.
+                  //   2. Only fall back to the local-state clear when
+                  //      we somehow don't have a live session
+                  //      (defensive — shouldn't happen in practice).
+                  //
+                  // The previous version called only
+                  // `setCurrentVoiceChannel(null)`, which hid the
+                  // mini-card on the user panel but left the user
+                  // joined to the call from the server's point of
+                  // view (channel sidebar still showed them as
+                  // present, the WebRTC peer connection was still
+                  // up, audio kept streaming).
+                  if (voiceSessionActions) {
+                    void voiceSessionActions.leave();
+                  } else {
+                    setCurrentVoiceChannel(null);
+                  }
                 }
               } : undefined}
             />
