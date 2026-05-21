@@ -28,6 +28,7 @@ import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
 import { ChannelList } from "../../components/dashboard-page/ChannelList";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
+import { Twemoji } from "../../components/ui/Twemoji";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
@@ -3712,7 +3713,7 @@ export default function Dashboard() {
                                     }`}
                                     aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.viewer_reacted ? ", you reacted" : ""}`}
                                   >
-                                    <span>{reaction.emoji}</span>
+                                    <Twemoji emoji={reaction.emoji} size={14} />
                                     <span className="tabular-nums">{reaction.count}</span>
                                   </button>
                                 ))}

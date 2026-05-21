@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Twemoji } from "./ui/Twemoji";
 
 interface EmojiPickerProps {
   isOpen: boolean;
@@ -257,7 +258,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                   className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-hover)]"
                   title={`Add ${emoji}`}
                 >
-                  <span className="text-xl emoji-char">{emoji}</span>
+                  <Twemoji emoji={emoji} size={22} />
                 </button>
               ))}
             </div>
