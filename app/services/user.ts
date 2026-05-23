@@ -1335,15 +1335,30 @@ export const useUserProfile = (userId: string) => {
   });
 };
 
-// Hook to logout user
+// Hook to logout user.
+//
+// `logout()` is now async-aware: callers can `await` it before
+// navigating so the sequence is guaranteed:
+//   1. queryClient.clear()       — drop in-memory query state
+//   2. authTokenCache = null     — drop the module-level cache
+//   3. logoutCurrentSession()    — clear cookies, storage tokens,
+//                                  node_session_token, and the
+//                                  persist-query-client disk cache
+//                                  via clearSessionTokens(), then
+//                                  best-effort revoke of refresh
+//                                  token against the server
+// Without the await, the previous implementation raced the
+// `window.location.href = '/login'` call against the revoke +
+// storage cleanup — on a slow network the navigation fired first
+// and the next page load could still see partial state.
 export const useLogout = () => {
   const queryClient = useQueryClient();
 
   return {
-    logout: () => {
+    logout: async () => {
       queryClient.clear();
       authTokenCache = null;
-      void logoutCurrentSession();
+      await logoutCurrentSession();
     }
   };
 };

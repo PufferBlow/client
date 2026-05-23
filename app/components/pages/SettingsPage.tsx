@@ -328,8 +328,24 @@ export default function Settings() {
                 isUpdatingPassword={updatePasswordMutation.isPending}
                 onOpenResetTokenModal={() => setShowResetModal(true)}
                 onSignOut={() => {
-                  logout();
-                  setTimeout(() => (window.location.href = '/login'), 100);
+                  // Await the cleanup before navigating so cookies +
+                  // storage are actually gone by the time `/login`
+                  // loads. The previous setTimeout-then-navigate
+                  // pattern raced the revoke + storage clears
+                  // against the page transition and could leave
+                  // node_session_token, the persisted query cache,
+                  // and the in-flight refresh-token revoke hanging
+                  // mid-flight.
+                  //
+                  // `window.location.href` (hard nav) is intentional
+                  // — it forces a full app reload, which resets all
+                  // React state, evicts the in-memory query cache
+                  // again, and rehydrates from the now-empty
+                  // PUFFERBLOW_QUERY_CACHE so the login page starts
+                  // truly clean.
+                  void logout().finally(() => {
+                    window.location.href = '/login';
+                  });
                 }}
               />
             )}

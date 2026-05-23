@@ -243,6 +243,39 @@ export const clearSessionTokens = (): void => {
   removeStorageValue(STORAGE_KEYS.authExpireAt);
   removeStorageValue(STORAGE_KEYS.refreshExpireAt);
   removeStorageValue(STORAGE_KEYS.tokenType);
+
+  // `node_session_token` is set by the decentralized-auth flow and
+  // sent on every subsequent API request as `X-Pufferblow-Node-Session`
+  // (see apiClient.ts:performFetch). Leaving it behind on logout
+  // meant the next user — or even an "anonymous" reload — would
+  // ride the previous session's node identity until they did a
+  // full re-login. Clear both storage tiers; `decentralizedAuth.ts`
+  // writes it to localStorage AND sessionStorage so the cleanup
+  // mirrors that.
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem("node_session_token");
+      window.sessionStorage.removeItem("node_session_token");
+    } catch {
+      /* storage unavailable; the cookie cleanup above is what matters */
+    }
+  }
+
+  // React Query's persist plugin writes the entire query cache into
+  // localStorage under PUFFERBLOW_QUERY_CACHE on a throttled cadence
+  // (see root.tsx). `queryClient.clear()` only drops the in-memory
+  // copy — on the next reload `persistQueryClient` rehydrates the
+  // disk copy and the previous user's channels / users / unread
+  // counts flash back into view until each query refetches and
+  // fails with no auth. Nuke the disk copy here so logout actually
+  // ends the session everywhere.
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem("PUFFERBLOW_QUERY_CACHE");
+    } catch {
+      /* see above */
+    }
+  }
 };
 
 export const refreshAuthSession = async (
