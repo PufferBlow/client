@@ -32,6 +32,7 @@ import {
   listFriendRequests,
   listFriends,
   sendFriendRequest,
+  sendFriendRequestByHandle,
   unblockFriendRequests,
   unfriendUser,
   type Friendship,
@@ -214,6 +215,24 @@ export function useFriendGraphMutations(
     onSuccess: invalidateAll,
   });
 
+  /**
+   * Handle-based send used by the Friends-panel Add Friend modal
+   * (username + optional instance origin). The "This instance"
+   * radio in the modal omits `originServer`; for federated targets
+   * the modal passes the remote host and the server WebFingers it.
+   */
+  const sendRequestByHandle = useMutation({
+    mutationFn: async (args: { username: string; originServer?: string }) => {
+      if (!hostPort || !authToken) throw new Error('Not signed in.');
+      const response = await sendFriendRequestByHandle(hostPort, authToken, args);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send friend request.');
+      }
+      return response.data;
+    },
+    onSuccess: invalidateAll,
+  });
+
   const accept = useMutation({
     mutationFn: async (friendshipId: string) => {
       if (!hostPort || !authToken) throw new Error('Not signed in.');
@@ -278,5 +297,13 @@ export function useFriendGraphMutations(
     onSuccess: invalidateAll,
   });
 
-  return { sendRequest, accept, cancelOrReject, unfriend, block, unblock };
+  return {
+    sendRequest,
+    sendRequestByHandle,
+    accept,
+    cancelOrReject,
+    unfriend,
+    block,
+    unblock,
+  };
 }

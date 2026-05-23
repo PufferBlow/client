@@ -22,7 +22,11 @@ import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { JoinServerModal } from "../../components/dashboard/JoinServerModal";
 import { ChannelSidebarHeader } from "../../components/dashboard-page/ChannelSidebarHeader";
-import { DirectMessagesPanel } from "../../components/dashboard-page/DirectMessagesPanel";
+import {
+  DirectMessagesPanel,
+  type SelectedFriendForDM,
+} from "../../components/dashboard-page/DirectMessagesPanel";
+import { DirectMessageView } from "../dashboard-page/DirectMessageView";
 import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
 import { ChannelList } from "../../components/dashboard-page/ChannelList";
@@ -297,6 +301,15 @@ export default function Dashboard() {
   // channel list — see the `dmsOpen ?` branch in the channel-panel
   // render block below.
   const [dmsOpen, setDmsOpen] = useState(false);
+
+  // Friend currently being chatted with inside the DM surface.
+  // null = the DM column is showing the Friends list / panel; set
+  // = the main pane swaps to the DM chat view. Cleared whenever
+  // the user leaves DM view (server-rail click) so a return trip
+  // lands on the panel index instead of resurrecting the previous
+  // conversation.
+  const [selectedFriendForDM, setSelectedFriendForDM] =
+    useState<SelectedFriendForDM | null>(null);
 
   // Friend graph — one place owns the wire reads, the perspective
   // resolver (`resolveFriendEdge`), and the mutation callbacks the
@@ -2108,6 +2121,9 @@ export default function Dashboard() {
     setUnreadMarker(null);
     setNotificationMenuOpen(false);
     setMessageInput("");
+    // Entering DMs lands on the panel index — no conversation
+    // open by default. The user picks one from the Friends tab.
+    setSelectedFriendForDM(null);
     setDmsOpen(true);
   };
 
@@ -3360,7 +3376,13 @@ export default function Dashboard() {
                 <ServerRailItem
                   label={serverInfo.server_name || "Server"}
                   selected={!dmsOpen}
-                  onClick={() => setDmsOpen(false)}
+                  onClick={() => {
+                    setDmsOpen(false);
+                    // Leaving DMs drops any open conversation so a
+                    // re-entry lands on the panel index — mirrors
+                    // how handleOpenDirectMessages clears on entry.
+                    setSelectedFriendForDM(null);
+                  }}
                   presenceClassName={dmsOpen ? undefined : "bg-[var(--color-success)]"}
                 >
                   {serverInfo.avatar_url ? (
@@ -3411,7 +3433,11 @@ export default function Dashboard() {
               views. */}
           <ChannelPanel>
             {dmsOpen ? (
-              <DirectMessagesPanel showToast={showToast} />
+              <DirectMessagesPanel
+                showToast={showToast}
+                selectedFriendForDM={selectedFriendForDM}
+                onOpenDirectMessage={setSelectedFriendForDM}
+              />
             ) : (
               <>
                 <ChannelSidebarHeader
@@ -3513,31 +3539,42 @@ export default function Dashboard() {
             chosen "Direct messages." We render a dedicated empty state
             instead until the full DM surface lands. */}
         {dmsOpen ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
-            <div
-              className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
-              aria-hidden="true"
-            >
-              <svg
-                className="h-7 w-7 text-[var(--color-text-secondary)]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                viewBox="0 0 24 24"
+          selectedFriendForDM ? (
+            // A friend was clicked in the Friends panel — swap the
+            // main pane to the DM chat view. Back button on the view
+            // clears the selection, returning us to the placeholder.
+            <DirectMessageView
+              peerUserId={selectedFriendForDM.userId}
+              peerHandle={selectedFriendForDM.handle}
+              onBack={() => setSelectedFriendForDM(null)}
+            />
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+              <div
+                className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
+                aria-hidden="true"
               >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
+                <svg
+                  className="h-7 w-7 text-[var(--color-text-secondary)]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.75}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-[var(--color-text)]">
+                Direct messages
+              </h2>
+              <p className="mt-2 max-w-[40ch] text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                Pick a friend from the list on the left to start chatting, or
+                head back into channel view via the rail.
+              </p>
             </div>
-            <h2 className="text-base font-semibold text-[var(--color-text)]">
-              Direct messages
-            </h2>
-            <p className="mt-2 max-w-[40ch] text-sm leading-relaxed text-[var(--color-text-secondary)]">
-              Pick a conversation from the list on the left, or pick a server
-              from the rail to head back into channel view.
-            </p>
-          </div>
+          )
         ) : (
           <>
         <ChatHeader

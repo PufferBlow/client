@@ -40,7 +40,32 @@ export interface Friendship {
   updated_at: string | null;
   /** Set by the listing endpoints (list_friends, list_pending). */
   other_user_id?: string;
+  /** The other side's username, joined server-side from the users
+   *  table. Set by the listing endpoints. Absent on the immediate
+   *  `sendFriendRequest` / `acceptFriendRequest` responses (those
+   *  return the raw friendship row without identity hydration). */
+  other_username?: string;
+  /** The other side's `origin_server` value. Empty string means
+   *  "this instance" — the client should render `username` alone
+   *  in that case; otherwise `username@origin_server`. */
+  other_origin_server?: string;
 }
+
+/**
+ * Pure formatter for the "Friends panel row" identifier display.
+ * Empty origin → just the username (local user); non-empty origin
+ * → `username@host`. Falls back to the user_id when neither is
+ * available (defensive — shouldn't happen given the new server-
+ * side hydration).
+ */
+export const formatFriendHandle = (
+  friendship: Pick<Friendship, 'other_user_id' | 'other_username' | 'other_origin_server'>,
+): string => {
+  const username = friendship.other_username?.trim();
+  if (!username) return friendship.other_user_id || '';
+  const origin = friendship.other_origin_server?.trim();
+  return origin ? `${username}@${origin}` : username;
+};
 
 export interface SendFriendRequestResponse {
   status_code: number;
@@ -74,10 +99,13 @@ export interface UnfriendResponse {
 }
 
 /**
- * Send a friend request to `targetUserId`. Idempotent — if a row
- * already exists in any state, the server returns that row instead
- * of creating a duplicate. Inspect `response.data.friendship.status`
- * to know whether the action actually moved the graph.
+ * Send a friend request to a user by their LOCAL `user_id`.
+ *
+ * Used by call sites that already hold the local UUID — the
+ * UserCard's "Add Friend" button, the MessageContextMenu's
+ * "Send Friend Request" row. Idempotent: if a row exists in any
+ * state the server returns it unchanged; inspect
+ * `friendship.status` to know whether the action moved the graph.
  */
 export const sendFriendRequest = async (
   hostPort: string,
@@ -88,6 +116,42 @@ export const sendFriendRequest = async (
   return apiClient.post<SendFriendRequestResponse>(
     `/api/v1/friends/requests?auth_token=${encodeURIComponent(authToken)}`,
     { target_user_id: targetUserId },
+  );
+};
+
+/**
+ * Send a friend request by handle (username + instance).
+ *
+ * Two shapes the modal uses:
+ *   * `{ username: "alice" }` (or `originServer` blank/undefined) →
+ *     "This instance" — server does a local username lookup.
+ *   * `{ username: "alice", originServer: "mastodon.example" }` →
+ *     server WebFingers the remote actor, creates a shadow `users`
+ *     row on first add, and returns the friendship targeting that
+ *     shadow's user_id. Subsequent listings hydrate the same
+ *     username + origin back so the row renders as
+ *     `alice@mastodon.example` everywhere.
+ *
+ * Returns the same response shape as `sendFriendRequest`. On
+ * 404 the server's `error` includes a "couldn't find X@Y" hint
+ * that the modal surfaces to the user.
+ */
+export const sendFriendRequestByHandle = async (
+  hostPort: string,
+  authToken: string,
+  args: { username: string; originServer?: string },
+): Promise<ApiResponse<SendFriendRequestResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  const body: Record<string, string> = {
+    target_username: args.username.trim(),
+  };
+  const origin = (args.originServer ?? '').trim();
+  if (origin) {
+    body.target_origin_server = origin;
+  }
+  return apiClient.post<SendFriendRequestResponse>(
+    `/api/v1/friends/requests?auth_token=${encodeURIComponent(authToken)}`,
+    body,
   );
 };
 
@@ -186,6 +250,11 @@ export interface FriendRequestBlock {
   blocker_id: string;
   blocked_id: string;
   created_at: string | null;
+  /** Hydrated from `users.username` by `list_blocks` server-side
+   *  so the Blocked tab can render `<username>@<origin>` instead
+   *  of a raw user_id. Absent on the immediate `block` response. */
+  blocked_username?: string;
+  blocked_origin_server?: string;
 }
 
 export interface BlockFriendRequestsResponse {
