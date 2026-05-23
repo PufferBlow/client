@@ -60,18 +60,22 @@ export interface Friendship {
 
 /**
  * Pure formatter for the "Friends panel row" identifier display.
- * Empty origin → just the username (local user); non-empty origin
- * → `username@host`. Falls back to the user_id when neither is
- * available (defensive — shouldn't happen given the new server-
- * side hydration).
+ * Returns just the username — the instance origin is intentionally
+ * hidden from the UI to keep federated and local users visually
+ * indistinguishable in the friends list, DM header, and blocked tab.
+ * Falls back to the user_id when no username is available
+ * (defensive — shouldn't happen given the new server-side
+ * hydration). The `other_origin_server` field on `Friendship`
+ * remains populated so other call sites (e.g. WebFinger lookups,
+ * tooltips, debug logs) can still surface the instance when
+ * useful — only the default display drops it.
  */
 export const formatFriendHandle = (
   friendship: Pick<Friendship, 'other_user_id' | 'other_username' | 'other_origin_server'>,
 ): string => {
   const username = friendship.other_username?.trim();
   if (!username) return friendship.other_user_id || '';
-  const origin = friendship.other_origin_server?.trim();
-  return origin ? `${username}@${origin}` : username;
+  return username;
 };
 
 export interface SendFriendRequestResponse {

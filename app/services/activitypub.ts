@@ -59,7 +59,25 @@ export interface DirectMessagePayload {
   message: string;
   sent_at: string;
   attachments?: unknown[];
+  /** Legacy field — older builds shipped the sender's username here.
+   *  Server now populates `sender_username` instead; keep this for
+   *  fall-through compatibility when consuming caches written by
+   *  older clients. */
   username?: string;
+  /** Hydrated server-side (`MessagesManager._hydrate_messages`) by
+   *  joining the sender's `users` row. The DM read path uses the
+   *  same hydration pipeline as channel messages, so all of these
+   *  are populated identically. */
+  sender_username?: string;
+  sender_avatar_url?: string | null;
+  sender_avatar_lqip_url?: string | null;
+  sender_banner_url?: string | null;
+  sender_banner_lqip_url?: string | null;
+  sender_status?: string;
+  sender_roles?: string[];
+  sender_about?: string | null;
+  sender_last_seen?: string | null;
+  sender_created_at?: string | null;
 }
 
 export interface LoadDirectMessagesResponse {

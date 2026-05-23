@@ -49,6 +49,7 @@ import {
   type Friendship,
 } from "../../services/friends";
 import { Modal } from "../ui/Modal";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { createFallbackAvatarUrl } from "../../services/user";
 import type { ShowToast } from "../Toast";
 
@@ -408,12 +409,24 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 
 /**
  * One row per friendship / pending request. `variant` controls
- * which action buttons appear. `onOpen` is only wired for accepted
- * friend rows — clicking them tells the parent to open the DM
- * chat view in the main pane.
+ * which action buttons appear.
  *
- * The identifier rendered is the formatted handle
- * (`username` for local, `username@host` for federated) via
+ * Action surfaces by variant:
+ *   * `friend` — clicking the row opens the DM chat view. The
+ *     destructive actions (Unfriend, Block) are deliberately NOT
+ *     rendered as inline buttons; they live behind a right-click
+ *     context menu so the row stays clean and accidental clicks
+ *     can't end a friendship. The chevron-vertical "⋮" button on
+ *     hover gives mouse-only users a second way in.
+ *   * `incoming` — inline Accept / Reject buttons stay visible
+ *     (these are the primary action on the row, not destructive
+ *     edge-cases). Block is also kept inline here because it's the
+ *     one-shot "make it stop" the user reaches for on harassment.
+ *   * `outgoing` — inline Cancel button. Only one action exists
+ *     for the row, no point hiding it behind a menu.
+ *
+ * The identifier rendered is the formatted handle (just the
+ * username — the `@host` suffix is no longer shown anywhere) via
  * `formatFriendHandle`. Falls back to the raw `user_id` only if the
  * server failed to hydrate identity — defensive against an older
  * server build.
@@ -441,6 +454,12 @@ function FriendshipRow({
   onUnfriend?: () => void;
   onBlock?: () => void;
 }) {
+  // Right-click context menu state. Only meaningful for `friend`
+  // variant; the other variants have inline buttons covering all
+  // available actions so the menu would be redundant.
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const handle = formatFriendHandle({
     other_user_id:
       row.other_user_id ??
@@ -485,97 +504,208 @@ function FriendshipRow({
   // actions are the only thing the user can do with them).
   const clickable = variant === "friend" && !!onOpen;
 
+  // Context-menu items for the `friend` variant. Built lazily so
+  // the array only allocates when the user actually right-clicks.
+  const buildFriendMenuItems = (): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+    if (onOpen) {
+      items.push({
+        id: "open-dm",
+        label: "Open chat",
+        onSelect: onOpen,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v8c0 1.38-1.12 2.5-2.5 2.5H10l-4 3.5V17H6.5C5.12 17 4 15.88 4 14.5z" />
+          </svg>
+        ),
+      });
+      items.push({ id: "sep-1", separator: true });
+    }
+    if (onUnfriend) {
+      items.push({
+        id: "unfriend",
+        label: "Unfriend",
+        tone: "warning",
+        onSelect: onUnfriend,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="8" r="4" />
+            <path d="M2 21c1-4 4-6 7-6s6 2 7 6" />
+            <line x1="16" y1="9" x2="22" y2="9" />
+          </svg>
+        ),
+      });
+    }
+    if (onBlock) {
+      items.push({
+        id: "block",
+        label: "Block",
+        tone: "danger",
+        onSelect: onBlock,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
+          </svg>
+        ),
+      });
+    }
+    return items;
+  };
+
   return (
-    <li
-      className={`flex items-center gap-3 px-3 py-2 text-xs transition-colors ${
-        clickable ? "cursor-pointer" : ""
-      } ${
-        selected
-          ? "bg-[var(--color-active)]"
-          : clickable
-            ? "hover:bg-[var(--color-hover)]"
-            : ""
-      }`}
-      onClick={() => {
-        if (clickable && onOpen) onOpen();
-      }}
-    >
-      <div className="relative shrink-0">
-        <img
-          src={avatarSrc}
-          alt=""
-          className="h-8 w-8 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover"
-        />
-        {presenceDot}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[var(--color-text)]">{handle}</div>
-        {variant === "outgoing" && (
-          <div className="text-[10px] text-[var(--color-text-muted)]">
-            Awaiting reply
-          </div>
-        )}
-        {variant === "incoming" && (
-          <div className="text-[10px] text-[var(--color-text-muted)]">
-            Wants to be friends
-          </div>
-        )}
-      </div>
-      <div
-        className="flex shrink-0 items-center gap-1"
-        // Action buttons sit on top of the row's click handler.
-        // Stop propagation so e.g. "Unfriend" doesn't also fire
-        // "open chat" on its way up.
-        onClick={(e) => e.stopPropagation()}
+    <>
+      <li
+        className={`group flex items-center gap-3 px-3 py-2 text-xs transition-colors ${
+          clickable ? "cursor-pointer" : ""
+        } ${
+          selected
+            ? "bg-[var(--color-active)]"
+            : clickable
+              ? "hover:bg-[var(--color-hover)]"
+              : ""
+        }`}
+        onClick={() => {
+          if (clickable && onOpen) onOpen();
+        }}
+        onContextMenu={(e) => {
+          // Only the friend variant gets a context menu; for incoming /
+          // outgoing the inline buttons already cover every action so a
+          // menu would be redundant noise.
+          if (variant !== "friend") return;
+          e.preventDefault();
+          setMenuPos({ x: e.clientX, y: e.clientY });
+        }}
       >
-        {variant === "incoming" && onAccept && (
-          <button
-            type="button"
-            onClick={onAccept}
-            className="rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-2 py-1 text-[10px] font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
-          >
-            Accept
-          </button>
-        )}
-        {variant === "incoming" && onReject && (
-          <button
-            type="button"
-            onClick={onReject}
-            className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
-          >
-            Reject
-          </button>
-        )}
-        {variant === "outgoing" && onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
-          >
-            Cancel
-          </button>
-        )}
-        {variant === "friend" && onUnfriend && (
-          <button
-            type="button"
-            onClick={onUnfriend}
-            className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
-          >
-            Unfriend
-          </button>
-        )}
-        {(variant === "friend" || variant === "incoming") && onBlock && (
-          <button
-            type="button"
-            onClick={onBlock}
-            className="rounded-md border border-[var(--color-error)]/40 px-2 py-1 text-[10px] font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/10"
-            title="Stop incoming friend requests from this user"
-          >
-            Block
-          </button>
-        )}
-      </div>
-    </li>
+        <div className="relative shrink-0">
+          <img
+            src={avatarSrc}
+            alt=""
+            className="h-8 w-8 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover"
+          />
+          {presenceDot}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[var(--color-text)]">{handle}</div>
+          {variant === "outgoing" && (
+            <div className="text-[10px] text-[var(--color-text-muted)]">
+              Awaiting reply
+            </div>
+          )}
+          {variant === "incoming" && (
+            <div className="text-[10px] text-[var(--color-text-muted)]">
+              Wants to be friends
+            </div>
+          )}
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          // Action buttons sit on top of the row's click handler.
+          // Stop propagation so e.g. "Accept" doesn't also fire
+          // "open chat" on its way up.
+          onClick={(e) => e.stopPropagation()}
+        >
+          {variant === "incoming" && onAccept && (
+            <button
+              type="button"
+              onClick={onAccept}
+              className="rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-2 py-1 text-[10px] font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+            >
+              Accept
+            </button>
+          )}
+          {variant === "incoming" && onReject && (
+            <button
+              type="button"
+              onClick={onReject}
+              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            >
+              Reject
+            </button>
+          )}
+          {variant === "outgoing" && onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+          )}
+          {variant === "incoming" && onBlock && (
+            <button
+              type="button"
+              onClick={onBlock}
+              className="rounded-md border border-[var(--color-error)]/40 px-2 py-1 text-[10px] font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/10"
+              title="Stop incoming friend requests from this user"
+            >
+              Block
+            </button>
+          )}
+          {/* Friend variant: kebab/more button as a discoverable
+              affordance for the right-click menu. Hidden until row
+              hover so the row stays clean at rest. */}
+          {variant === "friend" && (onUnfriend || onBlock) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                setMenuPos({ x: rect.right - 4, y: rect.bottom + 4 });
+              }}
+              title="More actions"
+              aria-label="More actions"
+              className="rounded-md p-1 text-[var(--color-text-muted)] opacity-0 transition-opacity hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] group-hover:opacity-100 focus:opacity-100"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="5" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="12" cy="19" r="1.6" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </li>
+      {variant === "friend" && menuPos && (
+        <ContextMenu
+          isOpen
+          position={menuPos}
+          onClose={() => setMenuPos(null)}
+          items={buildFriendMenuItems()}
+        />
+      )}
+    </>
   );
 }
 

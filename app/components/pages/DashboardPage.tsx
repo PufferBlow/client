@@ -3327,42 +3327,47 @@ export default function Dashboard() {
                 // pill behavior is unchanged here.
                 lockRestingPalette
               >
-                {/* Three stacked horizontal bars — a "list of message
-                    rows" glyph for the DM affordance. Reads as a
-                    skeleton/list rather than a single bubble, which
-                    is what the user wants this slot to communicate:
-                    "go to your direct conversations", i.e. an inbox
-                    rather than one specific message.
+                {/* Rounded chat-bubble glyph — universally read as
+                    "direct messages" and visually consistent with
+                    the line-art icon set used elsewhere in the rail
+                    and title bar. The previous three-bars "list"
+                    glyph read as a skeleton/checklist and didn't
+                    track with the rest of the app's iconography;
+                    a speech bubble is the single most established
+                    affordance for "messages" and reads instantly.
 
                     Layout decisions:
-                      - Lines are the same length (x1=5 → x2=19) so
-                        the three rows read as a uniform stack — no
-                        accidental "checklist" interpretation.
-                      - Even vertical spacing: y=7, 12, 17. The 5-unit
-                        gap is identical between every pair, which is
-                        what "fixed gap" calls for.
-                      - `strokeLinecap="round"` gives the bars
-                        soft, pill-shaped ends so they read as
-                        skeleton placeholder bars instead of crisp
-                        rulers. `strokeWidth=2.4` keeps them weighty
-                        without crowding the gaps at 28×28 px.
-                      - `currentColor` is preserved so the icon
-                        inherits the locked resting palette's
-                        text-secondary color, same as the previous
-                        glyph. */}
+                      - Single rounded-rectangle bubble (rx=5) with
+                        a small tail at the bottom-left so the shape
+                        clearly reads as a message bubble rather
+                        than a generic rounded square. The tail
+                        anchors to (8,17)→(5,20)→(8,20) which is
+                        small enough not to crowd the 24×24 canvas
+                        but distinct enough to register at icon size.
+                      - Two short interior strokes (y=11, y=14)
+                        suggest "message lines" — keeps the icon
+                        from feeling empty without crossing into
+                        text-content territory.
+                      - `strokeWidth=2` (slightly lighter than the
+                        previous 2.4) because the bubble outline +
+                        two interior lines + a tail would feel
+                        cluttered at 2.4. The lighter stroke keeps
+                        the icon airy at 28×28.
+                      - `currentColor` preserved so the icon inherits
+                        the locked resting palette, same as before. */}
                 <svg
                   className="h-7 w-7"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth={2.4}
+                  strokeWidth={2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <line x1="5" y1="7" x2="19" y2="7" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <line x1="5" y1="17" x2="19" y2="17" />
+                  <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v8c0 1.38-1.12 2.5-2.5 2.5H10l-4 3.5V17H6.5C5.12 17 4 15.88 4 14.5z" />
+                  <line x1="8" y1="10" x2="16" y2="10" />
+                  <line x1="8" y1="13" x2="13" y2="13" />
                 </svg>
               </ServerRailItem>
 
@@ -3548,6 +3553,7 @@ export default function Dashboard() {
               peerHandle={selectedFriendForDM.handle}
               peerAvatarUrl={selectedFriendForDM.avatarUrl}
               onBack={() => setSelectedFriendForDM(null)}
+              showToast={showToast}
             />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
