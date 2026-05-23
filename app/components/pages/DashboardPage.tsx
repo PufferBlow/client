@@ -3411,7 +3411,7 @@ export default function Dashboard() {
               views. */}
           <ChannelPanel>
             {dmsOpen ? (
-              <DirectMessagesPanel />
+              <DirectMessagesPanel showToast={showToast} />
             ) : (
               <>
                 <ChannelSidebarHeader
