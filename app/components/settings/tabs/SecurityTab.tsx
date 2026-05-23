@@ -112,27 +112,46 @@ export function SecurityTab({
             </div>
           </div>
 
+          {/* Row-aligned destructive actions: label + description on
+              the left, action button right-aligned on the same row.
+              Replaces the previous stacked layout where the button sat
+              below its description and consumed an extra ~80px of
+              vertical space per action. */}
           <div className="border-t border-[var(--color-border)] pt-6">
-            <h4 className="text-sm font-medium text-[var(--color-text)]">
-              Authentication Token
-            </h4>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Resetting your authentication token will log you out
-            </p>
-            <div className="mt-3">
-              <Button type="button" onClick={onOpenResetTokenModal} variant="danger">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <h4 className="text-sm font-medium text-[var(--color-text)]">
+                  Authentication Token
+                </h4>
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                  Resetting your authentication token will log you out
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={onOpenResetTokenModal}
+                variant="danger"
+                className="sm:flex-shrink-0"
+              >
                 Reset Auth Token
               </Button>
             </div>
           </div>
 
           <div className="border-t border-[var(--color-border)] pt-6">
-            <h4 className="text-sm font-medium text-[var(--color-text)]">Sign Out</h4>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Sign out of your account
-            </p>
-            <div className="mt-3">
-              <Button type="button" onClick={onSignOut} variant="danger">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <h4 className="text-sm font-medium text-[var(--color-text)]">Sign Out</h4>
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                  Sign out of your account
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={onSignOut}
+                variant="danger"
+                className="sm:flex-shrink-0"
+              >
                 Sign Out
               </Button>
             </div>

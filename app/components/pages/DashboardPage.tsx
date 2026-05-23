@@ -856,6 +856,12 @@ export default function Dashboard() {
   // selector fixes that and keeps every entry point's clear-on-enter
   // semantics identical.
   useEffect(() => {
+    // Skip the auto-select when the user is in DM view — they
+    // explicitly left channel-land via the rail's DM slot, so
+    // re-selecting a channel here would yank them back into a
+    // channel they didn't ask for the moment they open DMs.
+    if (dmsOpen) return;
+
     if (channels.length > 0 && !selectedChannel) {
       if (persistedChannelId) {
         const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
@@ -871,7 +877,7 @@ export default function Dashboard() {
         void handleChannelSelect(channels[0]);
       }
     }
-  }, [channels, persistedChannelId, selectedChannel]);
+  }, [channels, persistedChannelId, selectedChannel, dmsOpen]);
 
   const showUnsupportedSingleInstanceAction = (action: string, detail: string) => {
     showToast({
@@ -2001,6 +2007,47 @@ export default function Dashboard() {
 
     // Load messages for the selected channel using the extracted function
     await loadChannelMessages(channel);
+  };
+
+  /**
+   * Switch the dashboard into "Direct messages" view.
+   *
+   * The rail's DM slot used to just flip `dmsOpen=true` and swap the
+   * channel-list panel for `DirectMessagesPanel` — but the MAIN pane
+   * still kept reading `selectedChannel` and rendering its messages /
+   * composer / WebSocket. Visually, the user saw the channel they'd
+   * just been in stick around behind the DM sidebar, which read as
+   * "the button doesn't do anything."
+   *
+   * Mirror the channel-side `handleChannelSelect` cleanup so the
+   * main pane has nothing channel-y to render:
+   *   - disconnect the per-channel WebSocket (no more incoming
+   *     channel messages once the user leaves channel view),
+   *   - flush + clear the draft persistence loop (we don't want a
+   *     half-typed message in a channel that's no longer in view),
+   *   - clear `selectedChannel`, `replyTarget`, and `messages` so
+   *     the chat area renders the dedicated DM empty state below.
+   *
+   * Also persist a sentinel ("") for `selectedChannel` so the
+   * "restore previously selected channel" effect doesn't yank the
+   * user back into a channel on the next mount when they explicitly
+   * chose the DM slot.
+   */
+  const handleOpenDirectMessages = () => {
+    if (dmsOpen) return;
+    flushPendingDraftPersistence();
+
+    if (webSocketConnection) {
+      webSocketConnection.disconnect();
+      setWebSocketConnection(null);
+    }
+    setSelectedChannel(null);
+    setMessages([]);
+    setReplyTarget(null);
+    setUnreadMarker(null);
+    setNotificationMenuOpen(false);
+    setMessageInput("");
+    setDmsOpen(true);
   };
 
   const handleNotificationSelect = async (notification: NotificationItem) => {
@@ -3191,7 +3238,7 @@ export default function Dashboard() {
               <ServerRailItem
                 label="Direct messages"
                 selected={dmsOpen}
-                onClick={() => setDmsOpen(true)}
+                onClick={handleOpenDirectMessages}
                 // `lockRestingPalette` keeps the avatar on the dark
                 // resting surface across hover AND selected. The
                 // Pufferblow mark draws in white strokes via
@@ -3399,6 +3446,39 @@ export default function Dashboard() {
 
       {/* Main Chat Area */}
       <MessagePane>
+        {/* DM view: short-circuit the entire chat surface — no ChatHeader
+            (no channel to header), no message list, no composer. The
+            channel view doesn't belong here once the user has explicitly
+            chosen "Direct messages." We render a dedicated empty state
+            instead until the full DM surface lands. */}
+        {dmsOpen ? (
+          <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+            <div
+              className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
+              aria-hidden="true"
+            >
+              <svg
+                className="h-7 w-7 text-[var(--color-text-secondary)]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-[var(--color-text)]">
+              Direct messages
+            </h2>
+            <p className="mt-2 max-w-[40ch] text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              Pick a conversation from the list on the left, or pick a server
+              from the rail to head back into channel view.
+            </p>
+          </div>
+        ) : (
+          <>
         <ChatHeader
           selectedChannel={selectedChannel}
           notifications={notifications}
@@ -4646,6 +4726,8 @@ export default function Dashboard() {
         </>
         )}
 
+          </>
+        )}
       </MessagePane>
 
       {/* Member List */}
