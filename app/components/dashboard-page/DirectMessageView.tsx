@@ -2,7 +2,16 @@
  * Direct-message chat surface rendered in the main pane when the
  * user opens a DM from the Friends panel.
  *
- * Federated: the underlying `/api/v1/dms/messages` and
+ * Visual style mirrors the channel chat surface — same scrolling
+ * message list rhythm, grouped messages with avatar + username +
+ * timestamp header, and a composer wrapped in the same
+ * rounded-xl bordered surface with the "Enter to send · Shift+Enter
+ * for newline · char counter" footer. Layout decisions intentionally
+ * track DashboardPage's channel branch (not extracted into a shared
+ * component yet — that's a real refactor; this rewrite just makes
+ * the surfaces look like they belong to the same product).
+ *
+ * Federation: the underlying `/api/v1/dms/messages` and
  * `/api/v1/dms/send` endpoints accept a `peer` value that can be a
  * local user_id, a username, an actor URI, or `user@instance`. We
  * pass the friend's local-DB `user_id` (which the server side will
@@ -13,15 +22,14 @@
  * Realtime: this iteration polls every 5 seconds via react-query's
  * `refetchInterval`. The global WS doesn't carry DM events today —
  * once it does, swap the poll for an in-memory append fed by the
- * WS handler. The interface here doesn't change.
+ * WS handler. The component interface here doesn't change.
  *
- * Scope is intentionally lean: header (friend handle + back),
- * scrolling message list, single-line composer. No reactions, no
- * attachments, no read receipts. Those can layer in alongside the
- * channel chat's equivalents once the DM surface graduates from
- * "v1 wires" to "v1 polish."
+ * Scope intentionally still lean: no attachments, no emoji picker,
+ * no reactions, no replies. The composer mirrors the channel one
+ * minus those affordances — they can layer in alongside their
+ * channel-side equivalents once the wire surface supports them.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -33,6 +41,7 @@ import {
   type DirectMessagePayload,
 } from "../../services/activitypub";
 import {
+  createFallbackAvatarUrl,
   getAuthTokenFromCookies,
   getHostPortFromCookies,
   getHostPortFromStorage,
@@ -51,6 +60,40 @@ interface DirectMessageViewProps {
 
 const POLL_INTERVAL_MS = 5000;
 const MESSAGES_PER_PAGE = 50;
+const MAX_MESSAGE_LENGTH = 4000;
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Group consecutive messages from the same sender within a 5-min
+ * window — same heuristic the channel chat uses so the visual
+ * cadence (one avatar per "burst") is identical.
+ */
+function groupMessages(
+  messages: DirectMessagePayload[],
+): DirectMessagePayload[][] {
+  const groups: DirectMessagePayload[][] = [];
+  for (const msg of messages) {
+    const last = groups[groups.length - 1];
+    if (!last) {
+      groups.push([msg]);
+      continue;
+    }
+    const head = last[0];
+    const sameSender =
+      (msg.sender_user_id || msg.sender_id) ===
+      (head.sender_user_id || head.sender_id);
+    const headTs = head.sent_at ? new Date(head.sent_at).getTime() : 0;
+    const msgTs = msg.sent_at ? new Date(msg.sent_at).getTime() : 0;
+    const withinWindow =
+      headTs && msgTs && Math.abs(msgTs - headTs) <= GROUP_WINDOW_MS;
+    if (sameSender && withinWindow) {
+      last.push(msg);
+    } else {
+      groups.push([msg]);
+    }
+  }
+  return groups;
+}
 
 export function DirectMessageView({
   peerUserId,
@@ -86,9 +129,6 @@ export function DirectMessageView({
       return response.data;
     },
     refetchInterval: POLL_INTERVAL_MS,
-    // Stop the poll when the tab is in the background — the
-    // standard react-query behaviour suffices here, no custom
-    // gate needed.
     enabled: !!hostPort && !!authToken && !!peerUserId,
   });
 
@@ -111,20 +151,22 @@ export function DirectMessageView({
     onSuccess: () => {
       // Refetch immediately — the polling cycle would catch the
       // new message in <=5s, but we want the round-trip to feel
-      // tight. No optimistic insert because we don't have a
-      // server-assigned message_id on the wire yet.
+      // tight. No optimistic insert because the server's response
+      // doesn't carry the final message_id on the wire today.
       void queryClient.invalidateQueries({ queryKey: messagesQueryKey });
     },
   });
 
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Auto-scroll to bottom on new messages. Same heuristic the
-  // channel chat uses: pin to the bottom if the user was already
-  // near the bottom; otherwise leave their scroll position alone
-  // so they can read older messages without being yanked down.
   const messages = messagesQuery.data?.messages ?? [];
+  const groups = useMemo(() => groupMessages(messages), [messages]);
+
+  // Auto-scroll to bottom on new messages — same near-bottom
+  // heuristic the channel chat uses so the user doesn't get
+  // yanked down while reading older messages.
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -135,6 +177,17 @@ export function DirectMessageView({
     }
   }, [messages.length]);
 
+  // Auto-resize the composer textarea on input (cap at ~6 lines so
+  // it never eats the message list). Mirrors the channel composer's
+  // `resizeMessageComposer` behaviour at a smaller scale.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const next = Math.min(ta.scrollHeight, 160);
+    ta.style.height = `${next}px`;
+  }, [draft]);
+
   const handleSend = () => {
     const text = draft.trim();
     if (!text || sendMutation.isPending) return;
@@ -142,23 +195,30 @@ export function DirectMessageView({
     setDraft("");
   };
 
+  const canSend = draft.trim().length > 0 && !sendMutation.isPending;
+
   return (
     <div className="flex h-full flex-col">
-      {/* Header — friend handle + back button. Mirrors the channel
-          chat's header height so swapping between channel and DM
-          views doesn't shift the composer position. */}
+      {/* Header — same height/rhythm as ChatHeader so swapping
+          between channel and DM views doesn't shift the composer
+          position. Back button on the left + handle + subtitle. */}
       <div className="flex items-center gap-3 border-b border-[var(--color-border)] px-4 py-3">
         <button
           type="button"
           onClick={onBack}
           title="Back to Friends"
           aria-label="Back to friends list"
-          className="rounded-md p-1 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+          className="rounded-md p-1.5 text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
+        <img
+          src={createFallbackAvatarUrl(peerHandle)}
+          alt=""
+          className="h-7 w-7 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
+        />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-[var(--color-text)]">
             @{peerHandle}
@@ -169,100 +229,158 @@ export function DirectMessageView({
         </div>
       </div>
 
-      {/* Message list. Empty state when there are no messages yet so
-          the user knows they're in the right view but the
-          conversation just hasn't started. */}
+      {/* Message list — same container shape as the channel scroller
+          (`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4
+          break-words`) so a DM and a channel feel like the same
+          page with a different conversation in it. */}
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto px-4 py-4"
+        className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 break-words"
       >
         {messagesQuery.isLoading && messages.length === 0 ? (
-          <div className="py-8 text-center text-xs text-[var(--color-text-muted)]">
-            Loading…
+          <div className="flex h-full items-center justify-center text-center">
+            <div className="text-[var(--color-text-muted)] text-sm">Loading…</div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <h2 className="text-sm font-semibold text-[var(--color-text)]">
-              No messages yet
-            </h2>
-            <p className="mt-2 max-w-[32ch] text-xs leading-relaxed text-[var(--color-text-secondary)]">
-              This is the beginning of your conversation with
-              {" "}<span className="text-[var(--color-text)]">@{peerHandle}</span>.
-            </p>
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center text-[var(--color-text-secondary)]">
+              <div className="text-[var(--color-text-muted)] text-sm">No messages yet</div>
+              <div className="text-[var(--color-text-muted)] text-xs mt-1">
+                This is the beginning of your conversation with @{peerHandle}
+              </div>
+            </div>
           </div>
         ) : (
-          <ul className="space-y-2">
-            {messages.map((message) => (
-              <DirectMessageRow key={message.message_id} message={message} />
-            ))}
-          </ul>
+          groups.map((group) => {
+            const head = group[0];
+            const sender =
+              head.username || head.sender_user_id || head.sender_id || "Unknown";
+            const headTs = head.sent_at
+              ? new Date(head.sent_at).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                })
+              : "";
+            return (
+              <div
+                key={head.message_id}
+                // Mirror the channel row container: `group relative
+                // flex items-start space-x-3 px-2 py-1 rounded`.
+                // No hover bg — the channel rows dropped it for the
+                // same reason, see DashboardPage row comment.
+                className="group relative flex items-start space-x-3 px-2 py-1 rounded"
+              >
+                {/* Avatar — 40×40 round, same dimensions as channel
+                    avatars. DiceBear fallback keyed on the sender's
+                    display name so distinct senders get distinct
+                    glyphs deterministically. */}
+                <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]">
+                  <img
+                    src={createFallbackAvatarUrl(sender)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-[var(--color-text)] font-medium select-text">
+                      {sender}
+                    </span>
+                    <span className="text-[var(--color-text-secondary)] text-xs select-text">
+                      {headTs}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {group.map((msg) => (
+                      <div
+                        key={msg.message_id}
+                        className="text-sm text-[var(--color-text)] whitespace-pre-wrap break-words"
+                      >
+                        {msg.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 
-      {/* Composer — single line, Enter sends, Shift+Enter newline
-          (matches the channel composer's contract so muscle memory
-          transfers). Send button is gated on non-empty trimmed
-          input + no in-flight send. */}
-      <div className="border-t border-[var(--color-border)] px-4 py-3">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            rows={1}
-            placeholder={`Message @${peerHandle}`}
-            className="min-h-[2.25rem] flex-1 resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-          />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!draft.trim() || sendMutation.isPending}
-            className="shrink-0 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-2 text-xs font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-          >
-            {sendMutation.isPending ? "Sending…" : "Send"}
-          </button>
-        </div>
-        {sendMutation.isError && (
-          <div className="mt-1 text-[10px] text-[var(--color-error)]">
-            {sendMutation.error instanceof Error
-              ? sendMutation.error.message
-              : "Send failed."}
+      {/* Composer — same wrapper shell as the channel composer
+          (`rounded-xl border bg-[var(--color-surface-secondary)]
+          px-6 py-4`) with the same footer convention (Enter to
+          send · Shift+Enter for newline · char counter). No
+          attachment / emoji picker for DMs yet; the slot is
+          reserved by the same flex layout so a future addition
+          drops in without a visual jump. */}
+      <div className="px-4 pb-4 pt-2">
+        <div
+          className={`relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-6 py-4 ${
+            sendMutation.isPending ? "opacity-90" : ""
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={`Message @${peerHandle}`}
+                disabled={sendMutation.isPending}
+                rows={1}
+                maxLength={MAX_MESSAGE_LENGTH}
+                className="w-full bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none resize-none h-6 break-words overflow-wrap-anywhere disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              className="pb-icon-btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-on-primary)] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--color-primary)]"
+              title={canSend ? "Send message" : "Type a message"}
+              aria-label="Send message"
+            >
+              {sendMutation.isPending ? (
+                <span
+                  role="status"
+                  aria-label="Sending"
+                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                />
+              ) : (
+                <svg className="pb-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
+            </button>
           </div>
-        )}
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>Enter to send</span>
+              <span>Shift+Enter for newline</span>
+              {sendMutation.isError && (
+                <span className="text-[var(--color-error)]">
+                  {sendMutation.error instanceof Error
+                    ? sendMutation.error.message
+                    : "Send failed"}
+                </span>
+              )}
+            </div>
+            <span>
+              {draft.length}/{MAX_MESSAGE_LENGTH}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-/**
- * One message bubble. Lean — no avatars, no role tints, no reaction
- * shelf. Sender username on top, message body below, timestamp
- * tucked at the right edge of the header row.
- */
-function DirectMessageRow({ message }: { message: DirectMessagePayload }) {
-  const sender = message.username || message.sender_user_id || message.sender_id || "Unknown";
-  const ts = message.sent_at
-    ? new Date(message.sent_at).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
-  return (
-    <li className="rounded-md px-2 py-1.5 hover:bg-[var(--color-hover)]">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="truncate text-xs font-semibold text-[var(--color-text)]">
-          {sender}
-        </span>
-        <span className="text-[10px] text-[var(--color-text-muted)]">{ts}</span>
-      </div>
-      <div className="mt-0.5 whitespace-pre-wrap break-words text-sm text-[var(--color-text)]">
-        {message.message}
-      </div>
-    </li>
   );
 }
