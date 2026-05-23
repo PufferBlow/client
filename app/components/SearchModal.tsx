@@ -48,10 +48,15 @@ function formatResultTime(iso: string | undefined): string {
 
 /**
  * Optional metadata the search handler can attach to a result set.
- * `truncatedScan` means the server-side decrypt-and-scan didn't cover
- * the channel's full history — there may be older matches the user
- * doesn't see. We surface this honestly so the user doesn't assume
- * "no results" means "no matches in history."
+ *
+ * `truncatedScan` indicates the server returned an incomplete result
+ * set. On a modern Postgres-backed server this is always false: search
+ * runs through a tsvector + GIN index and covers the entire channel
+ * regardless of size. The flag is only set to `true` when the user is
+ * connected to an instance that still uses the legacy decrypt-and-scan
+ * fallback (SQLite test deployments, or an older server build that
+ * hasn't been migrated yet). When true, older matches outside the
+ * scan window may exist and the banner below surfaces that honestly.
  */
 export interface SearchResultMeta {
   truncatedScan?: boolean;
@@ -255,19 +260,22 @@ export function SearchModal({
       </div>
 
       <div className="max-h-[32rem] overflow-y-auto">
-        {/* Honest banner when the server-side scan didn't cover the
-            whole channel. Substring search decrypts up to scan_limit
-            (1000 by default) recent messages — older matches won't
-            appear and the user deserves to know. */}
+        {/* Surfaces the legacy-server case: the connected instance is
+            still using the decrypt-and-scan search fallback (SQLite
+            test deployment, or a pre-migration server build), so older
+            matches outside the scan window may not appear. A
+            current-build Postgres server returns false here and the
+            banner stays hidden. */}
         {meta.truncatedScan && !isLoading && query.trim().length >= 2 && (
           <div
             role="status"
             className="border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]/50 px-4 py-2 text-xs text-[var(--color-text-secondary)]"
           >
-            Search covered only the most recent messages
+            This server is running a legacy search backend that only
+            covers the most recent messages
             {meta.scannedChannelName ? <> in <span className="font-medium text-[var(--color-text)]">#{meta.scannedChannelName}</span></> : null}
-            . Older history wasn't scanned — open the channel to load
-            it, or narrow your query.
+            . Older matches may exist — narrow your query, or ask the
+            server operator to run <code className="font-mono">pufferblow migrate --backfill-search</code>.
           </div>
         )}
 

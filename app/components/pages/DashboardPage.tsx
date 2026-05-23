@@ -922,10 +922,15 @@ export default function Dashboard() {
    *
    *   1. Local message cache -- instant, covers the messages already
    *      loaded into the active view.
-   *   2. Server-side decrypt-and-scan for the active channel -- picks
-   *      up matches outside the local cache, capped at the server's
-   *      `scan_limit`. When the cap was hit, the result's `meta`
-   *      reports `truncatedScan: true` so the panel can warn the user.
+   *   2. Server-side ranked search for the active channel -- on a
+   *      modern Postgres-backed server this is a tsvector + GIN
+   *      lookup scored by `ts_rank_cd`, with attachment filenames
+   *      included in the index ("report.pdf" finds attachment-only
+   *      messages). Cost is O(matches), not O(channel size). On a
+   *      legacy server still using the decrypt-and-scan fallback,
+   *      `truncated_scan: true` may come back and the panel warns
+   *      the user that older matches outside the scan window
+   *      weren't covered.
    *
    * Returns an empty result set when no channel is selected, which
    * matches the UI behavior of hiding the search button entirely in

@@ -59,19 +59,40 @@ const unsupportedMessageOperation = <T>(operation: string): ApiResponse<T> => ({
 });
 
 // Message API functions
+//
+// Two ways to page through channel history:
+//
+//   1. `before` (opaque cursor) — preferred for new code. Server-side
+//      keyset pagination is O(log N + limit) regardless of how deep
+//      in the channel you've scrolled. The server returns
+//      `next_cursor` in the response (see `loadMessages` below); pass
+//      that value back as the `before` arg here for the next page.
+//      `next_cursor === null` means there is no older history.
+//
+//   2. Legacy `page` numbering — translated server-side into a bounded
+//      keyset walk. The server caps the reachable depth (currently
+//      ~2000 rows) and returns 400 past that, so deep scroll-back on
+//      a busy channel MUST use the cursor path.
+//
+// `getMessages` keeps the "give me an array, ignore pagination
+// details" shape for the call sites that don't care about cursors
+// yet. New call sites that want scroll-back should call `loadMessages`
+// directly so they can read `next_cursor` off the response.
 export const getMessages = async (hostPort: string, channelId: string, authToken: string, limit = 50, before?: string): Promise<ApiResponse<Message[]>> => {
   const apiClient = createApiClient(hostPort);
   const params: Record<string, string> = {
     auth_token: authToken,
-    page: '1',
     messages_per_page: Math.min(limit, 50).toString(),
   };
 
   if (before) {
-    params.before = before;
+    // Cursor mode — server ignores `page` when this is set.
+    params.before_cursor = before;
+  } else {
+    params.page = '1';
   }
 
-  const response = await apiClient.get<{ status_code: number; messages: Message[] }>(
+  const response = await apiClient.get<{ status_code: number; messages: Message[]; next_cursor?: string | null }>(
     `/api/v1/channels/${channelId}/load_messages`,
     params
   );
@@ -179,6 +200,16 @@ export const removeReaction = async (
 
 /**
  * Server-side response shape for the channel /search endpoint.
+ *
+ * Note the legacy `truncated_scan` field: on a Postgres-backed server
+ * this is always `false` (ranked search via tsvector/GIN doesn't
+ * "scan" — it's an index lookup with no truncation), and `scanned`
+ * holds the hit count rather than a candidate-scan count. The field
+ * is preserved for back-compat with SQLite test deployments and
+ * older server builds that still use the decrypt-and-scan fallback.
+ * New UI code should treat `truncated_scan: true` as "this is a
+ * legacy server, the result set may be incomplete," and otherwise
+ * present the result as complete.
  */
 export interface ChannelSearchResponse {
   status_code: number;
@@ -189,10 +220,17 @@ export interface ChannelSearchResponse {
 }
 
 /**
- * Search a channel for messages containing the given substring (case-
- * insensitive). The server decrypts and scans up to `scan_limit` recent
- * messages and returns up to `limit` matches, newest first. `truncated_scan`
- * is true when the channel has more history than the scan window covers.
+ * Ranked search across a channel's messages.
+ *
+ * On a Postgres-backed server, the query goes through a tsvector +
+ * GIN index, scored with `ts_rank_cd`, with attachment filenames
+ * included in the index (so "report.pdf" finds attachment-only
+ * messages). Cost is O(matches), not O(channel size), so the
+ * `scanLimit` option below is silently ignored on the ranked path —
+ * it's only honoured by the SQLite fallback for the test harness.
+ *
+ * Results are returned best-rank-first, with the most recent matches
+ * outranking older matches at the same score.
  */
 export const searchChannelMessages = async (
   hostPort: string,
@@ -223,14 +261,56 @@ export const searchMessages = async (_hostPort: string, _query: string, _authTok
   return unsupportedMessageOperation<SearchResult[]>('Message search');
 };
 
-// Additional messaging functions moved from channel service
-export const loadMessages = async (hostPort: string, channelId: string, authToken: string, page?: number, messages_per_page?: number): Promise<ApiResponse<{ status_code: number; messages: Message[] }>> => {
+/**
+ * Response payload for `loadMessages`. `next_cursor` is populated when
+ * the call used keyset (`beforeCursor`) pagination — pass it back as
+ * `beforeCursor` to fetch the next older page. `null` means "no
+ * older history" or "this request didn't use cursor mode."
+ */
+export interface LoadMessagesResponse {
+  status_code: number;
+  messages: Message[];
+  next_cursor?: string | null;
+}
+
+/**
+ * Load a channel's messages.
+ *
+ * Two modes (mutually exclusive — `beforeCursor` wins when both are set):
+ *
+ *   * `beforeCursor` — server-side keyset pagination, O(log N + limit)
+ *     regardless of channel size. Read `next_cursor` off the response;
+ *     pass it back as `beforeCursor` to fetch older messages. `null`
+ *     `next_cursor` means you reached the start of history. Prefer this
+ *     for any scroll-back UI.
+ *
+ *   * `page` / `messagesPerPage` — legacy numeric paging. Translated
+ *     server-side into a bounded keyset walk; the server caps reachable
+ *     depth (~2000 rows) and returns 400 past that, so deep scroll-back
+ *     MUST use the cursor mode above.
+ */
+export const loadMessages = async (
+  hostPort: string,
+  channelId: string,
+  authToken: string,
+  page?: number,
+  messagesPerPage?: number,
+  beforeCursor?: string,
+): Promise<ApiResponse<LoadMessagesResponse>> => {
   const apiClient = createApiClient(hostPort);
-  return apiClient.get(`/api/v1/channels/${channelId}/load_messages`, {
+  const params: Record<string, string> = {
     auth_token: authToken,
-    page: (page || 1).toString(),
-    messages_per_page: (messages_per_page || 20).toString()
-  });
+    messages_per_page: (messagesPerPage || 20).toString(),
+  };
+  if (beforeCursor) {
+    params.before_cursor = beforeCursor;
+  } else {
+    params.page = (page || 1).toString();
+  }
+  return apiClient.get<LoadMessagesResponse>(
+    `/api/v1/channels/${channelId}/load_messages`,
+    params,
+  );
 };
 
 export const markMessageAsRead = async (hostPort: string, channelId: string, messageId: string, authToken: string): Promise<ApiResponse<{ status_code: number; message: string }>> => {
