@@ -244,7 +244,10 @@ export default function Settings() {
   const tabs: SettingsTab[] = [
     { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-6 h-6" /> },
-    { id: 'audio', label: 'Audio', icon: <Volume2 className="w-6 h-6" /> },
+    // Label is "Voice" (matches the user's mental model — they call
+    // it the voice tab) but the id stays 'audio' so URL hashes
+    // (`#audio`) and any persisted state keep resolving.
+    { id: 'audio', label: 'Voice', icon: <Volume2 className="w-6 h-6" /> },
     { id: 'server', label: 'Server', icon: <Server className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
