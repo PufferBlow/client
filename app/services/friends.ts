@@ -173,3 +173,87 @@ export const unfriendUser = async (
     { auth_token: authToken },
   );
 };
+
+// ─────────────────────────────────────────────────────────────────────
+// Friend-request blocks
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * One row from `GET /api/v1/friends/blocks`. Matches the server-side
+ * `FriendRequestBlocks.to_dict()` shape.
+ */
+export interface FriendRequestBlock {
+  blocker_id: string;
+  blocked_id: string;
+  created_at: string | null;
+}
+
+export interface BlockFriendRequestsResponse {
+  status_code: number;
+  block: FriendRequestBlock;
+}
+
+export interface UnblockFriendRequestsResponse {
+  status_code: number;
+  removed: boolean;
+}
+
+export interface ListFriendRequestBlocksResponse {
+  status_code: number;
+  blocks: FriendRequestBlock[];
+}
+
+/**
+ * Block incoming friend requests from `targetUserId`. Side effect:
+ * any pending request from that user toward the viewer is deleted
+ * server-side in the same transaction. An ACCEPTED friendship is
+ * NOT affected — to also end the friendship the client should call
+ * `unfriendUser` separately.
+ *
+ * The server's `sendFriendRequest` rejection for blocked senders
+ * comes back as a generic "this user is not accepting friend
+ * requests" 403 — the wire surface deliberately doesn't reveal
+ * block status to the would-be sender.
+ */
+export const blockFriendRequests = async (
+  hostPort: string,
+  authToken: string,
+  targetUserId: string,
+): Promise<ApiResponse<BlockFriendRequestsResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.post<BlockFriendRequestsResponse>(
+    `/api/v1/friends/blocks?auth_token=${encodeURIComponent(authToken)}`,
+    { target_user_id: targetUserId },
+  );
+};
+
+/**
+ * Lift a friend-request block. Idempotent — `removed: false`
+ * means there was no block to remove.
+ */
+export const unblockFriendRequests = async (
+  hostPort: string,
+  authToken: string,
+  blockedUserId: string,
+): Promise<ApiResponse<UnblockFriendRequestsResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.delete<UnblockFriendRequestsResponse>(
+    `/api/v1/friends/blocks/${blockedUserId}`,
+    { auth_token: authToken },
+  );
+};
+
+/**
+ * Return every user the viewer has blocked from sending requests.
+ * The Friends panel renders the result in its "Blocked" tab.
+ */
+export const listFriendRequestBlocks = async (
+  hostPort: string,
+  authToken: string,
+): Promise<ApiResponse<ListFriendRequestBlocksResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.get<ListFriendRequestBlocksResponse>(
+    '/api/v1/friends/blocks',
+    { auth_token: authToken },
+  );
+};

@@ -60,6 +60,27 @@ interface UserCardProps {
   onCardClick?: () => void;
   showOnlineIndicator?: boolean;
   isCompact?: boolean;
+  /**
+   * Click handler for the "Add Friend" / "Cancel Request" /
+   * "Accept Friend Request" button rendered in the card's action
+   * row. Hidden entirely when this prop is omitted — only callers
+   * that resolve the friend-graph state (DashboardPage's user
+   * popout) pass it. The label and visual state are driven by
+   * `friendActionState`.
+   */
+  onAddFriend?: () => void;
+  /**
+   * Drives the friend-action button's label + disabled state:
+   *   undefined        → not friends, render "Add Friend"
+   *   'pending-out'    → viewer already sent a request
+   *   'pending-in'     → the displayed user sent a request to viewer
+   *   'friends'        → already friends, hide the button
+   *   'blocked'        → viewer has blocked this user, hide the button
+   * The button is fully hidden for self-cards (the viewer's own
+   * profile preview in Settings); callers signal "this is me" by
+   * omitting `onAddFriend`.
+   */
+  friendActionState?: 'pending-out' | 'pending-in' | 'friends' | 'blocked';
 }
 
 export function UserCard({
@@ -95,7 +116,9 @@ export function UserCard({
   onExternalLinksChange,
   onCardClick,
   showOnlineIndicator = true,
-  isCompact = false
+  isCompact = false,
+  onAddFriend,
+  friendActionState,
 }: UserCardProps) {
   const resolvedAccentColor = accentColor || "var(--color-accent)";
   const resolvedBannerColor = bannerColor || resolvedAccentColor;
@@ -484,6 +507,46 @@ export function UserCard({
               {status === 'dnd' && <div className="w-2 h-2 bg-[var(--color-error)] rounded-full"></div>}
               <span>{customStatus}</span>
             </div>
+          </div>
+        )}
+
+        {/* Friend action row — renders only when a caller wires
+            `onAddFriend` AND the viewer isn't already friends /
+            hasn't blocked this user. The button label flips to
+            "Cancel Friend Request" / "Accept Friend Request" based
+            on the current friend-graph edge passed in via
+            `friendActionState`, so the same affordance covers
+            sending a new request, taking back an outgoing one, and
+            accepting an incoming one. */}
+        {onAddFriend &&
+          friendActionState !== "friends" &&
+          friendActionState !== "blocked" && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={onAddFriend}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M12.5 7a4 4 0 11-8 0 4 4 0 018 0z M20 8v6 M23 11h-6"
+                />
+              </svg>
+              {friendActionState === "pending-out"
+                ? "Cancel friend request"
+                : friendActionState === "pending-in"
+                  ? "Accept friend request"
+                  : "Add friend"}
+            </button>
           </div>
         )}
 

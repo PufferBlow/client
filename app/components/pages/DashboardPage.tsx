@@ -40,6 +40,11 @@ import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage
 import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
 import { Modal } from "../../components/ui/Modal";
 import {
+  resolveFriendEdge,
+  useFriendGraph,
+  useFriendGraphMutations,
+} from "../../services/useFriendGraph";
+import {
   addReaction,
   bulkSetServerMute,
   deleteMessage,
@@ -292,6 +297,62 @@ export default function Dashboard() {
   // channel list — see the `dmsOpen ?` branch in the channel-panel
   // render block below.
   const [dmsOpen, setDmsOpen] = useState(false);
+
+  // Friend graph — one place owns the wire reads, the perspective
+  // resolver (`resolveFriendEdge`), and the mutation callbacks the
+  // user-card popout / message-context menu / Friends panel all
+  // share. Mounting the hook here also seeds the react-query
+  // cache on dashboard mount so the first friend-action click
+  // doesn't pay a network round-trip.
+  const friendHostPort =
+    (typeof window !== "undefined" && (getHostPortFromStorage() || getHostPortFromCookies())) || undefined;
+  const friendAuthToken =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const friendGraph = useFriendGraph(friendHostPort, friendAuthToken);
+  const friendMutations = useFriendGraphMutations(friendHostPort, friendAuthToken);
+
+  /**
+   * One handler that does the right thing for the current edge
+   * with `targetUserId`. UserCard + MessageContextMenu both
+   * delegate to this so a single label-to-action mapping lives
+   * here:
+   *   * 'none'         → send a friend request
+   *   * 'pending-out'  → cancel the outgoing request
+   *   * 'pending-in'   → accept the incoming request
+   *   * 'friends'      → no-op (UI hides the affordance anyway)
+   *   * 'blocked'      → no-op (server would 403 anyway)
+   *   * 'self'         → no-op
+   * Errors surface as a toast so the user knows when something
+   * went wrong (most commonly: the server returned a 403 because
+   * the recipient has blocked incoming requests).
+   */
+  const handleFriendAction = (targetUserId: string | undefined) => {
+    if (!targetUserId) return;
+    const edge = resolveFriendEdge(
+      friendGraph.snapshot,
+      currentUser?.user_id,
+      targetUserId,
+    );
+    const onError = (err: unknown) => {
+      showToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : "Friend request action failed.",
+        tone: "error",
+        category: "system",
+      });
+    };
+    if (edge.state === "pending-in" && edge.friendship) {
+      friendMutations.accept.mutate(edge.friendship.friendship_id, { onError });
+    } else if (edge.state === "pending-out" && edge.friendship) {
+      friendMutations.cancelOrReject.mutate(edge.friendship.friendship_id, { onError });
+    } else if (edge.state === "none") {
+      friendMutations.sendRequest.mutate(targetUserId, { onError });
+    }
+    // 'friends' / 'blocked' / 'self' — no-op; the UI doesn't expose
+    // the button in those states, but guard anyway.
+  };
 
   // Channel half of the title-bar breadcrumb. Tracks the active
   // channel only; suppressed entirely while the DM panel is open
@@ -4838,6 +4899,33 @@ export default function Dashboard() {
               setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
             }}
             onReply={() => handleMessageReply(currentMenuMessageId)}
+            // "Send Friend Request" / "Accept Friend Request" /
+            // "Cancel Friend Request" — single row whose label flips
+            // based on the resolved friend-graph edge between viewer
+            // and message sender. Hidden for own messages, accepted
+            // friends, and blocked users (the resolver returns the
+            // right state and MessageContextMenu's per-state filter
+            // hides the row when the action would be a no-op).
+            {...(() => {
+              if (!senderId) return {};
+              const edge = resolveFriendEdge(
+                friendGraph.snapshot,
+                currentUser?.user_id,
+                senderId,
+              );
+              if (edge.state === "self") return {};
+              const friendActionStateProp:
+                | "pending-out"
+                | "pending-in"
+                | "friends"
+                | "blocked"
+                | undefined =
+                edge.state === "none" ? undefined : edge.state;
+              return {
+                onSendFriendRequest: () => handleFriendAction(senderId),
+                friendActionState: friendActionStateProp,
+              };
+            })()}
             // Reply-in-DM intentionally not wired: DMs aren't a
             // first-class surface in this client yet, and the menu
             // policy is "every shown option must work". Omitting the
@@ -5333,6 +5421,30 @@ export default function Dashboard() {
             joinDate={userCardTooltipUser.joinedAt ? new Date(userCardTooltipUser.joinedAt).toISOString().split('T')[0] : undefined}
             showOnlineIndicator={true}
             isCompact={false}
+            // Friend-action button is wired only when the card isn't
+            // the viewer themselves. The resolver returns 'self' in
+            // that case and the button is hidden anyway, but we drop
+            // the handler entirely so the card stays render-pure
+            // (no useless callback on the viewer's own popover).
+            {...(() => {
+              const edge = resolveFriendEdge(
+                friendGraph.snapshot,
+                currentUser?.user_id,
+                userCardTooltipUser.id,
+              );
+              if (edge.state === "self") return {};
+              const friendActionStateProp:
+                | "pending-out"
+                | "pending-in"
+                | "friends"
+                | "blocked"
+                | undefined =
+                edge.state === "none" ? undefined : edge.state;
+              return {
+                onAddFriend: () => handleFriendAction(userCardTooltipUser.id),
+                friendActionState: friendActionStateProp,
+              };
+            })()}
           />
         </div>,
         document.body
