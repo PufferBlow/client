@@ -39,7 +39,22 @@ import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner, resolveSenderAvatarUrl } from "../../services/user";
 import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
 import { Modal } from "../../components/ui/Modal";
-import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
+import {
+  addReaction,
+  bulkSetServerMute,
+  deleteMessage,
+  getMessageReadHistory,
+  listNotificationPreferences,
+  loadMessages,
+  markChannelRead,
+  markMessageAsRead,
+  markServerRead,
+  removeReaction,
+  resetChannelNotificationPreference,
+  searchChannelMessages,
+  sendMessage,
+  setChannelNotificationPreference,
+} from "../../services/message";
 import {
   dispatchDesktopNotification,
   ensureNotificationPermission,
@@ -150,6 +165,8 @@ export default function Dashboard() {
     readMessageIds,
     unreadCountsByChannel,
     setUnreadCountsByChannel,
+    mutedChannelIds,
+    setMutedChannelIds,
     manualPresenceLock,
     unreadMarker,
     setUnreadMarker,
@@ -608,6 +625,34 @@ export default function Dashboard() {
     }
   }
 
+  // Seeds `mutedChannelIds` from the server. Only persisted deviations
+  // come back (absence = default = notify normally), so the response is
+  // small even on busy accounts. Failures are non-fatal — the worst
+  // case is the user sees unread dots for channels they've muted on
+  // another device, until the next refresh.
+  async function fetchNotificationPrefsData(authToken: string): Promise<void> {
+    try {
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!hostPort) {
+        return;
+      }
+      const response = await listNotificationPreferences(hostPort, authToken);
+      if (response.success && response.data) {
+        const muted = new Set<string>();
+        for (const pref of response.data.preferences || []) {
+          if (pref.muted && pref.channel_id) {
+            muted.add(pref.channel_id);
+          }
+        }
+        setMutedChannelIds(muted);
+      }
+    } catch (error) {
+      logger.ui.warn("Failed to fetch notification preferences", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async function fetchReadHistoryData(authToken: string): Promise<void> {
     try {
       const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
@@ -791,6 +836,7 @@ export default function Dashboard() {
       fetchUsersData(authToken),
       fetchServerInfoData(authToken),
       fetchReadHistoryData(authToken),
+      fetchNotificationPrefsData(authToken),
     ]);
     // Don't override a manual presence lock (DND/AFK) already set in the DB.
     // manualPresenceLock state hasn't committed yet at this point, so check currentUser.status directly.
@@ -1839,6 +1885,20 @@ export default function Dashboard() {
                 ? body.toLowerCase().includes(mentionHandle)
                 : false;
 
+              // Muted channel: still record the message in the
+              // message list (it'll appear when the user opens the
+              // channel), but skip the sidebar unread counter, the
+              // in-app notification dropdown, and the OS desktop
+              // toast. That mirrors the server-side behaviour for
+              // mention notifications (suppressed in
+              // `record_mentions_for_message` when the channel is
+              // muted) and matches the user's "stop pinging me here"
+              // intent.
+              const channelIsMuted = mutedChannelIds.has(incomingChannelId);
+              if (channelIsMuted) {
+                return;
+              }
+
               setUnreadCountsByChannel((prev) => ({
                 ...prev,
                 [incomingChannelId]: (prev[incomingChannelId] || 0) + 1,
@@ -2024,13 +2084,16 @@ export default function Dashboard() {
   };
 
   /**
-   * Clear unread state for a single channel without navigating to it.
-   * Wired to the "Mark As Read" item on the channel context menu and
-   * called per-channel by the server-dropdown's "Mark All As Read".
-   * UI-only (no API call) -- mirrors how `handleChannelSelect` clears
-   * the channel's entry when the user actually opens it.
+   * "Mark As Read" for a single channel — wired to the channel context
+   * menu. Optimistically clears the local unread state, then calls the
+   * server's `POST /channels/{id}/mark_all_read` so the next snapshot
+   * (page reload, second-device sync, etc) reflects the change. The
+   * server-side helper writes every visible message into the user's
+   * read-history in one transaction, so this is cheap regardless of
+   * how busy the channel is.
    */
   const handleMarkChannelRead = (channelId: string) => {
+    // Optimistic UI: clear immediately so the click feels instant.
     markChannelNotificationsRead(channelId);
     setUnreadCountsByChannel((prev) => {
       if (!prev[channelId]) return prev;
@@ -2038,27 +2101,146 @@ export default function Dashboard() {
       delete next[channelId];
       return next;
     });
+
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    void markChannelRead(hostPort, channelId, authToken).then((response) => {
+      if (!response.success) {
+        logger.ui.warn("Mark channel read failed (state diverged)", {
+          channelId,
+          error: response.error,
+        });
+      }
+    });
   };
 
   /**
-   * Server-wide "Mark All As Read." Reuses the existing notification
-   * clear path; renamed in the UI to match the dropdown label.
+   * Server-wide "Mark All As Read." Optimistically clears the local
+   * unread map, then calls `POST /channels/mark_all_read` which does
+   * the equivalent per-channel work in a single DB transaction.
    */
   const handleMarkAllChannelsRead = () => {
     handleMarkAllNotificationsRead();
+    setUnreadCountsByChannel({});
+
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    void markServerRead(hostPort, authToken).then((response) => {
+      if (!response.success) {
+        logger.ui.warn("Mark server read failed (state diverged)", {
+          error: response.error,
+        });
+      }
+    });
   };
 
   /**
-   * Stub for server mute. The backend doesn't ship a per-server mute
-   * flag yet, so this surfaces the standard "not yet" toast instead of
-   * pretending to mute anything. The menu entry stays so the feature
-   * is discoverable; wiring lands once the API does.
+   * Toggle the per-channel mute state. Muted channels stop producing
+   * notification rows server-side (see
+   * `NotificationsManager.record_mentions_for_message`) and the
+   * client suppresses the unread dot for them (see ChannelList's
+   * `hasUnread` calculation).
+   *
+   * `muted=true`  → `PUT  /notifications/preferences/{id}` with
+   *                 muted=true, mention_only=false.
+   * `muted=false` → `DELETE /notifications/preferences/{id}` so no
+   *                 row remains (state matches a never-muted channel).
+   */
+  const handleToggleChannelMute = (channelId: string, nextMuted: boolean) => {
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    // Optimistic UI flip so the menu label / icon update immediately.
+    setMutedChannelIds((prev) => {
+      const next = new Set(prev);
+      if (nextMuted) next.add(channelId);
+      else next.delete(channelId);
+      return next;
+    });
+
+    const op = nextMuted
+      ? setChannelNotificationPreference(hostPort, channelId, authToken, {
+          muted: true,
+          mention_only: false,
+        })
+      : resetChannelNotificationPreference(hostPort, channelId, authToken);
+
+    void op.then((response) => {
+      if (!response.success) {
+        // Rollback the optimistic flip on failure.
+        setMutedChannelIds((prev) => {
+          const next = new Set(prev);
+          if (nextMuted) next.delete(channelId);
+          else next.add(channelId);
+          return next;
+        });
+        showToast({
+          message:
+            response.error ||
+            `Failed to ${nextMuted ? "mute" : "unmute"} the channel.`,
+          tone: "error",
+          category: "system",
+        });
+      }
+    });
+  };
+
+  /**
+   * "Mute Server" / "Unmute Server" — bulk applies the same `muted`
+   * flag across every accessible channel via the server-side bulk
+   * endpoint (single DB transaction, no half-muted state if the
+   * request fails partway).
+   *
+   * Decides between mute/unmute by inspecting the current
+   * `mutedChannelIds` set against the list of accessible channels:
+   * if every channel is already muted, the action unmutes;
+   * otherwise it mutes.
    */
   const handleMuteServer = () => {
-    showUnsupportedSingleInstanceAction(
-      "Server mute",
-      "Muting the whole server (silence channel notifications, keep mention pings) isn't shipped yet. The dropdown surfaces the action so we know to wire it once the API lands.",
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    const accessibleIds = channels.map((c) => c.channel_id);
+    const allMuted =
+      accessibleIds.length > 0 &&
+      accessibleIds.every((id) => mutedChannelIds.has(id));
+    const nextMuted = !allMuted;
+
+    // Optimistic update: flip the whole set.
+    setMutedChannelIds(
+      nextMuted ? new Set(accessibleIds) : new Set<string>(),
     );
+
+    void bulkSetServerMute(hostPort, authToken, nextMuted).then((response) => {
+      if (!response.success) {
+        // Rollback — best-effort, the user might have to refresh to
+        // sync if the request failed mid-flight on the server side.
+        setMutedChannelIds(
+          allMuted ? new Set(accessibleIds) : new Set<string>(),
+        );
+        showToast({
+          message:
+            response.error ||
+            `Failed to ${nextMuted ? "mute" : "unmute"} the server.`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      showToast({
+        message: nextMuted
+          ? `Muted ${response.data?.channels_changed ?? 0} channel(s).`
+          : `Unmuted ${response.data?.channels_changed ?? 0} channel(s).`,
+        tone: "success",
+        category: "system",
+      });
+    });
   };
 
   /**
@@ -3140,6 +3322,10 @@ export default function Dashboard() {
                   onMuteServer={handleMuteServer}
                   onLeaveServer={handleLeaveServer}
                   showToast={showToast}
+                  serverIsMuted={
+                    channels.length > 0 &&
+                    channels.every((c) => mutedChannelIds.has(c.channel_id))
+                  }
                 />
 
                 <ChannelList
@@ -3148,6 +3334,7 @@ export default function Dashboard() {
                   selectedChannel={selectedChannel}
                   getMessageDraft={getMessageDraft}
                   unreadCountsByChannel={unreadCountsByChannel}
+                  mutedChannelIds={mutedChannelIds}
                   onChannelSelect={handleChannelSelect}
                   onChannelContextMenu={handleChannelContextMenu}
                   currentVoiceChannel={currentVoiceChannel}
@@ -4709,6 +4896,45 @@ export default function Dashboard() {
               setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
             },
           });
+          // Mute / Unmute Channel — flips the muted state via the
+          // /notifications/preferences API. The label tracks the
+          // current muted-set so a user can always tell at a glance
+          // what the action will do.
+          {
+            const channelIsMuted = mutedChannelIds.has(ctxChannel.channel_id);
+            items.push({
+              id: "toggle-mute",
+              label: channelIsMuted ? "Unmute Channel" : "Mute Channel",
+              icon: channelIsMuted ? (
+                // Speaker-on glyph (unmute action).
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+              ) : (
+                // Speaker-off glyph (mute action) — same shape with a
+                // diagonal slash, matching the "Mute Server" icon in
+                // the server dropdown so the actions read as a
+                // coherent set.
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9M3 3l18 18"
+                  />
+                </svg>
+              ),
+              onSelect: () => {
+                handleToggleChannelMute(ctxChannel.channel_id, !channelIsMuted);
+                setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+              },
+            });
+          }
           // Edit Channel — gated by edit_channels. Mirrors the
           // control-panel Channels tab edit flow; channel_type stays
           // immutable on this surface for the same reason (flipping

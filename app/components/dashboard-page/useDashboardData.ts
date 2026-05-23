@@ -110,6 +110,14 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
   const [unreadCountsByChannel, setUnreadCountsByChannel] = useState<Record<string, number>>({});
+  // Set of channel_ids the viewer has explicitly muted. Seeded from
+  // `GET /notifications/preferences` on mount and mutated locally by
+  // the mute/unmute handlers so the menu label + icon update without
+  // a round-trip. Used by ChannelList to suppress the unread dot on
+  // muted channels (muted = "I don't care, don't dot me") and by the
+  // context menu to flip the label between "Mute Channel" /
+  // "Unmute Channel."
+  const [mutedChannelIds, setMutedChannelIds] = useState<Set<string>>(new Set());
   const [manualPresenceLock, setManualPresenceLock] = useState<"dnd" | "afk" | "offline" | null>(null);
   const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
   const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission | "unsupported">(
@@ -556,6 +564,8 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     setReadMessageIds,
     unreadCountsByChannel,
     setUnreadCountsByChannel,
+    mutedChannelIds,
+    setMutedChannelIds,
     manualPresenceLock,
     setManualPresenceLock,
     unreadMarker,

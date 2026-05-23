@@ -330,3 +330,153 @@ export const getMessageReadHistory = async (
     auth_token: authToken,
   });
 };
+
+// ─────────────────────────────────────────────────────────────────────
+// Bulk read-state mutations
+// ─────────────────────────────────────────────────────────────────────
+
+export interface MarkChannelReadResponse {
+  status_code: number;
+  channel_id: string;
+  newly_marked_read: number;
+}
+
+export interface MarkServerReadResponse {
+  status_code: number;
+  channels_touched: number;
+  newly_marked_read: number;
+}
+
+/**
+ * "Mark As Read" for a single channel. Server-side this adds every
+ * visible message (within the 7-day unread window) to the user's
+ * read-history in one transaction — much faster than walking
+ * `markMessageAsRead` per message, and idempotent on re-run.
+ */
+export const markChannelRead = async (
+  hostPort: string,
+  channelId: string,
+  authToken: string,
+): Promise<ApiResponse<MarkChannelReadResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.post<MarkChannelReadResponse>(
+    `/api/v1/channels/${channelId}/mark_all_read?auth_token=${encodeURIComponent(authToken)}`,
+  );
+};
+
+/**
+ * Server-wide "Mark All As Read." Single DB transaction; collapses
+ * every unread dot the viewer sees in one round-trip.
+ */
+export const markServerRead = async (
+  hostPort: string,
+  authToken: string,
+): Promise<ApiResponse<MarkServerReadResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.post<MarkServerReadResponse>(
+    `/api/v1/channels/mark_all_read?auth_token=${encodeURIComponent(authToken)}`,
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// Notification preferences (per-channel mute + bulk mute-server)
+// ─────────────────────────────────────────────────────────────────────
+
+export interface NotificationPreference {
+  user_id: string;
+  channel_id: string;
+  muted: boolean;
+  mention_only: boolean;
+  updated_at: string | null;
+}
+
+export interface ListNotificationPreferencesResponse {
+  status_code: number;
+  preferences: NotificationPreference[];
+}
+
+export interface UpsertNotificationPreferenceResponse {
+  status_code: number;
+  preference: NotificationPreference;
+}
+
+export interface BulkSetMuteResponse {
+  status_code: number;
+  muted: boolean;
+  channels_total: number;
+  channels_changed: number;
+}
+
+/**
+ * List every notification preference the viewer has explicitly set.
+ * Absence of a row means "use default (notify normally)" — only
+ * deviations are stored, so the response is small in practice.
+ * The client uses this on mount to seed a `muted-channels` set
+ * for rendering the muted icon + suppressing the unread dot.
+ */
+export const listNotificationPreferences = async (
+  hostPort: string,
+  authToken: string,
+): Promise<ApiResponse<ListNotificationPreferencesResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.get<ListNotificationPreferencesResponse>(
+    '/api/v1/notifications/preferences',
+    { auth_token: authToken },
+  );
+};
+
+/**
+ * Set the viewer's mute / mention-only preference for a channel.
+ * Pass `muted: false, mention_only: false` to "unmute back to
+ * default" (the server still persists the row to remember the
+ * explicit choice; use `resetChannelNotificationPreference` to
+ * fully delete it).
+ */
+export const setChannelNotificationPreference = async (
+  hostPort: string,
+  channelId: string,
+  authToken: string,
+  options: { muted?: boolean; mention_only?: boolean } = {},
+): Promise<ApiResponse<UpsertNotificationPreferenceResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.put<UpsertNotificationPreferenceResponse>(
+    `/api/v1/notifications/preferences/${channelId}?auth_token=${encodeURIComponent(authToken)}`,
+    {
+      muted: Boolean(options.muted),
+      mention_only: Boolean(options.mention_only),
+    },
+  );
+};
+
+/**
+ * Delete the stored preference for a channel (back to defaults).
+ * Returns `{existed: false}` when no row was stored — idempotent.
+ */
+export const resetChannelNotificationPreference = async (
+  hostPort: string,
+  channelId: string,
+  authToken: string,
+): Promise<ApiResponse<{ status_code: number; existed: boolean }>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.delete<{ status_code: number; existed: boolean }>(
+    `/api/v1/notifications/preferences/${channelId}`,
+    { auth_token: authToken },
+  );
+};
+
+/**
+ * Bulk mute / unmute every accessible channel — backs the
+ * "Mute Server" / "Unmute Server" dropdown affordance.
+ * Single transaction server-side.
+ */
+export const bulkSetServerMute = async (
+  hostPort: string,
+  authToken: string,
+  muted: boolean,
+): Promise<ApiResponse<BulkSetMuteResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.put<BulkSetMuteResponse>(
+    `/api/v1/notifications/preferences?auth_token=${encodeURIComponent(authToken)}`,
+    { muted },
+  );
+};

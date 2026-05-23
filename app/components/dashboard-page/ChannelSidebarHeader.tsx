@@ -23,6 +23,11 @@ interface ChannelSidebarHeaderProps {
   onMuteServer: () => void;
   onLeaveServer: () => void;
   showToast: ShowToast;
+  /** True when every accessible channel is muted — flips the dropdown
+   *  label between "Mute Server" and "Unmute Server" so the user
+   *  always knows what the action will do. Computed in DashboardPage
+   *  from `mutedChannelIds` × `channels`. */
+  serverIsMuted: boolean;
 }
 
 /**
@@ -71,6 +76,7 @@ export function ChannelSidebarHeader({
   onMuteServer,
   onLeaveServer,
   showToast,
+  serverIsMuted,
 }: ChannelSidebarHeaderProps) {
   // ── Animated server banner: hover-to-play ──────────────────────────
   //
@@ -287,12 +293,26 @@ export function ChannelSidebarHeader({
                     setServerDropdownOpen(false);
                   }}
                   className="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-hover)]"
-                  title="Silence notifications for this server"
+                  title={
+                    serverIsMuted
+                      ? "Re-enable notifications for every channel"
+                      : "Silence notifications for every channel on this server"
+                  }
                 >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9M3 3l18 18" />
-                  </svg>
-                  <span className="font-medium">Mute Server</span>
+                  {serverIsMuted ? (
+                    // Speaker-on glyph — flips back when the server
+                    // is fully muted so the action verb matches.
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9M3 3l18 18" />
+                    </svg>
+                  )}
+                  <span className="font-medium">
+                    {serverIsMuted ? "Unmute Server" : "Mute Server"}
+                  </span>
                 </button>
 
                 {/* Group 3: destructive. Leave Server only for federated
