@@ -799,36 +799,30 @@ export default function Dashboard() {
     }
   }, [currentUser, updatePresenceStatus]);
 
-  // Initialize from persisted state after channels are loaded
+  // Initialize from persisted state after channels are loaded.
+  //
+  // Every path here goes through `handleChannelSelect` — the
+  // previously-bespoke "restore persisted channel" branch directly
+  // called `setSelectedChannel + loadChannelMessages` and skipped the
+  // unread-counts cleanup that `handleChannelSelect` does. That left a
+  // stale unread dot next to the channel the user was literally
+  // looking at on every cold start. Routing through the canonical
+  // selector fixes that and keeps every entry point's clear-on-enter
+  // semantics identical.
   useEffect(() => {
     if (channels.length > 0 && !selectedChannel) {
-      // Try to restore previously selected channel
       if (persistedChannelId) {
         const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
         if (persistedChannel) {
           logger.ui.debug("Restoring previously selected channel", { channelId: persistedChannel.channel_id });
-
-          // Set the selected channel and load messages automatically
-          setSelectedChannel(persistedChannel);
-
-          // Restore message draft for the persisted channel
-          const restoredDraft = getMessageDraft(persistedChannel.channel_id);
-          setMessageInput(restoredDraft);
-
-          // Load messages and setup WebSocket connection for the restored channel
-          loadChannelMessages(persistedChannel);
-          // Note: We don't call persistSelectedChannel here since it was already persisted
+          void handleChannelSelect(persistedChannel);
         } else {
           logger.ui.warn("Persisted channel not found, selecting first available channel", { persistedChannelId });
-          // Persisted channel no longer exists, select the first available channel
-          const firstChannel = channels[0];
-          handleChannelSelect(firstChannel);
+          void handleChannelSelect(channels[0]);
         }
       } else {
-        // No persisted channel, select the first available channel
         logger.ui.debug("No persisted channel found, selecting first available channel");
-        const firstChannel = channels[0];
-        handleChannelSelect(firstChannel);
+        void handleChannelSelect(channels[0]);
       }
     }
   }, [channels, persistedChannelId, selectedChannel]);

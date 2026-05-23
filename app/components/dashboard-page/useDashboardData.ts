@@ -296,7 +296,21 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     const snapshot = new Set(messageIds);
     readMessageIdsRef.current = snapshot;
     setReadMessageIds(snapshot);
-    setUnreadCountsByChannel(unreadCounts);
+    // Defensive: never re-introduce an unread dot for the channel the
+    // user is currently viewing. `fetchReadHistoryData` runs in parallel
+    // with the channel-restore effect, so the snapshot can land AFTER
+    // `handleChannelSelect` has already cleared this channel's count.
+    // Without this guard the blunt overwrite would resurrect the dot
+    // for ~one render before the next `markMessagesRead` round-trip
+    // wiped it again — a flicker that read as "the dot is stuck on a
+    // channel I just opened."
+    const activeChannelId = selectedChannelIdRef.current;
+    const sanitized = activeChannelId
+      ? Object.fromEntries(
+          Object.entries(unreadCounts).filter(([channelId]) => channelId !== activeChannelId),
+        )
+      : unreadCounts;
+    setUnreadCountsByChannel(sanitized);
   }, []);
 
   const markChannelNotificationsRead = useCallback((channelId: string) => {
