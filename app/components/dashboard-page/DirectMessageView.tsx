@@ -253,7 +253,7 @@ export function DirectMessageView({
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (args: { text: string; attachments: string[] }) => {
+    mutationFn: async (args: { text: string; attachments: string[]; stickerIds?: string[] }) => {
       if (!hostPort || !authToken) throw new Error("Not signed in.");
       const response = await sendDirectMessage(
         {
@@ -261,6 +261,8 @@ export function DirectMessageView({
           peer: peerUserId,
           message: args.text,
           attachments: args.attachments.length > 0 ? args.attachments : undefined,
+          sticker_ids:
+            args.stickerIds && args.stickerIds.length > 0 ? args.stickerIds : undefined,
         },
         hostPort,
       );
@@ -518,6 +520,40 @@ export function DirectMessageView({
     const quote = `> Replying to @${author}\n> ${excerpt}\n\n`;
     setDraft((prev) => (prev ? `${quote}${prev}` : quote));
     requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  /**
+   * Send a sticker as its own DM. If the smiley was clicked from a
+   * message's hover cluster (reactionTargetId is set), we treat it
+   * as a reaction intent instead — but DM reactions don't have a
+   * server endpoint yet, so we fall through to the existing
+   * "coming soon" toast in handleEmojiSelect's reaction branch.
+   */
+  const handleStickerSelect = (sticker: { sticker_id: string; alias: string | null; display_name: string }) => {
+    if (reactionTargetId) {
+      // Same "coming soon" path as emoji/GIF reactions on DMs.
+      showToast({
+        message: "DM reactions will land alongside the server endpoint.",
+        tone: "warning",
+        category: "system",
+      });
+      setReactionTargetId(null);
+      setIsEmojiPickerOpen(false);
+      return;
+    }
+    sendMutation.mutate(
+      { text: "", attachments: [], stickerIds: [sticker.sticker_id] },
+      {
+        onError: () => {
+          showToast({
+            message: "Couldn't send sticker.",
+            tone: "error",
+            category: "system",
+          });
+        },
+      },
+    );
+    setIsEmojiPickerOpen(false);
   };
 
   const handleGifSelect = (gif: { url: string; title: string }) => {
@@ -1141,6 +1177,7 @@ export function DirectMessageView({
           }}
           onEmojiSelect={handleEmojiSelect}
           onGifSelect={handleGifSelect}
+          onStickerSelect={handleStickerSelect}
         />
       </div>
 

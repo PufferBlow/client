@@ -310,6 +310,18 @@ export class ApiClient {
     });
   }
 
+  // PATCH — same JSON-body shape as POST/PUT, semantic "partial
+  // update" for resources where the server treats undefined fields
+  // as "leave alone". Used by the stickers admin surface; could be
+  // adopted elsewhere as the API surfaces grow.
+  async patch<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+      headers,
+    });
+  }
+
   async delete<T>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
     let fullEndpoint = endpoint;
     if (params) {

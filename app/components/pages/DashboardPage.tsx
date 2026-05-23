@@ -33,6 +33,8 @@ import { ChannelList } from "../../components/dashboard-page/ChannelList";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
 import { Twemoji } from "../../components/ui/Twemoji";
+import { ReactionGlyph } from "../../components/ReactionGlyph";
+import { useStickers, indexStickersById } from "../../services/useStickers";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
@@ -105,6 +107,22 @@ export default function Dashboard() {
   const { setServerName, setServerAvatarUrl, setChannelName } = useTitleBar();
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
+  // Instance sticker library — loaded once at dashboard mount, cached
+  // by react-query for the picker AND used here to resolve sticker
+  // reaction keys (`sticker:<id>`) into thumbnails on message
+  // reaction pills. Indexed by id in a memo so per-pill lookups
+  // are O(1).
+  const _stickerAuth =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const _stickerHost =
+    (typeof window !== "undefined" &&
+      (getHostPortFromStorage() || getHostPortFromCookies())) ||
+    undefined;
+  const stickersQuery = useStickers(_stickerHost, _stickerAuth);
+  const stickersById = useMemo(
+    () => indexStickersById(stickersQuery.data),
+    [stickersQuery.data],
+  );
   const {
     persistedChannelId,
     persistSelectedChannel,
@@ -2867,6 +2885,109 @@ export default function Dashboard() {
     }
   };
 
+  /**
+   * Send a sticker as its own message in the current channel. The
+   * sticker_id rides through `sendMessage`'s `stickerIds` field;
+   * the server looks it up, synthesises the attachment dict, and
+   * the renderer routes it through the inline StickerRenderer
+   * branch in AttachmentBubble. We optionally include the alias in
+   * the body text (`:alias:`) so search and screen-readers have
+   * something to grab onto; the renderer's body-text suppression
+   * trick hides that text when the only payload is one sticker.
+   *
+   * Reaction intent (sticker picked from the message-hover smiley
+   * cluster, not the composer) is handled separately by checking
+   * `reactionTargetRef.current` before falling through to send.
+   */
+  const handleStickerSelect = async (sticker: { sticker_id: string; alias: string | null; display_name: string }) => {
+    setIsEmojiPickerOpen(false);
+
+    // Reaction mode: the hover-cluster smiley sets this ref before
+    // opening the picker. We dispatch through the same reaction-add
+    // path the emoji-react case uses, just encoded as `sticker:<id>`.
+    const reactionTarget = reactionTargetRef.current;
+    reactionTargetRef.current = null;
+    if (reactionTarget) {
+      try {
+        await applyReactionToMessage(reactionTarget, `sticker:${sticker.sticker_id}`);
+      } catch (error) {
+        logger.ui.error("Sticker reaction failed", { error });
+        showToast({
+          message: "Couldn't add sticker reaction.",
+          tone: "error",
+          category: "system",
+        });
+      }
+      return;
+    }
+
+    if (!selectedChannel) {
+      showToast({
+        message: "Pick a channel before sending a sticker.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+
+    const authToken = getAuthTokenFromCookies() || "";
+    if (!authToken) {
+      showToast({
+        message: "You don't appear to be signed in.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    const resolvedInstance =
+      resolveStoredInstance(getHostPortFromStorage()) ??
+      resolveStoredInstance(getHostPortFromCookies());
+    if (!resolvedInstance) {
+      showToast({
+        message: "No home instance configured.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    try {
+      const response = await sendMessage(
+        resolvedInstance.raw,
+        selectedChannel.channel_id,
+        {
+          // Empty body — the renderer treats a single-sticker message
+          // as "no text" and shows just the sticker glyph. Carry the
+          // alias as a hidden a11y label via the attachment filename.
+          content: "",
+          sentAt: new Date().toISOString(),
+          stickerIds: [sticker.sticker_id],
+        },
+        authToken,
+      );
+      if (!response.success) {
+        showToast({
+          message: `Failed to send sticker: ${response.error || "Unknown error"}`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      const createdMessage = response.data?.message_data;
+      if (createdMessage) {
+        appendUniqueMessage(createdMessage);
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error sending sticker", { error });
+      showToast({
+        message: "An unexpected error occurred while sending the sticker.",
+        tone: "error",
+        category: "system",
+      });
+    }
+  };
+
   const handleUserClick = async (userId: string, username: string, event: React.MouseEvent, tooltipSource?: 'userpanel' | 'members' | 'messages') => {
     event.preventDefault();
 
@@ -4066,9 +4187,21 @@ export default function Dashboard() {
                                 appears while the pointer is over the
                                 message). Hidden when the row is empty —
                                 first-time reactions go through the hover
-                                cluster's smiley button. */}
+                                cluster's smiley button.
+
+                                Layout: pills sit BELOW the message body
+                                (`mt-1`) and right-align (`justify-end`) so
+                                they hug the right edge of the message
+                                column rather than dangling under the
+                                avatar gutter. This matches the convention
+                                established by Discord/Slack and gives the
+                                eye a single anchor to scan when
+                                reactions pile up on a long thread.
+                                `flex-wrap` keeps very wide rows of
+                                reactions wrapping to additional lines
+                                cleanly. */}
                             {message.reactions && message.reactions.length > 0 && (
-                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <div className="mt-1 flex flex-wrap items-center justify-end gap-1">
                                 {message.reactions.map((reaction) => (
                                   <button
                                     key={reaction.emoji}
@@ -4084,8 +4217,24 @@ export default function Dashboard() {
                                     }`}
                                     aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.viewer_reacted ? ", you reacted" : ""}`}
                                   >
-                                    <Twemoji emoji={reaction.emoji} size={14} />
+                                    {/* Count first, then glyph — reads
+                                        as "3 👍" rather than "👍 3".
+                                        Putting the number on the left
+                                        anchors the eye consistently at
+                                        the start of each pill, which is
+                                        the right move when many pills
+                                        sit in a row with different
+                                        glyphs but tabular numerals.
+                                        `tabular-nums` keeps the digits
+                                        the same width across all
+                                        counts so the pills don't
+                                        jitter as numbers grow. */}
                                     <span className="tabular-nums">{reaction.count}</span>
+                                    <ReactionGlyph
+                                      reactionKey={reaction.emoji}
+                                      stickersById={stickersById}
+                                      size={14}
+                                    />
                                   </button>
                                 ))}
                                 <button
@@ -4826,6 +4975,7 @@ export default function Dashboard() {
             }}
             onEmojiSelect={handleEmojiSelect}
             onGifSelect={handleGifSelect}
+            onStickerSelect={handleStickerSelect}
           />
         </div>
         </>

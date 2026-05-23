@@ -1,12 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Twemoji } from "./ui/Twemoji";
+import {
+  createFullUrl,
+  getAuthTokenFromCookies,
+  getHostPortFromCookies,
+  getHostPortFromStorage,
+} from "../services/user";
+import { useStickers } from "../services/useStickers";
+import type { StickerRecord } from "../services/stickers";
 
 interface EmojiPickerProps {
   isOpen: boolean;
   onClose: () => void;
   onEmojiSelect: (emoji: string) => void;
   onGifSelect?: (gif: { url: string; title: string }) => void;
+  /**
+   * Fires when the user clicks a sticker in the Stickers tab. When
+   * not provided, the Stickers tab is hidden — keeps the picker
+   * working unchanged in places that haven't wired the sticker
+   * send path yet (e.g. an admin settings page that only wants
+   * emoji insertion).
+   */
+  onStickerSelect?: (sticker: StickerRecord) => void;
 }
+
+type PickerTab = "emoji" | "gif" | "sticker";
 
 interface GifResult {
   id: string;
@@ -20,13 +38,48 @@ interface GifResult {
   };
 }
 
-export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: EmojiPickerProps) {
+export function EmojiPicker({
+  isOpen,
+  onClose,
+  onEmojiSelect,
+  onGifSelect,
+  onStickerSelect,
+}: EmojiPickerProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'emoji' | 'gif'>('emoji');
+  const [activeTab, setActiveTab] = useState<PickerTab>('emoji');
   const [gifs, setGifs] = useState<GifResult[]>([]);
   const [isLoadingGifs, setIsLoadingGifs] = useState(false);
   const [gifError, setGifError] = useState<string | null>(null);
+
+  // Sticker library is read-only here — the picker just consumes
+  // the cached list from useStickers. Active server inferred from
+  // the same cookie/storage chain the rest of the app uses; null
+  // host_port falls back to the in-page default automatically.
+  const hostPort =
+    (typeof window !== "undefined" &&
+      (getHostPortFromStorage() || getHostPortFromCookies())) ||
+    undefined;
+  const authToken =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const showStickersTab = !!onStickerSelect;
+  const stickersQuery = useStickers(
+    showStickersTab ? hostPort : undefined,
+    showStickersTab ? authToken : undefined,
+  );
+  const stickers = stickersQuery.data ?? [];
+
+  // Live-filter stickers by display_name / alias substring while the
+  // user types in the search field. The library is small (a few
+  // hundred entries at most) so a linear scan per keystroke is fine.
+  const filteredStickers = useMemo(() => {
+    if (!searchQuery.trim()) return stickers;
+    const needle = searchQuery.trim().toLowerCase();
+    return stickers.filter((s) => {
+      const haystack = `${s.display_name} ${s.alias ?? ''} ${s.filename}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [stickers, searchQuery]);
 
 
 
@@ -193,6 +246,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         <h3 className="text-sm font-semibold text-[var(--color-text)]">
           {activeTab === 'emoji' && 'Emoji'}
           {activeTab === 'gif' && 'GIF'}
+          {activeTab === 'sticker' && 'Stickers'}
         </h3>
 
         {/* Close button */}
@@ -231,6 +285,22 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         >
           GIF
         </button>
+        {showStickersTab && (
+          <button
+            onClick={() => setActiveTab('sticker')}
+            className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+              activeTab === 'sticker'
+                ? 'border-b-2 border-[var(--color-primary)] text-[var(--color-text)]'
+                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
+            }`}
+            // Use a generic 'stamp / icon' glyph rather than a brand
+            // emoji because the tab is showing the instance's own
+            // stickers — emoji here would imply the wrong content.
+            title="Stickers"
+          >
+            🏷️
+          </button>
+        )}
       </div>
 
       {/* Search Input */}
@@ -238,7 +308,11 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
         <input
           type="text"
           placeholder={
-            activeTab === 'emoji' ? 'Search emojis...' : 'Search GIFs...'
+            activeTab === 'emoji'
+              ? 'Search emojis...'
+              : activeTab === 'gif'
+                ? 'Search GIFs...'
+                : 'Search stickers...'
           }
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -330,6 +404,82 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, onGifSelect }: Emo
                     <div className="mt-1 text-xs text-[var(--color-text-muted)]">Start typing to search for GIFs</div>
                   </div>
                 )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Stickers tab — local-instance library. Empty state covers
+            three cases: instance has no library, library is loading,
+            or the search filter matched nothing. Sticker images are
+            128×128 in the renderer; in the picker we constrain to
+            72×72 with `object-contain` so non-square glyphs (square
+            badges, tall posts) all read the same size. */}
+        {activeTab === 'sticker' && showStickersTab && (
+          <>
+            {stickersQuery.isLoading ? (
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 12 }).map((_, index) => (
+                  <div
+                    key={`sticker-skeleton-${index}`}
+                    className="aspect-square rounded-md bg-[var(--color-surface-tertiary)] animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : stickersQuery.isError ? (
+              <div className="py-8 text-center text-[var(--color-error)]">
+                <div className="text-3xl mb-2">⚠️</div>
+                <div className="text-sm">Couldn't load stickers.</div>
+                <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  {stickersQuery.error instanceof Error
+                    ? stickersQuery.error.message
+                    : 'Try again in a moment.'}
+                </div>
+              </div>
+            ) : filteredStickers.length === 0 ? (
+              <div className="py-8 text-center text-[var(--color-text-secondary)]">
+                <div className="text-3xl mb-2">🏷️</div>
+                {searchQuery.trim() ? (
+                  <>
+                    <div className="text-sm">No stickers match "{searchQuery}".</div>
+                    <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      Try a different search term.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm">No stickers yet.</div>
+                    <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      Admins can upload stickers from server settings.
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {filteredStickers.map((sticker) => {
+                  const fullUrl = createFullUrl(sticker.sticker_url) || sticker.sticker_url;
+                  return (
+                    <button
+                      key={sticker.sticker_id}
+                      onClick={() => {
+                        if (onStickerSelect) {
+                          onStickerSelect(sticker);
+                          onClose();
+                        }
+                      }}
+                      className="group flex aspect-square items-center justify-center overflow-hidden rounded-md bg-[var(--color-surface-secondary)] p-1 transition-colors hover:bg-[var(--color-hover)]"
+                      title={sticker.alias ? `${sticker.display_name} (:${sticker.alias}:)` : sticker.display_name}
+                    >
+                      <img
+                        src={fullUrl}
+                        alt={sticker.display_name}
+                        className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </>

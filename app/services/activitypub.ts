@@ -43,6 +43,9 @@ export interface SendDirectMessageRequest {
   message: string;
   sent_at?: string;
   attachments?: string[];
+  /** Sticker IDs from the instance library. Server resolves to URLs
+   *  and merges into `attachments` before federating. */
+  sticker_ids?: string[];
 }
 
 export interface SendDirectMessageResponse {

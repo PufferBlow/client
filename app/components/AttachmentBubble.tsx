@@ -422,6 +422,44 @@ export const AttachmentBubble: React.FC<AttachmentBubbleProps> = ({
     window.addEventListener('mouseup', onUp);
   };
 
+  // Sticker attachment — distinct from images. Stickers render at a
+  // small fixed size (128px) inline with the message body, NOT as a
+  // full-width media bubble. The distinction is carried on the
+  // `type` field: an attachment with `type === "sticker"` is from
+  // the instance sticker library and the renderer keeps it small;
+  // an image with the same URL but `type === "image/png"` would
+  // render as a full attachment bubble.
+  //
+  // We check `type` directly here rather than relying on inferred
+  // type because the storage URL ends in `.png` / `.webp` / `.gif`
+  // and would otherwise route into the image branch. The explicit
+  // type tag is the source of truth.
+  if (type === "sticker" && !imageError) {
+    return (
+      <div
+        className={`inline-block my-1 ${className}`}
+        onClick={onClick}
+        // Note: no border, no hover frame, no download button. Stickers
+        // are visual furniture, not first-class attachments — they should
+        // feel like a chat sticker (Discord/Slack convention), not like
+        // a downloadable file.
+      >
+        <img
+          src={resolvedUrl}
+          alt={filename || "Sticker"}
+          loading="lazy"
+          className="block max-h-[128px] max-w-[128px] object-contain"
+          onError={() => setImageError(true)}
+          onLoad={() => setImageLoading(false)}
+          // Drag/right-click semantics match the larger attachment
+          // bubbles — users can still save a sticker if they want
+          // to; we just don't make it the primary affordance.
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
   // Image/Video attachment (large bubble style)
   if ((isImageAttachment || isVideoAttachment) && !imageError) {
     const isImage = isImageAttachment;

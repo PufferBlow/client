@@ -28,6 +28,15 @@ export interface SendMessageRequest {
   content: string;
   sentAt?: string;
   attachments?: File[];
+  /**
+   * Sticker IDs from the instance library to include on this message.
+   * The server resolves each id to its storage URL + metadata and
+   * appends it to the message's `attachments` list with
+   * `type: "sticker"`. The client never needs to upload a sticker —
+   * it's already on the server. Pass alongside `attachments`
+   * (regular files) freely; both are merged server-side.
+   */
+  stickerIds?: string[];
 }
 
 export interface SendMessageResponse {
@@ -136,6 +145,14 @@ export const sendMessage = async (
     messageData.attachments.forEach((file) => {
       formData.append('attachments', file);
     });
+  }
+
+  // Sticker refs ride through as a comma-separated id list — the
+  // server resolves them into structured attachment dicts. Empty
+  // list = field omitted, so legacy server builds that don't know
+  // about the field still parse the form OK.
+  if (messageData.stickerIds && messageData.stickerIds.length > 0) {
+    formData.append('sticker_ids', messageData.stickerIds.join(','));
   }
 
   // Use correct endpoint with channel_id as path parameter
