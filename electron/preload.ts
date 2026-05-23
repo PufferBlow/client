@@ -216,6 +216,20 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
   },
 
+  // ── Client log persistence ─────────────────────────────────────
+  //
+  // The renderer batches its in-memory log ring buffer and flushes formatted
+  // lines through these handlers. Main owns the daily file rotation and the
+  // `maxFiles` retention cap so disk state is safe across renderer crashes.
+  appendClientLogs: (
+    lines: string[],
+    maxFiles?: number,
+  ): Promise<{ written: boolean; file: string }> =>
+    ipcRenderer.invoke('client-logs:append', { lines, maxFiles }),
+  openLogsFolder: (): Promise<boolean> =>
+    ipcRenderer.invoke('client-logs:open-folder'),
+  getLogsDir: (): Promise<string> => ipcRenderer.invoke('client-logs:get-dir'),
+
   // ── Hardware acceleration preference ───────────────────────────
   //
   // Reads/writes a flag persisted in the main-process settings file.

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTitleBar } from '../context/TitleBarContext';
+import { LogsViewer } from './LogsViewer';
+import { logStore } from '../services/logStore';
 
 interface ElectronWindowBridge {
   platform?: string;
@@ -234,10 +236,62 @@ function UpdateTitleBarButton() {
   );
 }
 
+// Opens the in-app log viewer. Sits in the right cluster of the title bar
+// next to the window controls and the update button, with a red unread-error
+// dot when new error-level entries have arrived since the viewer was last
+// opened.
+function LogsTitleBarButton({ onClick }: { onClick: () => void }) {
+  const [unreadErrors, setUnreadErrors] = useState(0);
+
+  useEffect(() => {
+    setUnreadErrors(logStore.getErrorCountSinceMark());
+    return logStore.subscribe((snapshot) => {
+      setUnreadErrors(snapshot.errorCountSinceMark);
+    });
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      style={{ WebkitAppRegion: 'no-drag' } as any}
+      title={unreadErrors > 0 ? `Show client logs (${unreadErrors} new error${unreadErrors === 1 ? '' : 's'})` : 'Show client logs'}
+      aria-label="Show client logs"
+      className="relative inline-flex items-center justify-center self-stretch w-11 text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus:outline-none transition-colors"
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="8" y1="13" x2="16" y2="13" />
+        <line x1="8" y1="17" x2="16" y2="17" />
+        <line x1="8" y1="9" x2="10" y2="9" />
+      </svg>
+      {unreadErrors > 0 && (
+        <span
+          aria-hidden
+          className="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-[var(--color-error)]"
+        />
+      )}
+    </button>
+  );
+}
+
 export function TitleBar() {
   const { serverName, serverAvatarUrl, channelName } = useTitleBar();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   // `mounted` is the SSR-safety latch. SSR has no `window`, so isElectron()
   // returns false on the server -> server emits null. But on the client's
   // FIRST render (the hydration pass), `window.electron` already exists in
@@ -354,12 +408,14 @@ export function TitleBar() {
         </div>
       )}
 
-      {/* Right — update button (only visible when auto-update is OFF and a
-          release exists) + window controls (Win/Linux). */}
+      {/* Right — logs button + update button (only visible when auto-update
+          is OFF and a release exists) + window controls (Win/Linux). */}
       <div className="ml-auto flex items-center h-full z-10 shrink-0">
+        <LogsTitleBarButton onClick={() => setLogsOpen(true)} />
         <UpdateTitleBarButton />
         {!isMac && <WinControls isMaximized={isMaximized} />}
       </div>
+      <LogsViewer isOpen={logsOpen} onClose={() => setLogsOpen(false)} />
     </div>
   );
 }

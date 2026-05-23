@@ -84,23 +84,87 @@ export class ApiClient {
     };
   }
 
+  // Strips known credential query parameters before a URL/endpoint is logged.
+  // The logger ALSO scrubs `?auth_token=…` at the redaction layer (see
+  // services/logStore.ts), but doing it at the call site too means we never
+  // hand a tokenized string to consola / loglevel — defense in depth against
+  // a future redactor regression.
+  private sanitizeForLog(value: string): string {
+    try {
+      // Need an absolute URL for URL(). Fall back to a dummy origin when the
+      // value is just a path.
+      const isAbsolute = /^https?:\/\//i.test(value);
+      const parsed = new URL(value, isAbsolute ? undefined : 'http://x');
+      const stripKeys = [
+        'auth_token',
+        'token',
+        'access_token',
+        'refresh_token',
+        'session_token',
+        'api_key',
+        'apikey',
+        'key',
+        'password',
+        'secret',
+      ];
+      let changed = false;
+      stripKeys.forEach((k) => {
+        if (parsed.searchParams.has(k)) {
+          parsed.searchParams.set(k, '[REDACTED]');
+          changed = true;
+        }
+      });
+      if (!changed) return value;
+      return isAbsolute
+        ? parsed.toString()
+        : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return value;
+    }
+  }
+
   private async performFetch(
     endpoint: string,
     options: RequestInit,
     isFormData: boolean
   ): Promise<Response> {
     const url = `${this.baseUrl}${endpoint}`;
-    logger.api.debug(`Making request to ${url}`, options);
+    const method = (options.method || 'GET').toUpperCase();
+    const safeEndpoint = this.sanitizeForLog(endpoint);
+    const safeUrl = this.sanitizeForLog(url);
+    const hasAuth =
+      !!getAuthTokenForRequests() ||
+      endpoint.includes('auth_token=') ||
+      !!this.getNodeSessionToken();
+    logger.api.debug(`${method} ${safeEndpoint} → start`, { url: safeUrl, hasAuth, isFormData });
 
-    return fetch(url, {
-      ...options,
-      headers: {
-        // Don't set Content-Type for FormData - let the browser set it with boundary
-        ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
-        ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
-        ...options.headers,
-      },
-    });
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          // Don't set Content-Type for FormData - let the browser set it with boundary
+          ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
+          ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
+          ...options.headers,
+        },
+      });
+      const elapsed = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start,
+      );
+      const level = response.ok ? 'debug' : 'warn';
+      logger.api[level](
+        `${method} ${safeEndpoint} → ${response.status} (${elapsed}ms)`,
+        { status: response.status, ok: response.ok, durationMs: elapsed },
+      );
+      return response;
+    } catch (error) {
+      const elapsed = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start,
+      );
+      logger.api.error(`${method} ${safeEndpoint} → network error (${elapsed}ms)`, error);
+      throw error;
+    }
   }
 
   private async request<T>(
