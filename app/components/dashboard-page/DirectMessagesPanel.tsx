@@ -49,6 +49,7 @@ import {
   type Friendship,
 } from "../../services/friends";
 import { Modal } from "../ui/Modal";
+import { createFallbackAvatarUrl } from "../../services/user";
 import type { ShowToast } from "../Toast";
 
 type TabId = "friends" | "pending" | "blocked";
@@ -59,6 +60,10 @@ export interface SelectedFriendForDM {
   /** Their display handle — pre-formatted via `formatFriendHandle`,
    *  so callers can use it as a header subtitle without re-deriving. */
   handle: string;
+  /** Hydrated avatar URL (may be null/empty for users without an
+   *  uploaded avatar). The DM view falls back to the DiceBear
+   *  identicon keyed on the username when missing. */
+  avatarUrl?: string | null;
 }
 
 interface DirectMessagesPanelProps {
@@ -209,6 +214,7 @@ export function DirectMessagesPanel({
                       onOpenDirectMessage({
                         userId: row.other_user_id,
                         handle,
+                        avatarUrl: row.other_avatar_url ?? null,
                       })
                     }
                     onUnfriend={() =>
@@ -303,11 +309,18 @@ export function DirectMessagesPanel({
                 const username = row.blocked_username?.trim() || row.blocked_id;
                 const origin = row.blocked_origin_server?.trim();
                 const display = origin ? `${username}@${origin}` : username;
+                const avatarSrc =
+                  row.blocked_avatar_url || createFallbackAvatarUrl(username);
                 return (
                   <li
                     key={row.blocked_id}
                     className="flex items-center gap-3 px-3 py-2 text-xs"
                   >
+                    <img
+                      src={avatarSrc}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover opacity-60"
+                    />
                     <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">
                       {display}
                     </span>
@@ -438,6 +451,36 @@ function FriendshipRow({
     other_origin_server: row.other_origin_server,
   });
 
+  // Avatar resolution: use the hydrated `other_avatar_url` from
+  // the server when present, otherwise fall back to a DiceBear
+  // identicon keyed on the username so distinct friends still get
+  // distinct glyphs deterministically. Same fallback chain the
+  // channel chat uses for unknown users — keeps the visual
+  // language consistent.
+  const avatarSeed = row.other_username?.trim() || handle || "user";
+  const avatarSrc = row.other_avatar_url || createFallbackAvatarUrl(avatarSeed);
+
+  // Only friend rows render a presence dot — pending/blocked rows
+  // are about graph state, not "are they online right now."
+  const presenceDot = (() => {
+    if (variant !== "friend") return null;
+    const status = row.other_status || "offline";
+    const colorClass =
+      status === "online"
+        ? "bg-[var(--color-success)]"
+        : status === "idle" || status === "afk"
+          ? "bg-[var(--color-warning)]"
+          : status === "dnd"
+            ? "bg-[var(--color-error)]"
+            : "bg-[var(--color-text-muted)]";
+    return (
+      <span
+        aria-hidden="true"
+        className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-background)] ${colorClass}`}
+      />
+    );
+  })();
+
   // Only friend rows are clickable; pending rows are passive (the
   // actions are the only thing the user can do with them).
   const clickable = variant === "friend" && !!onOpen;
@@ -457,6 +500,14 @@ function FriendshipRow({
         if (clickable && onOpen) onOpen();
       }}
     >
+      <div className="relative shrink-0">
+        <img
+          src={avatarSrc}
+          alt=""
+          className="h-8 w-8 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover"
+        />
+        {presenceDot}
+      </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[var(--color-text)]">{handle}</div>
         {variant === "outgoing" && (

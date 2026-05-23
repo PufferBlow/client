@@ -3546,6 +3546,7 @@ export default function Dashboard() {
             <DirectMessageView
               peerUserId={selectedFriendForDM.userId}
               peerHandle={selectedFriendForDM.handle}
+              peerAvatarUrl={selectedFriendForDM.avatarUrl}
               onBack={() => setSelectedFriendForDM(null)}
             />
           ) : (

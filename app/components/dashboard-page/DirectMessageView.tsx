@@ -53,6 +53,10 @@ interface DirectMessageViewProps {
   peerUserId: string;
   /** Pre-formatted handle for the header ("alice" or "alice@host"). */
   peerHandle: string;
+  /** Hydrated `users.avatar_url` for the friend, plumbed through
+   *  from the Friends panel row. Null/empty → header falls back
+   *  to a DiceBear identicon keyed on `peerHandle`. */
+  peerAvatarUrl?: string | null;
   /** Back affordance — clears the selection in the parent so the
    *  user lands back on the DM "no conversation open" placeholder. */
   onBack: () => void;
@@ -98,6 +102,7 @@ function groupMessages(
 export function DirectMessageView({
   peerUserId,
   peerHandle,
+  peerAvatarUrl,
   onBack,
 }: DirectMessageViewProps) {
   const hostPort =
@@ -215,9 +220,9 @@ export function DirectMessageView({
           </svg>
         </button>
         <img
-          src={createFallbackAvatarUrl(peerHandle)}
+          src={peerAvatarUrl || createFallbackAvatarUrl(peerHandle)}
           alt=""
-          className="h-7 w-7 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
+          className="h-7 w-7 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover"
         />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-[var(--color-text)]">

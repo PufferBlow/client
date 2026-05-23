@@ -49,6 +49,13 @@ export interface Friendship {
    *  "this instance" — the client should render `username` alone
    *  in that case; otherwise `username@origin_server`. */
   other_origin_server?: string;
+  /** Hydrated `users.avatar_url`. Null/empty → client falls back
+   *  to the DiceBear identicon keyed on the username. */
+  other_avatar_url?: string | null;
+  /** Hydrated `users.status` (`online | idle | afk | dnd | offline`).
+   *  Default `"offline"` server-side. The Friends panel uses this
+   *  to render a small presence dot next to the avatar. */
+  other_status?: 'online' | 'idle' | 'afk' | 'dnd' | 'offline' | string;
 }
 
 /**
@@ -255,6 +262,7 @@ export interface FriendRequestBlock {
    *  of a raw user_id. Absent on the immediate `block` response. */
   blocked_username?: string;
   blocked_origin_server?: string;
+  blocked_avatar_url?: string | null;
 }
 
 export interface BlockFriendRequestsResponse {
