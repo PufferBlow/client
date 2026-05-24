@@ -15,6 +15,7 @@ import {
   cleanupOrphanedFiles,
 } from "../../../services/storage";
 import { renderFileTypeIcon } from "../../../utils/fileTypeMeta";
+import { showApiError } from "../../../services/showApiError";
 import type { ShowToast } from "../../Toast";
 import type { StorageFile } from "../types";
 
@@ -143,7 +144,7 @@ export function StorageTab({
         showToast({ message: `"${file.filename}" deleted.`, tone: 'success', category: 'destructive' });
         setDeleteConfirmFile(null);
       } else {
-        showToast({ message: `Failed to delete: ${response.error || 'Unknown error'}`, tone: 'error', category: 'system' });
+        showApiError(showToast, response, { action: `delete "${file.filename}"` });
       }
     } catch {
       showToast({ message: 'Network error while deleting file.', tone: 'error', category: 'system' });
@@ -164,7 +165,7 @@ export function StorageTab({
         });
         await loadFiles();
       } else {
-        showToast({ message: `Cleanup failed: ${response.error || 'Unknown error'}`, tone: 'error', category: 'system' });
+        showApiError(showToast, response, { action: "clean up orphaned files" });
       }
     } catch {
       showToast({ message: 'Network error during cleanup.', tone: 'error', category: 'system' });

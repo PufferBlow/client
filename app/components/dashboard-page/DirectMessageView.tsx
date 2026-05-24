@@ -69,6 +69,7 @@ import {
   useCurrentUserProfile,
 } from "../../services/user";
 import { createApiClient } from "../../services/apiClient";
+import { useNetworkStatus } from "../../services/networkStatus";
 import { EmojiPicker } from "../EmojiPicker";
 import { MessageContextMenu } from "../MessageContextMenu";
 import { MarkdownRenderer } from "../MarkdownRenderer";
@@ -469,7 +470,15 @@ export function DirectMessageView({
     setDraft("");
   };
 
+  // Device-level offline gate. When false, the send button is
+  // disabled and an inline hint replaces the "Enter to send"
+  // helper. We do NOT queue messages — the goal is honesty:
+  // pretending a send succeeded when the request can't even leave
+  // the device is the worst possible UX.
+  const isOnline = useNetworkStatus();
+
   const canSend =
+    isOnline &&
     !sendMutation.isPending &&
     !isUploading &&
     (draft.trim().length > 0 || pendingAttachments.length > 0);
@@ -1141,8 +1150,19 @@ export function DirectMessageView({
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
             <div className="flex flex-wrap items-center gap-2">
-              <span>Enter to send</span>
-              <span>Shift+Enter for newline</span>
+              {/* Offline takes over the helper text slot — the
+                  "Enter to send" hint would be misleading when
+                  pressing Enter can't actually send anything. */}
+              {!isOnline ? (
+                <span className="text-[var(--color-error)]">
+                  You're offline — sends will fail until you reconnect.
+                </span>
+              ) : (
+                <>
+                  <span>Enter to send</span>
+                  <span>Shift+Enter for newline</span>
+                </>
+              )}
               {pendingAttachments.length > 0 && (
                 <span>
                   {pendingAttachments.length} attachment{pendingAttachments.length === 1 ? "" : "s"}

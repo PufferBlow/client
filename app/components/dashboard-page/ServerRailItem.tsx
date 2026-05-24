@@ -69,6 +69,19 @@ export interface ServerRailItemProps {
    * resting, hover, and selected.
    */
   lockRestingPalette?: boolean;
+  /**
+   * When true, render an "offline" indicator on the avatar — small
+   * red dot in the bottom-right corner. Also dims the avatar so the
+   * eye picks it up at a glance. The caller derives this from
+   * ``useInstanceHealth(hostPort)`` so per-instance rails light up
+   * independently — a remote being down doesn't touch the local
+   * server's rail item.
+   *
+   * Mutually exclusive with ``presenceClassName`` visually — if
+   * both are set, ``offline`` wins because "this server is down"
+   * is the more important signal.
+   */
+  offline?: boolean;
 }
 
 export function ServerRailItem({
@@ -79,6 +92,7 @@ export function ServerRailItem({
   presenceClassName,
   onClick,
   lockRestingPalette = false,
+  offline = false,
 }: ServerRailItemProps) {
   // Pill height in two parts:
   //   - `pillStatic`  — the height the pill sits at when not being
@@ -159,14 +173,33 @@ export function ServerRailItem({
           className={`absolute left-0 w-1 rounded-r-full bg-[var(--color-text)] transition-all duration-200 ${pillStatic} ${pillHover}`}
         />
         <div
-          className={`relative flex h-12 w-12 items-center justify-center rounded-lg text-lg font-semibold transition-colors duration-200 ${avatarColors}`}
+          className={`relative flex h-12 w-12 items-center justify-center rounded-lg text-lg font-semibold transition-colors duration-200 ${avatarColors} ${
+            // Dim the whole avatar when the instance is offline so the
+            // eye picks it up before reading the dot. Subtle (60%
+            // opacity, grayscale on the content) — not so faded that
+            // the icon disappears, just enough to read as "this one
+            // isn't healthy right now."
+            offline ? "opacity-60 grayscale" : ""
+          }`}
         >
           {children}
-          {presenceClassName && (
+          {offline ? (
+            // Offline dot supersedes the presence dot. Red ringed
+            // with the surface color so it pops on every theme.
+            // aria-label so screen readers get the signal without
+            // needing the visual.
             <span
-              aria-hidden
-              className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[var(--color-surface)] ${presenceClassName}`}
+              aria-label="Offline"
+              role="img"
+              className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-error)]"
             />
+          ) : (
+            presenceClassName && (
+              <span
+                aria-hidden
+                className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[var(--color-surface)] ${presenceClassName}`}
+              />
+            )
           )}
         </div>
       </button>

@@ -15,6 +15,7 @@ import { Hash, Mic } from "lucide-react";
 import { getAuthTokenFromCookies } from "../../../services/user";
 import { listChannels, deleteChannel, updateChannel } from "../../../services/channel";
 import { logger } from "../../../utils/logger";
+import { showApiError } from "../../../services/showApiError";
 import type { Channel } from "../../../models";
 import type { ShowToast } from "../../Toast";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
@@ -131,16 +132,19 @@ export function ChannelsTab({
         }
         setEditingChannel(null);
       } else {
+        // showApiError picks tone/category from the typed AppError
+        // and uses the server's pre-formatted user_message. The
+        // collision case (resource.already_exists / 409) is handled
+        // automatically — the envelope's user_message is "That
+        // already exists." which is correct here. Specific code
+        // checks let us tighten the copy when we know the context.
+        const err = showApiError(showToast, response, {
+          action: "update the channel",
+        });
         logger.ui.error("Failed to update channel", {
           channelId: editingChannel.channel_id,
-          error: response.error,
-        });
-        showToast({
-          message: response.error?.includes('409') || response.error?.toLowerCase().includes('already exists')
-            ? 'A channel with that name already exists. Choose a different name.'
-            : `Failed to update channel: ${response.error || 'Unknown error'}`,
-          tone: 'error',
-          category: response.error?.toLowerCase().includes('already exists') ? 'validation' : 'system',
+          code: err.code,
+          requestId: err.requestId,
         });
       }
     } catch (error) {
@@ -177,11 +181,13 @@ export function ChannelsTab({
         }
         setDeleteConfirmChannel(null);
       } else {
-        logger.ui.error("Failed to delete channel", { channelId: channel.channel_id, error: response.error });
-        showToast({
-          message: `Failed to delete channel: ${response.error || 'Unknown error'}`,
-          tone: 'error',
-          category: 'system',
+        const err = showApiError(showToast, response, {
+          action: "delete the channel",
+        });
+        logger.ui.error("Failed to delete channel", {
+          channelId: channel.channel_id,
+          code: err.code,
+          requestId: err.requestId,
         });
       }
     } catch (error) {

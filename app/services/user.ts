@@ -892,6 +892,21 @@ export const handleAuthentication = async (
     rememberMe,
   });
 
+  // Tell the instance-health tracker this is the user's home host
+  // so subsequent failures against it surface as the more
+  // prominent ``instance.home_unreachable`` code (top-of-app
+  // banner) rather than ``instance.unreachable`` (per-instance
+  // badge). Done after the token write so any auto-fired request
+  // against the home instance from this point on inherits the
+  // home semantics.
+  try {
+    const { instanceHealth } = await import("./instanceHealth");
+    instanceHealth.setHomeHostPort(hostPort);
+  } catch {
+    // instanceHealth import is best-effort — the rest of the auth
+    // flow doesn't depend on it.
+  }
+
   await bootstrapDecentralizedNodeSession(token);
 };
 

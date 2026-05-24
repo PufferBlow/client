@@ -34,7 +34,11 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
 import { Twemoji } from "../../components/ui/Twemoji";
 import { ReactionGlyph } from "../../components/ReactionGlyph";
+import { showApiError } from "../../services/showApiError";
+import { OfflineBanner } from "../../components/OfflineBanner";
 import { useStickers, indexStickersById } from "../../services/useStickers";
+import { useHomeInstanceHealth } from "../../services/instanceHealth";
+import { useNetworkStatus } from "../../services/networkStatus";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
@@ -123,6 +127,11 @@ export default function Dashboard() {
     () => indexStickersById(stickersQuery.data),
     [stickersQuery.data],
   );
+  // Home-instance health drives the rail offline dot. Subscribes
+  // via the instanceHealth singleton so any request anywhere in
+  // the app updates this state — no per-component health
+  // observation needed.
+  const homeInstanceHealth = useHomeInstanceHealth();
   const {
     persistedChannelId,
     persistSelectedChannel,
@@ -509,9 +518,15 @@ export default function Dashboard() {
           response.error?.includes('409') ||
           response.error?.toLowerCase().includes('already exists');
         showToast({
+          // Collision case kept explicit because the dashboard's
+          // inline rename happens during typing and benefits from a
+          // tighter "pick a different name" prompt. Other failures
+          // delegate to the envelope-aware decoder for tone,
+          // category, and a useful pre-formatted message.
           message: isCollision
             ? 'A channel with that name already exists. Choose a different name.'
-            : `Failed to update channel: ${response.error || 'Unknown error'}`,
+            : (response.errorDetails?.userMessage
+                ?? `Failed to update channel: ${response.error || 'Something went wrong.'}`),
           tone: 'error',
           category: isCollision ? 'validation' : 'system',
         });
@@ -1371,11 +1386,11 @@ export default function Dashboard() {
         : await addReaction(hostPort, channelId, messageId, emoji, authToken);
 
       if (!response.success) {
-        showToast({
-          message: `Failed to update reaction: ${response.error || 'Unknown error'}`,
-          tone: "error",
-          category: "system",
-        });
+        // showApiError unwraps the typed envelope, picks tone +
+        // category (validation vs system vs info), and uses the
+        // server's pre-formatted user_message — replaces the
+        // generic "Unknown error" fallback.
+        showApiError(showToast, response, { action: 'update the reaction' });
         return;
       }
 
@@ -1442,11 +1457,7 @@ export default function Dashboard() {
       });
 
       if (!response.success) {
-        showToast({
-          message: `Failed to submit user report: ${response.error || 'Unknown error'}`,
-          tone: "error",
-          category: "system",
-        });
+        showApiError(showToast, response, { action: 'submit the user report' });
         return;
       }
 
@@ -1471,11 +1482,7 @@ export default function Dashboard() {
     });
 
     if (!response.success) {
-      showToast({
-        message: `Failed to submit message report: ${response.error || 'Unknown error'}`,
-        tone: "error",
-        category: "system",
-      });
+      showApiError(showToast, response, { action: 'submit the message report' });
       return;
     }
 
@@ -2546,7 +2553,13 @@ export default function Dashboard() {
   // this means a fast typist isn't blocked by re-evaluations of these
   // derived fields -- React updates them in a low-priority pass.
   const deferredMessageInput = useDeferredValue(messageInput);
+  // Device-level offline gate. The OfflineBanner already covers
+  // the top-of-app surface; here we just prevent the user from
+  // hitting send and seeing a confusing "fetch failed" toast —
+  // disable the button + show the inline helper instead.
+  const isDeviceOnline = useNetworkStatus();
   const canSendMessage =
+    isDeviceOnline &&
     Boolean(selectedChannel) &&
     !isSendingMessage &&
     (Boolean(deferredMessageInput.trim()) || messageAttachments.length > 0);
@@ -3401,8 +3414,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-full overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
-      {/* Left Sidebar Container */}
+    // Outer column wraps the OfflineBanner on top of the original
+    // horizontal flex layout. The banner is zero-height when
+    // healthy (returns null), so this column adds no layout cost
+    // in the common case. When the device is offline or the home
+    // instance is unreachable the banner slots in above the rails
+    // without disturbing their internal scroll behaviour — the
+    // inner `flex-1 min-h-0` keeps the rest of the app filling
+    // the remaining space.
+    <div className="h-full overflow-hidden bg-[var(--color-background)] flex flex-col font-sans select-none relative min-w-0">
+      <OfflineBanner />
+      <div className="flex flex-1 min-h-0 gap-2 p-2">
+        {/* Left Sidebar Container */}
       <div className="flex h-full shrink-0 flex-col gap-2">
         {/* Server and Channel Sidebars Row */}
         <div className="flex min-h-0 flex-1 gap-2">
@@ -3510,6 +3533,15 @@ export default function Dashboard() {
                     setSelectedFriendForDM(null);
                   }}
                   presenceClassName={dmsOpen ? undefined : "bg-[var(--color-success)]"}
+                  // Federation-aware offline indicator: dim + red dot
+                  // when the HOME instance has stopped responding. The
+                  // OfflineBanner already covers the device-offline
+                  // case at the top of the app; this dot is the
+                  // per-instance signal that survives once a future
+                  // build adds multi-instance support (each rail
+                  // entry gets its own dot driven by its own
+                  // ``useInstanceHealth(hostPort)``).
+                  offline={homeInstanceHealth?.kind === "unreachable"}
                 >
                   {serverInfo.avatar_url ? (
                     <ProgressiveImage
@@ -4940,12 +4972,24 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>{selectedChannel ? 'Enter to send' : 'Select a channel to start typing'}</span>
-                  {selectedChannel && <span>Shift+Enter for newline</span>}
-                  {composerAttachmentSummary.count > 0 && (
-                    <span>
-                      {composerAttachmentSummary.count} attachment{composerAttachmentSummary.count === 1 ? '' : 's'} • {composerAttachmentSummary.formattedSize}
+                  {!isDeviceOnline ? (
+                    // Offline replaces the "Enter to send / select a
+                    // channel" helper. Pressing Enter can't
+                    // succeed; setting honest expectations beats
+                    // showing a fetch-failed toast after the fact.
+                    <span className="text-[var(--color-error)]">
+                      You're offline — sends will fail until you reconnect.
                     </span>
+                  ) : (
+                    <>
+                      <span>{selectedChannel ? 'Enter to send' : 'Select a channel to start typing'}</span>
+                      {selectedChannel && <span>Shift+Enter for newline</span>}
+                      {composerAttachmentSummary.count > 0 && (
+                        <span>
+                          {composerAttachmentSummary.count} attachment{composerAttachmentSummary.count === 1 ? '' : 's'} • {composerAttachmentSummary.formattedSize}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
                 {selectedChannel && (
@@ -5650,6 +5694,7 @@ export default function Dashboard() {
         onClose={() => setDeviceSelectorModalOpen(false)}
       />
       </DashboardOverlays>
+      </div>
     </div>
   );
 }
