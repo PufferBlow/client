@@ -270,8 +270,16 @@ export function ChannelSidebarHeader({
                   </Link>
                 )}
 
-                {/* Group 2: notifications. */}
-                <div className="my-2 border-t border-[var(--color-border-secondary)]" />
+                {/* Group 2: notifications.
+                    Separator only renders when Group 1 actually
+                    produced rows above — for viewers without any of
+                    `create_channels` / invite-creation /
+                    `manage_server_settings`, Group 1 collapses to
+                    zero items and a dangling separator at the top
+                    of the menu looks like a layout bug. */}
+                {(canCreateChannels || canCreateInvite || canAccessControlPanel) && (
+                  <div className="my-2 border-t border-[var(--color-border-secondary)]" />
+                )}
 
                 <button
                   onClick={() => {

@@ -1,33 +1,39 @@
 /**
- * LogsTab — live server log viewer with search, level filter, ANSI colour
- * decoding, auto-scroll, and download.
+ * LogsTab — live server log viewer with search, level filter, ANSI
+ * colour decoding, auto-scroll, and download.
  *
- * Live updates: we don't have a server-side WebSocket endpoint for logs yet
- * (only /api/v1/system/logs over POST), so the "stream" here is a short-
- * interval poll (2s) that diffs against the last snapshot and appends new
- * lines. The polling lives in a dedicated effect that the user can pause
- * via the "Live" toggle — kept lightweight so it's safe to leave running.
+ * Visual design intentionally mirrors the in-app client-logs viewer
+ * (`components/LogsViewer.tsx`): compact developer-console chrome
+ * with small filter pills, tight controls row, monospaced 11px
+ * list, and a footer action strip. The server-logs page used to
+ * wear the heavier control-panel-tab chrome (large `controlPanelInputClass`
+ * search, big `controlPanelButtonClass` action buttons), which
+ * looked out of place when an operator is scanning thousands of
+ * loguru lines for a stack trace. Sharing the design with client
+ * logs also means the same muscle memory works in both surfaces.
+ *
+ * Live updates: we don't have a server-side WebSocket endpoint for
+ * logs yet (only /api/v1/system/logs over POST), so the "stream"
+ * here is a short-interval poll (2s) that diffs against the last
+ * snapshot and appends new lines. The polling lives in a dedicated
+ * effect that the user can pause via the "Live" toggle — kept
+ * lightweight so it's safe to leave running.
  *
  * Colouring policy: the panel lives inside the regular control-panel
  * card (same surface tokens as the other tabs — no terminal-chrome
- * decoration). What we DO keep is per-level coloring: lines with INFO
- * render in the info accent, WARNING in the warning accent, ERROR in
- * the error accent, etc. ANSI escape codes that the backend emits get
- * decoded onto the same palette so a coloured logger import keeps its
- * intent (red == error) without us pretending the panel is a real
- * terminal emulator.
+ * decoration). What we DO keep is per-level coloring: lines with
+ * INFO render in the info accent, WARNING in the warning accent,
+ * ERROR in the error accent, etc. ANSI escape codes that the
+ * backend emits get decoded onto the same palette so a coloured
+ * logger import keeps its intent (red == error) without us
+ * pretending the panel is a real terminal emulator.
  */
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { getAuthTokenFromCookies } from "../../../services/user";
 import { getServerLogs } from "../../../services/system";
 import type { ShowToast } from "../../Toast";
-import {
-  cx,
-  controlPanelSectionClass,
-  controlPanelButtonClass,
-  controlPanelInputClass,
-} from "../shared";
+import { cx, controlPanelSectionClass } from "../shared";
 
 // Options for the level dropdown. Centralised so the trigger label
 // and the menu rows can share a single source of truth.
@@ -77,6 +83,141 @@ const ANSI_COLORS: Record<string, string> = {
 
 const POLL_INTERVAL_MS = 2000;
 
+/**
+ * Parsed structure of a server log line.
+ *
+ * The server's file sink (see `pufferblow/cli/common.py::file_log_format`)
+ * emits a positional pipe-delimited format:
+ *
+ *   2024-05-24 12:34:56.789 | INFO     | name:function:line | message
+ *
+ * Request-context lines insert an extras chunk between the level and
+ * the source so the layout is:
+ *
+ *   {ts} | {level} | method={m} path={p} status={s} duration_ms={d}
+ *         client_ip={ip} request_id={rid} | {name}:{fn}:{line} | {message}
+ *
+ * Parsing into this typed shape lets the row renderer compose the
+ * same visual columns as the client-logs viewer — timestamp ·
+ * LEVEL · context-chip · message — so the two surfaces share a
+ * design language. Lines that don't match (multi-line tracebacks,
+ * stdout dumps from third-party libraries) fall back to a
+ * rawText-only render.
+ */
+interface ParsedLogLine {
+  /** Wall-clock timestamp portion (the `HH:mm:ss.SSS` suffix). The
+   *  date is dropped because rows are dense and the date repeats —
+   *  if someone needs the full date they can hover the row or
+   *  download the file. */
+  time: string;
+  /** Severity name, upper-case, no padding. */
+  level: string;
+  /** Short source attribution shown as a chip — derived from
+   *  `name:function:line` but trimmed to keep the chip compact.
+   *  Falls back to the module's last segment. */
+  context: string;
+  /** The actual message body (everything after the last pipe). */
+  message: string;
+  /** Original raw line — kept so the row can fall through to the
+   *  raw renderer if the user clicks expand, and so search /
+   *  copy-line operations still see the full content. */
+  rawText: string;
+  /** Optional request-id (8-char prefix) when this is a request
+   *  log line. Renders as a small monochrome chip next to the
+   *  context. */
+  requestIdShort?: string;
+  /** Optional HTTP status code for request lines — used to colour
+   *  the request-id chip (2xx green, 4xx warning, 5xx red). */
+  requestStatus?: number;
+}
+
+// Regexes pinned to the server's file_log_format. Kept here as
+// module-level constants so the parser doesn't recompile them per
+// call (a busy server can emit hundreds of lines per refresh).
+const LOG_LINE_HEAD_RE =
+  /^(\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2}\.\d{3})) \| (\w+)\s*\|\s*(.*)$/;
+const REQUEST_EXTRAS_RE =
+  /^(?:method=(\S+) )?(?:path=(\S+) )?(?:status=(\S+) )?(?:duration_ms=(\S+) )?(?:client_ip=(\S+) )?(?:request_id=(\S+))?\s*$/;
+
+function parseLogLine(raw: string): ParsedLogLine | null {
+  const head = LOG_LINE_HEAD_RE.exec(raw);
+  if (!head) return null;
+  const time = head[2];
+  const level = head[3].toUpperCase();
+  // The tail after the level is one of two shapes:
+  //   (a) `<name>:<fn>:<line> | <message>`
+  //   (b) `<request-extras> | <name>:<fn>:<line> | <message>`
+  // We split by the first ` | ` and decide based on whether the
+  // first chunk parses as request extras.
+  const tail = head[4];
+  const parts = tail.split(" | ");
+  let source = "";
+  let message = "";
+  let requestIdShort: string | undefined;
+  let requestStatus: number | undefined;
+  if (parts.length >= 3) {
+    // Shape (b): extras | source | message
+    const extras = REQUEST_EXTRAS_RE.exec(parts[0]);
+    if (extras) {
+      const rid = extras[6];
+      if (rid && rid !== "-") requestIdShort = rid.slice(0, 8);
+      const status = extras[3];
+      if (status && status !== "-") {
+        const n = Number.parseInt(status, 10);
+        if (!Number.isNaN(n)) requestStatus = n;
+      }
+    }
+    source = parts[1];
+    // Re-join the rest in case the message itself contained ` | `
+    // (the server message body is free-form text).
+    message = parts.slice(2).join(" | ");
+  } else if (parts.length === 2) {
+    // Shape (a): source | message
+    source = parts[0];
+    message = parts[1];
+  } else {
+    // Unknown — treat the whole tail as the message.
+    message = tail;
+  }
+
+  // Trim the source to its tail segments — full module paths
+  // (`pufferblow.api.dependencies.get_current_user:60`) would
+  // dominate the row. We keep the last module + function + line so
+  // an operator still has the locator info but in compact form.
+  const context = compactSource(source);
+
+  return {
+    time,
+    level,
+    context,
+    message: message.trim(),
+    rawText: raw,
+    requestIdShort,
+    requestStatus,
+  };
+}
+
+function compactSource(source: string): string {
+  const trimmed = source.trim();
+  if (!trimmed) return "";
+  // Drop the line number for a compact chip — operators can still
+  // see it on hover via the row's title attribute.
+  const noLine = trimmed.replace(/:(\d+)$/, "");
+  // Keep last two dotted segments: `pufferblow.api.dependencies:get_current_user`
+  // → `dependencies:get_current_user`. Less noise per row.
+  const colonAt = noLine.lastIndexOf(":");
+  if (colonAt < 0) {
+    // No function part — just a module path. Last segment only.
+    const dotAt = noLine.lastIndexOf(".");
+    return dotAt >= 0 ? noLine.slice(dotAt + 1) : noLine;
+  }
+  const mod = noLine.slice(0, colonAt);
+  const fn = noLine.slice(colonAt + 1);
+  const dotAt = mod.lastIndexOf(".");
+  const modTail = dotAt >= 0 ? mod.slice(dotAt + 1) : mod;
+  return `${modTail}:${fn}`;
+}
+
 // Pick a colour for a log line based on the level token it contains.
 // This is the fallback when the line has no ANSI codes — most plain-
 // text loggers still emit `[INFO]` / `WARNING:` markers that the
@@ -103,24 +244,8 @@ export function LogsTab({
   const [logLevel, setLogLevel] = useState<string>('all');
   const [autoScroll, setAutoScroll] = useState(true);
   const [isLive, setIsLive] = useState(true);
-  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const levelMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close the level dropdown on any click outside its wrapper. Cheap
-  // global listener; only active while the menu is open.
-  useEffect(() => {
-    if (!levelMenuOpen) return;
-    const handleClick = (event: MouseEvent) => {
-      if (!levelMenuRef.current) return;
-      if (!levelMenuRef.current.contains(event.target as Node)) {
-        setLevelMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [levelMenuOpen]);
   // We keep the latest log snapshot in a ref so the polling effect can
   // diff without re-subscribing on every state change.
   const latestLogsRef = useRef<string[]>([]);
@@ -337,220 +462,275 @@ export function LogsTab({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col space-y-6">
-      <div className={cx(controlPanelSectionClass, "flex h-full min-h-0 flex-1 flex-col")}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-lg font-medium text-[var(--color-text)]">Server Logs</h2>
-            <p className="text-[var(--color-text-secondary)] text-sm mt-1">
-              Live server logs with filtering and per-level coloring (INFO / WARNING / ERROR / DEBUG).
+      {/* Outer card stays in the control-panel section chrome so
+          this tab visually slots into the same shell as Stats /
+          Members / Security. Inside, the layout mirrors the
+          client-logs viewer: compact header, filter pills, tight
+          controls row, monospaced list, footer action strip. The
+          shared design language across the two log surfaces is
+          intentional — operators jumping between them shouldn't
+          have to relearn the controls. */}
+      <div className={cx(controlPanelSectionClass, "flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0")}>
+        {/* Header — title + Live/Paused indicator. Same vertical
+            rhythm as the client-logs modal's header row. */}
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-secondary)] px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--color-text)]">
+              Server logs
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              Live tail of the instance's loguru stream. Search, filter,
+              and per-level colouring (INFO / WARNING / ERROR / DEBUG).
             </p>
           </div>
-          <div className="flex items-center space-x-4">
-            <button
-              type="button"
-              onClick={() => setIsLive((v) => !v)}
+          <button
+            type="button"
+            onClick={() => setIsLive((v) => !v)}
+            className={cx(
+              "flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+              isLive
+                ? "border-[var(--color-success)] bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+            )}
+            title={isLive ? "Pause live updates" : "Resume live updates"}
+          >
+            <span
               className={cx(
-                "flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                isLive
-                  ? "border-[var(--color-success)] bg-[var(--color-success)]/15 text-[var(--color-success)]"
-                  : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+                "h-2 w-2 rounded-full",
+                isLive ? "bg-[var(--color-success)] animate-pulse" : "bg-[var(--color-text-muted)]"
               )}
-              title={isLive ? "Pause live updates" : "Resume live updates"}
-            >
-              <span
-                className={cx(
-                  "h-2 w-2 rounded-full",
-                  isLive ? "bg-[var(--color-success)] animate-pulse" : "bg-[var(--color-text-muted)]"
-                )}
-              />
-              {isLive ? "Live" : "Paused"}
-            </button>
-            <div className="text-sm text-[var(--color-text-secondary)]">
-              {filteredLogs.length} / {logs.length} entries
-            </div>
-            {/* Header "Refresh" button removed: the Live-stream poll
-                covers continuous updates, the error branch still has
-                its own Retry button for one-shot recovery, and the
-                top-of-card refresh was effectively redundant. */}
-          </div>
+            />
+            {isLive ? "Live" : "Paused"}
+          </button>
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-4">
-          <div className="flex-1">
+        {/* Filter row — pills for the level filter. Mirrors the
+            client-logs context-tab row visually (small bordered
+            pills, primary fill when active) so the two viewers
+            share the same density and rhythm. We deliberately use
+            pills here rather than a dropdown because the level
+            list is short (5 options) and pills are one-click
+            instead of two. */}
+        <div className="flex flex-col gap-2 border-b border-[var(--color-border-secondary)] px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {LOG_LEVEL_OPTIONS.map((option) => {
+              const active = logLevel === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setLogLevel(option.value)}
+                  className={cx(
+                    "rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    active
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+                      : "border-[var(--color-border-secondary)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Search + auto-scroll row — same shape as the client
+              viewer's controls row. Search expands to fill, the
+              auto-scroll checkbox sits to the right. */}
+          <div className="flex flex-wrap items-center gap-2">
             <input
-              type="text"
-              placeholder="Search logs..."
+              type="search"
+              placeholder="Search log lines…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={controlPanelInputClass}
+              className="min-w-[200px] flex-1 rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
+              aria-label="Search server log lines"
             />
-          </div>
-          {/* Custom level dropdown — replaces the native <select>. A
-              button + popover lets us keep the rounded chrome and
-              hover/focus tokens consistent with the rest of the
-              control panel; the native select inherits OS theming we
-              can't reach with Tailwind tokens. */}
-          <div className="flex items-center space-x-2">
-            <label className="font-medium text-[var(--color-text)]">Level:</label>
-            <div ref={levelMenuRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setLevelMenuOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={levelMenuOpen}
-                className={cx(
-                  "inline-flex w-40 items-center justify-between gap-2 rounded-xl border bg-[var(--color-surface-secondary)] px-3 py-2.5 text-sm transition-colors",
-                  levelMenuOpen
-                    ? "border-[var(--color-primary)] text-[var(--color-text)] ring-2 ring-[var(--color-focus)]"
-                    : "border-[var(--color-border-secondary)] text-[var(--color-text)] hover:border-[var(--color-border)] hover:bg-[var(--color-hover)]"
-                )}
-              >
-                <span className="truncate">
-                  {LOG_LEVEL_OPTIONS.find((opt) => opt.value === logLevel)?.label ?? "All"}
-                </span>
-                <ChevronDown
-                  className={cx(
-                    "h-4 w-4 shrink-0 text-[var(--color-text-secondary)] transition-transform",
-                    levelMenuOpen && "rotate-180"
-                  )}
-                />
-              </button>
-              {levelMenuOpen && (
-                <div
-                  role="listbox"
-                  className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-xl border border-[var(--color-border-secondary)] bg-[var(--color-surface)] py-1 shadow-lg"
-                >
-                  {LOG_LEVEL_OPTIONS.map((option) => {
-                    const isSelected = logLevel === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        onClick={() => {
-                          setLogLevel(option.value);
-                          setLevelMenuOpen(false);
-                        }}
-                        className={cx(
-                          "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors",
-                          isSelected
-                            ? "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
-                            : "text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-                        )}
-                      >
-                        <span>{option.label}</span>
-                        {isSelected && <Check className="h-4 w-4" strokeWidth={3} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Auto-scroll — square checkbox button to match the
-              enable/disable pattern used in Tasks and Security. */}
-          <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={() => setAutoScroll((v) => !v)}
-              className="flex items-center space-x-2 group"
               aria-pressed={autoScroll}
+              className="group inline-flex items-center gap-2 rounded-lg px-1 py-1 text-xs text-[var(--color-text)]"
             >
               <span
                 className={cx(
-                  "flex h-5 w-5 items-center justify-center rounded-md border transition-colors",
+                  "flex h-4 w-4 items-center justify-center rounded-md border transition-colors",
                   autoScroll
                     ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
                     : "border-[var(--color-border)] bg-[var(--color-surface)] text-transparent group-hover:bg-[var(--color-hover)]"
                 )}
               >
-                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                <Check className="h-3 w-3" strokeWidth={3} />
               </span>
-              <span className="text-sm text-[var(--color-text)]">Auto-scroll</span>
+              <span>Auto-scroll</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex space-x-2">
-            <button onClick={downloadLogs} className={controlPanelButtonClass('secondary')}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span>Download Logs</span>
-            </button>
-            <button onClick={clearLogs} className={controlPanelButtonClass('danger')}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              <span>Clear Logs</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Log viewport. Same surface tokens as the rest of the
-            control panel — no terminal-chrome decoration. Per-level
-            coloring lives inside the rows themselves. */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]">
+        {/* Log viewport — `flex-1` + `min-h-0` so it fills the
+            remaining tab height and scrolls internally rather than
+            pushing the action footer off-screen. Same monospaced
+            density as the client-logs list: text-[11px], px-5,
+            py-1.5 per row, border-b separators, hover-bg. */}
+        <div
+          ref={scrollContainerRef}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--color-background)] font-mono text-[11px] leading-relaxed"
+        >
           {loading ? (
             <div className="flex flex-1 items-center justify-center text-[var(--color-text-secondary)]">
               <div className="flex flex-col items-center">
-                <svg className="w-8 h-8 animate-spin mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="mb-3 h-5 w-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <p className="font-mono text-sm">Loading server logs...</p>
+                <p className="text-xs">Loading server logs…</p>
               </div>
             </div>
           ) : error ? (
             <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-[var(--color-error)]">
               <div>
-                <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="mx-auto mb-3 h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <h3 className="font-mono text-lg font-semibold mb-2">Error loading logs</h3>
-                <p className="font-mono text-sm mb-4">{error}</p>
+                <h3 className="text-sm font-semibold">Error loading logs</h3>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{error}</p>
                 <button
                   onClick={loadLogs}
-                  className={controlPanelButtonClass('primary')}
+                  className="mt-3 rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-hover)]"
                 >
                   Retry
                 </button>
               </div>
             </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center py-12 text-[var(--color-text-muted)]">
+              <p className="text-xs">
+                {logs.length === 0
+                  ? "No logs available yet — waiting for output…"
+                  : "No log lines match the current filters."}
+              </p>
+            </div>
           ) : (
-            <div
-              ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[13px] leading-relaxed text-[var(--color-text)]"
-            >
-              {filteredLogs.length === 0 ? (
-                <div className="py-8 text-center text-[var(--color-text-muted)]">
-                  {logs.length === 0 ? (
-                    <p>No logs available yet — waiting for output…</p>
-                  ) : (
-                    <p className="font-mono text-sm">No logs match your search criteria</p>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {filteredLogs.map((line, index) => {
-                    const tint = levelColorForLine(line);
-                    return (
-                      <div
-                        key={index}
-                        className="whitespace-pre-wrap break-words px-1 py-0.5 rounded hover:bg-[var(--color-hover)]"
-                        style={tint ? { color: tint } : undefined}
-                        dangerouslySetInnerHTML={{ __html: ansiToHtml(line) }}
-                      />
-                    );
-                  })}
-                  <div ref={logsEndRef} />
-                </>
-              )}
+            <div>
+              {filteredLogs.map((line, index) => {
+                // Try to render the row as STRUCTURED columns
+                // (timestamp · LEVEL · context · message) matching
+                // the client-logs viewer. Lines that don't match
+                // the file_log_format regex (multi-line tracebacks,
+                // raw stdout from a misbehaving library) fall
+                // through to the legacy raw renderer below — same
+                // ANSI decoding + level-tint, just without the
+                // structured columns.
+                const parsed = parseLogLine(line);
+                if (parsed) {
+                  const levelColor =
+                    parsed.level === "CRITICAL" || parsed.level === "ERROR"
+                      ? LEVEL_COLORS.error
+                      : parsed.level === "WARNING" || parsed.level === "WARN"
+                        ? LEVEL_COLORS.warning
+                        : parsed.level === "SUCCESS"
+                          ? LEVEL_COLORS.success
+                          : parsed.level === "INFO"
+                            ? LEVEL_COLORS.info
+                            : LEVEL_COLORS.debug;
+                  const statusColor =
+                    parsed.requestStatus === undefined
+                      ? undefined
+                      : parsed.requestStatus >= 500
+                        ? LEVEL_COLORS.error
+                        : parsed.requestStatus >= 400
+                          ? LEVEL_COLORS.warning
+                          : LEVEL_COLORS.success;
+                  return (
+                    <div
+                      key={index}
+                      // `title` carries the original line so an
+                      // operator can hover to see the full source
+                      // path / extras that the compact row hides.
+                      title={parsed.rawText}
+                      className="flex flex-wrap items-baseline gap-2 border-b border-[var(--color-border-secondary)] px-5 py-1.5 hover:bg-[var(--color-hover)]"
+                    >
+                      <span className="text-[var(--color-text-muted)]">
+                        {parsed.time}
+                      </span>
+                      <span
+                        className="font-semibold uppercase"
+                        style={{ color: levelColor }}
+                      >
+                        {parsed.level}
+                      </span>
+                      {parsed.context ? (
+                        <span className="rounded bg-[var(--color-surface-secondary)] px-1.5 py-px text-[10px] uppercase tracking-wide text-[var(--color-text-secondary)]">
+                          {parsed.context}
+                        </span>
+                      ) : null}
+                      {parsed.requestIdShort ? (
+                        <span
+                          className="rounded px-1.5 py-px text-[10px] uppercase tracking-wide"
+                          style={{
+                            backgroundColor:
+                              "color-mix(in srgb, var(--color-surface-secondary) 60%, transparent)",
+                            color: statusColor ?? "var(--color-text-secondary)",
+                          }}
+                        >
+                          {parsed.requestStatus !== undefined
+                            ? `${parsed.requestStatus} ${parsed.requestIdShort}`
+                            : parsed.requestIdShort}
+                        </span>
+                      ) : null}
+                      <span
+                        className="break-words text-[var(--color-text)]"
+                        // The message portion of the file format
+                        // doesn't contain ANSI (file sink runs with
+                        // colorize=False), so we render it as plain
+                        // text. The console sink DOES emit ANSI, but
+                        // /api/v1/system/logs reads from the file —
+                        // so this is the safe path.
+                      >
+                        {parsed.message}
+                      </span>
+                    </div>
+                  );
+                }
+                // Fallback — raw ANSI-decoded line. Covers
+                // multi-line tracebacks, third-party stdout, and
+                // any future logger format changes.
+                const tint = levelColorForLine(line);
+                return (
+                  <div
+                    key={index}
+                    className="whitespace-pre-wrap break-words border-b border-[var(--color-border-secondary)] px-5 py-1.5 hover:bg-[var(--color-hover)]"
+                    style={tint ? { color: tint } : undefined}
+                    dangerouslySetInnerHTML={{ __html: ansiToHtml(line) }}
+                  />
+                );
+              })}
+              <div ref={logsEndRef} />
             </div>
           )}
+        </div>
+
+        {/* Footer action strip — same layout as the client-logs
+            modal footer: action buttons on the left, counter +
+            destructive Clear on the right. Borders + padding match
+            the header so the card feels framed top-and-bottom. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border-secondary)] px-5 py-3">
+          <button
+            type="button"
+            onClick={downloadLogs}
+            className="rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+          >
+            Download .log
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px] text-[var(--color-text-muted)]">
+              {filteredLogs.length} / {logs.length}
+            </span>
+            <button
+              type="button"
+              onClick={clearLogs}
+              className="rounded-md border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-hover)]"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       </div>
     </div>

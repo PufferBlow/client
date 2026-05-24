@@ -159,6 +159,54 @@ export const loadFederatedDirectMessages = async (
   });
 };
 
+/**
+ * One conversation entry in the sidebar conversation list. Mirrors
+ * the wire shape returned by `GET /api/v1/dms/conversations`.
+ *
+ * Designed so the sidebar can render a row without a second fetch:
+ * the peer's identity (username, origin, avatar, presence) and the
+ * last message preview / timestamp are all here.
+ */
+export interface DirectMessageConversation {
+  conversation_id: string;
+  peer_user_id: string;
+  peer_username: string;
+  /** Empty string when the peer is local; non-empty federated host. */
+  peer_origin_server: string;
+  peer_avatar_url: string | null;
+  peer_status: string;
+  /** ISO 8601 timestamp of the most recent message. */
+  last_message_at: string | null;
+  /** Pre-truncated (server-side cap: 120 chars) text preview. */
+  last_message_preview: string;
+  /** True when the viewer was the sender of the latest message —
+   *  lets the UI prefix the preview with "You: " for outgoing. */
+  last_message_sender_is_me: boolean;
+}
+
+export interface ListDirectMessageConversationsResponse {
+  status_code: number;
+  conversations: DirectMessageConversation[];
+}
+
+/**
+ * List the viewer's DM conversations, most-recent-first.
+ *
+ * The sidebar consumes this on every chat open to populate the
+ * conversation list. The response is pre-hydrated server-side
+ * (peer info + last-message preview) so the UI doesn't need
+ * follow-up calls per row.
+ */
+export const listDirectMessageConversations = async (
+  authToken: string,
+  instance?: string,
+): Promise<ApiResponse<ListDirectMessageConversationsResponse>> => {
+  const apiClient = createFederationClient(instance);
+  return apiClient.get('/api/v1/dms/conversations', {
+    auth_token: authToken,
+  });
+};
+
 // Backward-compatible aliases while the rest of the client migrates off the
 // older generic naming.
 export const getWebFinger = resolveActorHandle;

@@ -293,6 +293,12 @@ export function DirectMessageView({
   // intent rather than a "insert into draft" intent. Same convention
   // the channel composer uses with `reactionTargetRef`.
   const [reactionTargetId, setReactionTargetId] = useState<string | null>(null);
+  // Tracks which group's hover cluster is currently visible. Same
+  // belt-and-braces pattern the channel chat uses — Tailwind's
+  // ``group-hover:opacity-100`` is the primary, this state is the
+  // backup for environments where pointer events get intercepted
+  // by parent containers.
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -739,6 +745,12 @@ export function DirectMessageView({
                 // below fade in only while the pointer is over the
                 // row — same convention the channel uses.
                 className="group relative flex items-start space-x-3 px-2 py-1 rounded"
+                // State-driven hover backup for the action cluster
+                // (see the cluster comment for why). Cheap; only
+                // fires on mouse boundary crossings, not on every
+                // pointer move.
+                onMouseEnter={() => setHoveredGroupId(head.message_id)}
+                onMouseLeave={() => setHoveredGroupId(null)}
                 onContextMenu={(e) => {
                   // Right-clicking anywhere on the group falls back
                   // to opening the menu on the group head, matching
@@ -859,6 +871,19 @@ export function DirectMessageView({
                     string as the channel-side cluster so the two
                     surfaces feel like one product.
 
+                    Visibility: ``group-hover:opacity-100`` should
+                    handle this on its own, but practice shows it can
+                    be defeated by intermediate elements that steal
+                    pointer events (the messages-area scroll
+                    container, in particular). To be robust we ALSO
+                    track hover with React state — same belt-and-
+                    braces approach the channel cluster uses (see the
+                    ``hoveredMessageId === firstMessage.message_id``
+                    branch in DashboardPage). ``z-10`` keeps the
+                    cluster above continuation-message hover
+                    timestamps and any markdown content with its own
+                    stacking context.
+
                     DM-specific behaviour:
                       - React opens the same EmojiPicker the composer
                         uses; on selection we surface a "coming soon"
@@ -876,7 +901,11 @@ export function DirectMessageView({
                       - More opens the same MessageContextMenu used
                         on right-click, anchored at the cluster
                         button rather than the cursor. */}
-                <div className="absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-0.5 py-0.5 shadow-[var(--shadow-popover)] opacity-0 group-hover:opacity-100 transition-opacity">
+                <div
+                  className={`absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface)] px-0.5 py-0.5 shadow-[var(--shadow-popover)] transition-opacity group-hover:opacity-100 ${
+                    hoveredGroupId === head.message_id ? "opacity-100" : "opacity-0"
+                  }`}
+                >
                   <button
                     type="button"
                     onClick={(e) => {

@@ -547,11 +547,12 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
   );
 
   /**
-   * Resource utilization card. The percent number is the headline (big
-   * + tabular-nums so successive frames don't jitter), the progress bar
-   * gives shape-at-a-glance, the status badge says what to do about it
-   * ("Healthy" vs "Warm" vs "Critical"), and the detail line shows the
-   * actual GB-of-GB so the percent isn't disembodied.
+   * Resource utilization CARD — the wide-screen treatment. Big headline
+   * percent (3xl tabular-nums so successive frames don't jitter),
+   * progress bar for shape-at-a-glance, status badge that names the
+   * severity ("Healthy" / "Warm" / "Critical"), and the GB-of-GB
+   * detail line so the percent isn't disembodied. Used on sm+ where
+   * the 4-column grid has room to breathe.
    */
   const UsageCard = ({
     label,
@@ -590,11 +591,77 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
   };
 
   /**
-   * Disk I/O card. Renders read + write throughputs with up/down arrows
-   * and an "Idle" label below ~50 KB/s so a quiet server doesn't look
-   * broken. Uses the same card chrome as UsageCard so the row reads
-   * as one coherent group rather than "three percent cards + a random
-   * I/O card".
+   * Compact horizontal ROW — the mobile-first treatment. Four resource
+   * cards stacked vertically on a phone screen would push the rest of
+   * the overview off the viewport; we collapse each one into a single-
+   * line composition: small label · inline progress bar · percent ·
+   * tiny status dot.
+   *
+   *   CPU        ━━━━━━━━━━━━━━━━━━━━░░░░░░░░  72%  ●
+   *
+   * Optional ``detailLine`` (memory / storage carry GB-of-GB; CPU
+   * doesn't) sits below the row in muted text so it's reachable
+   * without a tap. The status is communicated by the dot's color —
+   * a full badge would re-introduce the line wrap problem on
+   * narrow widths. Color matches the bar fill for consistency.
+   */
+  const UsageRow = ({
+    label,
+    value,
+    detail,
+  }: {
+    label: string;
+    value: number;
+    detail?: string;
+  }) => {
+    const accent = getUsageTone(value);
+    const status = getUsageStatus(value);
+    return (
+      <div className="rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <span className="w-[4.5rem] shrink-0 text-xs font-medium uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]">
+            {label}
+          </span>
+          {/* Bar takes the remaining width. `flex-1` + `min-w-0` is
+              the standard trick to let it shrink with the parent
+              instead of pushing the % column off-screen. */}
+          <div className="h-1.5 flex-1 min-w-0 overflow-hidden rounded-full bg-[var(--color-background)]">
+            <div
+              className="h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${Math.max(0, Math.min(value, 100))}%`, backgroundColor: accent }}
+            />
+          </div>
+          <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-[var(--color-text)]">
+            {Math.round(value)}%
+          </span>
+          {/* Status dot — color carries the severity. aria-label
+              keeps screen readers in the loop without needing a
+              visible badge. */}
+          <span
+            aria-label={status.label}
+            role="img"
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: accent }}
+          />
+        </div>
+        {detail ? (
+          // Detail line shows the human-readable GB-of-GB context.
+          // Offset by the label column width so it aligns under the
+          // bar — easier to scan than left-aligned.
+          <div className="mt-1 pl-[5.5rem] text-[11px] text-[var(--color-text-secondary)]">
+            {detail}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  /**
+   * Disk I/O CARD — wide-screen treatment. Read + write throughputs
+   * with up/down arrows, same card chrome as UsageCard so the row
+   * reads as one coherent group rather than "three percent cards
+   * plus a random I/O card." `formatThroughput` shows "Idle" below
+   * ~50 KB/s so a quiet server doesn't read as broken.
    */
   const DiskIOCard = ({
     readMbPerSec,
@@ -631,6 +698,44 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
           </span>
           <span className="text-sm font-medium tabular-nums text-[var(--color-text)]">
             {formatThroughput(writeMbPerSec)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  /**
+   * Compact Disk I/O ROW — mobile counterpart to ``DiskIOCard``.
+   * Read + write inline with arrows; matches the visual cadence of
+   * ``UsageRow`` (one line per resource) so the four resources read
+   * as a single tidy list rather than three rows + one card.
+   *
+   *   DISK I/O       ↓ 2.4 MB/s   ↑ 0.5 MB/s
+   */
+  const DiskIORow = ({
+    readMbPerSec,
+    writeMbPerSec,
+  }: {
+    readMbPerSec: number;
+    writeMbPerSec: number;
+  }) => (
+    <div className="rounded-lg border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="w-[4.5rem] shrink-0 text-xs font-medium uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]">
+          Disk I/O
+        </span>
+        <div className="flex flex-1 min-w-0 items-center justify-end gap-4 text-sm tabular-nums text-[var(--color-text)]">
+          <span className="flex items-center gap-1 text-[var(--color-text-secondary)]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+            <span className="font-medium text-[var(--color-text)]">{formatThroughput(readMbPerSec)}</span>
+          </span>
+          <span className="flex items-center gap-1 text-[var(--color-text-secondary)]">
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+            <span className="font-medium text-[var(--color-text)]">{formatThroughput(writeMbPerSec)}</span>
           </span>
         </div>
       </div>
@@ -744,29 +849,38 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
             </div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className={controlPanelInsetClass}>
-                <div className="mb-5 flex items-center justify-between gap-3">
-                  <div>
+              {/* Inset padding tightens on mobile (p-4) and opens back
+                  up on sm+ (p-5) so the compact rows below don't
+                  feel cramped against the inset border. */}
+              <div className={cx(controlPanelInsetClass, "p-4 sm:p-5")}>
+                {/* Header layout switches at sm: stacked (title then
+                    badge on its own line) on mobile so the badge
+                    can't bump the title onto two lines; side-by-side
+                    on sm+ where there's horizontal room. */}
+                <div className="mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="min-w-0">
                     <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--color-text)]">
                       Live telemetry
                     </h3>
-                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                    <p className="mt-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
                       Host CPU, memory, storage, and I/O. Status is the
                       severity of the worst resource right now.
                     </p>
                   </div>
-                  {/* Single status badge driven by the worst resource. */}
+                  {/* Single status badge driven by the worst resource.
+                      `self-start` keeps it from stretching to the
+                      header column width on mobile. */}
                   {(() => {
                     if (usageError) {
                       return (
-                        <span className={controlPanelBadgeClass("danger")}>
+                        <span className={cx(controlPanelBadgeClass("danger"), "self-start")}>
                           Telemetry offline
                         </span>
                       );
                     }
                     if (usageLoading || !serverUsage) {
                       return (
-                        <span className={controlPanelBadgeClass("info")}>Collecting…</span>
+                        <span className={cx(controlPanelBadgeClass("info"), "self-start")}>Collecting…</span>
                       );
                     }
                     const worst = Math.max(
@@ -776,7 +890,7 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
                     );
                     const overall = getUsageStatus(worst);
                     return (
-                      <span className={controlPanelBadgeClass(overall.tone)}>
+                      <span className={cx(controlPanelBadgeClass(overall.tone), "self-start")}>
                         {overall.tone === "success"
                           ? "All systems healthy"
                           : overall.tone === "info"
@@ -811,13 +925,46 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
                     </div>
                   </div>
                 ) : serverUsage ? (
-                  <div className="space-y-4">
-                    {/* Four-card row: three resource cards (CPU /
-                        Memory / Storage) each with their own status
-                        badge + percent + bar + GB-of-GB detail; one
-                        I/O card with read/write throughput. The row
-                        collapses to 2 columns on md, 1 on mobile. */}
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-3 sm:space-y-4">
+                    {/* TWO renderings, mutually visible via Tailwind
+                        breakpoints — no JS branching needed:
+
+                          * < sm — compact one-line ``UsageRow`` /
+                            ``DiskIORow`` items stacked. Each is ~36px
+                            tall, so the whole strip fits in ~150px
+                            and leaves the rest of the overview
+                            visible without a scroll.
+                          * ≥ sm — the existing card grid (`md:2-col`,
+                            `xl:4-col`). Each card has the big 3xl
+                            percentage and the GB-of-GB detail.
+
+                        Same data either way; the chrome is what
+                        differs. Both surfaces share the same status /
+                        accent helpers so the colors stay consistent
+                        between viewports — same red dot on the row
+                        view IS the same accent on the card bar. */}
+                    <div className="space-y-2 sm:hidden">
+                      <UsageRow
+                        label="CPU"
+                        value={serverUsage.cpu_percent}
+                      />
+                      <UsageRow
+                        label="Memory"
+                        value={serverUsage.ram_percent}
+                        detail={`${serverUsage.ram_used_gb} GB of ${serverUsage.ram_total_gb} GB`}
+                      />
+                      <UsageRow
+                        label="Storage"
+                        value={serverUsage.storage_percent}
+                        detail={`${serverUsage.storage_used_gb} GB of ${serverUsage.storage_total_gb} GB`}
+                      />
+                      <DiskIORow
+                        readMbPerSec={serverUsage.disk_read_mb_per_sec}
+                        writeMbPerSec={serverUsage.disk_write_mb_per_sec}
+                      />
+                    </div>
+
+                    <div className="hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
                       <UsageCard
                         label="CPU"
                         value={serverUsage.cpu_percent}
@@ -839,16 +986,18 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
                       />
                     </div>
 
-                    {/* Footer strip: uptime + last-updated. Dropped the
-                        old "Messages/hour and channel utilization" line
-                        -- those numbers don't belong in a host-health
-                        panel; they're already shown in the metric cards
-                        above. Activity is about people, telemetry is
-                        about the box; mixing them was confusing. */}
-                    <div className={controlPanelQuietClass}>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-[var(--color-text-secondary)]">
-                        <span className="flex items-center gap-2">
-                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    {/* Footer strip — uptime + last-updated. On mobile
+                        we drop the heavy `controlPanelQuietClass`
+                        chrome (rounded-2xl + 20px padding) for a thin
+                        rule + tight padding so the footer doesn't
+                        outweigh the compact rows above it. The
+                        labels also shorten ("Uptime" stays, "Updated"
+                        becomes a relative shorthand) so the line
+                        doesn't wrap on narrow phones. */}
+                    <div className="rounded-lg border border-[var(--color-border-secondary)] bg-[color:color-mix(in_srgb,var(--color-surface-secondary)_72%,var(--color-background)_28%)] px-3 py-2 sm:rounded-[1.25rem] sm:px-5 sm:py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
+                        <span className="flex items-center gap-1.5 sm:gap-2">
+                          <svg className="h-3.5 w-3.5 text-[var(--color-text-tertiary)] sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           Uptime{" "}
@@ -856,8 +1005,8 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
                             {formatUptime(serverUsage.uptime_seconds)}
                           </span>
                         </span>
-                        <span className="flex items-center gap-2">
-                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <span className="flex items-center gap-1.5 sm:gap-2">
+                          <svg className="h-3.5 w-3.5 text-[var(--color-text-tertiary)] sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
                           Updated{" "}

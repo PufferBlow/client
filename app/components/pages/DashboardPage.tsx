@@ -26,6 +26,7 @@ import {
   DirectMessagesPanel,
   type SelectedFriendForDM,
 } from "../../components/dashboard-page/DirectMessagesPanel";
+import { DirectMessageConversationsPanel } from "../../components/dashboard-page/DirectMessageConversationsPanel";
 import { DirectMessageView } from "../dashboard-page/DirectMessageView";
 import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
@@ -3591,10 +3592,16 @@ export default function Dashboard() {
               views. */}
           <ChannelPanel>
             {dmsOpen ? (
-              <DirectMessagesPanel
-                showToast={showToast}
+              // Sidebar in DM mode: list of conversations, not the
+              // Friends tabs. Clicking a conversation row sets
+              // selectedFriendForDM, which makes the main pane
+              // render DirectMessageView. The "Friends" button in
+              // the panel header clears the selection so the main
+              // pane swaps to the Friends/Pending/Blocked tabs.
+              <DirectMessageConversationsPanel
                 selectedFriendForDM={selectedFriendForDM}
                 onOpenDirectMessage={setSelectedFriendForDM}
+                onShowFriends={() => setSelectedFriendForDM(null)}
               />
             ) : (
               <>
@@ -3698,9 +3705,10 @@ export default function Dashboard() {
             instead until the full DM surface lands. */}
         {dmsOpen ? (
           selectedFriendForDM ? (
-            // A friend was clicked in the Friends panel — swap the
-            // main pane to the DM chat view. Back button on the view
-            // clears the selection, returning us to the placeholder.
+            // A conversation is selected (clicked from the sidebar
+            // list OR from the Friends panel) — main pane is the
+            // DM chat view. Back button clears the selection,
+            // returning the user to the Friends panel below.
             <DirectMessageView
               peerUserId={selectedFriendForDM.userId}
               peerHandle={selectedFriendForDM.handle}
@@ -3709,30 +3717,22 @@ export default function Dashboard() {
               showToast={showToast}
             />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
-              <div
-                className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
-                aria-hidden="true"
-              >
-                <svg
-                  className="h-7 w-7 text-[var(--color-text-secondary)]"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.75}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
+            // No conversation selected → main pane shows the
+            // Friends / Pending / Blocked tabs. Sidebar swap moved
+            // the convo list to the LEFT; this is the new "what do
+            // you see when no chat is open" surface. Centered with
+            // a max-width so the Friends rows don't stretch into
+            // an unusable wide layout on large monitors — the
+            // chrome inside DirectMessagesPanel was designed for
+            // a sidebar-width container.
+            <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
+              <div className="mx-auto w-full max-w-2xl">
+                <DirectMessagesPanel
+                  showToast={showToast}
+                  selectedFriendForDM={selectedFriendForDM}
+                  onOpenDirectMessage={setSelectedFriendForDM}
+                />
               </div>
-              <h2 className="text-base font-semibold text-[var(--color-text)]">
-                Direct messages
-              </h2>
-              <p className="mt-2 max-w-[40ch] text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                Pick a friend from the list on the left to start chatting, or
-                head back into channel view via the rail.
-              </p>
             </div>
           )
         ) : (
