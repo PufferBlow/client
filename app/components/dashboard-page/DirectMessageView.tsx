@@ -56,6 +56,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  editDirectMessage,
   loadDirectMessages,
   sendDirectMessage,
   type DirectMessagePayload,
@@ -76,6 +77,8 @@ import { MarkdownRenderer } from "../MarkdownRenderer";
 import { MessageEmbeds } from "../MessageEmbeds";
 import { AttachmentGrid } from "../AttachmentBubble";
 import { ProgressiveImage } from "../ui/ProgressiveImage";
+import { EditedTag } from "../EditedTag";
+import { InlineMessageEditor } from "../InlineMessageEditor";
 import type { MessageAttachment } from "../../models/Message";
 import type { ShowToast } from "../Toast";
 
@@ -254,7 +257,16 @@ export function DirectMessageView({
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (args: { text: string; attachments: string[]; stickerIds?: string[] }) => {
+    mutationFn: async (args: {
+      text: string;
+      // Typed attachment objects with MIME/filename hints so the
+      // renderer can pick the right bubble at read time (images
+      // render as image bubbles, videos as video bubbles, etc).
+      // The previous URL-only shape forced the renderer to guess
+      // from the URL extension — broke for hashed storage URLs.
+      attachments: Array<{ url: string; filename: string; type: string; size: number }>;
+      stickerIds?: string[];
+    }) => {
       if (!hostPort || !authToken) throw new Error("Not signed in.");
       const response = await sendDirectMessage(
         {
@@ -299,6 +311,8 @@ export function DirectMessageView({
   // backup for environments where pointer events get intercepted
   // by parent containers.
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
+  // Which DM message is being edited inline. Null = no editor open.
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -394,14 +408,35 @@ export function DirectMessageView({
    * owner uploads) so the user isn't left guessing why their
    * attachment didn't go through.
    */
-  const uploadOne = async (file: File): Promise<string | null> => {
+  /**
+   * Upload one file via the storage endpoint and return the typed
+   * attachment dict (`{url, filename, type, size}`) for inclusion
+   * in the DM payload.
+   *
+   * Returns the FULL response shape — not just the URL — so the
+   * renderer downstream has the MIME hint it needs to pick the
+   * right bubble. The previous URL-only return was the root cause
+   * of "images render as a generic file" in DMs: the storage URL
+   * `/storage/<hash>` has no extension for the client renderer to
+   * sniff, so without `type` riding along it fell through to the
+   * default "application/octet-stream" bucket.
+   */
+  const uploadOne = async (
+    file: File,
+  ): Promise<{ url: string; filename: string; type: string; size: number } | null> => {
     if (!hostPort || !authToken) return null;
     const formData = new FormData();
     formData.append("file", file);
     formData.append("directory", "uploads");
     try {
       const apiClient = createApiClient(hostPort);
-      const response = await apiClient.post<{ status_code: number; url: string }>(
+      const response = await apiClient.post<{
+        status_code: number;
+        url: string;
+        filename?: string;
+        type?: string;
+        size?: number;
+      }>(
         `/api/v1/storage/upload?auth_token=${encodeURIComponent(authToken)}`,
         formData,
       );
@@ -422,7 +457,16 @@ export function DirectMessageView({
         }
         return null;
       }
-      return response.data.url;
+      return {
+        url: response.data.url,
+        // Server-known filename / MIME / size are populated when
+        // the storage manager could parse them. Defensive fallback
+        // to the File object's own fields keeps the typed shape
+        // intact on the rare case the server skipped enrichment.
+        filename: response.data.filename || file.name,
+        type: response.data.type || file.type || "application/octet-stream",
+        size: response.data.size ?? file.size ?? 0,
+      };
     } catch (err) {
       showToast({
         message:
@@ -442,8 +486,10 @@ export function DirectMessageView({
     if (!text && pendingAttachments.length === 0) return;
 
     // Upload pending files first; bail if any fail (the upload helper
-    // already surfaced a toast).
-    let attachmentUrls: string[] = [];
+    // already surfaced a toast). Returned objects carry the typed
+    // `{url, filename, type, size}` shape so the server can persist
+    // the MIME hint for the renderer to use on read.
+    let attachmentObjects: Array<{ url: string; filename: string; type: string; size: number }> = [];
     if (pendingAttachments.length > 0) {
       setIsUploading(true);
       try {
@@ -454,14 +500,14 @@ export function DirectMessageView({
           setIsUploading(false);
           return;
         }
-        attachmentUrls = results as string[];
+        attachmentObjects = results as Array<{ url: string; filename: string; type: string; size: number }>;
       } finally {
         setIsUploading(false);
       }
     }
 
     sendMutation.mutate(
-      { text, attachments: attachmentUrls },
+      { text, attachments: attachmentObjects },
       {
         onSuccess: () => {
           // Clear preview URLs only after a successful send so the
@@ -593,6 +639,60 @@ export function DirectMessageView({
     setDraft((prev) => (prev ? prev + snippet : snippet.trimStart()));
     setIsEmojiPickerOpen(false);
     requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  /**
+   * Persist an inline DM edit. Same flow as the channel side —
+   * PATCH the body, patch the local message cache with the
+   * post-edit shape so the row updates without waiting for the
+   * next poll.
+   */
+  const handleSaveDmEdit = async (messageId: string, newBody: string) => {
+    if (!hostPort || !authToken) {
+      showToast({
+        message: "You don't appear to be signed in.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+    try {
+      const response = await editDirectMessage(authToken, messageId, newBody, hostPort);
+      if (!response.success || !response.data) {
+        showToast({
+          message: response.error || "Couldn't save the edit.",
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      // Patch the react-query cache directly so the message row
+      // re-renders with the new body + edit metadata immediately.
+      const patchData = response.data;
+      queryClient.setQueryData(messagesQueryKey, (old: typeof messagesQuery.data | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.map((m) =>
+            m.message_id === messageId
+              ? {
+                  ...m,
+                  message: patchData.message,
+                  edit_count: patchData.edit_count,
+                  last_edited_at: patchData.last_edited_at,
+                }
+              : m,
+          ),
+        };
+      });
+      setEditingMessageId(null);
+    } catch (err) {
+      showToast({
+        message: err instanceof Error ? err.message : "Couldn't save the edit.",
+        tone: "error",
+        category: "system",
+      });
+    }
   };
 
   // ── Context menu handlers ───────────────────────────────────────
@@ -850,14 +950,33 @@ export function DirectMessageView({
                               Replies are not supported on the DM
                               wire surface — `parseReplyContext` is
                               skipped here. */}
-                          <MarkdownRenderer
-                            content={msg.message || ""}
-                            className="text-[var(--color-text)]"
-                          />
-                          <MessageEmbeds content={msg.message || ""} />
+                          {editingMessageId === msg.message_id ? (
+                            // Inline edit path. Same component the
+                            // channel chat uses so the edit affordance
+                            // is consistent across surfaces.
+                            <InlineMessageEditor
+                              initialBody={msg.message || ""}
+                              onCancel={() => setEditingMessageId(null)}
+                              onSave={async (next) => {
+                                await handleSaveDmEdit(msg.message_id, next);
+                              }}
+                            />
+                          ) : (
+                            <>
+                              <MarkdownRenderer
+                                content={msg.message || ""}
+                                className="text-[var(--color-text)]"
+                              />
+                              <EditedTag
+                                count={msg.edit_count ?? 0}
+                                at={msg.last_edited_at ?? null}
+                              />
+                              <MessageEmbeds content={msg.message || ""} />
 
-                          {attachments.length > 0 && (
-                            <AttachmentGrid attachments={attachments} />
+                              {attachments.length > 0 && (
+                                <AttachmentGrid attachments={attachments} />
+                              )}
+                            </>
                           )}
                         </div>
                       );
@@ -1237,28 +1356,38 @@ export function DirectMessageView({
           omitted — DMs aren't subject to channel moderator powers
           (they're between two people), and editing isn't supported
           on the wire surface yet. */}
-      {contextMenu && (
-        <MessageContextMenu
-          isOpen
-          position={contextMenu.position}
-          onClose={closeContextMenu}
-          onCopyMessage={() => handleCopyMessage(contextMenu.message)}
-          onCopyMessageId={() => handleCopyMessageId(contextMenu.message)}
-          onDelete={handleDeleteDmMessage}
-          onReportMessage={handleReportDmMessage}
-          isSelf={
-            !!currentUser &&
-            (contextMenu.message.sender_user_id === currentUser.user_id ||
-              contextMenu.message.sender_id === currentUser.user_id)
-          }
-          canDelete={
-            !!currentUser &&
-            (contextMenu.message.sender_user_id === currentUser.user_id ||
-              contextMenu.message.sender_id === currentUser.user_id)
-          }
-          canReport
-        />
-      )}
+      {contextMenu && (() => {
+        const isOwn =
+          !!currentUser &&
+          (contextMenu.message.sender_user_id === currentUser.user_id ||
+            contextMenu.message.sender_id === currentUser.user_id);
+        return (
+          <MessageContextMenu
+            isOpen
+            position={contextMenu.position}
+            onClose={closeContextMenu}
+            onCopyMessage={() => handleCopyMessage(contextMenu.message)}
+            onCopyMessageId={() => handleCopyMessageId(contextMenu.message)}
+            onEdit={
+              // Edit Message is wired to PATCH /api/v1/dms/messages/{id}.
+              // Capability matches Delete — only the original author
+              // can edit. Opens the inline editor on the row.
+              isOwn
+                ? () => {
+                    setEditingMessageId(contextMenu.message.message_id);
+                    closeContextMenu();
+                  }
+                : undefined
+            }
+            canEdit={isOwn}
+            onDelete={handleDeleteDmMessage}
+            onReportMessage={handleReportDmMessage}
+            isSelf={isOwn}
+            canDelete={isOwn}
+            canReport
+          />
+        );
+      })()}
     </div>
   );
 }

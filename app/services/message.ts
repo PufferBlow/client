@@ -159,8 +159,37 @@ export const sendMessage = async (
   return apiClient.post<SendMessageResponse>(`/api/v1/channels/${channelId}/send_message`, formData);
 };
 
-export const updateMessage = async (_hostPort: string, _messageId: string, _content: string, _authToken: string): Promise<ApiResponse<Message>> => {
-  return unsupportedMessageOperation<Message>('Editing messages');
+export interface EditMessageResponse {
+  status_code: number;
+  message_id: string;
+  message: string;
+  edit_count: number;
+  last_edited_at: string;
+}
+
+/**
+ * Edit a channel message's body.
+ *
+ * Only the original sender can edit — server returns 403 otherwise.
+ * The post-edit shape (new body + edit_count + last_edited_at)
+ * comes back so the caller can patch its local message cache
+ * without a re-fetch.
+ */
+export const updateMessage = async (
+  hostPort: string,
+  messageId: string,
+  content: string,
+  authToken: string,
+  channelId: string,
+): Promise<ApiResponse<EditMessageResponse>> => {
+  const apiClient = createApiClient(hostPort);
+  return apiClient.patch<EditMessageResponse>(
+    `/api/v1/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+    {
+      auth_token: authToken,
+      message: content,
+    },
+  );
 };
 
 export const deleteMessage = async (

@@ -68,6 +68,11 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [currentMenuMessageId, setCurrentMenuMessageId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  // The message currently being edited inline. Null when no
+  // editor is open. Driven by the context-menu "Edit Message"
+  // action and the per-row inline editor toggles it back to null
+  // on save / cancel.
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({
     isOpen: false,
@@ -524,6 +529,8 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     setCurrentMenuMessageId,
     hoveredMessageId,
     setHoveredMessageId,
+    editingMessageId,
+    setEditingMessageId,
     membersListVisible,
     setMembersListVisible,
     userContextMenu,

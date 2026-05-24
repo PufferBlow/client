@@ -37,12 +37,33 @@ export interface FollowRemoteActorResponse {
   result: Record<string, unknown>;
 }
 
+/**
+ * Typed attachment payload accepted by `POST /api/v1/dms/send`.
+ *
+ * Two shapes the server accepts (mixable in the same array):
+ *   * Plain URL string — legacy / minimal shape; renderer infers
+ *     MIME from the URL extension. Fine for `/storage/<hash>.png`
+ *     but breaks for hash-only URLs where the renderer can't
+ *     tell an image from a generic file.
+ *   * Typed object — `{url, filename, type, size}` carrying the
+ *     MIME hint the renderer needs. The storage upload response
+ *     already includes filename + type + size, so it's cheap to
+ *     keep them around end-to-end.
+ *
+ * New code should ALWAYS send the typed object. The string shape
+ * stays in the type union for back-compat with any older client
+ * builds still calling this service.
+ */
+export type DirectMessageAttachmentInput =
+  | string
+  | { url: string; filename?: string; type?: string; size?: number; lqip_url?: string | null };
+
 export interface SendDirectMessageRequest {
   auth_token: string;
   peer: string;
   message: string;
   sent_at?: string;
-  attachments?: string[];
+  attachments?: DirectMessageAttachmentInput[];
   /** Sticker IDs from the instance library. Server resolves to URLs
    *  and merges into `attachments` before federating. */
   sticker_ids?: string[];
@@ -62,6 +83,11 @@ export interface DirectMessagePayload {
   message: string;
   sent_at: string;
   attachments?: unknown[];
+  /** Edit metadata. ``edit_count === 0`` means never edited; the
+   *  renderer's "edited" / "edited N times" badge only shows when
+   *  this is > 0. ``last_edited_at`` is null in the unedited case. */
+  edit_count?: number;
+  last_edited_at?: string | null;
   /** Legacy field — older builds shipped the sender's username here.
    *  Server now populates `sender_username` instead; keep this for
    *  fall-through compatibility when consuming caches written by
@@ -188,6 +214,33 @@ export interface ListDirectMessageConversationsResponse {
   status_code: number;
   conversations: DirectMessageConversation[];
 }
+
+export interface EditDirectMessageResponse {
+  status_code: number;
+  message_id: string;
+  message: string;
+  edit_count: number;
+  last_edited_at: string;
+}
+
+/**
+ * Edit a DM message's body. Only the original sender can edit;
+ * the server returns 403 otherwise. The post-edit shape (new
+ * body + edit_count + last_edited_at) comes back so the client
+ * can update its cache without a separate fetch.
+ */
+export const editDirectMessage = async (
+  authToken: string,
+  messageId: string,
+  newMessage: string,
+  instance?: string,
+): Promise<ApiResponse<EditDirectMessageResponse>> => {
+  const apiClient = createFederationClient(instance);
+  return apiClient.patch(`/api/v1/dms/messages/${encodeURIComponent(messageId)}`, {
+    auth_token: authToken,
+    message: newMessage,
+  });
+};
 
 /**
  * List the viewer's DM conversations, most-recent-first.

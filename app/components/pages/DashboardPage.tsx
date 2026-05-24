@@ -35,6 +35,9 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
 import { Twemoji } from "../../components/ui/Twemoji";
 import { ReactionGlyph } from "../../components/ReactionGlyph";
+import { EditedTag } from "../../components/EditedTag";
+import { InlineMessageEditor } from "../../components/InlineMessageEditor";
+import { updateMessage } from "../../services/message";
 import { showApiError } from "../../services/showApiError";
 import { OfflineBanner } from "../../components/OfflineBanner";
 import { useStickers, indexStickersById } from "../../services/useStickers";
@@ -163,6 +166,8 @@ export default function Dashboard() {
     setCurrentMenuMessageId,
     hoveredMessageId,
     setHoveredMessageId,
+    editingMessageId,
+    setEditingMessageId,
     membersListVisible,
     setMembersListVisible,
     userContextMenu,
@@ -1323,6 +1328,73 @@ export default function Dashboard() {
     );
   };
 
+  /**
+   * Save an inline message edit.
+   *
+   * Persists via PATCH /api/v1/channels/{cid}/messages/{mid}, then
+   * patches the local message cache with the post-edit shape
+   * (new body + edit_count + last_edited_at) so the row re-renders
+   * immediately without waiting for the WS broadcast. Closes the
+   * editor regardless of success — on failure a toast surfaces
+   * the reason and the user can retry from the menu.
+   */
+  const handleSaveMessageEdit = useCallback(
+    async (messageId: string, newBody: string, channelId: string | null | undefined) => {
+      if (!channelId) {
+        showToast({
+          message: "Couldn't edit — this message isn't tied to a channel.",
+          tone: "error",
+          category: "validation",
+        });
+        return;
+      }
+      const authToken = getAuthTokenFromCookies() || "";
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!authToken || !hostPort) {
+        showToast({
+          message: "You don't appear to be signed in.",
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      try {
+        const response = await updateMessage(hostPort, messageId, newBody, authToken, channelId);
+        if (!response.success || !response.data) {
+          showApiError(showToast, response, { action: "edit the message" });
+          return;
+        }
+        // Patch the local cache. Other viewers receive the WS
+        // ``message_edited`` broadcast; this is the optimistic
+        // path for the editor's own client.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === messageId
+              ? {
+                  ...m,
+                  message: response.data!.message,
+                  edit_count: response.data!.edit_count,
+                  last_edited_at: response.data!.last_edited_at,
+                }
+              : m,
+          ),
+        );
+        setEditingMessageId(null);
+      } catch (error) {
+        logger.ui.error("Unexpected error editing message", { error });
+        showToast({
+          message: "An unexpected error occurred while saving the edit.",
+          tone: "error",
+          category: "system",
+        });
+      }
+    },
+    // setMessages, setEditingMessageId, showToast are from the
+    // surrounding closure; deps array names what changes meaningfully.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showToast],
+  );
+
   // Message action handlers
   const handleMessageReply = (messageId: string | null) => {
     if (!messageId) {
@@ -1522,6 +1594,17 @@ export default function Dashboard() {
       // Report all messages in the group
       setReportModal({ isOpen: true, targetType: 'message', messages: messageIds });
     };
+
+    // Pin the menu's "current message" to the group head so the
+    // single-message actions (Reply, Edit, Delete, Add Reaction)
+    // have something to target. Without this, ``onReply`` /
+    // ``onEdit`` etc. fire with ``currentMenuMessageId === null``
+    // and bail silently — the bug the user reported as "Reply
+    // doesn't work from the right-click menu." The hover three-dot
+    // button already set this; right-click did not.
+    if (messageIds.length > 0) {
+      setCurrentMenuMessageId(messageIds[0]);
+    }
 
     setMessageContextMenu({
       isOpen: true,
@@ -4163,11 +4246,29 @@ export default function Dashboard() {
                               //     strip renders inline above the
                               //     body — same logic the original
                               //     site used.
+                              // Inline edit path: when this row is
+                              // being edited, replace the body with a
+                              // textarea + Save/Cancel. The reply
+                              // context (if any) stays visible above
+                              // so the user keeps the "replying to..."
+                              // anchor while typing.
+                              if (editingMessageId === message.message_id) {
+                                return (
+                                  <InlineMessageEditor
+                                    initialBody={message.message}
+                                    onCancel={() => setEditingMessageId(null)}
+                                    onSave={async (next) => {
+                                      await handleSaveMessageEdit(message.message_id, next, message.channel_id);
+                                    }}
+                                  />
+                                );
+                              }
                               const parsed = parseReplyContext(message.message);
                               if (!parsed) {
                                 return (
                                   <>
                                     <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                                    <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={message.message} />
                                   </>
                                 );
@@ -4176,6 +4277,7 @@ export default function Dashboard() {
                                 return (
                                   <>
                                     <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                    <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={parsed.body} />
                                   </>
                                 );
@@ -4201,6 +4303,7 @@ export default function Dashboard() {
                                     onJump={scrollToMessage}
                                   />
                                   <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                  <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                   <MessageEmbeds content={parsed.body} />
                                 </>
                               );
@@ -5190,12 +5293,19 @@ export default function Dashboard() {
               messageContextMenu.onCopyLink ?? (() => handleMessageCopy(currentMenuMessageId))
             }
             copyMessageIdLabel={messageContextMenu.customCopyLinkLabel}
-            // Edit Message is also intentionally unwired right now —
-            // the server hasn't shipped a message-edit endpoint yet
-            // (`updateMessage` in services/message.ts is a stub). The
-            // option will come back when the API lands. Same policy
-            // as Reply-in-DM above: don't surface non-working options.
-            onEdit={undefined}
+            // Edit Message — now backed by PATCH
+            // /api/v1/channels/{cid}/messages/{mid}. The endpoint
+            // re-encrypts the new body, bumps edit_count, and
+            // stamps last_edited_at; the WS broadcast updates
+            // other viewers. Clicking the row opens an inline
+            // editor over the message bubble (see editingMessageId
+            // state + the per-row branch in the message list).
+            onEdit={() => {
+              if (currentMenuMessageId) {
+                setEditingMessageId(currentMenuMessageId);
+                setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+              }
+            }}
             onDelete={() => void handleMessageDelete(currentMenuMessageId)}
             onReportMessage={
               messageContextMenu.onReport ?? (() => handleMessageReport(currentMenuMessageId))

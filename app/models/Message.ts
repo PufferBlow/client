@@ -45,6 +45,15 @@ export interface Message {
   /** Hashed version of the message content for security/storage */
   hashed_message: string;
 
+  /** Number of times this message has been edited. ``0`` means
+   *  never edited; the client renders an "edited" / "edited N
+   *  times" badge when this is > 0. */
+  edit_count?: number;
+
+  /** ISO 8601 timestamp of the most recent edit, or null if the
+   *  message has never been edited. */
+  last_edited_at?: string | null;
+
   /** ID of the user who sent the message */
   sender_user_id: string;
 
