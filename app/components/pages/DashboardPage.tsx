@@ -3803,19 +3803,25 @@ export default function Dashboard() {
             // No conversation selected → main pane shows the
             // Friends / Pending / Blocked tabs. Sidebar swap moved
             // the convo list to the LEFT; this is the new "what do
-            // you see when no chat is open" surface. Centered with
-            // a max-width so the Friends rows don't stretch into
-            // an unusable wide layout on large monitors — the
-            // chrome inside DirectMessagesPanel was designed for
-            // a sidebar-width container.
-            <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
-              <div className="mx-auto w-full max-w-2xl">
-                <DirectMessagesPanel
-                  showToast={showToast}
-                  selectedFriendForDM={selectedFriendForDM}
-                  onOpenDirectMessage={setSelectedFriendForDM}
-                />
-              </div>
+            // you see when no chat is open" surface.
+            //
+            // Full-width treatment: the panel now stretches the
+            // entire main pane so the Friends/Pending/Blocked tab
+            // strip spans the full container (each tab's `flex-1`
+            // distributes the width evenly). The previous
+            // `max-w-2xl` cap was a defensive choice from when
+            // this same component rendered as a sidebar; in the
+            // main pane the tabs feel cramped under that
+            // constraint. Friend rows that get extra horizontal
+            // room just push the trailing kebab to the right edge
+            // — the layout inside `FriendshipRow` is flex-row so
+            // it absorbs the extra space gracefully.
+            <div className="flex flex-1 flex-col overflow-y-auto">
+              <DirectMessagesPanel
+                showToast={showToast}
+                selectedFriendForDM={selectedFriendForDM}
+                onOpenDirectMessage={setSelectedFriendForDM}
+              />
             </div>
           )
         ) : (

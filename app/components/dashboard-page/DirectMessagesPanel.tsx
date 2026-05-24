@@ -372,15 +372,28 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+      // `flex-1` makes each tab take an equal slice of whatever
+      // width the parent has — sidebar (narrow) or main pane (wide)
+      // both work, no per-context branching. `py-2.5 text-sm`
+      // gives the strip enough vertical weight to read as a real
+      // navigation row when rendered full-width in the main pane.
+      // Hover bg makes the click target obvious even before the
+      // user notices the underline.
+      className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${
         active
           ? "border-b-2 border-[var(--color-primary)] text-[var(--color-text)]"
-          : "border-b-2 border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+          : "border-b-2 border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
       }`}
     >
       {label}
       {count > 0 && (
-        <span className="ml-1.5 text-[10px] text-[var(--color-text-muted)]">
+        <span
+          className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            active
+              ? "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-muted)]"
+          }`}
+        >
           {count}
         </span>
       )}
