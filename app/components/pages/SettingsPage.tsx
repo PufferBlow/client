@@ -8,7 +8,7 @@ import { Button } from "../../components/Button";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout, USER_QUERY_KEYS } from "../../services/user";
 import { normalizeInstance, resolveInstance } from "../../services/instance";
 import { useQueryClient } from '@tanstack/react-query';
-import { User, Palette, Volume2, Server, Shield } from 'lucide-react';
+import { User, Palette, Volume2, Server, Shield, Monitor } from 'lucide-react';
 import { SettingsHeader } from "../settings/SettingsHeader";
 import { SettingsSidebar } from "../settings/SettingsSidebar";
 import type { SettingsTab, SettingsTabId } from "../settings/types";
@@ -19,6 +19,7 @@ import { SecurityTab } from "../settings/tabs/SecurityTab";
 import { AudioTab } from "../settings/tabs/AudioTab";
 import { ProfileTab } from "../settings/tabs/ProfileTab";
 import { AppearanceTab } from "../settings/tabs/AppearanceTab";
+import { ClientTab } from "../settings/tabs/ClientTab";
 import { useTrackLastRoute } from "../../utils/uiStatePersistence";
 
 export default function Settings() {
@@ -74,7 +75,7 @@ export default function Settings() {
   // Set initial active tab based on URL hash
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash && ['profile', 'appearance', 'audio', 'server', 'security'].includes(hash)) {
+    if (hash && ['profile', 'appearance', 'audio', 'server', 'security', 'client'].includes(hash)) {
       setActiveTab(hash as any);
     }
   }, []);
@@ -249,6 +250,12 @@ export default function Settings() {
     // (`#audio`) and any persisted state keep resolving.
     { id: 'audio', label: 'Voice', icon: <Volume2 className="w-6 h-6" /> },
     { id: 'server', label: 'Server', icon: <Server className="w-6 h-6" /> },
+    // Client tab — local device preferences (hardware acceleration,
+    // auto-update, version readout). Sits next to Server (which
+    // configures the home instance) so the two complementary
+    // configurations are easy to find together. Monitor glyph reads
+    // as "this device / display."
+    { id: 'client', label: 'Client', icon: <Monitor className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
 
@@ -314,6 +321,10 @@ export default function Settings() {
                 setNewHostPort={setNewHostPort}
                 onSubmit={handleHostPortSubmit}
               />
+            )}
+
+            {activeTab === 'client' && (
+              <ClientTab setMessage={setMessage} />
             )}
 
             {activeTab === 'security' && (
