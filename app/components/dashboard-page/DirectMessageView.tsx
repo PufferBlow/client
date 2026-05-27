@@ -49,7 +49,7 @@
  * once it does, swap the poll for an in-memory append fed by the
  * WS handler. The component interface here doesn't change.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -79,7 +79,12 @@ import { AttachmentGrid } from "../AttachmentBubble";
 import { ProgressiveImage } from "../ui/ProgressiveImage";
 import { EditedTag } from "../EditedTag";
 import { InlineMessageEditor } from "../InlineMessageEditor";
-import { buildReplyMessageBody, parseReplyContext } from "../../utils/replyContext";
+import { MessageReplyContext } from "../MessageReplyContext";
+import {
+  buildReplyMessageBody,
+  findReplyParent,
+  parseReplyContext,
+} from "../../utils/replyContext";
 import type { MessageAttachment } from "../../models/Message";
 import type { ShowToast } from "../Toast";
 
@@ -710,6 +715,53 @@ export function DirectMessageView({
     }
   };
 
+  /**
+   * Scroll the message list to a specific DM message + briefly
+   * highlight it. Mirrors the channel's `scrollToMessage` helper:
+   * looks up the row by its `dm-msg-<id>` anchor, smooth-scrolls
+   * into view, then toggles a one-shot ring/bg highlight that
+   * fades after ~1.6s. Used by the reply-context strip's
+   * "jump to original" affordance.
+   */
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const scrollToDmMessage = (messageId: string) => {
+    const el = document.getElementById(`dm-msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) =>
+        current === messageId ? null : current,
+      );
+    }, 1600);
+  };
+
+  /**
+   * Resolve the parent message's avatar URL for the reply card.
+   * DM payloads carry `sender_avatar_url` directly (server-hydrated
+   * by `_hydrate_messages`); we route through `createFullUrl` so
+   * server-relative paths resolve against the active instance,
+   * and fall back to the peer's avatar (when the parent is from
+   * the peer) and finally a DiceBear identicon. Same fallback
+   * chain the group-head avatar uses — keeps the reply card and
+   * the speaker row in agreement on every render.
+   */
+  const resolveDmReplyAvatar = (
+    parent: DirectMessagePayload | null,
+    fallbackUsername: string,
+  ): string => {
+    if (parent) {
+      const fromMsg = createFullUrl(parent.sender_avatar_url ?? undefined);
+      if (fromMsg) return fromMsg;
+      const parentSender = parent.sender_user_id || parent.sender_id || "";
+      if (parentSender === peerUserId) {
+        const fromPeer = createFullUrl(peerAvatarUrl ?? undefined);
+        if (fromPeer) return fromPeer;
+      }
+    }
+    return createFallbackAvatarUrl(fallbackUsername || "user");
+  };
+
   // ── Context menu handlers ───────────────────────────────────────
   const closeContextMenu = () => setContextMenu(null);
 
@@ -851,9 +903,65 @@ export function DirectMessageView({
                   hour12: true,
                 })
               : "";
+            // Reply context for the group HEAD message — same
+            // pattern channels use: parse the markdown blockquote
+            // header at the top of the body, find the parent
+            // message in our loaded conversation, build the rich
+            // reply card via `MessageReplyContext`. The strip sits
+            // ABOVE the avatar+name row so the visual flow reads
+            // "this reply targets X" → "speaker says" → "body."
+            const headReplyParsed = parseReplyContext(head.message || "");
+            const headReplyParent = headReplyParsed
+              ? findReplyParent(
+                  messages,
+                  headReplyParsed.author,
+                  headReplyParsed.excerpt,
+                  // DMs don't carry a global users-by-id map; the
+                  // sender_username on the row is the authoritative
+                  // source. Match by walking the messages list.
+                  (senderId) => {
+                    for (const m of messages) {
+                      if ((m.sender_user_id || m.sender_id) === senderId) {
+                        return m.sender_username || m.username;
+                      }
+                    }
+                    return undefined;
+                  },
+                )
+              : null;
+            const headReplyAvatar = headReplyParsed
+              ? resolveDmReplyAvatar(headReplyParent, headReplyParsed.author)
+              : null;
             return (
+              <React.Fragment key={head.message_id}>
+                {/* Reply context strip — sits ABOVE the avatar +
+                    username row, indented to align with the
+                    message column (not the avatar gutter). Same
+                    indentation + DOM ordering as the channel reply
+                    strip so the visual cadence matches. */}
+                {headReplyParsed && headReplyAvatar !== null && (
+                  <div className="px-2 pl-[3.5rem]">
+                    <MessageReplyContext
+                      author={headReplyParsed.author}
+                      excerpt={headReplyParsed.excerpt}
+                      parent={
+                        // MessageReplyContext expects a Message
+                        // type but only reads message_id from
+                        // parent. The DM payload's message_id is
+                        // the same shape, so we cast through the
+                        // structural minimum the component uses.
+                        headReplyParent
+                          ? ({
+                              message_id: headReplyParent.message_id,
+                            } as unknown as import("../../models").Message)
+                          : null
+                      }
+                      parentAvatar={headReplyAvatar}
+                      onJump={scrollToDmMessage}
+                    />
+                  </div>
+                )}
               <div
-                key={head.message_id}
                 // Mirror the channel row container: `group relative
                 // flex items-start space-x-3 px-2 py-1 rounded`. The
                 // `group` class is what lets the hover action cluster
@@ -920,6 +1028,44 @@ export function DirectMessageView({
                           })
                         : "";
                       const attachments = normalizeDmAttachments(msg.attachments);
+                      // Strip the reply marker block from the body
+                      // BEFORE handing to MarkdownRenderer. When a
+                      // message starts with `> Replying to @X\n> ...`
+                      // the rich reply card (rendered above the
+                      // group head, or inline below for continuation
+                      // messages) carries that information visually
+                      // — re-rendering the raw blockquote underneath
+                      // would duplicate it as ugly markdown quote
+                      // lines. parseReplyContext returns the body
+                      // with the marker peeled off.
+                      const parsedMsg = parseReplyContext(msg.message || "");
+                      const visibleBody = parsedMsg ? parsedMsg.body : (msg.message || "");
+                      // Continuation messages that ARE themselves
+                      // replies show their own inline reply strip
+                      // (rare — usually only the first message in a
+                      // grouping is a reply, but it does happen
+                      // when a user replies twice in a row to
+                      // different parents).
+                      const continuationReplyParent =
+                        isContinuation && parsedMsg
+                          ? findReplyParent(
+                              messages,
+                              parsedMsg.author,
+                              parsedMsg.excerpt,
+                              (senderId) => {
+                                for (const m of messages) {
+                                  if ((m.sender_user_id || m.sender_id) === senderId) {
+                                    return m.sender_username || m.username;
+                                  }
+                                }
+                                return undefined;
+                              },
+                            )
+                          : null;
+                      const continuationReplyAvatar =
+                        isContinuation && parsedMsg
+                          ? resolveDmReplyAvatar(continuationReplyParent, parsedMsg.author)
+                          : null;
                       return (
                         <div
                           key={msg.message_id}
@@ -978,15 +1124,40 @@ export function DirectMessageView({
                             />
                           ) : (
                             <>
+                              {/* Continuation messages that are
+                                  themselves replies render their
+                                  reply card inline above the body —
+                                  same pattern the channel uses for
+                                  rare "two replies in a row"
+                                  cases. The group head's reply
+                                  card was rendered ABOVE the
+                                  avatar row already. */}
+                              {isContinuation && parsedMsg && continuationReplyAvatar !== null && (
+                                <div className="mb-1">
+                                  <MessageReplyContext
+                                    author={parsedMsg.author}
+                                    excerpt={parsedMsg.excerpt}
+                                    parent={
+                                      continuationReplyParent
+                                        ? ({
+                                            message_id: continuationReplyParent.message_id,
+                                          } as unknown as import("../../models").Message)
+                                        : null
+                                    }
+                                    parentAvatar={continuationReplyAvatar}
+                                    onJump={scrollToDmMessage}
+                                  />
+                                </div>
+                              )}
                               <MarkdownRenderer
-                                content={msg.message || ""}
+                                content={visibleBody}
                                 className="text-[var(--color-text)]"
                               />
                               <EditedTag
                                 count={msg.edit_count ?? 0}
                                 at={msg.last_edited_at ?? null}
                               />
-                              <MessageEmbeds content={msg.message || ""} />
+                              <MessageEmbeds content={visibleBody} />
 
                               {attachments.length > 0 && (
                                 <AttachmentGrid attachments={attachments} />
@@ -1126,6 +1297,7 @@ export function DirectMessageView({
                   </button>
                 </div>
               </div>
+              </React.Fragment>
             );
           })
         )}
