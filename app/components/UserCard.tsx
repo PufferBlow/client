@@ -179,26 +179,37 @@ export function UserCard({
       case 'offline':
         return 'Offline';
       case 'dnd':
-        return 'Do Not Disturb';
+        // Short label — "Do Not Disturb" is too wide for a calm
+        // presence badge. DND is the universal short form (same
+        // shape Discord / Slack / iOS ship).
+        return 'DND';
       case 'idle':
-        return 'Idle';
+        // AFK is the more common term in chat apps for "I'm
+        // here but not actively at the keyboard"; idle reads as
+        // technical / system-y.
+        return 'AFK';
       default:
         return 'Unknown';
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  /**
+   * Map a presence status to the variant suffix on the new
+   * `.pb-presence-badge` class. The dot + tinted background +
+   * border colors are wired in CSS via the `--pb-presence-color`
+   * custom property — see `app.css` (`.pb-presence-badge--*`).
+   */
+  const getStatusBadgeVariant = (status: string): string => {
     switch (status) {
       case 'active':
-        return '🟢';
-      case 'offline':
-        return '⚫';
-      case 'dnd':
-        return '🔴';
+        return 'pb-presence-badge--online';
       case 'idle':
-        return '🟡';
+        return 'pb-presence-badge--idle';
+      case 'dnd':
+        return 'pb-presence-badge--dnd';
+      case 'offline':
       default:
-        return '⚫';
+        return 'pb-presence-badge--offline';
     }
   };
 
@@ -284,11 +295,15 @@ export function UserCard({
             {bio}
           </p>
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-xs text-[var(--color-text-secondary)]">
-              <div className="flex items-center space-x-1">
-                <span>{getStatusIcon(status)}</span>
-                <span className="font-medium">{getStatusText(status)}</span>
-              </div>
+            <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+              {/* Modern presence badge — pill with a tinted bg in
+                  the status color, a small solid dot, and the
+                  label. Replaces the previous emoji + plain-text
+                  pair that mixed an emoji into an otherwise
+                  line-art icon set. */}
+              <span className={`pb-presence-badge ${getStatusBadgeVariant(status)}`}>
+                {getStatusText(status)}
+              </span>
               {originServer && (
                 <>
                   <span className="text-[var(--color-text-muted)]">•</span>
@@ -356,25 +371,18 @@ export function UserCard({
           ></div>
         </div>
 
-        {/* Status Indicator - Discord style */}
+        {/* Status badge — sits at the top-right of the banner.
+            New treatment: a calm tinted pill via the shared
+            `.pb-presence-badge` utility so the same chrome is
+            used everywhere a status is shown (compact card, full
+            card, members list). The previous design was a fully-
+            saturated solid-fill pill with a glowing dot — visually
+            loud against the banner art and out of step with the
+            rest of the app's restrained colour vocabulary. */}
         <div className="absolute top-6 right-6">
-          <div
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg ${
-              status === 'active' ? 'border-[var(--color-success)] bg-[var(--color-success)] text-[var(--color-on-success)]' :
-              status === 'idle' ? 'border-[var(--color-warning)] bg-[var(--color-warning)] text-[var(--color-on-warning)]' :
-              status === 'dnd' ? 'border-[var(--color-error)] bg-[var(--color-error)] text-[var(--color-on-error)]' :
-              'border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'
-            }`}
-            style={status === 'active' ? { borderWidth: "2px", borderStyle: "solid", borderColor: `color-mix(in srgb, ${resolvedAccentColor} 35%, transparent)` } : undefined}
-          >
-            <div className={`w-2 h-2 rounded-full mr-2 ${
-              status === 'active' ? 'bg-[var(--color-success)] shadow-[0_0_12px_color-mix(in_srgb,var(--color-success)_45%,transparent)]' :
-              status === 'idle' ? 'bg-[var(--color-warning)] shadow-[0_0_12px_color-mix(in_srgb,var(--color-warning)_45%,transparent)]' :
-              status === 'dnd' ? 'bg-[var(--color-error)] shadow-[0_0_12px_color-mix(in_srgb,var(--color-error)_45%,transparent)]' :
-              'bg-[var(--color-text-muted)] shadow-[0_0_12px_color-mix(in_srgb,var(--color-text-muted)_35%,transparent)]'
-            }`}></div>
+          <span className={`pb-presence-badge ${getStatusBadgeVariant(status)} shadow-[var(--shadow-popover)]`}>
             {getStatusText(status)}
-          </div>
+          </span>
         </div>
       </div>
 

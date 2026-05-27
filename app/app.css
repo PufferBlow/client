@@ -323,6 +323,66 @@ button[aria-disabled="true"],
   background: color-mix(in srgb, var(--color-text-muted) 78%, var(--color-surface-tertiary) 22%);
 }
 
+/*
+ * Presence badge — the pill version of the status indicator,
+ * used on user profile cards.
+ *
+ * Design intent: a calm, modern presence chip that doesn't shout.
+ * Replaces the previous treatment which used emoji icons (out of
+ * place against the line-art icon set elsewhere in the app) AND
+ * a fully-saturated solid-fill pill on the profile banner that
+ * dominated the user's eye.
+ *
+ * Shape: a translucent tint of the status color for the background
+ * (so it reads as "tinted" rather than "loud"), a 1px border in
+ * the same color at higher alpha for definition, the status text
+ * in the app's primary text color, and a small solid dot on the
+ * left for the at-a-glance recognition.
+ *
+ * Tones map 1:1 with the existing presence-dot palette so the
+ * dot + badge use the same color for the same state — the dot
+ * sub-element below reuses the var directly to avoid drift.
+ */
+.pb-presence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--pb-presence-color, var(--color-text-muted)) 38%, transparent);
+  background: color-mix(in srgb, var(--pb-presence-color, var(--color-text-muted)) 12%, var(--color-surface) 88%);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.pb-presence-badge::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--pb-presence-color, var(--color-text-muted));
+  flex-shrink: 0;
+}
+
+.pb-presence-badge--online {
+  --pb-presence-color: var(--color-success);
+}
+
+.pb-presence-badge--idle {
+  --pb-presence-color: var(--color-warning);
+}
+
+.pb-presence-badge--dnd {
+  --pb-presence-color: var(--color-error);
+}
+
+.pb-presence-badge--offline {
+  --pb-presence-color: var(--color-text-muted);
+}
+
 .pb-toast-success {
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface) 88%);
   border-color: color-mix(in srgb, var(--color-success) 34%, var(--color-border-secondary));
