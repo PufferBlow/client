@@ -53,6 +53,15 @@ interface PersistedAudioSelections {
    * blow our ear-drums.
    */
   micVolume: number;
+  /**
+   * Output gain applied to every remote peer's `<audio>` element via the
+   * HTMLMediaElement.volume property. Stored as a 0–100 integer
+   * percentage (matches the slider UI); 100 is full. Capped at 100
+   * because `.volume` ceiling is 1.0 — we can't amplify the incoming
+   * stream past unity without inserting a Web Audio graph, and that
+   * would defeat the per-element setSinkId routing.
+   */
+  speakerVolume: number;
   voiceActivityMode: VoiceActivityMode;
   pttKey: string;
   audioQuality: AudioQualityPreset;
@@ -65,6 +74,7 @@ const DEFAULT_AUDIO_SELECTIONS: PersistedAudioSelections = {
   noiseSuppression: true,
   autoGainControl: true,
   micVolume: 100,
+  speakerVolume: 100,
   voiceActivityMode: 'voice',
   pttKey: 'Alt',
   audioQuality: 'better',
@@ -94,6 +104,7 @@ function readAudioSettings(): PersistedAudioSelections {
       noiseSuppression?: boolean;
       autoGainControl?: boolean;
       micVolume?: number;
+      speakerVolume?: number;
       voiceActivityMode?: string;
       pttKey?: string;
       audioQuality?: string;
@@ -102,6 +113,11 @@ function readAudioSettings(): PersistedAudioSelections {
     // Clamp into the 0–200% range the slider exposes. Anything higher would
     // amplify line noise into clipping for very little perceived benefit.
     const micVolume = Math.max(0, Math.min(200, micRaw));
+    // SpeakerVolume is 0–100 because HTMLMediaElement.volume tops at 1.0;
+    // a missing field defaults to 100 (don't silently mute existing
+    // users who upgrade from a build that didn't persist this).
+    const speakerRaw = typeof parsed.speakerVolume === 'number' ? parsed.speakerVolume : 100;
+    const speakerVolume = Math.max(0, Math.min(100, speakerRaw));
     const mode: VoiceActivityMode = parsed.voiceActivityMode === 'ptt' ? 'ptt' : 'voice';
     const quality: AudioQualityPreset =
       parsed.audioQuality === 'good' || parsed.audioQuality === 'best'
@@ -114,6 +130,7 @@ function readAudioSettings(): PersistedAudioSelections {
       noiseSuppression: parsed.noiseSuppression ?? true,
       autoGainControl: parsed.autoGainControl ?? true,
       micVolume,
+      speakerVolume,
       voiceActivityMode: mode,
       pttKey: parsed.pttKey?.trim() || 'Alt',
       audioQuality: quality,
@@ -308,6 +325,27 @@ export class VoiceTransport {
   // server-negotiated profile.
   private currentAudioQuality: AudioQualityPreset = 'better';
 
+  // Global output gain applied to every remote peer's audio element
+  // as `audio.volume = currentSpeakerVolume * perUserPref`. Stored
+  // as 0..1 here (the slider's 0..100 percentage is normalised on
+  // read). Defaults to 1 so users upgrading from a build that
+  // didn't have this setting don't suddenly land at silence.
+  private currentSpeakerVolume = 1;
+
+  // Current DSP toggles. Tracked here so the settings-change
+  // listener can detect when a flip happened and re-acquire the
+  // local mic with the new constraints — getUserMedia constraints
+  // can't be updated in-place on an already-running track, so the
+  // only way to apply a fresh `echoCancellation`/`noiseSuppression`/
+  // `autoGainControl` value mid-call is to call getUserMedia again
+  // and `replaceTrack` on every sender. The fields default to the
+  // same values the persisted-settings reader does so the first
+  // refresh after a Settings hop doesn't spuriously trigger a
+  // reacquire on identical values.
+  private currentEchoCancellation = true;
+  private currentNoiseSuppression = true;
+  private currentAutoGainControl = true;
+
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
   }
@@ -399,6 +437,10 @@ export class VoiceTransport {
     this.currentVoiceActivityMode = persisted.voiceActivityMode;
     this.currentPttKey = persisted.pttKey;
     this.currentAudioQuality = persisted.audioQuality;
+    this.currentSpeakerVolume = Math.max(0, Math.min(1, persisted.speakerVolume / 100));
+    this.currentEchoCancellation = persisted.echoCancellation;
+    this.currentNoiseSuppression = persisted.noiseSuppression;
+    this.currentAutoGainControl = persisted.autoGainControl;
 
     const audioConstraints: MediaTrackConstraints = {
       echoCancellation: persisted.echoCancellation,
@@ -613,6 +655,108 @@ export class VoiceTransport {
       if (this.pc) {
         void this.applyAudioSenderQuality(this.pc);
       }
+    }
+
+    // Speaker volume — apply to every remote audio element so a
+    // live drag in Settings adjusts an in-progress call without
+    // requiring a leave + rejoin. The applySpeakerVolumeToAllRemotes
+    // helper preserves per-user preferences by recomputing
+    // `effectiveVolumeFor` for each.
+    const nextSpeakerVolume = Math.max(0, Math.min(1, persisted.speakerVolume / 100));
+    if (Math.abs(nextSpeakerVolume - this.currentSpeakerVolume) > 0.001) {
+      this.currentSpeakerVolume = nextSpeakerVolume;
+      this.applySpeakerVolumeToAllRemotes();
+    }
+
+    // DSP toggles — these can't be updated in place on a running
+    // mediaTrack (getUserMedia constraints are sticky once a track
+    // exists), so the only way to apply a flipped value mid-call
+    // is to re-acquire the mic and replaceTrack on every sender.
+    // Detected by comparing each toggle against the cached current
+    // value; if any drifted, kick the re-acquire path with the
+    // current device. Quietly skipped when there's no peer
+    // connection (settings flip happened outside a call — values
+    // will be picked up on next connect).
+    const dspChanged =
+      persisted.echoCancellation !== this.currentEchoCancellation ||
+      persisted.noiseSuppression !== this.currentNoiseSuppression ||
+      persisted.autoGainControl !== this.currentAutoGainControl;
+    if (dspChanged && this.pc) {
+      this.currentEchoCancellation = persisted.echoCancellation;
+      this.currentNoiseSuppression = persisted.noiseSuppression;
+      this.currentAutoGainControl = persisted.autoGainControl;
+      void this.reacquireLocalMicWithCurrentSettings();
+    } else if (dspChanged) {
+      // Update the cache so a subsequent connect picks them up.
+      this.currentEchoCancellation = persisted.echoCancellation;
+      this.currentNoiseSuppression = persisted.noiseSuppression;
+      this.currentAutoGainControl = persisted.autoGainControl;
+    }
+  }
+
+  /**
+   * Re-acquire the local mic with the current persisted settings
+   * (device + DSP toggles + sample rate) and ``replaceTrack`` on
+   * every active sender. Used by:
+   *
+   *   * The settings-change listener when the user flips a DSP
+   *     toggle mid-call — getUserMedia constraints can't be
+   *     updated in place, so we replay the stream with fresh
+   *     constraints.
+   *   * (handleDeviceChange retains its own inline implementation
+   *     for now because it owns the input/output split semantics;
+   *     a future cleanup could route both through here.)
+   *
+   * Failures bubble through onError but don't tear down the call.
+   * The peer keeps its connection — only the local mic source
+   * changes from its perspective, which is invisible because the
+   * sender's MediaStreamTrack reference stays stable from RTC's
+   * point of view.
+   */
+  private async reacquireLocalMicWithCurrentSettings(): Promise<void> {
+    if (!this.pc) return;
+    try {
+      const audioSettings = this.mediaQuality?.audio;
+      const constraints: MediaTrackConstraints = {
+        echoCancellation: this.currentEchoCancellation,
+        noiseSuppression: this.currentNoiseSuppression,
+        autoGainControl: this.currentAutoGainControl,
+        sampleRate: audioSettings?.sample_rate_hz,
+        channelCount: audioSettings?.stereo_enabled
+          ? Math.max(audioSettings.channels, 2)
+          : audioSettings?.channels,
+      };
+      if (this.currentInputDeviceId) {
+        constraints.deviceId = { exact: this.currentInputDeviceId };
+      }
+      const nextRawStream = await navigator.mediaDevices.getUserMedia({
+        audio: constraints,
+        video: false,
+      });
+      const persisted = readAudioSettings();
+      // Tear down the old audio graph (the old AudioContext was
+      // holding the previous mic's source node).
+      this.teardownLocalAudioGraph();
+      const previousProcessedStream = this.localStream;
+      this.localStream = this.buildLocalAudioGraph(nextRawStream, persisted.micVolume);
+      const nextTrack = this.localStream.getAudioTracks()[0];
+      if (!nextTrack) return;
+      await Promise.all(
+        this.pc
+          .getSenders()
+          .filter((sender) => sender.track?.kind === 'audio')
+          .map((sender) => sender.replaceTrack(nextTrack)),
+      );
+      this.refreshLocalTrackEnabled();
+      if (previousProcessedStream && previousProcessedStream !== nextRawStream) {
+        for (const track of previousProcessedStream.getTracks()) {
+          track.stop();
+        }
+      }
+    } catch (error) {
+      this.emitError(
+        `Failed to re-apply audio settings: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -1038,15 +1182,21 @@ export class VoiceTransport {
         void this.applyOutputSinkId(audio);
       }
 
-      // Associate with a userId from the pending queue (FIFO)
+      // Associate with a userId from the pending queue (FIFO). Apply
+      // the effective volume = global speaker volume * per-user
+      // preference. The two compose because the slider in Settings
+      // is a master gain ("how loud is everyone overall?"), while
+      // per-user prefs are deltas ("make X quieter"). Defaults to
+      // the global volume alone when the user has no per-user
+      // override yet.
       if (this.pendingTrackQueue.length > 0) {
         const userId = this.pendingTrackQueue.shift()!;
         this.userAudioMap.set(userId, audio);
-        // Apply stored volume preference
-        const vol = this.userVolumePrefs.get(userId);
-        if (vol !== undefined) {
-          audio.volume = vol;
-        }
+        audio.volume = this.effectiveVolumeFor(userId);
+      } else {
+        // No userId association yet — at least apply the global
+        // speaker volume so the first frame doesn't blast at full.
+        audio.volume = this.currentSpeakerVolume;
       }
 
       void audio.play().catch(() => undefined);
@@ -1456,13 +1606,63 @@ export class VoiceTransport {
     this.userVolumePrefs.set(userId, clamped);
     const audio = this.userAudioMap.get(userId);
     if (audio) {
-      audio.volume = clamped;
+      // Compose with the global speaker volume so the per-user
+      // preference acts as a delta on top of the master gain.
+      audio.volume = this.effectiveVolumeFor(userId);
     }
   }
 
-  /** Get current volume for a user (defaults to 1 if not set). */
+  /** Get current per-user volume preference (defaults to 1 if not set).
+   *  This is the RAW preference value, NOT the effective applied
+   *  volume — call sites that want the actual playback gain should
+   *  multiply by the current speaker volume themselves, or read
+   *  ``audio.volume`` from the element.
+   */
   getUserVolume(userId: string): number {
     return this.userVolumePrefs.get(userId) ?? 1;
+  }
+
+  /**
+   * Effective playback volume for a remote participant: the master
+   * speaker volume (Settings → Voice → Output volume) multiplied
+   * by any per-user preference. Both factors are clamped to [0, 1],
+   * so the result is naturally clamped too. Used wherever we need
+   * to write to ``audio.volume`` so the two factors stay in sync.
+   */
+  private effectiveVolumeFor(userId: string | null | undefined): number {
+    const perUser = userId ? this.userVolumePrefs.get(userId) ?? 1 : 1;
+    return Math.max(0, Math.min(1, this.currentSpeakerVolume * perUser));
+  }
+
+  /**
+   * Apply the current speaker volume + per-user prefs to every live
+   * remote audio element. Called when ``currentSpeakerVolume``
+   * changes (the user dragged the slider mid-call). Iterates the
+   * userAudioMap rather than remoteAudioEls so each peer's per-user
+   * preference is preserved.
+   */
+  private applySpeakerVolumeToAllRemotes(): void {
+    for (const [userId, audio] of this.userAudioMap.entries()) {
+      audio.volume = this.effectiveVolumeFor(userId);
+    }
+    // Audio elements that haven't been associated with a user yet
+    // (first frame arriving before the pendingTrackQueue resolves)
+    // still need the master volume applied.
+    for (const audio of this.remoteAudioEls.values()) {
+      // Walk userAudioMap to detect whether this element is already
+      // associated — set membership is faster than a reverse lookup
+      // built every time.
+      let isAssociated = false;
+      for (const known of this.userAudioMap.values()) {
+        if (known === audio) {
+          isAssociated = true;
+          break;
+        }
+      }
+      if (!isAssociated) {
+        audio.volume = this.currentSpeakerVolume;
+      }
+    }
   }
 
   async disconnect(): Promise<void> {

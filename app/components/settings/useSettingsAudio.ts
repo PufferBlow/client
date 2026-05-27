@@ -300,26 +300,81 @@ export function useSettingsAudio({
       const { outputGain } = createGainNodes(context);
       const oscillator = context.createOscillator();
       oscillator.connect(outputGain);
-      outputGain.connect(context.destination);
+
+      // Route the test tone through an off-screen <audio> element
+      // so the output is bound to `selectedOutputDevice` via
+      // `setSinkId` — otherwise `context.destination` always plays
+      // through the system default, which made the speaker test
+      // ignore the dropdown selection above it (the whole point
+      // of the test is to verify THAT sink, not the system one).
+      //
+      // Fallback: browsers that don't expose `setSinkId` (Firefox,
+      // Safari) silently fall back to the system default — same
+      // behaviour they had before, no regression.
+      const mediaDest = context.createMediaStreamDestination();
+      outputGain.connect(mediaDest);
+      const sink = document.createElement("audio");
+      sink.srcObject = mediaDest.stream;
+      sink.autoplay = true;
+      // Hidden but still in the DOM so the browser actually plays it.
+      sink.style.position = "absolute";
+      sink.style.left = "-9999px";
+      sink.style.top = "0";
+      document.body.appendChild(sink);
+
+      type SinkableAudio = HTMLAudioElement & {
+        setSinkId?: (sinkId: string) => Promise<void>;
+      };
+      const sinkable = sink as SinkableAudio;
+      if (selectedOutputDevice && typeof sinkable.setSinkId === "function") {
+        try {
+          await sinkable.setSinkId(selectedOutputDevice);
+        } catch (error) {
+          logger.ui.warn("Speaker test setSinkId failed", {
+            sinkId: selectedOutputDevice,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       oscillator.frequency.setValueAtTime(1000, context.currentTime);
       oscillator.type = "sine";
       oscillator.start();
       setAudioContext(context);
 
-      setTimeout(() => {
+      // Tear-down helper used by both the timeout and the catch
+      // path. Idempotent — safe to call from either side.
+      const cleanup = () => {
         try {
           oscillator.stop();
-          if (context.state !== "closed") {
-            void context.close();
-          }
-          setAudioContext(null);
-          setOutputGainNode(null);
+        } catch {
+          // Already stopped.
+        }
+        try {
+          sink.pause();
+          sink.srcObject = null;
+        } catch {
+          // Defensive.
+        }
+        if (sink.parentNode) {
+          sink.parentNode.removeChild(sink);
+        }
+        if (context.state !== "closed") {
+          void context.close();
+        }
+        setAudioContext(null);
+        setOutputGainNode(null);
+        setIsTestingSpeakers(false);
+      };
+
+      setTimeout(() => {
+        try {
+          cleanup();
         } catch (error) {
           logger.ui.warn("Speaker test cleanup warning", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
-        setIsTestingSpeakers(false);
         setMessage({ type: "success", text: "Speaker test completed." });
       }, 3000);
 
