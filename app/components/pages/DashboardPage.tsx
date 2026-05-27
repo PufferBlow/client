@@ -40,6 +40,7 @@ import { InlineMessageEditor } from "../../components/InlineMessageEditor";
 import { updateMessage } from "../../services/message";
 import { showApiError } from "../../services/showApiError";
 import { OfflineBanner } from "../../components/OfflineBanner";
+import { PttHint } from "../../components/PttHint";
 import { useStickers, indexStickersById } from "../../services/useStickers";
 import { useHomeInstanceHealth } from "../../services/instanceHealth";
 import { useNetworkStatus } from "../../services/networkStatus";
@@ -3508,6 +3509,11 @@ export default function Dashboard() {
     // the remaining space.
     <div className="h-full overflow-hidden bg-[var(--color-background)] flex flex-col font-sans select-none relative min-w-0">
       <OfflineBanner />
+      {/* Floating "Hold KEY to talk" chip — auto-shows when a voice
+          call is connected AND the user's activation mode is PTT.
+          Pure visual; the actual mute/unmute lives in the voice
+          transport's own PTT listener. */}
+      <PttHint />
       <div className="flex flex-1 min-h-0 gap-2 p-2">
         {/* Left Sidebar Container */}
       <div className="flex h-full shrink-0 flex-col gap-2">

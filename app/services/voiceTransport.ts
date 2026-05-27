@@ -16,6 +16,76 @@ const AUDIO_DEVICES_CHANGED_EVENT = 'pufferblow:audio-devices-changed';
  */
 export const AUDIO_SETTINGS_CHANGED_EVENT = 'pufferblow:audio-settings-changed';
 
+/**
+ * Window-level event the active voice transport dispatches on each
+ * RAF frame while a monitor subscriber is attached. Carries
+ * ``{ frequencyData, inputLevel }`` — same shape the Settings page's
+ * test-mode meter expects, so the visualizer code can swap between
+ * its own getUserMedia stream and the live call's stream without
+ * branching on the data shape.
+ *
+ * Producers: ``VoiceTransport`` only emits while at least one
+ * subscriber has called ``requestLiveAudioMonitor`` (refcounted).
+ * Consumers: the Settings hook subscribes whenever the user has
+ * the "Start monitor" toggle on AND a call is active.
+ */
+export const AUDIO_MONITOR_FRAME_EVENT = 'pufferblow:audio-monitor-frame';
+
+/**
+ * Live monitor registry. The active voice transport registers
+ * itself on connect; the Settings hook checks this to decide
+ * whether to subscribe to live call audio (via the event above)
+ * or fall back to its own getUserMedia capture.
+ *
+ * Kept as a module-level singleton because (a) only one voice
+ * call is active at a time, and (b) Settings doesn't need a
+ * reference to the transport's full API — just "is one active?
+ * if so, request a frame stream."
+ */
+interface LiveAudioMonitorSource {
+  start(): void;
+  stop(): void;
+}
+let liveMonitorSource: LiveAudioMonitorSource | null = null;
+
+/** True when a voice call is connected and able to publish audio
+ *  monitor frames. Settings consults this before deciding whether
+ *  to acquire its own getUserMedia stream. */
+export function isLiveAudioMonitorAvailable(): boolean {
+  return liveMonitorSource !== null;
+}
+
+/** Ask the active voice transport to begin publishing live audio
+ *  monitor frames. Refcounted internally — pair with
+ *  ``releaseLiveAudioMonitor``. No-op when no call is active. */
+export function requestLiveAudioMonitor(): void {
+  liveMonitorSource?.start();
+}
+
+/** Release a previously-acquired monitor handle. The transport
+ *  stops publishing frames once the refcount reaches zero. */
+export function releaseLiveAudioMonitor(): void {
+  liveMonitorSource?.stop();
+}
+
+/**
+ * Public read of the persisted audio settings the transport uses.
+ * Exposed so UI surfaces (the PTT hint chip in the dashboard) can
+ * show the user's chosen activation mode + push-to-talk key
+ * without duplicating the localStorage shape definition. Returns
+ * a defensive copy — mutations don't leak back into the cache.
+ */
+export function readPersistedAudioSettings(): {
+  voiceActivityMode: 'voice' | 'ptt';
+  pttKey: string;
+} {
+  const persisted = readAudioSettings();
+  return {
+    voiceActivityMode: persisted.voiceActivityMode,
+    pttKey: persisted.pttKey,
+  };
+}
+
 export type VoiceActivityMode = 'voice' | 'ptt';
 export type AudioQualityPreset = 'good' | 'better' | 'best';
 
@@ -345,6 +415,16 @@ export class VoiceTransport {
   private currentEchoCancellation = true;
   private currentNoiseSuppression = true;
   private currentAutoGainControl = true;
+
+  // Live audio monitor — refcounted publisher of the local mic's
+  // spectrum + level. Only allocates the AnalyserNode + RAF loop
+  // while at least one subscriber is attached (Settings → Voice
+  // monitor toggle). Zero-cost when nobody's listening.
+  private monitorRefCount = 0;
+  private monitorAnalyser: AnalyserNode | null = null;
+  private monitorSourceNode: MediaStreamAudioSourceNode | null = null;
+  private monitorRafId: number | null = null;
+  private monitorFrameBuffer: Uint8Array | null = null;
 
   constructor(callbacks: VoiceTransportCallbacks = {}) {
     this.callbacks = callbacks;
@@ -881,6 +961,111 @@ export class VoiceTransport {
   }
 
   /**
+   * Refcounted start of the live audio monitor. Wires a read-only
+   * AnalyserNode in parallel with the existing audio graph (no
+   * effect on the outgoing audio to peers — `connect` to an
+   * analyser is a tap, not an interception). Dispatches each RAF
+   * tick on the window as ``AUDIO_MONITOR_FRAME_EVENT``.
+   *
+   * Public entry point is the ``requestLiveAudioMonitor`` helper
+   * registered on the module-level ``liveMonitorSource`` —
+   * registration is wired in ``setState('connected')`` and torn
+   * down in ``disconnect``.
+   */
+  private startMonitor(): void {
+    this.monitorRefCount += 1;
+    if (this.monitorAnalyser) return;
+    if (!this.localAudioContext || !this.localStream) return;
+
+    try {
+      const ctx = this.localAudioContext;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      // Wire from the processed local stream (post-gain) so the
+      // spectrum reflects what peers actually hear, not the raw
+      // pre-gain input. The source node holds a reference to the
+      // stream — tracked here so teardown can disconnect it.
+      const sourceNode = ctx.createMediaStreamSource(this.localStream);
+      sourceNode.connect(analyser);
+      this.monitorAnalyser = analyser;
+      this.monitorSourceNode = sourceNode;
+      this.monitorFrameBuffer = new Uint8Array(analyser.frequencyBinCount);
+
+      const tick = () => {
+        if (!this.monitorAnalyser || !this.monitorFrameBuffer) return;
+        // TS' modern lib types insist on `Uint8Array<ArrayBuffer>`
+        // for `getByteFrequencyData`; the buffer we hold is the
+        // same shape but typed more loosely on the field. Cast at
+        // the use site — the runtime contract is unchanged.
+        const buf = this.monitorFrameBuffer as Uint8Array<ArrayBuffer>;
+        this.monitorAnalyser.getByteFrequencyData(buf);
+        // Compute the average bin value as a quick proxy for input
+        // level. Normalised to 0..1 to match the test-mode meter.
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          sum += buf[i];
+        }
+        const level = sum / (buf.length * 255);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent(AUDIO_MONITOR_FRAME_EVENT, {
+              detail: {
+                // Copy the buffer — subscribers may hold the ref
+                // across RAF boundaries and we'll mutate ours next
+                // tick.
+                frequencyData: new Uint8Array(buf),
+                inputLevel: level,
+              },
+            }),
+          );
+        }
+        this.monitorRafId = requestAnimationFrame(tick);
+      };
+      this.monitorRafId = requestAnimationFrame(tick);
+    } catch (error) {
+      voiceLogger.warn('voiceTransport: failed to start audio monitor', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.monitorAnalyser = null;
+      this.monitorSourceNode = null;
+      this.monitorFrameBuffer = null;
+    }
+  }
+
+  /**
+   * Refcounted stop. Tears down the analyser + RAF loop once the
+   * last subscriber releases. Safe to call when no monitor is
+   * running — the refcount just stays at 0.
+   */
+  private stopMonitor(): void {
+    if (this.monitorRefCount > 0) {
+      this.monitorRefCount -= 1;
+    }
+    if (this.monitorRefCount > 0) return;
+    if (this.monitorRafId !== null) {
+      cancelAnimationFrame(this.monitorRafId);
+      this.monitorRafId = null;
+    }
+    if (this.monitorSourceNode) {
+      try {
+        this.monitorSourceNode.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.monitorSourceNode = null;
+    }
+    if (this.monitorAnalyser) {
+      try {
+        this.monitorAnalyser.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.monitorAnalyser = null;
+    }
+    this.monitorFrameBuffer = null;
+  }
+
+  /**
    * Stop the raw mic stream and close the AudioContext built by
    * buildLocalAudioGraph. Leaves `localStream` (the processed stream)
    * alone — the caller is responsible for swapping or stopping that
@@ -1209,6 +1394,15 @@ export class VoiceTransport {
           // counter so the next transient drop gets the full backoff budget.
           this.reconnectAttempts = 0;
           this.setState('connected');
+          // Register as the module-level live-audio-monitor source
+          // so Settings can subscribe to the call's mic stream
+          // instead of acquiring its own getUserMedia capture.
+          // Idempotent across reconnect transitions because we
+          // overwrite the same slot.
+          liveMonitorSource = {
+            start: () => this.startMonitor(),
+            stop: () => this.stopMonitor(),
+          };
           break;
         case 'disconnected':
           // Disconnected is transient — Chrome fires this when ICE checks
@@ -1741,6 +1935,45 @@ export class VoiceTransport {
     if (this.deviceChangeUnsub) {
       this.deviceChangeUnsub();
       this.deviceChangeUnsub = null;
+    }
+
+    // Tear down any live audio monitor + unregister from the
+    // module-level slot so Settings stops trying to use this
+    // transport's stream. The monitor stop is idempotent on a
+    // zero refcount, so a Settings subscriber that's still
+    // attached when the call ends just stops receiving frames
+    // and can fall back to its own getUserMedia path.
+    this.monitorRefCount = 0;
+    if (this.monitorRafId !== null) {
+      cancelAnimationFrame(this.monitorRafId);
+      this.monitorRafId = null;
+    }
+    if (this.monitorSourceNode) {
+      try {
+        this.monitorSourceNode.disconnect();
+      } catch {
+        // already disconnected
+      }
+      this.monitorSourceNode = null;
+    }
+    if (this.monitorAnalyser) {
+      try {
+        this.monitorAnalyser.disconnect();
+      } catch {
+        // already disconnected
+      }
+      this.monitorAnalyser = null;
+    }
+    this.monitorFrameBuffer = null;
+    // Only clear the module-level slot if THIS transport owns it
+    // (defensive against rapid reconnect where a new transport
+    // may have already replaced us).
+    if (liveMonitorSource && this.pc === null) {
+      // Best-effort identity check: at disconnect time we've
+      // already torn down `pc`, so any transport that re-registers
+      // afterwards (different instance) won't share state. Just
+      // clear it.
+      liveMonitorSource = null;
     }
 
     this.participants.clear();

@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logger } from "../../utils/logger";
+import {
+  AUDIO_MONITOR_FRAME_EVENT,
+  isLiveAudioMonitorAvailable,
+  releaseLiveAudioMonitor,
+  requestLiveAudioMonitor,
+} from "../../services/voiceTransport";
 
 type MessageState = { type: "success" | "error"; text: string } | null;
 
@@ -257,6 +263,13 @@ export function useSettingsAudio({
       setMicrophoneStream(stream);
       await setupAudioRouting(stream);
       startAudioAnalysis();
+      // First successful getUserMedia on this page transitions the
+      // permission state from "prompt" to "granted" — browsers
+      // SHOULD fire `devicechange` on that transition (which the
+      // mount-time listener handles), but some don't. Belt-and-
+      // braces: refresh manually so device labels populate
+      // immediately after the test starts.
+      void refreshDevices(true);
       setMessage({ type: "success", text: "Microphone test started with current audio settings." });
     } catch (error) {
       setIsTestingMicrophone(false);
@@ -420,19 +433,126 @@ export function useSettingsAudio({
     setMessage({ type: "success", text: "Speaker test stopped." });
   };
 
-  const refreshInputDevices = async () => {
+  /**
+   * Enumerate both input + output devices.
+   *
+   * `enumerateDevices` returns devices regardless of permission,
+   * BUT browsers redact the device `.label` field until the page
+   * has been granted `getUserMedia` for that kind at least once.
+   * So a first call from a page that's never asked returns
+   * entries like ``{ deviceId: 'abc...', label: '' }``, which
+   * renders as "Default device" / empty in the picker.
+   *
+   * Solution: this function always enumerates and stores the
+   * result. Three triggers re-run it:
+   *
+   *   1. Initial mount — sets the device list with whatever
+   *      labels are available (none until the page has a track).
+   *   2. After any successful getUserMedia call (mic test, call
+   *      connect, listener start) — the second pass returns
+   *      proper labels because the permission grant is now live.
+   *   3. `navigator.mediaDevices.devicechange` events — picks
+   *      up hot-plug + unplug + system default changes.
+   *
+   * The `silent` arg lets internal callers refresh without
+   * surfacing a toast; the user-pressed Refresh button still
+   * confirms with a count message.
+   */
+  const refreshDevices = async (silent = false) => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter((device) => device.kind === "audioinput");
+      const audioOutputs = devices.filter((device) => device.kind === "audiooutput");
       setInputDevices(audioInputs);
-      setMessage({ type: "success", text: `Found ${audioInputs.length} audio input devices` });
+      setOutputDevices(audioOutputs);
+      if (!silent) {
+        setMessage({
+          type: "success",
+          text: `Found ${audioInputs.length} input ${audioInputs.length === 1 ? "device" : "devices"} and ${audioOutputs.length} output ${audioOutputs.length === 1 ? "device" : "devices"}.`,
+        });
+      }
     } catch {
-      setMessage({ type: "error", text: "Failed to enumerate audio devices" });
+      if (!silent) {
+        setMessage({ type: "error", text: "Failed to enumerate audio devices" });
+      }
     }
   };
 
+  // Backward-compat alias — earlier UI code only knew about input
+  // refresh. Kept so the Settings → Voice tab keeps working
+  // without a sweep. New callers should use refreshDevices.
+  const refreshInputDevices = refreshDevices;
+
+  /**
+   * Initial enumeration + change-event subscription.
+   *
+   * Pass 1 fires at mount and populates the picker with whatever
+   * the browser will share without an active permission. If the
+   * page has been granted mic access in a prior session, labels
+   * come through; otherwise we get a "device exists, name
+   * unknown" entry. Either is better than an empty dropdown.
+   *
+   * The `devicechange` listener picks up subsequent additions /
+   * removals (USB headset plug, Bluetooth pair) AND — crucially —
+   * the relabel that happens after the FIRST successful
+   * getUserMedia: browsers fire `devicechange` when the permission
+   * state transitions, so the picker repopulates automatically
+   * without callers needing to thread re-enumeration into every
+   * getUserMedia call site.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.mediaDevices) return;
+    void refreshDevices(true);
+    const handler = () => {
+      void refreshDevices(true);
+    };
+    navigator.mediaDevices.addEventListener("devicechange", handler);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Subscription handle for the live-call audio monitor (when a
+  // voice call is active and we're tapping its stream instead of
+  // running our own getUserMedia). Cleaned up by stopListening.
+  const liveMonitorUnsubRef = useRef<(() => void) | null>(null);
+
   const startListening = async () => {
     try {
+      // Path A: a voice call is active. Subscribe to the transport's
+      // live monitor — single mic capture is shared between the
+      // call and the settings meter. Avoids duplicating
+      // getUserMedia + DSP pipelines, and lets the user see their
+      // own input as the peer hears it.
+      if (isLiveAudioMonitorAvailable()) {
+        requestLiveAudioMonitor();
+        const handler = (event: Event) => {
+          const detail = (event as CustomEvent<{
+            frequencyData: Uint8Array;
+            inputLevel: number;
+          }>).detail;
+          if (!detail) return;
+          setFrequencyData(detail.frequencyData);
+          setInputLevel(detail.inputLevel);
+        };
+        window.addEventListener(AUDIO_MONITOR_FRAME_EVENT, handler);
+        liveMonitorUnsubRef.current = () => {
+          window.removeEventListener(AUDIO_MONITOR_FRAME_EVENT, handler);
+          releaseLiveAudioMonitor();
+        };
+        setIsListening(true);
+        setMessage({
+          type: "success",
+          text: "Listening to your call audio. Speak normally to see the levels above.",
+        });
+        return;
+      }
+
+      // Path B: no live call. Acquire a private mic capture for the
+      // monitor — same code path that was here before. The user
+      // explicitly toggled "Start monitor" so the permission
+      // prompt isn't surprising.
       const context = new AudioContext();
       setWebAudioContext(context);
 
@@ -472,6 +592,15 @@ export function useSettingsAudio({
 
   const stopListening = () => {
     setIsListening(false);
+    // Live-call subscription path (Path A above) — release the
+    // refcounted monitor and detach the frame listener.
+    if (liveMonitorUnsubRef.current) {
+      liveMonitorUnsubRef.current();
+      liveMonitorUnsubRef.current = null;
+    }
+    // Private getUserMedia path (Path B above) — tear down the
+    // AudioContext. The mic stream's tracks were owned by the
+    // source node; closing the context releases them.
     if (webAudioContext) {
       void webAudioContext.close();
       setWebAudioContext(null);
