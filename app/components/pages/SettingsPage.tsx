@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { useTheme } from "../../components/ThemeProvider";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { UserCard } from "../../components/UserCard";
+import { useToast } from "../Toast";
 import { CroppableImage } from "../../components/CroppableImage";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/Button";
@@ -40,7 +41,29 @@ export default function Settings() {
   const resetAuthTokenMutation = useResetAuthToken();
   const { logout } = useLogout();
   const theme = useTheme();
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const toast = useToast();
+  // Bridge the existing `setMessage` callback API the tabs already
+  // use → the global toast system. Every tab's success / error
+  // message now appears in the bottom-right toast surface (where
+  // the rest of the app's feedback already lives) instead of an
+  // inline banner stuck in the SettingsHeader.
+  //
+  // Keeps the `{type: 'success' | 'error', text: string} | null`
+  // signature so the tab callsites don't need a sweep — `null`
+  // becomes a no-op (no toast to fire). Picked `category: 'system'`
+  // so the toast suppressor (which filters out noisy success
+  // messages) doesn't eat settings confirmations.
+  const setMessage = useCallback(
+    (msg: { type: 'success' | 'error'; text: string } | null) => {
+      if (!msg) return;
+      toast({
+        message: msg.text,
+        tone: msg.type === 'error' ? 'error' : 'success',
+        category: 'system',
+      });
+    },
+    [toast],
+  );
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -80,13 +103,9 @@ export default function Settings() {
     }
   }, []);
 
-  // Auto-hide messages after 5 seconds
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
+  // Auto-hide was for the old inline Notice in SettingsHeader.
+  // Toasts auto-dismiss themselves via the ToastProvider's TTL
+  // (3-5s based on tone), so no timer needed here anymore.
 
   const hostPort = getHostPortFromStorage() || '';
 
@@ -268,8 +287,6 @@ export default function Settings() {
         <div className="flex-1 flex flex-col bg-[var(--color-background)] overflow-hidden">
           <SettingsHeader
             title={tabs.find((tab) => tab.id === activeTab)?.label || "Settings"}
-            message={message}
-            onDismissMessage={() => setMessage(null)}
           />
 
           {/* Content Area */}

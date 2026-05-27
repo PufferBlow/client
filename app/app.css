@@ -641,8 +641,18 @@ button[aria-disabled="true"],
 }
 
 @keyframes slideInRight {
+  /*
+   * Slide from off-screen-right into place. The previous variant
+   * started at translateX(10px) which was too subtle to read as
+   * a "slide" — the toast looked like it was popping in. With
+   * the toast anchored at bottom-right, animating from a wider
+   * starting offset (24px ≈ the bottom-4 / right-4 gutter) gives
+   * a clear directional cue without crossing into off-putting
+   * territory. Opacity fades in parallel so the motion has a
+   * cohesive feel rather than a hard appear.
+   */
   from {
-    transform: translateX(10px);
+    transform: translateX(24px);
     opacity: 0;
   }
   to {
