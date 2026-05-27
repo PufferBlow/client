@@ -841,7 +841,7 @@ export function DirectMessageView({
           page with a different conversation in it. */}
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 break-words"
+        className="pb-message-group-list flex-1 overflow-y-auto overflow-x-hidden p-4 break-words"
       >
         {messagesQuery.isLoading && messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center">
@@ -1151,7 +1151,7 @@ export function DirectMessageView({
                               )}
                               <MarkdownRenderer
                                 content={visibleBody}
-                                className="text-[var(--color-text)]"
+                                className="pb-message-body text-[var(--color-text)]"
                               />
                               <EditedTag
                                 count={msg.edit_count ?? 0}

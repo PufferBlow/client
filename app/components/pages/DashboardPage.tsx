@@ -3943,7 +3943,7 @@ export default function Dashboard() {
         {/* Messages Area */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 break-words"
+          className="pb-message-group-list flex-1 overflow-y-auto overflow-x-hidden p-4 break-words"
         >
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -4273,7 +4273,7 @@ export default function Dashboard() {
                               if (!parsed) {
                                 return (
                                   <>
-                                    <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                                    <MarkdownRenderer content={message.message} className="pb-message-body text-[var(--color-text)]" />
                                     <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={message.message} />
                                   </>
@@ -4282,7 +4282,7 @@ export default function Dashboard() {
                               if (!isContinuation) {
                                 return (
                                   <>
-                                    <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                    <MarkdownRenderer content={parsed.body} className="pb-message-body text-[var(--color-text)]" />
                                     <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={parsed.body} />
                                   </>
@@ -4308,7 +4308,7 @@ export default function Dashboard() {
                                     parentAvatar={parentAvatar}
                                     onJump={scrollToMessage}
                                   />
-                                  <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                  <MarkdownRenderer content={parsed.body} className="pb-message-body text-[var(--color-text)]" />
                                   <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                   <MessageEmbeds content={parsed.body} />
                                 </>

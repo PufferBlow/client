@@ -68,6 +68,45 @@
      surfaces; `modal` for actual full-overlay dialogs. */
   --shadow-popover: 0 8px 24px var(--color-shadow);
   --shadow-modal: 0 18px 42px var(--color-shadow-lg);
+
+  /* Message density variables. Defaults match the "Default / Medium /
+     Normal" layout combination. ThemeProvider overwrites these from
+     the Appearance settings' layout pills (`viewMode`, `messageSize`,
+     `messageSpacing`) so changing them in Settings actually moves
+     the chat UI. */
+  --pb-message-font-size: 14px;
+  --pb-message-group-gap: 1rem;
+  --pb-message-row-padding-y: 0.25rem;
+}
+
+/*
+ * Message-list density utilities.
+ *
+ * Channels and DMs both put `.pb-message-body` on the markdown
+ * container, `.pb-message-row` on each message row, and
+ * `.pb-message-group-list` on the column that stacks groups. Wiring
+ * those three classes lets every density variable come to life
+ * without touching component internals — set the CSS variable in
+ * ThemeProvider and the message list reflows.
+ *
+ * The classes inherit from CSS variables (not Tailwind utility
+ * classes) so they always win against the inline `text-sm` /
+ * `space-y-4` legacy markup. Specificity stays low (one class) so
+ * a per-message override is still possible if a future feature
+ * (highlighted message, error state) needs to force a size.
+ */
+.pb-message-body {
+  font-size: var(--pb-message-font-size);
+  line-height: 1.55;
+}
+
+.pb-message-row {
+  padding-top: var(--pb-message-row-padding-y);
+  padding-bottom: var(--pb-message-row-padding-y);
+}
+
+.pb-message-group-list > * + * {
+  margin-top: var(--pb-message-group-gap);
 }
 
 html,

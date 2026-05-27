@@ -112,57 +112,74 @@ export function ModernToggle({
   checked,
   onChange,
   size = 'medium',
-  color = '[var(--color-primary)]',
+  color: _color = '[var(--color-primary)]',
   disabled = false,
   className = '',
-  icons,
-  labels
+  icons: _icons,
+  labels: _labels,
 }: ModernToggleProps) {
+  // Reworked to the standard slim toggle every modern app ships:
+  // GitHub, Linear, Notion, iOS, Android — same pattern. The
+  // previous design had inline "ON"/"OFF" text inside the track
+  // plus a check/X icon inside the thumb, which made every toggle
+  // feel like a debug widget and chewed up disproportionate
+  // horizontal space (~w-16 for a medium control). The new shape
+  // is purely positional: a pill track whose color signals state,
+  // a circular thumb that slides between the two ends. No inline
+  // text, no icon inside the thumb. Label + helper-text live
+  // OUTSIDE the toggle (ToggleRow already provides them).
+  //
+  // The `color`, `icons`, `labels` props are accepted for
+  // backward compat but ignored — callers don't need to update
+  // their imports. The internal `_` prefix tells future readers
+  // and the linter that "yes, we know we're not using these."
   const sizeClasses = {
-    small: { container: 'w-12 h-6', thumb: 'w-4 h-4', translate: 'translate-x-6' },
-    medium: { container: 'w-16 h-8', thumb: 'w-6 h-6', translate: 'translate-x-8' },
-    large: { container: 'w-20 h-10', thumb: 'w-8 h-8', translate: 'translate-x-10' }
+    small: { track: 'h-4 w-7', thumb: 'h-3 w-3', on: 'translate-x-3.5', off: 'translate-x-0.5' },
+    medium: { track: 'h-5 w-9', thumb: 'h-4 w-4', on: 'translate-x-4', off: 'translate-x-0.5' },
+    large: { track: 'h-6 w-11', thumb: 'h-5 w-5', on: 'translate-x-5', off: 'translate-x-0.5' },
   };
 
-  const currentSize = sizeClasses[size];
+  const dims = sizeClasses[size];
 
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
-      className={`
-        relative inline-flex items-center rounded-full transition-colors duration-200 ease-in-out
-        ${currentSize.container} ${color} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${checked ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] border border-[var(--color-primary)]' : 'bg-[var(--color-surface-secondary)] border border-[var(--color-border)] text-[var(--color-text-secondary)]'}
-        ${className}
-      `}
+      className={[
+        // Pill track. `relative` + `inline-flex items-center` are
+        // the standard layout shape; the thumb absolutely positions
+        // itself via translate within the track's content box.
+        'relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200 ease-out',
+        // Color tracks state directly — no border swap, just a fill
+        // flip. Off uses surface-tertiary (one notch darker than
+        // surface-secondary) so it reads as "inactive" against the
+        // surrounding controls without needing a border outline.
+        checked
+          ? 'bg-[var(--color-primary)]'
+          : 'bg-[var(--color-surface-tertiary)] hover:bg-[var(--color-hover)]',
+        // Subtle focus ring — visible on keyboard focus, hidden
+        // otherwise. Matches the rest of the app's focus treatment.
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]',
+        dims.track,
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+        className,
+      ].join(' ')}
     >
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`text-[10px] font-medium transition-all duration-150 ${
-          checked
-            ? 'text-[var(--color-on-primary)] scale-100'
-            : 'text-[var(--color-text-secondary)] scale-75'
-        }`}>
-          {checked ? (labels?.on || 'ON') : (labels?.off || 'OFF')}
-        </span>
-      </div>
-
-      <div
-        className={`
-          relative inline-block rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-background)] transition-all duration-200 ease-in-out
-          ${currentSize.thumb} flex items-center justify-center
-          ${checked ? currentSize.translate : 'translate-x-0'}
-        `}
-      >
-        <div className={`transition-all duration-200 ${checked ? 'scale-100' : 'scale-75'}`}>
-          {checked ? (
-            icons?.on || <Check className="w-3 h-3 text-current" />
-          ) : (
-            icons?.off || <X className="w-3 h-3 text-current" />
-          )}
-        </div>
-      </div>
+      <span
+        aria-hidden="true"
+        className={[
+          // Thumb. Pure circle, white fill so it stands out on both
+          // the primary-tint ON track and the muted OFF track —
+          // same approach the iOS / GitHub toggles use to keep
+          // contrast guaranteed in both states.
+          'inline-block rounded-full bg-white shadow-sm transition-transform duration-200 ease-out',
+          dims.thumb,
+          checked ? dims.on : dims.off,
+        ].join(' ')}
+      />
     </button>
   );
 }
