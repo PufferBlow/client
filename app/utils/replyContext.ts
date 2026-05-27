@@ -39,6 +39,46 @@ export interface ParsedReplyContext {
 
 const HEADER_PATTERN = /^>\s*Replying to @(\S+)\s*$/;
 
+/**
+ * Pure builder that prepends the reply marker block to a body.
+ *
+ * Used by both the channel composer (via the `useDashboardData`
+ * wrapper that injects the users-map fallback for username
+ * resolution) and the DM composer (which gets the author from
+ * the DM payload's `sender_username` directly). Pulling the
+ * formatting into a shared helper keeps the wire shape identical
+ * across surfaces — `parseReplyContext` on read works the same
+ * way no matter where the reply came from.
+ *
+ * Excerpt is single-line, capped at 140 chars; if the target was
+ * itself a reply, the nested marker is stripped first so reply
+ * chains don't accumulate the entire history in every generation.
+ */
+export interface ReplyTargetForBuild {
+  message: string;
+  /** Pre-resolved author name. Caller decides which field on the
+   *  source payload provides this (channels use `username` from the
+   *  Message, DMs use `sender_username`). */
+  author: string;
+}
+
+export function buildReplyMessageBody(
+  body: string,
+  target: ReplyTargetForBuild | null,
+): string {
+  if (!target) return body;
+  const parsedTarget = parseReplyContext(target.message || "");
+  const targetVisibleBody = parsedTarget ? parsedTarget.body : (target.message || "");
+  const excerpt = targetVisibleBody
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 140);
+  const quotedLines = excerpt ? `> ${excerpt.replace(/\n/g, "\n> ")}\n\n` : "";
+  return `> Replying to @${target.author || "Unknown User"}\n${quotedLines}${body}`.trim();
+}
+
 export function parseReplyContext(content: string): ParsedReplyContext | null {
   if (!content) return null;
 

@@ -50,7 +50,7 @@ import {
 } from "../../services/friends";
 import { Modal } from "../ui/Modal";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
-import { createFallbackAvatarUrl } from "../../services/user";
+import { createFallbackAvatarUrl, createFullUrl } from "../../services/user";
 import type { ShowToast } from "../Toast";
 
 type TabId = "friends" | "pending" | "blocked";
@@ -311,7 +311,8 @@ export function DirectMessagesPanel({
                 const origin = row.blocked_origin_server?.trim();
                 const display = origin ? `${username}@${origin}` : username;
                 const avatarSrc =
-                  row.blocked_avatar_url || createFallbackAvatarUrl(username);
+                  createFullUrl(row.blocked_avatar_url ?? undefined) ||
+                  createFallbackAvatarUrl(username);
                 return (
                   <li
                     key={row.blocked_id}
@@ -489,8 +490,17 @@ function FriendshipRow({
   // distinct glyphs deterministically. Same fallback chain the
   // channel chat uses for unknown users — keeps the visual
   // language consistent.
+  //
+  // `createFullUrl` is required here: the server stores avatars as
+  // relative `/storage/<hash>` paths so the URL stays valid across
+  // a CDN swap. Without resolving against the active instance the
+  // browser fetches `/storage/<hash>` against the React Router
+  // app's origin and 404s — the bug a user reported as "friend
+  // avatars don't load."
   const avatarSeed = row.other_username?.trim() || handle || "user";
-  const avatarSrc = row.other_avatar_url || createFallbackAvatarUrl(avatarSeed);
+  const avatarSrc =
+    createFullUrl(row.other_avatar_url ?? undefined) ||
+    createFallbackAvatarUrl(avatarSeed);
 
   // Only friend rows render a presence dot — pending/blocked rows
   // are about graph state, not "are they online right now."

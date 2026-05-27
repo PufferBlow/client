@@ -79,6 +79,7 @@ import { AttachmentGrid } from "../AttachmentBubble";
 import { ProgressiveImage } from "../ui/ProgressiveImage";
 import { EditedTag } from "../EditedTag";
 import { InlineMessageEditor } from "../InlineMessageEditor";
+import { buildReplyMessageBody, parseReplyContext } from "../../utils/replyContext";
 import type { MessageAttachment } from "../../models/Message";
 import type { ShowToast } from "../Toast";
 
@@ -313,6 +314,11 @@ export function DirectMessageView({
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   // Which DM message is being edited inline. Null = no editor open.
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  // Reply target — the message being replied to. Drives the slim
+  // reply pill above the composer (mirrors the channel chat's
+  // pill exactly) and the markdown blockquote that gets prepended
+  // to the body on send. Clearing it cancels the reply.
+  const [replyTarget, setReplyTarget] = useState<DirectMessagePayload | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -506,8 +512,26 @@ export function DirectMessageView({
       }
     }
 
+    // Reply encoding: when a reply target is set, prepend the
+    // standard markdown blockquote header via the SHARED helper
+    // (`buildReplyMessageBody` in utils/replyContext) so the wire
+    // shape matches what channel messages emit. The reading-side
+    // `parseReplyContext` then renders the rich reply card
+    // identically across surfaces.
+    const replyAuthor =
+      replyTarget?.sender_username ||
+      replyTarget?.username ||
+      (replyTarget?.sender_user_id === peerUserId ? peerHandle : undefined) ||
+      "Unknown User";
+    const outgoingBody = replyTarget
+      ? buildReplyMessageBody(text, {
+          message: replyTarget.message || "",
+          author: replyAuthor,
+        })
+      : text;
+
     sendMutation.mutate(
-      { text, attachments: attachmentObjects },
+      { text: outgoingBody, attachments: attachmentObjects },
       {
         onSuccess: () => {
           // Clear preview URLs only after a successful send so the
@@ -516,6 +540,9 @@ export function DirectMessageView({
             if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
           });
           setPendingAttachments([]);
+          // Clear the reply target so the pill disappears and
+          // future sends are not interpreted as replies.
+          setReplyTarget(null);
         },
       },
     );
@@ -558,28 +585,16 @@ export function DirectMessageView({
   };
 
   /**
-   * Insert a quoted-reply prefix into the composer draft. The wire-
-   * level encoding (`> @user: excerpt\n`) matches what channels emit
-   * for their reply edges, so when typed reply support lands on the
-   * DM endpoint the renderer will pick the same blockquote up via
-   * `parseReplyContext` without any further client changes.
+   * Start a reply: set the target and focus the textarea. The reply
+   * pill above the composer renders from this state; the actual
+   * markdown blockquote is built on send via ``buildReplyMessageBody``
+   * (the channel side uses the same helper, so wire-level encoding
+   * is identical). Replaces the older prefix-into-draft helper —
+   * the user shouldn't have to delete a quote block by hand to
+   * back out of a reply.
    */
-  const insertReplyQuote = (msg: DirectMessagePayload) => {
-    const senderId = msg.sender_user_id || msg.sender_id || "";
-    const isFromPeer = senderId === peerUserId;
-    const author =
-      msg.sender_username ||
-      msg.username ||
-      (isFromPeer ? peerHandle : undefined) ||
-      (currentUser?.user_id === senderId ? currentUser?.username : undefined) ||
-      "user";
-    // Trim the excerpt to the first newline / 120 chars so the
-    // composer doesn't balloon to a screenful of quoted text on a
-    // long-message reply. Same heuristic the channel side uses.
-    const raw = (msg.message || "").replace(/\s+/g, " ").trim();
-    const excerpt = raw.length > 120 ? `${raw.slice(0, 117)}…` : raw;
-    const quote = `> Replying to @${author}\n> ${excerpt}\n\n`;
-    setDraft((prev) => (prev ? `${quote}${prev}` : quote));
+  const startReply = (msg: DirectMessagePayload) => {
+    setReplyTarget(msg);
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
@@ -1057,7 +1072,10 @@ export function DirectMessageView({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      insertReplyQuote(head);
+                      // Set the reply target — the pill above the
+                      // composer renders from this state. Same
+                      // pattern the channel chat uses.
+                      startReply(head);
                     }}
                     className="pb-icon-btn h-7 w-7 border-0 hover:bg-[var(--color-hover)]"
                     title="Reply"
@@ -1120,54 +1138,225 @@ export function DirectMessageView({
           the "+" upload picker and emoji button matching the
           channel composer's left-edge controls. */}
       <div className="px-4 pb-4 pt-2">
+        {/* Reply pill — slim bar attached to the top edge of the
+            composer (rounded-t-xl, border-b-0 so it visually
+            connects to the composer beneath). Mirrors the
+            channel-side pill verbatim: reply arrow, peer avatar,
+            "Replying to NAME", muted excerpt, close X. Cancel
+            clears the reply target; the body is plain text again.
+            On send, ``buildReplyMessageBody`` prepends the markdown
+            blockquote so the wire shape matches what channels
+            emit. */}
+        {replyTarget && (() => {
+          const replySenderId =
+            replyTarget.sender_user_id || replyTarget.sender_id || "";
+          const replyFromPeer = replySenderId === peerUserId;
+          const replyAuthor =
+            replyTarget.sender_username ||
+            replyTarget.username ||
+            (replyFromPeer ? peerHandle : undefined) ||
+            (currentUser?.user_id === replySenderId
+              ? currentUser?.username
+              : undefined) ||
+            "Unknown User";
+          // Strip any nested reply header off the target body
+          // before previewing — see the comment in
+          // buildReplyMessageBody for why.
+          const parsedTarget = parseReplyContext(replyTarget.message || "");
+          const visibleTargetText = parsedTarget
+            ? parsedTarget.body
+            : (replyTarget.message || "");
+          const rawText = visibleTargetText.replace(/\s+/g, " ").trim();
+          const PREVIEW_CHAR_CAP = 120;
+          const previewText = rawText
+            ? rawText.length > PREVIEW_CHAR_CAP
+              ? `${rawText.slice(0, PREVIEW_CHAR_CAP).trimEnd()}…`
+              : rawText
+            : "Attachment-only message";
+          // Avatar resolution: server-attached on the message
+          // payload first (sender_avatar_url), then the peer's
+          // passed-in avatar (covers messages from the peer where
+          // hydration may not have populated sender_avatar_url),
+          // then DiceBear fallback.
+          const replyAvatarSrc =
+            createFullUrl(replyTarget.sender_avatar_url ?? undefined) ||
+            (replyFromPeer ? createFullUrl(peerAvatarUrl ?? undefined) : null) ||
+            createFallbackAvatarUrl(replyAuthor);
+          return (
+            <div className="flex items-center gap-2 rounded-t-xl border border-b-0 border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5">
+              <svg
+                className="h-3.5 w-3.5 shrink-0 -scale-x-100 text-[var(--color-text-muted)]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <polyline points="9 14 4 9 9 4" />
+                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+              </svg>
+              <img
+                src={replyAvatarSrc}
+                alt=""
+                className="h-5 w-5 shrink-0 rounded-full object-cover"
+              />
+              <span className="text-xs font-semibold text-[var(--color-text)] truncate max-w-[10rem]">
+                {replyAuthor}
+              </span>
+              <span className="text-xs text-[var(--color-text-muted)] truncate min-w-0 flex-1">
+                {previewText}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setReplyTarget(null);
+                }}
+                className="shrink-0 rounded-full p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-error)]/15 hover:text-[var(--color-error)]"
+                title="Cancel reply"
+                aria-label="Cancel reply"
+              >
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          );
+        })()}
         <div
-          className={`relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-6 py-4 ${
-            sendMutation.isPending || isUploading ? "opacity-90" : ""
-          }`}
+          className={`relative border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-6 py-4 ${
+            replyTarget ? "rounded-b-xl border-t-0" : "rounded-xl"
+          } ${sendMutation.isPending || isUploading ? "opacity-90" : ""}`}
         >
           {/* Pending attachment chips — same vertical slot the
               channel composer uses, just inside the DM bar. */}
+          {/* Attachment previews — matches the channel composer
+              layout exactly: card grid with image / video / file
+              thumbnail (96×96 area), filename truncated below,
+              size + type in muted text, X to remove. Channel uses
+              `composerAttachmentPreviews` from useDashboardComposer;
+              DMs synthesize the same preview shape inline from
+              the local file objects since the DM upload path
+              hasn't been hoisted into a shared hook yet. */}
           {pendingAttachments.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
-              {pendingAttachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="group relative flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-xs"
-                >
-                  {att.previewUrl ? (
-                    <img
-                      src={att.previewUrl}
-                      alt=""
-                      className="h-8 w-8 rounded object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <div className="max-w-[10rem] truncate text-[var(--color-text)]">
-                      {att.file.name}
-                    </div>
-                    <div className="text-[10px] text-[var(--color-text-muted)]">
-                      {(att.file.size / 1024).toFixed(1)} KB
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAttachment(att.id)}
-                    title="Remove attachment"
-                    aria-label="Remove attachment"
-                    className="ml-1 rounded-md p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+              {pendingAttachments.map((att) => {
+                const isImage = att.file.type.startsWith("image/");
+                const isVideo = att.file.type.startsWith("video/");
+                const sizeMb = att.file.size / (1024 * 1024);
+                return (
+                  <div
+                    key={att.id}
+                    className="relative bg-[var(--color-surface-secondary)] rounded-lg p-3 border border-[var(--color-border)] group hover:border-[var(--color-border)] transition-colors"
                   >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                    {isImage && att.previewUrl ? (
+                      <div className="flex flex-col items-center space-y-2">
+                        <img
+                          src={att.previewUrl}
+                          alt={att.file.name}
+                          className="max-w-24 max-h-24 object-cover rounded"
+                        />
+                        <div className="text-center">
+                          <p
+                            className="text-xs text-[var(--color-text)] font-medium truncate max-w-24"
+                            title={att.file.name}
+                          >
+                            {att.file.name}
+                          </p>
+                          <p className="text-xs text-[var(--color-text-secondary)]">
+                            {sizeMb.toFixed(1)}MB
+                          </p>
+                        </div>
+                      </div>
+                    ) : isVideo && att.previewUrl ? (
+                      <div className="flex flex-col items-center space-y-2">
+                        <video
+                          src={att.previewUrl}
+                          className="max-w-24 max-h-24 rounded object-cover"
+                          muted
+                          preload="metadata"
+                        />
+                        <div className="text-center">
+                          <p
+                            className="text-xs text-[var(--color-text)] font-medium truncate max-w-24"
+                            title={att.file.name}
+                          >
+                            {att.file.name}
+                          </p>
+                          <p className="text-xs text-[var(--color-text-secondary)]">
+                            {sizeMb.toFixed(1)}MB • Video
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center space-y-2 text-center">
+                        <svg
+                          className="w-12 h-12 text-[var(--color-text-secondary)]"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        <div>
+                          <p
+                            className="text-xs text-[var(--color-text)] font-medium truncate max-w-24"
+                            title={att.file.name}
+                          >
+                            {att.file.name}
+                          </p>
+                          <p className="text-xs text-[var(--color-text-secondary)]">
+                            {sizeMb.toFixed(1)}MB • {att.file.type || "Unknown type"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Remove button — matches the channel composer's
+                        position + tone exactly. Hidden until hover so
+                        the preview chrome stays clean at rest. */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(att.id)}
+                      title="Remove attachment"
+                      aria-label="Remove attachment"
+                      className="absolute -top-2 -right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-error)] text-[var(--color-on-primary)] opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <svg
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1368,6 +1557,15 @@ export function DirectMessageView({
             onClose={closeContextMenu}
             onCopyMessage={() => handleCopyMessage(contextMenu.message)}
             onCopyMessageId={() => handleCopyMessageId(contextMenu.message)}
+            onReply={() => {
+              // Sets the reply target + focuses the composer.
+              // The pill above the composer renders from the
+              // shared state; on send the body is wrapped via
+              // buildReplyMessageBody so the wire shape matches
+              // channel replies exactly.
+              startReply(contextMenu.message);
+              closeContextMenu();
+            }}
             onEdit={
               // Edit Message is wired to PATCH /api/v1/dms/messages/{id}.
               // Capability matches Delete — only the original author
