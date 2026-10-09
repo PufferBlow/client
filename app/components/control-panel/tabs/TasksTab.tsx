@@ -422,7 +422,17 @@ export function TasksTab({
                       <button
                         onClick={() => handleRunTask(taskId)}
                         disabled={isRunning || !task.enabled}
-                        className={`flex items-center space-x-1 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRunning ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-muted)]' : 'bg-[var(--color-success)] text-[var(--color-on-success)] hover:opacity-90'}`}
+                        // Was bg-[var(--color-success)] (solid green) -- the only
+                        // saturated-color button anywhere in the control panel,
+                        // breaking the monochrome theme every other primary
+                        // action (Create Channel, Save Changes, Upload...) uses.
+                        // Routes through the same shared button variant now.
+                        className={cx(
+                          "flex items-center space-x-1 text-sm",
+                          isRunning
+                            ? "rounded px-3 py-1.5 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--color-surface-tertiary)] text-[var(--color-text-muted)]"
+                            : controlPanelButtonClass('primary'),
+                        )}
                       >
                         {isRunning ? (
                           <>
