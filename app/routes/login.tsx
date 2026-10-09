@@ -9,7 +9,10 @@ import { PufferblowBrand } from "../components/PufferblowBrand";
 import { Notice } from "../components/ui/Notice";
 import { normalizeInstance, resolveInstance } from "../services/instance";
 import { login, handleAuthentication } from "../services/user";
-import { sanitizeAuthError } from "../utils/authErrors";
+import {
+  classifyAuthError,
+  type AuthErrorClassification,
+} from "../utils/authErrors";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
@@ -22,7 +25,17 @@ export function meta({}: Route.MetaArgs) {
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  // Banner-level error message — shown in a Notice at the top of
+  // the form. Used for non-field errors (network, banned account,
+  // server outage) and as a fallback when the typed envelope
+  // didn't tag a specific field.
   const [error, setError] = useState<string | null>(null);
+  // Field-level errors for inline highlighting. Populated from the
+  // typed AppError.details.field that the server now ships on
+  // ``auth.username_*`` and ``auth.password_*`` codes. Reset on
+  // every submit so a fixed validation doesn't keep its red ring
+  // after a successful attempt.
+  const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const redirectTarget = resolvePostAuthRedirect(
@@ -36,9 +49,29 @@ export default function Login() {
     }
   }, [loginSuccess, navigate, redirectTarget]);
 
+  /**
+   * Apply an AuthErrorClassification to form state — pulls field
+   * errors onto inline inputs, falls through to the banner for
+   * non-field cases. Wrapping the dispatch in one helper keeps
+   * the submit handler readable.
+   */
+  const applyClassification = (cls: AuthErrorClassification) => {
+    if (cls.field === "username") {
+      setFieldErrors({ username: cls.message });
+      setError(null);
+    } else if (cls.field === "password") {
+      setFieldErrors({ password: cls.message });
+      setError(null);
+    } else {
+      setFieldErrors({});
+      setError(cls.message);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setFieldErrors({});
     setIsLoading(true);
 
     const formData = new FormData(event.currentTarget);
@@ -68,11 +101,15 @@ export default function Login() {
     const response = await login(normalizedInstance, { username, password });
 
     if (!response.success) {
-      // Never echo the server's raw error here — it may distinguish
-      // "user not found" from "wrong password," which is a username-
-      // enumeration vector. sanitizeAuthError collapses both to a
-      // single generic message.
-      setError(sanitizeAuthError(response.error, "Login failed.").message);
+      // classifyAuthError reads the typed envelope (when present)
+      // and picks the right field / kind / message. Enumeration
+      // resistance still holds: ``auth.invalid_credentials`` maps
+      // to the generic "Invalid username or password." regardless
+      // of whether the server's reason was "no such user" or
+      // "wrong password" (the server's internal message field
+      // carries the truth for logs; only ``user_message`` /
+      // ``error_code`` is sanitised).
+      applyClassification(classifyAuthError(response, "Login failed."));
       setIsLoading(false);
       return;
     }
@@ -134,6 +171,7 @@ export default function Login() {
               autoComplete="username"
               label="Username"
               disabled={isSubmitting}
+              error={fieldErrors.username}
               fullWidth
               required
             />
@@ -144,6 +182,7 @@ export default function Login() {
               autoComplete="current-password"
               label="Password"
               disabled={isSubmitting}
+              error={fieldErrors.password}
               fullWidth
               required
             />

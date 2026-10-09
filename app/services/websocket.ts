@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { resolveInstance } from './instance';
+import { networkStatus } from './networkStatus';
 import { getHostPortFromStorage } from './user';
 import type { Message, MessageAttachment } from '../models';
 
@@ -255,11 +256,87 @@ export class GlobalWebSocket {
   private statusOnConnect: PresenceStatus | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Unsubscribe handle for the network-status listener. Held so
+   *  we can drop it cleanly in ``disconnect`` and avoid leaking
+   *  listeners across hot reloads in development. */
+  private networkStatusUnsubscribe: (() => void) | null = null;
+  /** Pending reconnect timer id. Tracked so we can cancel it when
+   *  the device goes offline — no point burning the exponential-
+   *  backoff budget while there's no chance of succeeding. */
+  private pendingReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Set while the device is offline. ``scheduleReconnect`` bails
+   *  when this is true so the manager doesn't thrash; the
+   *  network-status listener triggers a fresh ``connect()`` the
+   *  moment the device comes back online. */
+  private suspendedForOffline = false;
 
   constructor(authToken: string, hostPort: string, callbacks: WebSocketCallbacks = {}) {
     this.authToken = authToken;
     this.hostPort = hostPort;
     this.callbacks = callbacks;
+    // Subscribe to device-level connectivity changes so the manager
+    // can pause reconnect attempts when there's no point trying.
+    // The listener is wired up in the constructor (not in
+    // ``connect``) because the `online` event may fire BEFORE the
+    // caller calls connect — we want to be ready immediately so
+    // the first reconnect lands without delay.
+    this.networkStatusUnsubscribe = networkStatus.subscribe((online) => {
+      this.handleNetworkStatusChange(online);
+    });
+  }
+
+  /**
+   * Network-status transitions.
+   *
+   * Offline → cancel any pending reconnect timer and close the
+   *   socket if it's still trying. Set ``suspendedForOffline`` so
+   *   ``scheduleReconnect`` (which can also be triggered by
+   *   ``onclose`` here) doesn't immediately re-schedule.
+   *
+   * Online → wake up. Reset the reconnect counter (we don't want
+   *   to count the offline window as a failed attempt) and call
+   *   ``connect`` directly. If the WS was already connected this
+   *   is a no-op (``connect`` short-circuits).
+   */
+  private handleNetworkStatusChange(online: boolean): void {
+    if (!online) {
+      if (this.suspendedForOffline) return;
+      this.suspendedForOffline = true;
+      websocketLogger.info(
+        'Device offline detected — suspending WebSocket reconnect attempts',
+      );
+      if (this.pendingReconnectTimer !== null) {
+        clearTimeout(this.pendingReconnectTimer);
+        this.pendingReconnectTimer = null;
+      }
+      // Close any in-flight CONNECTING socket — there's no point
+      // letting it run out the TCP timeout. An already-connected
+      // socket gets closed too because it's effectively dead once
+      // the device lost connectivity; the browser would just take
+      // longer to tell us.
+      if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+        try {
+          this.ws.close(1001, 'Device offline');
+        } catch {
+          // Defensive — close() shouldn't throw on a CONNECTING
+          // socket but browsers have shipped bugs there.
+        }
+      }
+      this.setConnectionState('disconnected');
+      return;
+    }
+    if (!this.suspendedForOffline) return;
+    this.suspendedForOffline = false;
+    websocketLogger.info(
+      'Device back online — attempting WebSocket reconnect immediately',
+    );
+    // Reset the reconnect-attempt budget so the offline window
+    // didn't eat retries that should count against actual server
+    // failures.
+    this.reconnectAttempts = 0;
+    if (!this.isDestroyed) {
+      this.connect();
+    }
   }
 
   setStatusOnConnect(status: PresenceStatus | null): void {
@@ -373,6 +450,16 @@ export class GlobalWebSocket {
   }
 
   private scheduleReconnect(): void {
+    // Suspended because the device is offline — don't burn retries
+    // while there's no chance of success. The network-status
+    // listener restarts the cycle when the device reconnects.
+    if (this.suspendedForOffline) {
+      websocketLogger.info(
+        'Reconnect requested while device offline — deferring until online',
+      );
+      return;
+    }
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       websocketLogger.error('Max reconnect attempts reached for global WebSocket');
       this.setConnectionState('disconnected');
@@ -383,7 +470,8 @@ export class GlobalWebSocket {
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
     websocketLogger.info(`Scheduling global WebSocket reconnect in ${delay}ms`);
 
-    setTimeout(() => {
+    this.pendingReconnectTimer = setTimeout(() => {
+      this.pendingReconnectTimer = null;
       this.reconnectAttempts++;
       this.connect();
     }, delay);
@@ -393,6 +481,14 @@ export class GlobalWebSocket {
     this.isDestroyed = true;
     this.stopHeartbeat();
     this.unregisterBeforeUnloadHandler();
+    if (this.pendingReconnectTimer !== null) {
+      clearTimeout(this.pendingReconnectTimer);
+      this.pendingReconnectTimer = null;
+    }
+    if (this.networkStatusUnsubscribe) {
+      this.networkStatusUnsubscribe();
+      this.networkStatusUnsubscribe = null;
+    }
     if (this.ws) {
       this.ws.close(1000, 'Global WebSocket component unmounted');
       this.ws = null;

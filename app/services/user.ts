@@ -892,6 +892,21 @@ export const handleAuthentication = async (
     rememberMe,
   });
 
+  // Tell the instance-health tracker this is the user's home host
+  // so subsequent failures against it surface as the more
+  // prominent ``instance.home_unreachable`` code (top-of-app
+  // banner) rather than ``instance.unreachable`` (per-instance
+  // badge). Done after the token write so any auto-fired request
+  // against the home instance from this point on inherits the
+  // home semantics.
+  try {
+    const { instanceHealth } = await import("./instanceHealth");
+    instanceHealth.setHomeHostPort(hostPort);
+  } catch {
+    // instanceHealth import is best-effort — the rest of the auth
+    // flow doesn't depend on it.
+  }
+
   await bootstrapDecentralizedNodeSession(token);
 };
 
@@ -1335,15 +1350,30 @@ export const useUserProfile = (userId: string) => {
   });
 };
 
-// Hook to logout user
+// Hook to logout user.
+//
+// `logout()` is now async-aware: callers can `await` it before
+// navigating so the sequence is guaranteed:
+//   1. queryClient.clear()       — drop in-memory query state
+//   2. authTokenCache = null     — drop the module-level cache
+//   3. logoutCurrentSession()    — clear cookies, storage tokens,
+//                                  node_session_token, and the
+//                                  persist-query-client disk cache
+//                                  via clearSessionTokens(), then
+//                                  best-effort revoke of refresh
+//                                  token against the server
+// Without the await, the previous implementation raced the
+// `window.location.href = '/login'` call against the revoke +
+// storage cleanup — on a slow network the navigation fired first
+// and the next page load could still see partial state.
 export const useLogout = () => {
   const queryClient = useQueryClient();
 
   return {
-    logout: () => {
+    logout: async () => {
       queryClient.clear();
       authTokenCache = null;
-      void logoutCurrentSession();
+      await logoutCurrentSession();
     }
   };
 };

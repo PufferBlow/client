@@ -12,6 +12,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getAuthTokenFromCookies, type ListUsersResponse } from "../../../services/user";
 import { banUser, timeoutUser } from "../../../services/moderation";
+import { showApiError } from "../../../services/showApiError";
 import type { ShowToast } from "../../Toast";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../ModerationActionModal";
 import { MemberRoleEditorModal, RoleBadgeList } from "../RoleManagement";
@@ -182,11 +183,7 @@ export function MembersTab({
           reason: data.reason,
         });
         if (!response.success) {
-          showToast({
-            message: `Failed to timeout ${username}: ${response.error || 'Unknown error'}`,
-            tone: 'error',
-            category: 'system',
-          });
+          showApiError(showToast, response, { action: `time out ${username}` });
           return;
         }
         const minutes = data.durationMinutes!;
@@ -201,11 +198,7 @@ export function MembersTab({
           reason: data.reason,
         });
         if (!response.success) {
-          showToast({
-            message: `Failed to ban ${username}: ${response.error || 'Unknown error'}`,
-            tone: 'error',
-            category: 'system',
-          });
+          showApiError(showToast, response, { action: `ban ${username}` });
           return;
         }
         showToast({

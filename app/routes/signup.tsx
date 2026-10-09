@@ -9,7 +9,10 @@ import { PufferblowBrand } from "../components/PufferblowBrand";
 import { Notice } from "../components/ui/Notice";
 import { normalizeInstance, resolveInstance } from "../services/instance";
 import { signup, handleAuthentication } from "../services/user";
-import { sanitizeAuthError } from "../utils/authErrors";
+import {
+  classifyAuthError,
+  type AuthErrorClassification,
+} from "../utils/authErrors";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../utils/authRedirect";
 
 export function meta({}: Route.MetaArgs) {
@@ -22,7 +25,18 @@ export function meta({}: Route.MetaArgs) {
 export default function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
+  // Banner-level error for non-field cases (instance unreachable,
+  // signup disabled, server outage). Field-specific errors live in
+  // ``fieldErrors`` below.
   const [error, setError] = useState<string | null>(null);
+  // Inline field errors for the three text inputs the user can
+  // actually fix. ``confirmPassword`` is a client-only check (no
+  // server signal carries it).
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
   const redirectTarget = resolvePostAuthRedirect(
@@ -36,9 +50,27 @@ export default function Signup() {
     }
   }, [signupSuccess, navigate, redirectTarget]);
 
+  /**
+   * Dispatch an AuthErrorClassification into form state — field
+   * errors for inline highlighting, banner for everything else.
+   */
+  const applyClassification = (cls: AuthErrorClassification) => {
+    if (cls.field === "username" || cls.field === "new_username") {
+      setFieldErrors({ username: cls.message });
+      setError(null);
+    } else if (cls.field === "password") {
+      setFieldErrors({ password: cls.message });
+      setError(null);
+    } else {
+      setFieldErrors({});
+      setError(cls.message);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setFieldErrors({});
     setIsLoading(true);
 
     const formData = new FormData(event.currentTarget);
@@ -48,6 +80,10 @@ export default function Signup() {
     const hostPort = formData.get("hostPort") as string;
     const rememberMe = formData.get("remember-me") === "on";
 
+    // Client-side gates BEFORE we send anything. The server now
+    // enforces the same password/username rules — these checks
+    // exist for instant feedback (no round-trip) and to catch the
+    // pre-send mistakes (password mismatch) the server never sees.
     if (!username || !password || !confirmPassword || !hostPort) {
       setError("All fields are required.");
       setIsLoading(false);
@@ -55,13 +91,13 @@ export default function Signup() {
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setFieldErrors({ confirmPassword: "Passwords don't match." });
       setIsLoading(false);
       return;
     }
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+      setFieldErrors({ password: "Password must be at least 8 characters long." });
       setIsLoading(false);
       return;
     }
@@ -81,11 +117,12 @@ export default function Signup() {
     const response = await signup(normalizedInstance, { username, password });
 
     if (!response.success) {
-      // Sanitize so the form never echoes a server message that, for
-      // example, distinguishes "username taken" from "username invalid"
-      // in a way that aids enumeration. Known cases map to friendly
-      // generic strings; everything else falls back.
-      setError(sanitizeAuthError(response.error, "Signup failed.").message);
+      // classifyAuthError reads the typed envelope when present,
+      // pulls field hints onto inline inputs (username taken,
+      // password rejected by server-side rules), and falls back to
+      // the banner for non-field cases (signup disabled, server
+      // outage, network).
+      applyClassification(classifyAuthError(response, "Signup failed."));
       setIsLoading(false);
       return;
     }
@@ -147,6 +184,7 @@ export default function Signup() {
               autoComplete="username"
               label="Username"
               disabled={isSubmitting}
+              error={fieldErrors.username}
               fullWidth
               required
             />
@@ -158,6 +196,7 @@ export default function Signup() {
               label="Password"
               disabled={isSubmitting}
               minLength={8}
+              error={fieldErrors.password}
               fullWidth
               required
             />
@@ -168,6 +207,7 @@ export default function Signup() {
               autoComplete="new-password"
               label="Confirm password"
               disabled={isSubmitting}
+              error={fieldErrors.confirmPassword}
               fullWidth
               required
             />

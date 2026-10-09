@@ -22,13 +22,28 @@ import { UserListItem } from "../../components/dashboard/UserListItem";
 import { AddServerButton } from "../../components/dashboard/AddServerButton";
 import { JoinServerModal } from "../../components/dashboard/JoinServerModal";
 import { ChannelSidebarHeader } from "../../components/dashboard-page/ChannelSidebarHeader";
-import { DirectMessagesPanel } from "../../components/dashboard-page/DirectMessagesPanel";
+import {
+  DirectMessagesPanel,
+  type SelectedFriendForDM,
+} from "../../components/dashboard-page/DirectMessagesPanel";
+import { DirectMessageConversationsPanel } from "../../components/dashboard-page/DirectMessageConversationsPanel";
+import { DirectMessageView } from "../dashboard-page/DirectMessageView";
 import { MembersList } from "../../components/dashboard-page/MembersList";
 import { ChatHeader } from "../../components/dashboard-page/ChatHeader";
 import { ChannelList } from "../../components/dashboard-page/ChannelList";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { ProgressiveImage } from "../../components/ui/ProgressiveImage";
 import { Twemoji } from "../../components/ui/Twemoji";
+import { ReactionGlyph } from "../../components/ReactionGlyph";
+import { EditedTag } from "../../components/EditedTag";
+import { InlineMessageEditor } from "../../components/InlineMessageEditor";
+import { updateMessage } from "../../services/message";
+import { showApiError } from "../../services/showApiError";
+import { OfflineBanner } from "../../components/OfflineBanner";
+import { PttHint } from "../../components/PttHint";
+import { useStickers, indexStickersById } from "../../services/useStickers";
+import { useHomeInstanceHealth } from "../../services/instanceHealth";
+import { useNetworkStatus } from "../../services/networkStatus";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { ModerationActionModal, type ModerationActionSubmit } from "../../components/ModerationActionModal";
 import { validateMessageInput } from "../../utils/markdown";
@@ -39,7 +54,27 @@ import { logger } from "../../utils/logger";
 import { getAuthTokenFromCookies, getHostPortFromCookies, getHostPortFromStorage, useCurrentUserProfile, getUserProfileById, createFallbackAvatarUrl, createFullUrl, getResolvedRoleNames, getUserAccentColor, getUserRoles, hasResolvedPrivilege, updateUserStatus, resolveAvatarUrl, resolveBanner, resolveSenderAvatarUrl } from "../../services/user";
 import { listChannels, createChannel, deleteChannel, updateChannel } from "../../services/channel";
 import { Modal } from "../../components/ui/Modal";
-import { addReaction, deleteMessage, getMessageReadHistory, loadMessages, markMessageAsRead, removeReaction, searchChannelMessages, sendMessage } from "../../services/message";
+import {
+  resolveFriendEdge,
+  useFriendGraph,
+  useFriendGraphMutations,
+} from "../../services/useFriendGraph";
+import {
+  addReaction,
+  bulkSetServerMute,
+  deleteMessage,
+  getMessageReadHistory,
+  listNotificationPreferences,
+  loadMessages,
+  markChannelRead,
+  markMessageAsRead,
+  markServerRead,
+  removeReaction,
+  resetChannelNotificationPreference,
+  searchChannelMessages,
+  sendMessage,
+  setChannelNotificationPreference,
+} from "../../services/message";
 import {
   dispatchDesktopNotification,
   ensureNotificationPermission,
@@ -81,6 +116,27 @@ export default function Dashboard() {
   const { setServerName, setServerAvatarUrl, setChannelName } = useTitleBar();
   const loginRedirectPath = buildAuthRedirectPath(location.pathname, location.search, location.hash);
   const { data: currentUser, isLoading: userLoading, error: userError } = useCurrentUserProfile();
+  // Instance sticker library — loaded once at dashboard mount, cached
+  // by react-query for the picker AND used here to resolve sticker
+  // reaction keys (`sticker:<id>`) into thumbnails on message
+  // reaction pills. Indexed by id in a memo so per-pill lookups
+  // are O(1).
+  const _stickerAuth =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const _stickerHost =
+    (typeof window !== "undefined" &&
+      (getHostPortFromStorage() || getHostPortFromCookies())) ||
+    undefined;
+  const stickersQuery = useStickers(_stickerHost, _stickerAuth);
+  const stickersById = useMemo(
+    () => indexStickersById(stickersQuery.data),
+    [stickersQuery.data],
+  );
+  // Home-instance health drives the rail offline dot. Subscribes
+  // via the instanceHealth singleton so any request anywhere in
+  // the app updates this state — no per-component health
+  // observation needed.
+  const homeInstanceHealth = useHomeInstanceHealth();
   const {
     persistedChannelId,
     persistSelectedChannel,
@@ -111,6 +167,8 @@ export default function Dashboard() {
     setCurrentMenuMessageId,
     hoveredMessageId,
     setHoveredMessageId,
+    editingMessageId,
+    setEditingMessageId,
     membersListVisible,
     setMembersListVisible,
     userContextMenu,
@@ -150,6 +208,8 @@ export default function Dashboard() {
     readMessageIds,
     unreadCountsByChannel,
     setUnreadCountsByChannel,
+    mutedChannelIds,
+    setMutedChannelIds,
     manualPresenceLock,
     unreadMarker,
     setUnreadMarker,
@@ -276,6 +336,71 @@ export default function Dashboard() {
   // render block below.
   const [dmsOpen, setDmsOpen] = useState(false);
 
+  // Friend currently being chatted with inside the DM surface.
+  // null = the DM column is showing the Friends list / panel; set
+  // = the main pane swaps to the DM chat view. Cleared whenever
+  // the user leaves DM view (server-rail click) so a return trip
+  // lands on the panel index instead of resurrecting the previous
+  // conversation.
+  const [selectedFriendForDM, setSelectedFriendForDM] =
+    useState<SelectedFriendForDM | null>(null);
+
+  // Friend graph — one place owns the wire reads, the perspective
+  // resolver (`resolveFriendEdge`), and the mutation callbacks the
+  // user-card popout / message-context menu / Friends panel all
+  // share. Mounting the hook here also seeds the react-query
+  // cache on dashboard mount so the first friend-action click
+  // doesn't pay a network round-trip.
+  const friendHostPort =
+    (typeof window !== "undefined" && (getHostPortFromStorage() || getHostPortFromCookies())) || undefined;
+  const friendAuthToken =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const friendGraph = useFriendGraph(friendHostPort, friendAuthToken);
+  const friendMutations = useFriendGraphMutations(friendHostPort, friendAuthToken);
+
+  /**
+   * One handler that does the right thing for the current edge
+   * with `targetUserId`. UserCard + MessageContextMenu both
+   * delegate to this so a single label-to-action mapping lives
+   * here:
+   *   * 'none'         → send a friend request
+   *   * 'pending-out'  → cancel the outgoing request
+   *   * 'pending-in'   → accept the incoming request
+   *   * 'friends'      → no-op (UI hides the affordance anyway)
+   *   * 'blocked'      → no-op (server would 403 anyway)
+   *   * 'self'         → no-op
+   * Errors surface as a toast so the user knows when something
+   * went wrong (most commonly: the server returned a 403 because
+   * the recipient has blocked incoming requests).
+   */
+  const handleFriendAction = (targetUserId: string | undefined) => {
+    if (!targetUserId) return;
+    const edge = resolveFriendEdge(
+      friendGraph.snapshot,
+      currentUser?.user_id,
+      targetUserId,
+    );
+    const onError = (err: unknown) => {
+      showToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : "Friend request action failed.",
+        tone: "error",
+        category: "system",
+      });
+    };
+    if (edge.state === "pending-in" && edge.friendship) {
+      friendMutations.accept.mutate(edge.friendship.friendship_id, { onError });
+    } else if (edge.state === "pending-out" && edge.friendship) {
+      friendMutations.cancelOrReject.mutate(edge.friendship.friendship_id, { onError });
+    } else if (edge.state === "none") {
+      friendMutations.sendRequest.mutate(targetUserId, { onError });
+    }
+    // 'friends' / 'blocked' / 'self' — no-op; the UI doesn't expose
+    // the button in those states, but guard anyway.
+  };
+
   // Channel half of the title-bar breadcrumb. Tracks the active
   // channel only; suppressed entirely while the DM panel is open
   // since "channel" doesn't apply to DMs. Cleared on unmount so
@@ -400,9 +525,15 @@ export default function Dashboard() {
           response.error?.includes('409') ||
           response.error?.toLowerCase().includes('already exists');
         showToast({
+          // Collision case kept explicit because the dashboard's
+          // inline rename happens during typing and benefits from a
+          // tighter "pick a different name" prompt. Other failures
+          // delegate to the envelope-aware decoder for tone,
+          // category, and a useful pre-formatted message.
           message: isCollision
             ? 'A channel with that name already exists. Choose a different name.'
-            : `Failed to update channel: ${response.error || 'Unknown error'}`,
+            : (response.errorDetails?.userMessage
+                ?? `Failed to update channel: ${response.error || 'Something went wrong.'}`),
           tone: 'error',
           category: isCollision ? 'validation' : 'system',
         });
@@ -608,6 +739,34 @@ export default function Dashboard() {
     }
   }
 
+  // Seeds `mutedChannelIds` from the server. Only persisted deviations
+  // come back (absence = default = notify normally), so the response is
+  // small even on busy accounts. Failures are non-fatal — the worst
+  // case is the user sees unread dots for channels they've muted on
+  // another device, until the next refresh.
+  async function fetchNotificationPrefsData(authToken: string): Promise<void> {
+    try {
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!hostPort) {
+        return;
+      }
+      const response = await listNotificationPreferences(hostPort, authToken);
+      if (response.success && response.data) {
+        const muted = new Set<string>();
+        for (const pref of response.data.preferences || []) {
+          if (pref.muted && pref.channel_id) {
+            muted.add(pref.channel_id);
+          }
+        }
+        setMutedChannelIds(muted);
+      }
+    } catch (error) {
+      logger.ui.warn("Failed to fetch notification preferences", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async function fetchReadHistoryData(authToken: string): Promise<void> {
     try {
       const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
@@ -791,6 +950,7 @@ export default function Dashboard() {
       fetchUsersData(authToken),
       fetchServerInfoData(authToken),
       fetchReadHistoryData(authToken),
+      fetchNotificationPrefsData(authToken),
     ]);
     // Don't override a manual presence lock (DND/AFK) already set in the DB.
     // manualPresenceLock state hasn't committed yet at this point, so check currentUser.status directly.
@@ -799,39 +959,39 @@ export default function Dashboard() {
     }
   }, [currentUser, updatePresenceStatus]);
 
-  // Initialize from persisted state after channels are loaded
+  // Initialize from persisted state after channels are loaded.
+  //
+  // Every path here goes through `handleChannelSelect` — the
+  // previously-bespoke "restore persisted channel" branch directly
+  // called `setSelectedChannel + loadChannelMessages` and skipped the
+  // unread-counts cleanup that `handleChannelSelect` does. That left a
+  // stale unread dot next to the channel the user was literally
+  // looking at on every cold start. Routing through the canonical
+  // selector fixes that and keeps every entry point's clear-on-enter
+  // semantics identical.
   useEffect(() => {
+    // Skip the auto-select when the user is in DM view — they
+    // explicitly left channel-land via the rail's DM slot, so
+    // re-selecting a channel here would yank them back into a
+    // channel they didn't ask for the moment they open DMs.
+    if (dmsOpen) return;
+
     if (channels.length > 0 && !selectedChannel) {
-      // Try to restore previously selected channel
       if (persistedChannelId) {
         const persistedChannel = channels.find(c => c.channel_id === persistedChannelId);
         if (persistedChannel) {
           logger.ui.debug("Restoring previously selected channel", { channelId: persistedChannel.channel_id });
-
-          // Set the selected channel and load messages automatically
-          setSelectedChannel(persistedChannel);
-
-          // Restore message draft for the persisted channel
-          const restoredDraft = getMessageDraft(persistedChannel.channel_id);
-          setMessageInput(restoredDraft);
-
-          // Load messages and setup WebSocket connection for the restored channel
-          loadChannelMessages(persistedChannel);
-          // Note: We don't call persistSelectedChannel here since it was already persisted
+          void handleChannelSelect(persistedChannel);
         } else {
           logger.ui.warn("Persisted channel not found, selecting first available channel", { persistedChannelId });
-          // Persisted channel no longer exists, select the first available channel
-          const firstChannel = channels[0];
-          handleChannelSelect(firstChannel);
+          void handleChannelSelect(channels[0]);
         }
       } else {
-        // No persisted channel, select the first available channel
         logger.ui.debug("No persisted channel found, selecting first available channel");
-        const firstChannel = channels[0];
-        handleChannelSelect(firstChannel);
+        void handleChannelSelect(channels[0]);
       }
     }
-  }, [channels, persistedChannelId, selectedChannel]);
+  }, [channels, persistedChannelId, selectedChannel, dmsOpen]);
 
   const showUnsupportedSingleInstanceAction = (action: string, detail: string) => {
     showToast({
@@ -922,10 +1082,15 @@ export default function Dashboard() {
    *
    *   1. Local message cache -- instant, covers the messages already
    *      loaded into the active view.
-   *   2. Server-side decrypt-and-scan for the active channel -- picks
-   *      up matches outside the local cache, capped at the server's
-   *      `scan_limit`. When the cap was hit, the result's `meta`
-   *      reports `truncatedScan: true` so the panel can warn the user.
+   *   2. Server-side ranked search for the active channel -- on a
+   *      modern Postgres-backed server this is a tsvector + GIN
+   *      lookup scored by `ts_rank_cd`, with attachment filenames
+   *      included in the index ("report.pdf" finds attachment-only
+   *      messages). Cost is O(matches), not O(channel size). On a
+   *      legacy server still using the decrypt-and-scan fallback,
+   *      `truncated_scan: true` may come back and the panel warns
+   *      the user that older matches outside the scan window
+   *      weren't covered.
    *
    * Returns an empty result set when no channel is selected, which
    * matches the UI behavior of hiding the search button entirely in
@@ -1164,6 +1329,73 @@ export default function Dashboard() {
     );
   };
 
+  /**
+   * Save an inline message edit.
+   *
+   * Persists via PATCH /api/v1/channels/{cid}/messages/{mid}, then
+   * patches the local message cache with the post-edit shape
+   * (new body + edit_count + last_edited_at) so the row re-renders
+   * immediately without waiting for the WS broadcast. Closes the
+   * editor regardless of success — on failure a toast surfaces
+   * the reason and the user can retry from the menu.
+   */
+  const handleSaveMessageEdit = useCallback(
+    async (messageId: string, newBody: string, channelId: string | null | undefined) => {
+      if (!channelId) {
+        showToast({
+          message: "Couldn't edit — this message isn't tied to a channel.",
+          tone: "error",
+          category: "validation",
+        });
+        return;
+      }
+      const authToken = getAuthTokenFromCookies() || "";
+      const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+      if (!authToken || !hostPort) {
+        showToast({
+          message: "You don't appear to be signed in.",
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      try {
+        const response = await updateMessage(hostPort, messageId, newBody, authToken, channelId);
+        if (!response.success || !response.data) {
+          showApiError(showToast, response, { action: "edit the message" });
+          return;
+        }
+        // Patch the local cache. Other viewers receive the WS
+        // ``message_edited`` broadcast; this is the optimistic
+        // path for the editor's own client.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === messageId
+              ? {
+                  ...m,
+                  message: response.data!.message,
+                  edit_count: response.data!.edit_count,
+                  last_edited_at: response.data!.last_edited_at,
+                }
+              : m,
+          ),
+        );
+        setEditingMessageId(null);
+      } catch (error) {
+        logger.ui.error("Unexpected error editing message", { error });
+        showToast({
+          message: "An unexpected error occurred while saving the edit.",
+          tone: "error",
+          category: "system",
+        });
+      }
+    },
+    // setMessages, setEditingMessageId, showToast are from the
+    // surrounding closure; deps array names what changes meaningfully.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showToast],
+  );
+
   // Message action handlers
   const handleMessageReply = (messageId: string | null) => {
     if (!messageId) {
@@ -1228,11 +1460,11 @@ export default function Dashboard() {
         : await addReaction(hostPort, channelId, messageId, emoji, authToken);
 
       if (!response.success) {
-        showToast({
-          message: `Failed to update reaction: ${response.error || 'Unknown error'}`,
-          tone: "error",
-          category: "system",
-        });
+        // showApiError unwraps the typed envelope, picks tone +
+        // category (validation vs system vs info), and uses the
+        // server's pre-formatted user_message — replaces the
+        // generic "Unknown error" fallback.
+        showApiError(showToast, response, { action: 'update the reaction' });
         return;
       }
 
@@ -1299,11 +1531,7 @@ export default function Dashboard() {
       });
 
       if (!response.success) {
-        showToast({
-          message: `Failed to submit user report: ${response.error || 'Unknown error'}`,
-          tone: "error",
-          category: "system",
-        });
+        showApiError(showToast, response, { action: 'submit the user report' });
         return;
       }
 
@@ -1328,11 +1556,7 @@ export default function Dashboard() {
     });
 
     if (!response.success) {
-      showToast({
-        message: `Failed to submit message report: ${response.error || 'Unknown error'}`,
-        tone: "error",
-        category: "system",
-      });
+      showApiError(showToast, response, { action: 'submit the message report' });
       return;
     }
 
@@ -1371,6 +1595,17 @@ export default function Dashboard() {
       // Report all messages in the group
       setReportModal({ isOpen: true, targetType: 'message', messages: messageIds });
     };
+
+    // Pin the menu's "current message" to the group head so the
+    // single-message actions (Reply, Edit, Delete, Add Reaction)
+    // have something to target. Without this, ``onReply`` /
+    // ``onEdit`` etc. fire with ``currentMenuMessageId === null``
+    // and bail silently — the bug the user reported as "Reply
+    // doesn't work from the right-click menu." The hover three-dot
+    // button already set this; right-click did not.
+    if (messageIds.length > 0) {
+      setCurrentMenuMessageId(messageIds[0]);
+    }
 
     setMessageContextMenu({
       isOpen: true,
@@ -1840,6 +2075,20 @@ export default function Dashboard() {
                 ? body.toLowerCase().includes(mentionHandle)
                 : false;
 
+              // Muted channel: still record the message in the
+              // message list (it'll appear when the user opens the
+              // channel), but skip the sidebar unread counter, the
+              // in-app notification dropdown, and the OS desktop
+              // toast. That mirrors the server-side behaviour for
+              // mention notifications (suppressed in
+              // `record_mentions_for_message` when the channel is
+              // muted) and matches the user's "stop pinging me here"
+              // intent.
+              const channelIsMuted = mutedChannelIds.has(incomingChannelId);
+              if (channelIsMuted) {
+                return;
+              }
+
               setUnreadCountsByChannel((prev) => ({
                 ...prev,
                 [incomingChannelId]: (prev[incomingChannelId] || 0) + 1,
@@ -1944,6 +2193,50 @@ export default function Dashboard() {
     await loadChannelMessages(channel);
   };
 
+  /**
+   * Switch the dashboard into "Direct messages" view.
+   *
+   * The rail's DM slot used to just flip `dmsOpen=true` and swap the
+   * channel-list panel for `DirectMessagesPanel` — but the MAIN pane
+   * still kept reading `selectedChannel` and rendering its messages /
+   * composer / WebSocket. Visually, the user saw the channel they'd
+   * just been in stick around behind the DM sidebar, which read as
+   * "the button doesn't do anything."
+   *
+   * Mirror the channel-side `handleChannelSelect` cleanup so the
+   * main pane has nothing channel-y to render:
+   *   - disconnect the per-channel WebSocket (no more incoming
+   *     channel messages once the user leaves channel view),
+   *   - flush + clear the draft persistence loop (we don't want a
+   *     half-typed message in a channel that's no longer in view),
+   *   - clear `selectedChannel`, `replyTarget`, and `messages` so
+   *     the chat area renders the dedicated DM empty state below.
+   *
+   * Also persist a sentinel ("") for `selectedChannel` so the
+   * "restore previously selected channel" effect doesn't yank the
+   * user back into a channel on the next mount when they explicitly
+   * chose the DM slot.
+   */
+  const handleOpenDirectMessages = () => {
+    if (dmsOpen) return;
+    flushPendingDraftPersistence();
+
+    if (webSocketConnection) {
+      webSocketConnection.disconnect();
+      setWebSocketConnection(null);
+    }
+    setSelectedChannel(null);
+    setMessages([]);
+    setReplyTarget(null);
+    setUnreadMarker(null);
+    setNotificationMenuOpen(false);
+    setMessageInput("");
+    // Entering DMs lands on the panel index — no conversation
+    // open by default. The user picks one from the Friends tab.
+    setSelectedFriendForDM(null);
+    setDmsOpen(true);
+  };
+
   const handleNotificationSelect = async (notification: NotificationItem) => {
     const channel = channels.find(
       (candidate) => candidate.channel_id === notification.channelId,
@@ -2025,13 +2318,16 @@ export default function Dashboard() {
   };
 
   /**
-   * Clear unread state for a single channel without navigating to it.
-   * Wired to the "Mark As Read" item on the channel context menu and
-   * called per-channel by the server-dropdown's "Mark All As Read".
-   * UI-only (no API call) -- mirrors how `handleChannelSelect` clears
-   * the channel's entry when the user actually opens it.
+   * "Mark As Read" for a single channel — wired to the channel context
+   * menu. Optimistically clears the local unread state, then calls the
+   * server's `POST /channels/{id}/mark_all_read` so the next snapshot
+   * (page reload, second-device sync, etc) reflects the change. The
+   * server-side helper writes every visible message into the user's
+   * read-history in one transaction, so this is cheap regardless of
+   * how busy the channel is.
    */
   const handleMarkChannelRead = (channelId: string) => {
+    // Optimistic UI: clear immediately so the click feels instant.
     markChannelNotificationsRead(channelId);
     setUnreadCountsByChannel((prev) => {
       if (!prev[channelId]) return prev;
@@ -2039,27 +2335,146 @@ export default function Dashboard() {
       delete next[channelId];
       return next;
     });
+
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    void markChannelRead(hostPort, channelId, authToken).then((response) => {
+      if (!response.success) {
+        logger.ui.warn("Mark channel read failed (state diverged)", {
+          channelId,
+          error: response.error,
+        });
+      }
+    });
   };
 
   /**
-   * Server-wide "Mark All As Read." Reuses the existing notification
-   * clear path; renamed in the UI to match the dropdown label.
+   * Server-wide "Mark All As Read." Optimistically clears the local
+   * unread map, then calls `POST /channels/mark_all_read` which does
+   * the equivalent per-channel work in a single DB transaction.
    */
   const handleMarkAllChannelsRead = () => {
     handleMarkAllNotificationsRead();
+    setUnreadCountsByChannel({});
+
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    void markServerRead(hostPort, authToken).then((response) => {
+      if (!response.success) {
+        logger.ui.warn("Mark server read failed (state diverged)", {
+          error: response.error,
+        });
+      }
+    });
   };
 
   /**
-   * Stub for server mute. The backend doesn't ship a per-server mute
-   * flag yet, so this surfaces the standard "not yet" toast instead of
-   * pretending to mute anything. The menu entry stays so the feature
-   * is discoverable; wiring lands once the API does.
+   * Toggle the per-channel mute state. Muted channels stop producing
+   * notification rows server-side (see
+   * `NotificationsManager.record_mentions_for_message`) and the
+   * client suppresses the unread dot for them (see ChannelList's
+   * `hasUnread` calculation).
+   *
+   * `muted=true`  → `PUT  /notifications/preferences/{id}` with
+   *                 muted=true, mention_only=false.
+   * `muted=false` → `DELETE /notifications/preferences/{id}` so no
+   *                 row remains (state matches a never-muted channel).
+   */
+  const handleToggleChannelMute = (channelId: string, nextMuted: boolean) => {
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    // Optimistic UI flip so the menu label / icon update immediately.
+    setMutedChannelIds((prev) => {
+      const next = new Set(prev);
+      if (nextMuted) next.add(channelId);
+      else next.delete(channelId);
+      return next;
+    });
+
+    const op = nextMuted
+      ? setChannelNotificationPreference(hostPort, channelId, authToken, {
+          muted: true,
+          mention_only: false,
+        })
+      : resetChannelNotificationPreference(hostPort, channelId, authToken);
+
+    void op.then((response) => {
+      if (!response.success) {
+        // Rollback the optimistic flip on failure.
+        setMutedChannelIds((prev) => {
+          const next = new Set(prev);
+          if (nextMuted) next.delete(channelId);
+          else next.add(channelId);
+          return next;
+        });
+        showToast({
+          message:
+            response.error ||
+            `Failed to ${nextMuted ? "mute" : "unmute"} the channel.`,
+          tone: "error",
+          category: "system",
+        });
+      }
+    });
+  };
+
+  /**
+   * "Mute Server" / "Unmute Server" — bulk applies the same `muted`
+   * flag across every accessible channel via the server-side bulk
+   * endpoint (single DB transaction, no half-muted state if the
+   * request fails partway).
+   *
+   * Decides between mute/unmute by inspecting the current
+   * `mutedChannelIds` set against the list of accessible channels:
+   * if every channel is already muted, the action unmutes;
+   * otherwise it mutes.
    */
   const handleMuteServer = () => {
-    showUnsupportedSingleInstanceAction(
-      "Server mute",
-      "Muting the whole server (silence channel notifications, keep mention pings) isn't shipped yet. The dropdown surfaces the action so we know to wire it once the API lands.",
+    const authToken = getAuthTokenFromCookies() || "";
+    const hostPort = getHostPortFromStorage() || getHostPortFromCookies();
+    if (!authToken || !hostPort) return;
+
+    const accessibleIds = channels.map((c) => c.channel_id);
+    const allMuted =
+      accessibleIds.length > 0 &&
+      accessibleIds.every((id) => mutedChannelIds.has(id));
+    const nextMuted = !allMuted;
+
+    // Optimistic update: flip the whole set.
+    setMutedChannelIds(
+      nextMuted ? new Set(accessibleIds) : new Set<string>(),
     );
+
+    void bulkSetServerMute(hostPort, authToken, nextMuted).then((response) => {
+      if (!response.success) {
+        // Rollback — best-effort, the user might have to refresh to
+        // sync if the request failed mid-flight on the server side.
+        setMutedChannelIds(
+          allMuted ? new Set(accessibleIds) : new Set<string>(),
+        );
+        showToast({
+          message:
+            response.error ||
+            `Failed to ${nextMuted ? "mute" : "unmute"} the server.`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      showToast({
+        message: nextMuted
+          ? `Muted ${response.data?.channels_changed ?? 0} channel(s).`
+          : `Unmuted ${response.data?.channels_changed ?? 0} channel(s).`,
+        tone: "success",
+        category: "system",
+      });
+    });
   };
 
   /**
@@ -2223,7 +2638,13 @@ export default function Dashboard() {
   // this means a fast typist isn't blocked by re-evaluations of these
   // derived fields -- React updates them in a low-priority pass.
   const deferredMessageInput = useDeferredValue(messageInput);
+  // Device-level offline gate. The OfflineBanner already covers
+  // the top-of-app surface; here we just prevent the user from
+  // hitting send and seeing a confusing "fetch failed" toast —
+  // disable the button + show the inline helper instead.
+  const isDeviceOnline = useNetworkStatus();
   const canSendMessage =
+    isDeviceOnline &&
     Boolean(selectedChannel) &&
     !isSendingMessage &&
     (Boolean(deferredMessageInput.trim()) || messageAttachments.length > 0);
@@ -2556,6 +2977,109 @@ export default function Dashboard() {
       logger.ui.error("Unexpected error sending GIF", { error });
       showToast({
         message: "An unexpected error occurred while sending the GIF.",
+        tone: "error",
+        category: "system",
+      });
+    }
+  };
+
+  /**
+   * Send a sticker as its own message in the current channel. The
+   * sticker_id rides through `sendMessage`'s `stickerIds` field;
+   * the server looks it up, synthesises the attachment dict, and
+   * the renderer routes it through the inline StickerRenderer
+   * branch in AttachmentBubble. We optionally include the alias in
+   * the body text (`:alias:`) so search and screen-readers have
+   * something to grab onto; the renderer's body-text suppression
+   * trick hides that text when the only payload is one sticker.
+   *
+   * Reaction intent (sticker picked from the message-hover smiley
+   * cluster, not the composer) is handled separately by checking
+   * `reactionTargetRef.current` before falling through to send.
+   */
+  const handleStickerSelect = async (sticker: { sticker_id: string; alias: string | null; display_name: string }) => {
+    setIsEmojiPickerOpen(false);
+
+    // Reaction mode: the hover-cluster smiley sets this ref before
+    // opening the picker. We dispatch through the same reaction-add
+    // path the emoji-react case uses, just encoded as `sticker:<id>`.
+    const reactionTarget = reactionTargetRef.current;
+    reactionTargetRef.current = null;
+    if (reactionTarget) {
+      try {
+        await applyReactionToMessage(reactionTarget, `sticker:${sticker.sticker_id}`);
+      } catch (error) {
+        logger.ui.error("Sticker reaction failed", { error });
+        showToast({
+          message: "Couldn't add sticker reaction.",
+          tone: "error",
+          category: "system",
+        });
+      }
+      return;
+    }
+
+    if (!selectedChannel) {
+      showToast({
+        message: "Pick a channel before sending a sticker.",
+        tone: "error",
+        category: "validation",
+      });
+      return;
+    }
+
+    const authToken = getAuthTokenFromCookies() || "";
+    if (!authToken) {
+      showToast({
+        message: "You don't appear to be signed in.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    const resolvedInstance =
+      resolveStoredInstance(getHostPortFromStorage()) ??
+      resolveStoredInstance(getHostPortFromCookies());
+    if (!resolvedInstance) {
+      showToast({
+        message: "No home instance configured.",
+        tone: "error",
+        category: "system",
+      });
+      return;
+    }
+
+    try {
+      const response = await sendMessage(
+        resolvedInstance.raw,
+        selectedChannel.channel_id,
+        {
+          // Empty body — the renderer treats a single-sticker message
+          // as "no text" and shows just the sticker glyph. Carry the
+          // alias as a hidden a11y label via the attachment filename.
+          content: "",
+          sentAt: new Date().toISOString(),
+          stickerIds: [sticker.sticker_id],
+        },
+        authToken,
+      );
+      if (!response.success) {
+        showToast({
+          message: `Failed to send sticker: ${response.error || "Unknown error"}`,
+          tone: "error",
+          category: "system",
+        });
+        return;
+      }
+      const createdMessage = response.data?.message_data;
+      if (createdMessage) {
+        appendUniqueMessage(createdMessage);
+      }
+    } catch (error) {
+      logger.ui.error("Unexpected error sending sticker", { error });
+      showToast({
+        message: "An unexpected error occurred while sending the sticker.",
         tone: "error",
         category: "system",
       });
@@ -2975,8 +3499,23 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-full overflow-hidden bg-[var(--color-background)] flex font-sans gap-2 p-2 select-none relative min-w-0">
-      {/* Left Sidebar Container */}
+    // Outer column wraps the OfflineBanner on top of the original
+    // horizontal flex layout. The banner is zero-height when
+    // healthy (returns null), so this column adds no layout cost
+    // in the common case. When the device is offline or the home
+    // instance is unreachable the banner slots in above the rails
+    // without disturbing their internal scroll behaviour — the
+    // inner `flex-1 min-h-0` keeps the rest of the app filling
+    // the remaining space.
+    <div className="h-full overflow-hidden bg-[var(--color-background)] flex flex-col font-sans select-none relative min-w-0">
+      <OfflineBanner />
+      {/* Floating "Hold KEY to talk" chip — auto-shows when a voice
+          call is connected AND the user's activation mode is PTT.
+          Pure visual; the actual mute/unmute lives in the voice
+          transport's own PTT listener. */}
+      <PttHint />
+      <div className="flex flex-1 min-h-0 gap-2 p-2">
+        {/* Left Sidebar Container */}
       <div className="flex h-full shrink-0 flex-col gap-2">
         {/* Server and Channel Sidebars Row */}
         <div className="flex min-h-0 flex-1 gap-2">
@@ -3010,7 +3549,7 @@ export default function Dashboard() {
               <ServerRailItem
                 label="Direct messages"
                 selected={dmsOpen}
-                onClick={() => setDmsOpen(true)}
+                onClick={handleOpenDirectMessages}
                 // `lockRestingPalette` keeps the avatar on the dark
                 // resting surface across hover AND selected. The
                 // Pufferblow mark draws in white strokes via
@@ -3022,42 +3561,47 @@ export default function Dashboard() {
                 // pill behavior is unchanged here.
                 lockRestingPalette
               >
-                {/* Three stacked horizontal bars — a "list of message
-                    rows" glyph for the DM affordance. Reads as a
-                    skeleton/list rather than a single bubble, which
-                    is what the user wants this slot to communicate:
-                    "go to your direct conversations", i.e. an inbox
-                    rather than one specific message.
+                {/* Rounded chat-bubble glyph — universally read as
+                    "direct messages" and visually consistent with
+                    the line-art icon set used elsewhere in the rail
+                    and title bar. The previous three-bars "list"
+                    glyph read as a skeleton/checklist and didn't
+                    track with the rest of the app's iconography;
+                    a speech bubble is the single most established
+                    affordance for "messages" and reads instantly.
 
                     Layout decisions:
-                      - Lines are the same length (x1=5 → x2=19) so
-                        the three rows read as a uniform stack — no
-                        accidental "checklist" interpretation.
-                      - Even vertical spacing: y=7, 12, 17. The 5-unit
-                        gap is identical between every pair, which is
-                        what "fixed gap" calls for.
-                      - `strokeLinecap="round"` gives the bars
-                        soft, pill-shaped ends so they read as
-                        skeleton placeholder bars instead of crisp
-                        rulers. `strokeWidth=2.4` keeps them weighty
-                        without crowding the gaps at 28×28 px.
-                      - `currentColor` is preserved so the icon
-                        inherits the locked resting palette's
-                        text-secondary color, same as the previous
-                        glyph. */}
+                      - Single rounded-rectangle bubble (rx=5) with
+                        a small tail at the bottom-left so the shape
+                        clearly reads as a message bubble rather
+                        than a generic rounded square. The tail
+                        anchors to (8,17)→(5,20)→(8,20) which is
+                        small enough not to crowd the 24×24 canvas
+                        but distinct enough to register at icon size.
+                      - Two short interior strokes (y=11, y=14)
+                        suggest "message lines" — keeps the icon
+                        from feeling empty without crossing into
+                        text-content territory.
+                      - `strokeWidth=2` (slightly lighter than the
+                        previous 2.4) because the bubble outline +
+                        two interior lines + a tail would feel
+                        cluttered at 2.4. The lighter stroke keeps
+                        the icon airy at 28×28.
+                      - `currentColor` preserved so the icon inherits
+                        the locked resting palette, same as before. */}
                 <svg
                   className="h-7 w-7"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth={2.4}
+                  strokeWidth={2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <line x1="5" y1="7" x2="19" y2="7" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <line x1="5" y1="17" x2="19" y2="17" />
+                  <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v8c0 1.38-1.12 2.5-2.5 2.5H10l-4 3.5V17H6.5C5.12 17 4 15.88 4 14.5z" />
+                  <line x1="8" y1="10" x2="16" y2="10" />
+                  <line x1="8" y1="13" x2="13" y2="13" />
                 </svg>
               </ServerRailItem>
 
@@ -3071,8 +3615,23 @@ export default function Dashboard() {
                 <ServerRailItem
                   label={serverInfo.server_name || "Server"}
                   selected={!dmsOpen}
-                  onClick={() => setDmsOpen(false)}
+                  onClick={() => {
+                    setDmsOpen(false);
+                    // Leaving DMs drops any open conversation so a
+                    // re-entry lands on the panel index — mirrors
+                    // how handleOpenDirectMessages clears on entry.
+                    setSelectedFriendForDM(null);
+                  }}
                   presenceClassName={dmsOpen ? undefined : "bg-[var(--color-success)]"}
+                  // Federation-aware offline indicator: dim + red dot
+                  // when the HOME instance has stopped responding. The
+                  // OfflineBanner already covers the device-offline
+                  // case at the top of the app; this dot is the
+                  // per-instance signal that survives once a future
+                  // build adds multi-instance support (each rail
+                  // entry gets its own dot driven by its own
+                  // ``useInstanceHealth(hostPort)``).
+                  offline={homeInstanceHealth?.kind === "unreachable"}
                 >
                   {serverInfo.avatar_url ? (
                     <ProgressiveImage
@@ -3122,7 +3681,17 @@ export default function Dashboard() {
               views. */}
           <ChannelPanel>
             {dmsOpen ? (
-              <DirectMessagesPanel />
+              // Sidebar in DM mode: list of conversations, not the
+              // Friends tabs. Clicking a conversation row sets
+              // selectedFriendForDM, which makes the main pane
+              // render DirectMessageView. The "Friends" button in
+              // the panel header clears the selection so the main
+              // pane swaps to the Friends/Pending/Blocked tabs.
+              <DirectMessageConversationsPanel
+                selectedFriendForDM={selectedFriendForDM}
+                onOpenDirectMessage={setSelectedFriendForDM}
+                onShowFriends={() => setSelectedFriendForDM(null)}
+              />
             ) : (
               <>
                 <ChannelSidebarHeader
@@ -3141,6 +3710,10 @@ export default function Dashboard() {
                   onMuteServer={handleMuteServer}
                   onLeaveServer={handleLeaveServer}
                   showToast={showToast}
+                  serverIsMuted={
+                    channels.length > 0 &&
+                    channels.every((c) => mutedChannelIds.has(c.channel_id))
+                  }
                 />
 
                 <ChannelList
@@ -3149,6 +3722,7 @@ export default function Dashboard() {
                   selectedChannel={selectedChannel}
                   getMessageDraft={getMessageDraft}
                   unreadCountsByChannel={unreadCountsByChannel}
+                  mutedChannelIds={mutedChannelIds}
                   onChannelSelect={handleChannelSelect}
                   onChannelContextMenu={handleChannelContextMenu}
                   currentVoiceChannel={currentVoiceChannel}
@@ -3213,6 +3787,51 @@ export default function Dashboard() {
 
       {/* Main Chat Area */}
       <MessagePane>
+        {/* DM view: short-circuit the entire chat surface — no ChatHeader
+            (no channel to header), no message list, no composer. The
+            channel view doesn't belong here once the user has explicitly
+            chosen "Direct messages." We render a dedicated empty state
+            instead until the full DM surface lands. */}
+        {dmsOpen ? (
+          selectedFriendForDM ? (
+            // A conversation is selected (clicked from the sidebar
+            // list OR from the Friends panel) — main pane is the
+            // DM chat view. Back button clears the selection,
+            // returning the user to the Friends panel below.
+            <DirectMessageView
+              peerUserId={selectedFriendForDM.userId}
+              peerHandle={selectedFriendForDM.handle}
+              peerAvatarUrl={selectedFriendForDM.avatarUrl}
+              onBack={() => setSelectedFriendForDM(null)}
+              showToast={showToast}
+            />
+          ) : (
+            // No conversation selected → main pane shows the
+            // Friends / Pending / Blocked tabs. Sidebar swap moved
+            // the convo list to the LEFT; this is the new "what do
+            // you see when no chat is open" surface.
+            //
+            // Full-width treatment: the panel now stretches the
+            // entire main pane so the Friends/Pending/Blocked tab
+            // strip spans the full container (each tab's `flex-1`
+            // distributes the width evenly). The previous
+            // `max-w-2xl` cap was a defensive choice from when
+            // this same component rendered as a sidebar; in the
+            // main pane the tabs feel cramped under that
+            // constraint. Friend rows that get extra horizontal
+            // room just push the trailing kebab to the right edge
+            // — the layout inside `FriendshipRow` is flex-row so
+            // it absorbs the extra space gracefully.
+            <div className="flex flex-1 flex-col overflow-y-auto">
+              <DirectMessagesPanel
+                showToast={showToast}
+                selectedFriendForDM={selectedFriendForDM}
+                onOpenDirectMessage={setSelectedFriendForDM}
+              />
+            </div>
+          )
+        ) : (
+          <>
         <ChatHeader
           selectedChannel={selectedChannel}
           notifications={notifications}
@@ -3330,7 +3949,7 @@ export default function Dashboard() {
         {/* Messages Area */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 break-words"
+          className="pb-message-group-list flex-1 overflow-y-auto overflow-x-hidden p-4 break-words"
         >
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -3639,11 +4258,29 @@ export default function Dashboard() {
                               //     strip renders inline above the
                               //     body — same logic the original
                               //     site used.
+                              // Inline edit path: when this row is
+                              // being edited, replace the body with a
+                              // textarea + Save/Cancel. The reply
+                              // context (if any) stays visible above
+                              // so the user keeps the "replying to..."
+                              // anchor while typing.
+                              if (editingMessageId === message.message_id) {
+                                return (
+                                  <InlineMessageEditor
+                                    initialBody={message.message}
+                                    onCancel={() => setEditingMessageId(null)}
+                                    onSave={async (next) => {
+                                      await handleSaveMessageEdit(message.message_id, next, message.channel_id);
+                                    }}
+                                  />
+                                );
+                              }
                               const parsed = parseReplyContext(message.message);
                               if (!parsed) {
                                 return (
                                   <>
-                                    <MarkdownRenderer content={message.message} className="text-[var(--color-text)]" />
+                                    <MarkdownRenderer content={message.message} className="pb-message-body text-[var(--color-text)]" />
+                                    <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={message.message} />
                                   </>
                                 );
@@ -3651,7 +4288,8 @@ export default function Dashboard() {
                               if (!isContinuation) {
                                 return (
                                   <>
-                                    <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                    <MarkdownRenderer content={parsed.body} className="pb-message-body text-[var(--color-text)]" />
+                                    <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                     <MessageEmbeds content={parsed.body} />
                                   </>
                                 );
@@ -3676,7 +4314,8 @@ export default function Dashboard() {
                                     parentAvatar={parentAvatar}
                                     onJump={scrollToMessage}
                                   />
-                                  <MarkdownRenderer content={parsed.body} className="text-[var(--color-text)]" />
+                                  <MarkdownRenderer content={parsed.body} className="pb-message-body text-[var(--color-text)]" />
+                                  <EditedTag count={message.edit_count ?? 0} at={message.last_edited_at ?? null} />
                                   <MessageEmbeds content={parsed.body} />
                                 </>
                               );
@@ -3695,9 +4334,21 @@ export default function Dashboard() {
                                 appears while the pointer is over the
                                 message). Hidden when the row is empty —
                                 first-time reactions go through the hover
-                                cluster's smiley button. */}
+                                cluster's smiley button.
+
+                                Layout: pills sit BELOW the message body
+                                (`mt-1`) and right-align (`justify-end`) so
+                                they hug the right edge of the message
+                                column rather than dangling under the
+                                avatar gutter. This matches the convention
+                                established by Discord/Slack and gives the
+                                eye a single anchor to scan when
+                                reactions pile up on a long thread.
+                                `flex-wrap` keeps very wide rows of
+                                reactions wrapping to additional lines
+                                cleanly. */}
                             {message.reactions && message.reactions.length > 0 && (
-                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <div className="mt-1 flex flex-wrap items-center justify-end gap-1">
                                 {message.reactions.map((reaction) => (
                                   <button
                                     key={reaction.emoji}
@@ -3713,8 +4364,24 @@ export default function Dashboard() {
                                     }`}
                                     aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.viewer_reacted ? ", you reacted" : ""}`}
                                   >
-                                    <Twemoji emoji={reaction.emoji} size={14} />
+                                    {/* Count first, then glyph — reads
+                                        as "3 👍" rather than "👍 3".
+                                        Putting the number on the left
+                                        anchors the eye consistently at
+                                        the start of each pill, which is
+                                        the right move when many pills
+                                        sit in a row with different
+                                        glyphs but tabular numerals.
+                                        `tabular-nums` keeps the digits
+                                        the same width across all
+                                        counts so the pills don't
+                                        jitter as numbers grow. */}
                                     <span className="tabular-nums">{reaction.count}</span>
+                                    <ReactionGlyph
+                                      reactionKey={reaction.emoji}
+                                      stickersById={stickersById}
+                                      size={14}
+                                    />
                                   </button>
                                 ))}
                                 <button
@@ -4420,12 +5087,24 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>{selectedChannel ? 'Enter to send' : 'Select a channel to start typing'}</span>
-                  {selectedChannel && <span>Shift+Enter for newline</span>}
-                  {composerAttachmentSummary.count > 0 && (
-                    <span>
-                      {composerAttachmentSummary.count} attachment{composerAttachmentSummary.count === 1 ? '' : 's'} • {composerAttachmentSummary.formattedSize}
+                  {!isDeviceOnline ? (
+                    // Offline replaces the "Enter to send / select a
+                    // channel" helper. Pressing Enter can't
+                    // succeed; setting honest expectations beats
+                    // showing a fetch-failed toast after the fact.
+                    <span className="text-[var(--color-error)]">
+                      You're offline — sends will fail until you reconnect.
                     </span>
+                  ) : (
+                    <>
+                      <span>{selectedChannel ? 'Enter to send' : 'Select a channel to start typing'}</span>
+                      {selectedChannel && <span>Shift+Enter for newline</span>}
+                      {composerAttachmentSummary.count > 0 && (
+                        <span>
+                          {composerAttachmentSummary.count} attachment{composerAttachmentSummary.count === 1 ? '' : 's'} • {composerAttachmentSummary.formattedSize}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
                 {selectedChannel && (
@@ -4455,11 +5134,14 @@ export default function Dashboard() {
             }}
             onEmojiSelect={handleEmojiSelect}
             onGifSelect={handleGifSelect}
+            onStickerSelect={handleStickerSelect}
           />
         </div>
         </>
         )}
 
+          </>
+        )}
       </MessagePane>
 
       {/* Member List */}
@@ -4570,6 +5252,33 @@ export default function Dashboard() {
               setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
             }}
             onReply={() => handleMessageReply(currentMenuMessageId)}
+            // "Send Friend Request" / "Accept Friend Request" /
+            // "Cancel Friend Request" — single row whose label flips
+            // based on the resolved friend-graph edge between viewer
+            // and message sender. Hidden for own messages, accepted
+            // friends, and blocked users (the resolver returns the
+            // right state and MessageContextMenu's per-state filter
+            // hides the row when the action would be a no-op).
+            {...(() => {
+              if (!senderId) return {};
+              const edge = resolveFriendEdge(
+                friendGraph.snapshot,
+                currentUser?.user_id,
+                senderId,
+              );
+              if (edge.state === "self") return {};
+              const friendActionStateProp:
+                | "pending-out"
+                | "pending-in"
+                | "friends"
+                | "blocked"
+                | undefined =
+                edge.state === "none" ? undefined : edge.state;
+              return {
+                onSendFriendRequest: () => handleFriendAction(senderId),
+                friendActionState: friendActionStateProp,
+              };
+            })()}
             // Reply-in-DM intentionally not wired: DMs aren't a
             // first-class surface in this client yet, and the menu
             // policy is "every shown option must work". Omitting the
@@ -4596,12 +5305,19 @@ export default function Dashboard() {
               messageContextMenu.onCopyLink ?? (() => handleMessageCopy(currentMenuMessageId))
             }
             copyMessageIdLabel={messageContextMenu.customCopyLinkLabel}
-            // Edit Message is also intentionally unwired right now —
-            // the server hasn't shipped a message-edit endpoint yet
-            // (`updateMessage` in services/message.ts is a stub). The
-            // option will come back when the API lands. Same policy
-            // as Reply-in-DM above: don't surface non-working options.
-            onEdit={undefined}
+            // Edit Message — now backed by PATCH
+            // /api/v1/channels/{cid}/messages/{mid}. The endpoint
+            // re-encrypts the new body, bumps edit_count, and
+            // stamps last_edited_at; the WS broadcast updates
+            // other viewers. Clicking the row opens an inline
+            // editor over the message bubble (see editingMessageId
+            // state + the per-row branch in the message list).
+            onEdit={() => {
+              if (currentMenuMessageId) {
+                setEditingMessageId(currentMenuMessageId);
+                setMessageContextMenu({ isOpen: false, position: { x: 0, y: 0 } });
+              }
+            }}
             onDelete={() => void handleMessageDelete(currentMenuMessageId)}
             onReportMessage={
               messageContextMenu.onReport ?? (() => handleMessageReport(currentMenuMessageId))
@@ -4710,6 +5426,45 @@ export default function Dashboard() {
               setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
             },
           });
+          // Mute / Unmute Channel — flips the muted state via the
+          // /notifications/preferences API. The label tracks the
+          // current muted-set so a user can always tell at a glance
+          // what the action will do.
+          {
+            const channelIsMuted = mutedChannelIds.has(ctxChannel.channel_id);
+            items.push({
+              id: "toggle-mute",
+              label: channelIsMuted ? "Unmute Channel" : "Mute Channel",
+              icon: channelIsMuted ? (
+                // Speaker-on glyph (unmute action).
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+              ) : (
+                // Speaker-off glyph (mute action) — same shape with a
+                // diagonal slash, matching the "Mute Server" icon in
+                // the server dropdown so the actions read as a
+                // coherent set.
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9M3 3l18 18"
+                  />
+                </svg>
+              ),
+              onSelect: () => {
+                handleToggleChannelMute(ctxChannel.channel_id, !channelIsMuted);
+                setChannelContextMenu({ isOpen: false, position: { x: 0, y: 0 }, channel: null });
+              },
+            });
+          }
           // Edit Channel — gated by edit_channels. Mirrors the
           // control-panel Channels tab edit flow; channel_type stays
           // immutable on this surface for the same reason (flipping
@@ -5026,6 +5781,30 @@ export default function Dashboard() {
             joinDate={userCardTooltipUser.joinedAt ? new Date(userCardTooltipUser.joinedAt).toISOString().split('T')[0] : undefined}
             showOnlineIndicator={true}
             isCompact={false}
+            // Friend-action button is wired only when the card isn't
+            // the viewer themselves. The resolver returns 'self' in
+            // that case and the button is hidden anyway, but we drop
+            // the handler entirely so the card stays render-pure
+            // (no useless callback on the viewer's own popover).
+            {...(() => {
+              const edge = resolveFriendEdge(
+                friendGraph.snapshot,
+                currentUser?.user_id,
+                userCardTooltipUser.id,
+              );
+              if (edge.state === "self") return {};
+              const friendActionStateProp:
+                | "pending-out"
+                | "pending-in"
+                | "friends"
+                | "blocked"
+                | undefined =
+                edge.state === "none" ? undefined : edge.state;
+              return {
+                onAddFriend: () => handleFriendAction(userCardTooltipUser.id),
+                friendActionState: friendActionStateProp,
+              };
+            })()}
           />
         </div>,
         document.body
@@ -5037,6 +5816,7 @@ export default function Dashboard() {
         onClose={() => setDeviceSelectorModalOpen(false)}
       />
       </DashboardOverlays>
+      </div>
     </div>
   );
 }

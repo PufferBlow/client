@@ -1,14 +1,15 @@
 import { Link } from "react-router";
 import { useTheme } from "../../components/ThemeProvider";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { UserCard } from "../../components/UserCard";
+import { useToast } from "../Toast";
 import { CroppableImage } from "../../components/CroppableImage";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/Button";
 import { getHostPortFromStorage, setHostPortToStorage, useCurrentUserProfile, useUpdateUsername, useUpdateStatus, useUpdateBio, useUpdateAvatar, useUpdateBanner, useUpdatePassword, useResetAuthToken, useLogout, USER_QUERY_KEYS } from "../../services/user";
 import { normalizeInstance, resolveInstance } from "../../services/instance";
 import { useQueryClient } from '@tanstack/react-query';
-import { User, Palette, Volume2, Server, Shield } from 'lucide-react';
+import { User, Palette, Volume2, Server, Shield, Monitor } from 'lucide-react';
 import { SettingsHeader } from "../settings/SettingsHeader";
 import { SettingsSidebar } from "../settings/SettingsSidebar";
 import type { SettingsTab, SettingsTabId } from "../settings/types";
@@ -19,6 +20,7 @@ import { SecurityTab } from "../settings/tabs/SecurityTab";
 import { AudioTab } from "../settings/tabs/AudioTab";
 import { ProfileTab } from "../settings/tabs/ProfileTab";
 import { AppearanceTab } from "../settings/tabs/AppearanceTab";
+import { ClientTab } from "../settings/tabs/ClientTab";
 import { useTrackLastRoute } from "../../utils/uiStatePersistence";
 
 export default function Settings() {
@@ -39,7 +41,29 @@ export default function Settings() {
   const resetAuthTokenMutation = useResetAuthToken();
   const { logout } = useLogout();
   const theme = useTheme();
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const toast = useToast();
+  // Bridge the existing `setMessage` callback API the tabs already
+  // use → the global toast system. Every tab's success / error
+  // message now appears in the bottom-right toast surface (where
+  // the rest of the app's feedback already lives) instead of an
+  // inline banner stuck in the SettingsHeader.
+  //
+  // Keeps the `{type: 'success' | 'error', text: string} | null`
+  // signature so the tab callsites don't need a sweep — `null`
+  // becomes a no-op (no toast to fire). Picked `category: 'system'`
+  // so the toast suppressor (which filters out noisy success
+  // messages) doesn't eat settings confirmations.
+  const setMessage = useCallback(
+    (msg: { type: 'success' | 'error'; text: string } | null) => {
+      if (!msg) return;
+      toast({
+        message: msg.text,
+        tone: msg.type === 'error' ? 'error' : 'success',
+        category: 'system',
+      });
+    },
+    [toast],
+  );
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -74,18 +98,14 @@ export default function Settings() {
   // Set initial active tab based on URL hash
   useEffect(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash && ['profile', 'appearance', 'audio', 'server', 'security'].includes(hash)) {
+    if (hash && ['profile', 'appearance', 'audio', 'server', 'security', 'client'].includes(hash)) {
       setActiveTab(hash as any);
     }
   }, []);
 
-  // Auto-hide messages after 5 seconds
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
+  // Auto-hide was for the old inline Notice in SettingsHeader.
+  // Toasts auto-dismiss themselves via the ToastProvider's TTL
+  // (3-5s based on tone), so no timer needed here anymore.
 
   const hostPort = getHostPortFromStorage() || '';
 
@@ -244,8 +264,17 @@ export default function Settings() {
   const tabs: SettingsTab[] = [
     { id: 'profile', label: 'Profile', icon: <User className="w-6 h-6" /> },
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-6 h-6" /> },
-    { id: 'audio', label: 'Audio', icon: <Volume2 className="w-6 h-6" /> },
+    // Label is "Voice" (matches the user's mental model — they call
+    // it the voice tab) but the id stays 'audio' so URL hashes
+    // (`#audio`) and any persisted state keep resolving.
+    { id: 'audio', label: 'Voice', icon: <Volume2 className="w-6 h-6" /> },
     { id: 'server', label: 'Server', icon: <Server className="w-6 h-6" /> },
+    // Client tab — local device preferences (hardware acceleration,
+    // auto-update, version readout). Sits next to Server (which
+    // configures the home instance) so the two complementary
+    // configurations are easy to find together. Monitor glyph reads
+    // as "this device / display."
+    { id: 'client', label: 'Client', icon: <Monitor className="w-6 h-6" /> },
     { id: 'security', label: 'Security', icon: <Shield className="w-6 h-6" /> },
   ];
 
@@ -258,8 +287,6 @@ export default function Settings() {
         <div className="flex-1 flex flex-col bg-[var(--color-background)] overflow-hidden">
           <SettingsHeader
             title={tabs.find((tab) => tab.id === activeTab)?.label || "Settings"}
-            message={message}
-            onDismissMessage={() => setMessage(null)}
           />
 
           {/* Content Area */}
@@ -313,6 +340,10 @@ export default function Settings() {
               />
             )}
 
+            {activeTab === 'client' && (
+              <ClientTab setMessage={setMessage} />
+            )}
+
             {activeTab === 'security' && (
               <SecurityTab
                 currentPassword={currentPassword}
@@ -325,8 +356,24 @@ export default function Settings() {
                 isUpdatingPassword={updatePasswordMutation.isPending}
                 onOpenResetTokenModal={() => setShowResetModal(true)}
                 onSignOut={() => {
-                  logout();
-                  setTimeout(() => (window.location.href = '/login'), 100);
+                  // Await the cleanup before navigating so cookies +
+                  // storage are actually gone by the time `/login`
+                  // loads. The previous setTimeout-then-navigate
+                  // pattern raced the revoke + storage clears
+                  // against the page transition and could leave
+                  // node_session_token, the persisted query cache,
+                  // and the in-flight refresh-token revoke hanging
+                  // mid-flight.
+                  //
+                  // `window.location.href` (hard nav) is intentional
+                  // — it forces a full app reload, which resets all
+                  // React state, evicts the in-memory query cache
+                  // again, and rehydrates from the now-empty
+                  // PUFFERBLOW_QUERY_CACHE so the login page starts
+                  // truly clean.
+                  void logout().finally(() => {
+                    window.location.href = '/login';
+                  });
                 }}
               />
             )}

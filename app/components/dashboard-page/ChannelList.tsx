@@ -16,6 +16,13 @@ interface ChannelListProps {
   /** Per-channel drafts; truthy when the user has unsent text. */
   getMessageDraft: (channelId: string) => string;
   unreadCountsByChannel: Record<string, number>;
+  /** Channels the viewer has explicitly muted via the per-channel mute
+   *  affordance. Used to suppress the unread dot (muted = "I asked not
+   *  to be pinged here, don't dot me") and to render a muted glyph on
+   *  the channel row. Membership is the only thing that matters; the
+   *  source of truth is `mutedChannelIds` in the dashboard data hook,
+   *  seeded from `GET /notifications/preferences` on mount. */
+  mutedChannelIds: Set<string>;
   onChannelSelect: (channel: Channel) => void;
   onChannelContextMenu: (event: React.MouseEvent, channel: Channel) => void;
 
@@ -131,6 +138,7 @@ export function ChannelList({
   selectedChannel,
   getMessageDraft,
   unreadCountsByChannel,
+  mutedChannelIds,
   onChannelSelect,
   onChannelContextMenu,
   currentVoiceChannel,
@@ -171,17 +179,26 @@ export function ChannelList({
   const toggleGroup = (k: GroupKey) =>
     setCollapsed((prev) => ({ ...prev, [k]: !prev[k] }));
 
-  const renderTextRow = (channel: Channel) => (
-    <TextChannelRow
-      key={channel.channel_id}
-      channel={channel}
-      isSelected={selectedChannel?.channel_id === channel.channel_id}
-      hasUnread={(unreadCountsByChannel[channel.channel_id] || 0) > 0}
-      hasDraft={getMessageDraft(channel.channel_id).trim().length > 0}
-      onSelect={onChannelSelect}
-      onContextMenu={onChannelContextMenu}
-    />
-  );
+  const renderTextRow = (channel: Channel) => {
+    const isMuted = mutedChannelIds.has(channel.channel_id);
+    return (
+      <TextChannelRow
+        key={channel.channel_id}
+        channel={channel}
+        isSelected={selectedChannel?.channel_id === channel.channel_id}
+        // Muted channels never show an unread dot — the whole point of
+        // muting is "I don't want a visual ping from this channel."
+        // The server still records that messages went unread (so the
+        // unread-count snapshot is accurate for other surfaces), the
+        // sidebar just chooses not to surface it here.
+        hasUnread={!isMuted && (unreadCountsByChannel[channel.channel_id] || 0) > 0}
+        hasDraft={getMessageDraft(channel.channel_id).trim().length > 0}
+        isMuted={isMuted}
+        onSelect={onChannelSelect}
+        onContextMenu={onChannelContextMenu}
+      />
+    );
+  };
   const renderVoiceRow = (channel: Channel) => (
     <VoiceChannel
       key={channel.channel_id}
@@ -257,6 +274,7 @@ function TextChannelRow({
   isSelected,
   hasUnread,
   hasDraft,
+  isMuted,
   onSelect,
   onContextMenu,
 }: {
@@ -264,6 +282,7 @@ function TextChannelRow({
   isSelected: boolean;
   hasUnread: boolean;
   hasDraft: boolean;
+  isMuted: boolean;
   onSelect: (channel: Channel) => void;
   onContextMenu: (event: React.MouseEvent, channel: Channel) => void;
 }) {
@@ -271,7 +290,7 @@ function TextChannelRow({
     <div
       className={`flex items-center px-2 py-1 rounded-md hover:bg-[var(--color-hover)] cursor-pointer ${
         isSelected ? "bg-[var(--color-active)] text-[var(--color-text)]" : ""
-      }`}
+      } ${isMuted && !isSelected ? "opacity-60" : ""}`}
       onClick={() => onSelect(channel)}
       onContextMenu={(e) => onContextMenu(e, channel)}
     >
@@ -288,14 +307,36 @@ function TextChannelRow({
       <div className="flex items-center ml-auto">
         {/* Binary unread indicator -- a small primary-color dot, no
             count. Hidden when the channel is currently selected (no
-            reason to mark unread on the channel the user is reading)
-            and cleared on `handleChannelSelect` in DashboardPage so
-            it doesn't linger after the user opens the channel. */}
+            reason to mark unread on the channel the user is reading),
+            hidden when the channel is muted (the whole point of mute
+            is "don't visually ping me"), and cleared on
+            `handleChannelSelect` in DashboardPage so it doesn't
+            linger after the user opens the channel. */}
         {hasUnread && !isSelected && (
           <span
             className="mr-1 h-2 w-2 rounded-full bg-[var(--color-primary)]"
             aria-label="Unread messages"
           />
+        )}
+        {/* Muted glyph (speaker with diagonal slash). Visible on every
+            muted channel row so the viewer can scan the sidebar and
+            see "right, I muted these." Subtle — dimmed text color,
+            same size as the lock glyph for private channels. */}
+        {isMuted && (
+          <svg
+            className="w-3.5 h-3.5 text-[var(--color-text-muted)] ml-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-label="Muted"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9M3 3l18 18"
+            />
+          </svg>
         )}
         {hasDraft && (
           <div className="flex items-center mr-1" title="Has unsent message">

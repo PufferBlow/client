@@ -3,10 +3,33 @@ import { getAuthTokenForRequests, refreshAuthSession } from './authSession';
 import { resolveInstance, resolveStoredInstance } from './instance';
 import { getHostPortFromStorage as getHostPort } from './user';
 
+import type { AppError } from './apiError';
+import { fromEnvelope, fromNetworkError } from './apiError';
+import { instanceHealth } from './instanceHealth';
+import { networkStatus } from './networkStatus';
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
+  /**
+   * Human-readable error message — kept for backward compatibility
+   * with call sites that do `response.error || "Unknown error"`.
+   * New call sites should prefer ``errorDetails`` so they get the
+   * full typed AppError (code, fields, requestId, retry hint).
+   *
+   * When ``errorDetails`` is set this string is the AppError's
+   * ``userMessage`` so the legacy and typed paths stay in sync.
+   */
   error?: string;
+  /**
+   * Typed error decoder output — present on every failed response.
+   * Always check this first; legacy ``error`` mirrors its
+   * ``userMessage`` for back-compat. Call sites switching on
+   * ``errorDetails.code`` can make UX decisions (auto-logout on
+   * auth.invalid_token, retry button on rate_limit.exceeded, …)
+   * that the bare string couldn't support.
+   */
+  errorDetails?: AppError;
 }
 
 export class ApiClient {
@@ -84,23 +107,87 @@ export class ApiClient {
     };
   }
 
+  // Strips known credential query parameters before a URL/endpoint is logged.
+  // The logger ALSO scrubs `?auth_token=…` at the redaction layer (see
+  // services/logStore.ts), but doing it at the call site too means we never
+  // hand a tokenized string to consola / loglevel — defense in depth against
+  // a future redactor regression.
+  private sanitizeForLog(value: string): string {
+    try {
+      // Need an absolute URL for URL(). Fall back to a dummy origin when the
+      // value is just a path.
+      const isAbsolute = /^https?:\/\//i.test(value);
+      const parsed = new URL(value, isAbsolute ? undefined : 'http://x');
+      const stripKeys = [
+        'auth_token',
+        'token',
+        'access_token',
+        'refresh_token',
+        'session_token',
+        'api_key',
+        'apikey',
+        'key',
+        'password',
+        'secret',
+      ];
+      let changed = false;
+      stripKeys.forEach((k) => {
+        if (parsed.searchParams.has(k)) {
+          parsed.searchParams.set(k, '[REDACTED]');
+          changed = true;
+        }
+      });
+      if (!changed) return value;
+      return isAbsolute
+        ? parsed.toString()
+        : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return value;
+    }
+  }
+
   private async performFetch(
     endpoint: string,
     options: RequestInit,
     isFormData: boolean
   ): Promise<Response> {
     const url = `${this.baseUrl}${endpoint}`;
-    logger.api.debug(`Making request to ${url}`, options);
+    const method = (options.method || 'GET').toUpperCase();
+    const safeEndpoint = this.sanitizeForLog(endpoint);
+    const safeUrl = this.sanitizeForLog(url);
+    const hasAuth =
+      !!getAuthTokenForRequests() ||
+      endpoint.includes('auth_token=') ||
+      !!this.getNodeSessionToken();
+    logger.api.debug(`${method} ${safeEndpoint} → start`, { url: safeUrl, hasAuth, isFormData });
 
-    return fetch(url, {
-      ...options,
-      headers: {
-        // Don't set Content-Type for FormData - let the browser set it with boundary
-        ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
-        ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
-        ...options.headers,
-      },
-    });
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          // Don't set Content-Type for FormData - let the browser set it with boundary
+          ...(options.body && !isFormData && { 'Content-Type': 'application/json' }),
+          ...(this.getNodeSessionToken() && { 'X-Pufferblow-Node-Session': this.getNodeSessionToken() as string }),
+          ...options.headers,
+        },
+      });
+      const elapsed = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start,
+      );
+      const level = response.ok ? 'debug' : 'warn';
+      logger.api[level](
+        `${method} ${safeEndpoint} → ${response.status} (${elapsed}ms)`,
+        { status: response.status, ok: response.ok, durationMs: elapsed },
+      );
+      return response;
+    } catch (error) {
+      const elapsed = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start,
+      );
+      logger.api.error(`${method} ${safeEndpoint} → network error (${elapsed}ms)`, error);
+      throw error;
+    }
   }
 
   private async request<T>(
@@ -134,77 +221,75 @@ export class ApiClient {
       }
 
       if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
-        // Try to parse error response as JSON to get FastAPI detail messages
+        // Decode through the typed envelope path so call sites
+        // get a full AppError (code, details, requestId, retry
+        // hint) in addition to the legacy `error` string. The
+        // decoder handles three shapes: canonical envelope,
+        // legacy { detail: ... }, and anything else.
+        const requestIdHeader = response.headers.get('X-Request-ID');
+        let body: unknown;
         try {
-          const errorJson = await response.json();
-          if (errorJson.detail) {
-            // FastAPI uses `detail` in two shapes:
-            //   - String, when the route raised `HTTPException(detail=...)`
-            //   - Array of `{loc, msg, type, ...}` objects, when a
-            //     request-body Pydantic validator failed (422).
-            // Stringifying an array of objects gave us
-            // `[object Object]` in the UI — useless for the user
-            // and useless for diagnosing the underlying cause.
-            // Flatten it to a readable, one-line summary.
-            if (typeof errorJson.detail === "string") {
-              errorMessage = errorJson.detail;
-            } else if (Array.isArray(errorJson.detail)) {
-              errorMessage = errorJson.detail
-                .map((item: { loc?: unknown; msg?: string }) => {
-                  const locPart = Array.isArray(item.loc)
-                    ? item.loc.filter((s) => s !== "body").join(".")
-                    : "";
-                  const msgPart = item.msg || "validation error";
-                  return locPart ? `${locPart}: ${msgPart}` : msgPart;
-                })
-                .join("; ");
-            } else {
-              errorMessage = JSON.stringify(errorJson.detail);
-            }
-          } else if (errorJson.error) {
-            errorMessage = errorJson.error;
-          }
+          body = await response.json();
         } catch {
-          // If JSON parsing fails, use text or fallback
           try {
-            const errorText = await response.text();
-            if (errorText) {
-              errorMessage = errorText;
-            }
+            body = await response.text();
           } catch {
-            // Use default error message
+            body = null;
           }
         }
-
-        logger.api.error(`Request failed: ${response.status} ${response.statusText}`, errorMessage);
+        const appError = fromEnvelope(body, response.status, requestIdHeader);
+        logger.api.error(
+          `Request failed: ${response.status} [${appError.code}] ${appError.userMessage}`,
+          { requestId: appError.requestId, isFallback: appError.isFallback },
+        );
+        // Feed instanceHealth. Even an HTTP-level failure tells us
+        // something about the host — a 401 says the instance is up
+        // and serving, just refusing this request; a 5xx says
+        // something's broken inside it. The tracker filters
+        // non-health-relevant codes (auth, validation) internally
+        // so we hand it the raw code and let it decide.
+        instanceHealth.markUnhealthy(this.baseUrl, appError.code);
         return {
           success: false,
-          error: errorMessage,
+          // `error` mirrors `errorDetails.userMessage` so old call
+          // sites that do `response.error || "Unknown error"` keep
+          // working with the new envelope-derived text.
+          error: appError.userMessage,
+          errorDetails: appError,
         };
       }
 
       const data = await response.json();
       logger.api.debug('Request successful', data);
+      // Mark the host healthy. The tracker collapses repeated
+      // healthy markings to a no-op so this is cheap on every
+      // request.
+      instanceHealth.markHealthy(this.baseUrl);
+      // If `navigator.onLine` was lying about being offline (some
+      // browsers / captive-portal escape paths) a successful round-
+      // trip is unambiguous evidence we're online — nudge the
+      // status singleton so dependent UI exits its offline state.
+      networkStatus.markOnline();
       return {
         success: true,
         data,
       };
     } catch (error) {
       logger.api.error('Request error', error);
-
-      // Check if it's a CORS error
-      if (error instanceof TypeError && error.message.includes('CORS')) {
-        return {
-          success: false,
-          error: 'CORS error: The server does not allow cross-origin requests from this domain. Please check server configuration.',
-        };
-      }
-
+      // Network-level failure — no response was received. The
+      // decoder builds a client-only AppError (offline / timeout /
+      // CORS / instance.unreachable) based on the thrown value,
+      // navigator state, AND whether this is the home instance.
+      const appError = fromNetworkError(error, this.baseUrl);
+      // Pass the resolved code into the instance tracker so it can
+      // distinguish "we're offline globally" (don't flag THIS
+      // instance as broken — the device is the problem) from
+      // "this instance specifically is down."
+      instanceHealth.markUnhealthy(this.baseUrl, appError.code);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: appError.userMessage,
+        errorDetails: appError,
       };
     }
   }
@@ -241,6 +326,18 @@ export class ApiClient {
   async put<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+      headers,
+    });
+  }
+
+  // PATCH — same JSON-body shape as POST/PUT, semantic "partial
+  // update" for resources where the server treats undefined fields
+  // as "leave alone". Used by the stickers admin surface; could be
+  // adopted elsewhere as the API surfaces grow.
+  async patch<T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
       headers,
     });

@@ -277,6 +277,65 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     root.style.setProperty("color-scheme", isDark ? "dark" : "light");
     setThemeState(isDark ? "dark" : "light");
 
+    // Layout knobs — turn the View / Size / Spacing pills into real
+    // CSS so picking "Compact" or "Large" actually changes the
+    // message list. Before this, the pills were write-only state:
+    // they round-tripped to localStorage but no surface read them.
+    //
+    // Strategy: write CSS variables to :root that downstream
+    // rendering can consume (`var(--pb-message-font-size)` on the
+    // message body, `--pb-message-row-padding-*` on each row,
+    // `--pb-message-group-gap` between groups). Then ALSO mirror
+    // the selected values onto `data-message-*` attributes so a
+    // stylesheet can target them with selectors when a CSS var
+    // isn't ergonomic. Components that want to pick up the new
+    // sizes just reference the vars — no per-component prop
+    // threading.
+    const layout = appearanceConfig.layout;
+
+    // Message body font size — the most-visible knob.
+    const messageFontSize = (
+      layout.messageSize === "small"
+        ? "12.5px"
+        : layout.messageSize === "large"
+          ? "16px"
+          : layout.messageSize === "extra-large"
+            ? "18px"
+            : "14px" // medium / default
+    );
+    root.style.setProperty("--pb-message-font-size", messageFontSize);
+
+    // Group vertical gap. "Tight" packs messages tightly, "Loose"
+    // gives them air. Channel list uses `space-y-4` (16px) today;
+    // we override via the var.
+    const groupGap = (
+      layout.messageSpacing === "tight"
+        ? "0.5rem"
+        : layout.messageSpacing === "loose"
+          ? "1.5rem"
+          : "1rem" // normal
+    );
+    root.style.setProperty("--pb-message-group-gap", groupGap);
+
+    // Per-message row padding — `viewMode` controls overall
+    // density. Compact tightens vertical padding; Cozy opens it
+    // up. Default is the existing chrome.
+    const rowPaddingY = (
+      layout.viewMode === "compact"
+        ? "0.125rem"
+        : layout.viewMode === "cozy"
+          ? "0.5rem"
+          : "0.25rem" // default
+    );
+    root.style.setProperty("--pb-message-row-padding-y", rowPaddingY);
+
+    // Mirror onto data-attributes for any selector-driven
+    // overrides that need to live in plain CSS rather than
+    // inline-style indirection.
+    root.dataset.messageView = layout.viewMode;
+    root.dataset.messageSize = layout.messageSize;
+    root.dataset.messageSpacing = layout.messageSpacing;
+
     localStorage.setItem("pufferblow-custom-theme", JSON.stringify(appearanceConfig));
   }, [appearanceConfig]);
 

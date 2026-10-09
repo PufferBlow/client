@@ -34,6 +34,20 @@ interface MessageContextMenuProps {
   onAddReaction?: () => void;
   onReply?: () => void;
   onReplyInDM?: () => void;
+  /** Send a friend request to the message sender. Hidden when the
+   *  viewer is the sender (`isSelf`), when already friends, or when
+   *  a request is already pending in either direction — the caller
+   *  decides via `friendActionState` below which state to show. */
+  onSendFriendRequest?: () => void;
+  /** Drives the friend-request row label / disabled state:
+   *    - undefined (default) → not friends, show "Send Friend Request"
+   *    - 'pending-out'       → viewer already sent a request
+   *    - 'pending-in'        → the sender sent the viewer a request
+   *    - 'friends'           → already friends, hide the row
+   *    - 'blocked'           → viewer blocked this user, hide the row
+   *  The caller is expected to compute this from the friend-graph
+   *  query that backs the Friends panel. */
+  friendActionState?: 'pending-out' | 'pending-in' | 'friends' | 'blocked';
 
   // ── Clipboard ───────────────────────────────────────────────────────
   /** Copies the message's text content to the clipboard. */
@@ -108,6 +122,8 @@ export function MessageContextMenu({
   onAddReaction,
   onReply,
   onReplyInDM,
+  onSendFriendRequest,
+  friendActionState,
   onCopyMessage,
   onDownload,
   onCopyMessageId,
@@ -166,6 +182,31 @@ export function MessageContextMenu({
       label: "Reply in DM",
       icon: icon("M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"),
       onSelect: onReplyInDM,
+    });
+  }
+  // "Send Friend Request" / "Cancel Friend Request" / "Accept Friend
+  // Request" — the label and onSelect both flip based on the current
+  // edge in the friend graph (caller computes `friendActionState`).
+  // Hidden entirely for own messages, for accepted friends, and when
+  // the viewer has blocked this user (the action would just bounce
+  // off the 403 the server returns).
+  if (
+    onSendFriendRequest &&
+    !isSelf &&
+    friendActionState !== "friends" &&
+    friendActionState !== "blocked"
+  ) {
+    const label =
+      friendActionState === "pending-out"
+        ? "Cancel Friend Request"
+        : friendActionState === "pending-in"
+          ? "Accept Friend Request"
+          : "Send Friend Request";
+    pushAction({
+      id: "friend-request",
+      label,
+      icon: icon("M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M12.5 7a4 4 0 11-8 0 4 4 0 018 0z M20 8v6 M23 11h-6"),
+      onSelect: onSendFriendRequest,
     });
   }
 

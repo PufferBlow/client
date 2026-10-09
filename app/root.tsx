@@ -29,6 +29,8 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import { getAuthTokenFromCookies } from "./services/user";
 import { startBackgroundAuthRefresh } from "./services/authSession";
 import { buildAuthRedirectPath, resolvePostAuthRedirect } from "./utils/authRedirect";
+import { logger } from "./utils/logger";
+import { startLogDiskSync } from "./services/logDiskSync";
 
 const CACHE_KEY = 'PUFFERBLOW_QUERY_CACHE';
 const CACHE_BUSTER = 'pb-v1';
@@ -102,6 +104,20 @@ export default function App() {
   const location = useLocation();
 
   useEffect(() => {
+    const isElectron = typeof window !== "undefined" && "electron" in window;
+    const platform = isElectron
+      ? (window as unknown as { electron?: { platform?: string } }).electron?.platform
+      : "web";
+    logger.system.info("app:boot", {
+      platform,
+      isElectron,
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "n/a",
+    });
+
+    // Begin draining the log ring buffer to a daily-rotating file on disk
+    // (Electron only; no-op in the browser). Default retention: 7 days.
+    const stopLogSync = startLogDiskSync({ maxFiles: 7 });
+
     const stopActive = startBackgroundAuthRefresh(() => {
       // Clear both in-memory and persisted cache on auth expiry so stale
       // user data doesn't leak into the next session.
@@ -122,6 +138,7 @@ export default function App() {
     });
     return () => {
       stopActive();
+      stopLogSync();
     };
   }, []);
 

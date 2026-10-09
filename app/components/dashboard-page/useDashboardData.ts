@@ -68,6 +68,11 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   }>({ isOpen: false, position: { x: 0, y: 0 } });
   const [currentMenuMessageId, setCurrentMenuMessageId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  // The message currently being edited inline. Null when no
+  // editor is open. Driven by the context-menu "Edit Message"
+  // action and the per-row inline editor toggles it back to null
+  // on save / cancel.
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [membersListVisible, setMembersListVisible] = useState(false);
   const [userContextMenu, setUserContextMenu] = useState<{ isOpen: boolean; position: { x: number; y: number } }>({
     isOpen: false,
@@ -110,6 +115,14 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
   const [unreadCountsByChannel, setUnreadCountsByChannel] = useState<Record<string, number>>({});
+  // Set of channel_ids the viewer has explicitly muted. Seeded from
+  // `GET /notifications/preferences` on mount and mutated locally by
+  // the mute/unmute handlers so the menu label + icon update without
+  // a round-trip. Used by ChannelList to suppress the unread dot on
+  // muted channels (muted = "I don't care, don't dot me") and by the
+  // context menu to flip the label between "Mute Channel" /
+  // "Unmute Channel."
+  const [mutedChannelIds, setMutedChannelIds] = useState<Set<string>>(new Set());
   const [manualPresenceLock, setManualPresenceLock] = useState<"dnd" | "afk" | "offline" | null>(null);
   const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
   const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission | "unsupported">(
@@ -296,7 +309,21 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     const snapshot = new Set(messageIds);
     readMessageIdsRef.current = snapshot;
     setReadMessageIds(snapshot);
-    setUnreadCountsByChannel(unreadCounts);
+    // Defensive: never re-introduce an unread dot for the channel the
+    // user is currently viewing. `fetchReadHistoryData` runs in parallel
+    // with the channel-restore effect, so the snapshot can land AFTER
+    // `handleChannelSelect` has already cleared this channel's count.
+    // Without this guard the blunt overwrite would resurrect the dot
+    // for ~one render before the next `markMessagesRead` round-trip
+    // wiped it again — a flicker that read as "the dot is stuck on a
+    // channel I just opened."
+    const activeChannelId = selectedChannelIdRef.current;
+    const sanitized = activeChannelId
+      ? Object.fromEntries(
+          Object.entries(unreadCounts).filter(([channelId]) => channelId !== activeChannelId),
+        )
+      : unreadCounts;
+    setUnreadCountsByChannel(sanitized);
   }, []);
 
   const markChannelNotificationsRead = useCallback((channelId: string) => {
@@ -502,6 +529,8 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     setCurrentMenuMessageId,
     hoveredMessageId,
     setHoveredMessageId,
+    editingMessageId,
+    setEditingMessageId,
     membersListVisible,
     setMembersListVisible,
     userContextMenu,
@@ -542,6 +571,8 @@ export function useDashboardData({ currentUser, navigate, location, showToast }:
     setReadMessageIds,
     unreadCountsByChannel,
     setUnreadCountsByChannel,
+    mutedChannelIds,
+    setMutedChannelIds,
     manualPresenceLock,
     setManualPresenceLock,
     unreadMarker,

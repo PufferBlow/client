@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import path from 'path';
 import { createTray } from './tray';
+import { registerClientLogIpc } from './logs';
 
 const isDev = !app.isPackaged;
 const PROD_INDEX = path.join(__dirname, '..', 'build', 'client', 'index.html');
@@ -517,6 +518,12 @@ app.whenReady().then(() => {
   ipcMain.on('focus-window', () => {
     focusMainWindow();
   });
+
+  // Client-side log persistence (daily-rotating files in <userData>/logs).
+  // Renderer batches lines from its in-memory ring buffer and flushes them
+  // here; main.ts owns the file rotation and pruning so disk state is safe
+  // even if the renderer crashes mid-write.
+  registerClientLogIpc();
 
   // Custom title bar window controls.
   ipcMain.handle('window-minimize', () => mainWindow?.minimize());

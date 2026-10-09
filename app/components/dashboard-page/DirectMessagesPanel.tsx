@@ -1,67 +1,934 @@
 /**
- * Panel that fills the channel-sidebar column when the user has the
- * rail's Direct-Messages slot selected.
+ * Channel-sidebar slot that fills the column when the user has the
+ * rail's "Direct messages" affordance selected.
  *
- * The DM surface itself isn't wired up to the server yet — the
- * `/api/v1/dms` endpoint family exists on the API but the client
- * doesn't render a conversation list or composer for it. This panel
- * is the visible affordance: tells the user where DMs live in the
- * navigation and what to expect when the full surface lands.
+ * Today this is the FRIENDS panel — actual DM conversations don't
+ * have a wire surface yet, but the friend graph does, and the
+ * client-side affordance (Add Friend / accept / cancel / unfriend /
+ * block / unblock) all live in one place here. When the
+ * `/api/v1/dms/*` endpoint family lands, the active "Friends" tab
+ * becomes one of several (Friends / DMs / …) inside the same shell.
  *
- * Same panel shell as ChannelSidebarHeader + ChannelList so the
- * sidebar's outer border / radius / scrollbar don't shift when the
- * user toggles between server view and DM view. Just the inner
- * content changes.
+ * Three tabs:
+ *   * Friends — accepted relationships. Each row offers Unfriend
+ *     and Block, and clicking the row opens a DM chat view in the
+ *     main pane (handled by `onOpenDirectMessage` from the parent).
+ *   * Pending — incoming + outgoing requests, separated by header.
+ *     Incoming rows offer Accept / Reject / Block; outgoing offer
+ *     Cancel.
+ *   * Blocked — users the viewer has stopped from sending requests.
+ *     Each row offers Unblock.
+ *
+ * Top-right of the panel header carries an "Add Friend" button that
+ * opens a modal taking `username + instance origin` (with a "This
+ * instance" radio for local lookups). The modal flows through
+ * `useFriendGraphMutations.sendRequestByHandle` so federated targets
+ * are resolved via WebFinger server-side and a shadow row is created
+ * for the remote actor on first add.
+ *
+ * All reads + mutations flow through `useFriendGraph` /
+ * `useFriendGraphMutations` so this panel + the UserCard popout +
+ * the message context menu stay in sync. Optimistic UI is
+ * deliberately NOT used here — the operations are infrequent and
+ * the round-trip cost (~50ms typical) is fine for the truthful
+ * "did the server confirm it" feedback loop.
  */
-export function DirectMessagesPanel() {
-  return (
-    <>
-      {/* Header — mirrors the ChannelSidebarHeader's vertical
-          rhythm so the rail-to-panel handoff doesn't jump when the
-          user toggles. No banner gradient (DMs aren't a server, so
-          there's nothing to brand); the title sits in the same
-          slot where a server name normally does. */}
-      <div className="border-b border-[var(--color-border)] px-3 py-3">
-        <h1 className="text-base font-bold text-[var(--color-text)]">
-          Direct messages
-        </h1>
-        <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
-          Conversations with other Pufferblow users
-        </p>
-      </div>
+import { useMemo, useState } from "react";
+import {
+  getAuthTokenFromCookies,
+  getHostPortFromCookies,
+  getHostPortFromStorage,
+  useCurrentUserProfile,
+} from "../../services/user";
+import {
+  useFriendGraph,
+  useFriendGraphMutations,
+} from "../../services/useFriendGraph";
+import {
+  formatFriendHandle,
+  type Friendship,
+} from "../../services/friends";
+import { Modal } from "../ui/Modal";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
+import { createFallbackAvatarUrl, createFullUrl } from "../../services/user";
+import type { ShowToast } from "../Toast";
 
-      {/* Body — empty state for now. When the DM list arrives this
-          gets replaced by a scrollable list of recent conversations
-          (one row per peer, last-message preview, unread dot — same
-          shape as the channel rows). The empty state copy is
-          intentionally specific about what's coming so the user
-          doesn't think the slot is broken. */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-        <div
-          className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)]"
-          aria-hidden="true"
+type TabId = "friends" | "pending" | "blocked";
+
+export interface SelectedFriendForDM {
+  /** Friend's local-DB `user_id` (or shadow user_id for federated). */
+  userId: string;
+  /** Their display handle — pre-formatted via `formatFriendHandle`,
+   *  so callers can use it as a header subtitle without re-deriving. */
+  handle: string;
+  /** Hydrated avatar URL (may be null/empty for users without an
+   *  uploaded avatar). The DM view falls back to the DiceBear
+   *  identicon keyed on the username when missing. */
+  avatarUrl?: string | null;
+}
+
+interface DirectMessagesPanelProps {
+  /** Shared toast for surfacing server errors (e.g. 403 from a
+   *  blocked recipient on send_request). */
+  showToast: ShowToast;
+  /** The friend currently being chatted with — used to render the
+   *  active selection state in the Friends tab. Null when no
+   *  conversation is open. */
+  selectedFriendForDM: SelectedFriendForDM | null;
+  /** Fired when the user clicks a friend row in the Friends tab.
+   *  The parent owns the chat view and responds by rendering it
+   *  in the main pane. */
+  onOpenDirectMessage: (friend: SelectedFriendForDM) => void;
+}
+
+export function DirectMessagesPanel({
+  showToast,
+  selectedFriendForDM,
+  onOpenDirectMessage,
+}: DirectMessagesPanelProps) {
+  const hostPort =
+    (typeof window !== "undefined" &&
+      (getHostPortFromStorage() || getHostPortFromCookies())) ||
+    undefined;
+  const authToken =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+
+  const { data: currentUser } = useCurrentUserProfile();
+  const { snapshot, isLoading } = useFriendGraph(hostPort, authToken);
+  const {
+    accept,
+    cancelOrReject,
+    unfriend,
+    block,
+    unblock,
+  } = useFriendGraphMutations(hostPort, authToken);
+
+  const [tab, setTab] = useState<TabId>("friends");
+  const [addFriendOpen, setAddFriendOpen] = useState(false);
+
+  // Hoisted "throw a server error onto a toast" helper — every
+  // mutation handler below shares the same shape.
+  const surfaceMutationError = (err: unknown) => {
+    showToast({
+      message:
+        err instanceof Error ? err.message : "Friend action failed.",
+      tone: "error",
+      category: "system",
+    });
+  };
+
+  const pendingCount = useMemo(
+    () =>
+      (snapshot?.incoming.length ?? 0) +
+      (snapshot?.outgoing.length ?? 0),
+    [snapshot?.incoming.length, snapshot?.outgoing.length],
+  );
+  const friendsCount = snapshot?.friends.length ?? 0;
+  const blockedCount = snapshot?.blocks.length ?? 0;
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header — title + the top-right Add Friend trigger. Same
+          vertical rhythm as ChannelSidebarHeader so the panel
+          handoff doesn't jump when toggling. */}
+      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-border)] px-3 py-3">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold text-[var(--color-text)]">
+            Friends
+          </h1>
+          <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
+            Friend requests, friends, and blocked users
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddFriendOpen(true)}
+          title="Send a friend request by username and instance"
+          className="shrink-0 inline-flex items-center gap-1 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
         >
           <svg
-            className="h-5 w-5 text-[var(--color-text-secondary)]"
+            className="h-3 w-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Friend
+        </button>
+      </div>
+
+      {/* Tab strip. Counts only render when the bucket has rows so
+          empty tabs don't carry a stale " (0)" suffix. */}
+      <div className="flex border-b border-[var(--color-border)] text-xs">
+        <TabButton
+          label="Friends"
+          count={friendsCount}
+          active={tab === "friends"}
+          onClick={() => setTab("friends")}
+        />
+        <TabButton
+          label="Pending"
+          count={pendingCount}
+          active={tab === "pending"}
+          onClick={() => setTab("pending")}
+        />
+        <TabButton
+          label="Blocked"
+          count={blockedCount}
+          active={tab === "blocked"}
+          onClick={() => setTab("blocked")}
+        />
+      </div>
+
+      {/* Body — scrollable. */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading && !snapshot && (
+          <div className="px-4 py-8 text-center text-xs text-[var(--color-text-muted)]">
+            Loading…
+          </div>
+        )}
+
+        {tab === "friends" && snapshot && (
+          snapshot.friends.length === 0 ? (
+            <EmptyState
+              title="No friends yet"
+              body="Click Add Friend to send a request — by username on this instance, or by username + instance origin to a federated user."
+            />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)]">
+              {snapshot.friends.map((row) => {
+                const handle = formatFriendHandle(row);
+                const isActive =
+                  !!selectedFriendForDM &&
+                  selectedFriendForDM.userId === row.other_user_id;
+                return (
+                  <FriendshipRow
+                    key={row.friendship_id}
+                    row={row}
+                    variant="friend"
+                    currentUserId={currentUser?.user_id}
+                    selected={isActive}
+                    onOpen={() =>
+                      row.other_user_id &&
+                      onOpenDirectMessage({
+                        userId: row.other_user_id,
+                        handle,
+                        avatarUrl: row.other_avatar_url ?? null,
+                      })
+                    }
+                    onUnfriend={() =>
+                      unfriend.mutate(row.other_user_id ?? "", {
+                        onError: surfaceMutationError,
+                      })
+                    }
+                    onBlock={() =>
+                      block.mutate(row.other_user_id ?? "", {
+                        onError: surfaceMutationError,
+                      })
+                    }
+                  />
+                );
+              })}
+            </ul>
+          )
+        )}
+
+        {tab === "pending" && snapshot && (
+          snapshot.incoming.length === 0 &&
+          snapshot.outgoing.length === 0 ? (
+            <EmptyState
+              title="No pending requests"
+              body="Friend requests you send or receive will show up here."
+            />
+          ) : (
+            <>
+              {snapshot.incoming.length > 0 && (
+                <>
+                  <SectionLabel>Incoming</SectionLabel>
+                  <ul className="divide-y divide-[var(--color-border)]">
+                    {snapshot.incoming.map((row) => (
+                      <FriendshipRow
+                        key={row.friendship_id}
+                        row={row}
+                        variant="incoming"
+                        currentUserId={currentUser?.user_id}
+                        onAccept={() =>
+                          accept.mutate(row.friendship_id, {
+                            onError: surfaceMutationError,
+                          })
+                        }
+                        onReject={() =>
+                          cancelOrReject.mutate(row.friendship_id, {
+                            onError: surfaceMutationError,
+                          })
+                        }
+                        onBlock={() =>
+                          block.mutate(row.requester_id, {
+                            onError: surfaceMutationError,
+                          })
+                        }
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+              {snapshot.outgoing.length > 0 && (
+                <>
+                  <SectionLabel>Sent</SectionLabel>
+                  <ul className="divide-y divide-[var(--color-border)]">
+                    {snapshot.outgoing.map((row) => (
+                      <FriendshipRow
+                        key={row.friendship_id}
+                        row={row}
+                        variant="outgoing"
+                        currentUserId={currentUser?.user_id}
+                        onCancel={() =>
+                          cancelOrReject.mutate(row.friendship_id, {
+                            onError: surfaceMutationError,
+                          })
+                        }
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )
+        )}
+
+        {tab === "blocked" && snapshot && (
+          snapshot.blocks.length === 0 ? (
+            <EmptyState
+              title="No one blocked"
+              body="Blocking a user stops them from sending you friend requests. Existing friendships aren't affected."
+            />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)]">
+              {snapshot.blocks.map((row) => {
+                const username = row.blocked_username?.trim() || row.blocked_id;
+                const origin = row.blocked_origin_server?.trim();
+                const display = origin ? `${username}@${origin}` : username;
+                const avatarSrc =
+                  createFullUrl(row.blocked_avatar_url ?? undefined) ||
+                  createFallbackAvatarUrl(username);
+                return (
+                  <li
+                    key={row.blocked_id}
+                    className="flex items-center gap-3 px-3 py-2 text-xs"
+                  >
+                    <img
+                      src={avatarSrc}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover opacity-60"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[var(--color-text)]">
+                      {display}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        unblock.mutate(row.blocked_id, {
+                          onError: surfaceMutationError,
+                        })
+                      }
+                      className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                    >
+                      Unblock
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        )}
+      </div>
+
+      <AddFriendModal
+        isOpen={addFriendOpen}
+        onClose={() => setAddFriendOpen(false)}
+        showToast={showToast}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Internal building blocks
+// ─────────────────────────────────────────────────────────────────────
+
+function TabButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // `flex-1` makes each tab take an equal slice of whatever
+      // width the parent has — sidebar (narrow) or main pane (wide)
+      // both work, no per-context branching. `py-2.5 text-sm`
+      // gives the strip enough vertical weight to read as a real
+      // navigation row when rendered full-width in the main pane.
+      // Hover bg makes the click target obvious even before the
+      // user notices the underline.
+      className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? "border-b-2 border-[var(--color-primary)] text-[var(--color-text)]"
+          : "border-b-2 border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+      }`}
+    >
+      {label}
+      {count > 0 && (
+        <span
+          className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            active
+              ? "bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-muted)]"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+      <h2 className="text-sm font-semibold text-[var(--color-text)]">{title}</h2>
+      <p className="mt-2 max-w-[32ch] text-xs leading-relaxed text-[var(--color-text-secondary)]">
+        {body}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One row per friendship / pending request. `variant` controls
+ * which action buttons appear.
+ *
+ * Action surfaces by variant:
+ *   * `friend` — clicking the row opens the DM chat view. The
+ *     destructive actions (Unfriend, Block) are deliberately NOT
+ *     rendered as inline buttons; they live behind a right-click
+ *     context menu so the row stays clean and accidental clicks
+ *     can't end a friendship. The chevron-vertical "⋮" button on
+ *     hover gives mouse-only users a second way in.
+ *   * `incoming` — inline Accept / Reject buttons stay visible
+ *     (these are the primary action on the row, not destructive
+ *     edge-cases). Block is also kept inline here because it's the
+ *     one-shot "make it stop" the user reaches for on harassment.
+ *   * `outgoing` — inline Cancel button. Only one action exists
+ *     for the row, no point hiding it behind a menu.
+ *
+ * The identifier rendered is the formatted handle (just the
+ * username — the `@host` suffix is no longer shown anywhere) via
+ * `formatFriendHandle`. Falls back to the raw `user_id` only if the
+ * server failed to hydrate identity — defensive against an older
+ * server build.
+ */
+function FriendshipRow({
+  row,
+  variant,
+  currentUserId,
+  selected = false,
+  onOpen,
+  onAccept,
+  onReject,
+  onCancel,
+  onUnfriend,
+  onBlock,
+}: {
+  row: Friendship;
+  variant: "friend" | "incoming" | "outgoing";
+  currentUserId: string | undefined;
+  selected?: boolean;
+  onOpen?: () => void;
+  onAccept?: () => void;
+  onReject?: () => void;
+  onCancel?: () => void;
+  onUnfriend?: () => void;
+  onBlock?: () => void;
+}) {
+  // Right-click context menu state. Only meaningful for `friend`
+  // variant; the other variants have inline buttons covering all
+  // available actions so the menu would be redundant.
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const handle = formatFriendHandle({
+    other_user_id:
+      row.other_user_id ??
+      (currentUserId && row.requester_id === currentUserId
+        ? row.addressee_id
+        : row.requester_id),
+    other_username: row.other_username,
+    other_origin_server: row.other_origin_server,
+  });
+
+  // Avatar resolution: use the hydrated `other_avatar_url` from
+  // the server when present, otherwise fall back to a DiceBear
+  // identicon keyed on the username so distinct friends still get
+  // distinct glyphs deterministically. Same fallback chain the
+  // channel chat uses for unknown users — keeps the visual
+  // language consistent.
+  //
+  // `createFullUrl` is required here: the server stores avatars as
+  // relative `/storage/<hash>` paths so the URL stays valid across
+  // a CDN swap. Without resolving against the active instance the
+  // browser fetches `/storage/<hash>` against the React Router
+  // app's origin and 404s — the bug a user reported as "friend
+  // avatars don't load."
+  const avatarSeed = row.other_username?.trim() || handle || "user";
+  const avatarSrc =
+    createFullUrl(row.other_avatar_url ?? undefined) ||
+    createFallbackAvatarUrl(avatarSeed);
+
+  // Only friend rows render a presence dot — pending/blocked rows
+  // are about graph state, not "are they online right now."
+  const presenceDot = (() => {
+    if (variant !== "friend") return null;
+    const status = row.other_status || "offline";
+    const colorClass =
+      status === "online"
+        ? "bg-[var(--color-success)]"
+        : status === "idle" || status === "afk"
+          ? "bg-[var(--color-warning)]"
+          : status === "dnd"
+            ? "bg-[var(--color-error)]"
+            : "bg-[var(--color-text-muted)]";
+    return (
+      <span
+        aria-hidden="true"
+        className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-background)] ${colorClass}`}
+      />
+    );
+  })();
+
+  // Only friend rows are clickable; pending rows are passive (the
+  // actions are the only thing the user can do with them).
+  const clickable = variant === "friend" && !!onOpen;
+
+  // Context-menu items for the `friend` variant. Built lazily so
+  // the array only allocates when the user actually right-clicks.
+  const buildFriendMenuItems = (): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+    if (onOpen) {
+      items.push({
+        id: "open-dm",
+        label: "Open chat",
+        onSelect: onOpen,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
-            viewBox="0 0 24 24"
+            aria-hidden="true"
           >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v8c0 1.38-1.12 2.5-2.5 2.5H10l-4 3.5V17H6.5C5.12 17 4 15.88 4 14.5z" />
           </svg>
+        ),
+      });
+      items.push({ id: "sep-1", separator: true });
+    }
+    if (onUnfriend) {
+      items.push({
+        id: "unfriend",
+        label: "Unfriend",
+        tone: "warning",
+        onSelect: onUnfriend,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="8" r="4" />
+            <path d="M2 21c1-4 4-6 7-6s6 2 7 6" />
+            <line x1="16" y1="9" x2="22" y2="9" />
+          </svg>
+        ),
+      });
+    }
+    if (onBlock) {
+      items.push({
+        id: "block",
+        label: "Block",
+        tone: "danger",
+        onSelect: onBlock,
+        icon: (
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
+          </svg>
+        ),
+      });
+    }
+    return items;
+  };
+
+  return (
+    <>
+      <li
+        className={`group flex items-center gap-3 px-3 py-2 text-xs transition-colors ${
+          clickable ? "cursor-pointer" : ""
+        } ${
+          selected
+            ? "bg-[var(--color-active)]"
+            : clickable
+              ? "hover:bg-[var(--color-hover)]"
+              : ""
+        }`}
+        onClick={() => {
+          if (clickable && onOpen) onOpen();
+        }}
+        onContextMenu={(e) => {
+          // Only the friend variant gets a context menu; for incoming /
+          // outgoing the inline buttons already cover every action so a
+          // menu would be redundant noise.
+          if (variant !== "friend") return;
+          e.preventDefault();
+          setMenuPos({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        <div className="relative shrink-0">
+          <img
+            src={avatarSrc}
+            alt=""
+            className="h-8 w-8 rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] object-cover"
+          />
+          {presenceDot}
         </div>
-        <h2 className="text-sm font-semibold text-[var(--color-text)]">
-          No conversations yet
-        </h2>
-        <p className="mt-2 max-w-[22ch] text-xs leading-relaxed text-[var(--color-text-secondary)]">
-          Direct messages let you talk to other users without joining
-          a shared server. The full conversation list ships in a
-          follow-up release.
-        </p>
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[var(--color-text)]">{handle}</div>
+          {variant === "outgoing" && (
+            <div className="text-[10px] text-[var(--color-text-muted)]">
+              Awaiting reply
+            </div>
+          )}
+          {variant === "incoming" && (
+            <div className="text-[10px] text-[var(--color-text-muted)]">
+              Wants to be friends
+            </div>
+          )}
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          // Action buttons sit on top of the row's click handler.
+          // Stop propagation so e.g. "Accept" doesn't also fire
+          // "open chat" on its way up.
+          onClick={(e) => e.stopPropagation()}
+        >
+          {variant === "incoming" && onAccept && (
+            <button
+              type="button"
+              onClick={onAccept}
+              className="rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-2 py-1 text-[10px] font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)]"
+            >
+              Accept
+            </button>
+          )}
+          {variant === "incoming" && onReject && (
+            <button
+              type="button"
+              onClick={onReject}
+              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            >
+              Reject
+            </button>
+          )}
+          {variant === "outgoing" && onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+          )}
+          {variant === "incoming" && onBlock && (
+            <button
+              type="button"
+              onClick={onBlock}
+              className="rounded-md border border-[var(--color-error)]/40 px-2 py-1 text-[10px] font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error)]/10"
+              title="Stop incoming friend requests from this user"
+            >
+              Block
+            </button>
+          )}
+          {/* Friend variant: kebab/more button as a discoverable
+              affordance for the right-click menu. Hidden until row
+              hover so the row stays clean at rest. */}
+          {variant === "friend" && (onUnfriend || onBlock) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                setMenuPos({ x: rect.right - 4, y: rect.bottom + 4 });
+              }}
+              title="More actions"
+              aria-label="More actions"
+              className="rounded-md p-1 text-[var(--color-text-muted)] opacity-0 transition-opacity hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] group-hover:opacity-100 focus:opacity-100"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="5" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="12" cy="19" r="1.6" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </li>
+      {variant === "friend" && menuPos && (
+        <ContextMenu
+          isOpen
+          position={menuPos}
+          onClose={() => setMenuPos(null)}
+          items={buildFriendMenuItems()}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Add Friend modal — username + instance picker.
+ *
+ * Two instance choices via a radio pair:
+ *   * "This instance" (default) — sends the request as a
+ *     local username lookup; server resolves via `users.username`.
+ *   * "Other instance" — reveals a host input that the server
+ *     WebFingers to find the remote actor. Creates a shadow
+ *     `users` row on first add so future listings render the
+ *     federated handle natively.
+ *
+ * Submit gates on a non-empty username. Errors come back from the
+ * server via the showToast channel — most commonly a 404 with a
+ * "couldn't find X@Y" hint when the handle doesn't resolve.
+ */
+function AddFriendModal({
+  isOpen,
+  onClose,
+  showToast,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  showToast: ShowToast;
+}) {
+  const hostPort =
+    (typeof window !== "undefined" &&
+      (getHostPortFromStorage() || getHostPortFromCookies())) ||
+    undefined;
+  const authToken =
+    (typeof window !== "undefined" && getAuthTokenFromCookies()) || undefined;
+  const { sendRequestByHandle } = useFriendGraphMutations(hostPort, authToken);
+
+  const [username, setUsername] = useState("");
+  const [instanceMode, setInstanceMode] = useState<"this" | "other">("this");
+  const [originHost, setOriginHost] = useState("");
+
+  const reset = () => {
+    setUsername("");
+    setInstanceMode("this");
+    setOriginHost("");
+  };
+  const handleClose = () => {
+    if (!sendRequestByHandle.isPending) {
+      reset();
+      onClose();
+    }
+  };
+
+  const canSubmit =
+    username.trim().length > 0 &&
+    (instanceMode === "this" || originHost.trim().length > 0) &&
+    !sendRequestByHandle.isPending;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    sendRequestByHandle.mutate(
+      {
+        username: username.trim(),
+        originServer:
+          instanceMode === "this" ? undefined : originHost.trim(),
+      },
+      {
+        onSuccess: () => {
+          showToast({
+            message: "Friend request sent.",
+            tone: "success",
+            category: "system",
+          });
+          reset();
+          onClose();
+        },
+        onError: (err) => {
+          showToast({
+            message:
+              err instanceof Error
+                ? err.message
+                : "Failed to send friend request.",
+            tone: "error",
+            category: "system",
+          });
+        },
+      },
+    );
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Add friend"
+      description="Send a friend request by username. Pick the instance the user belongs to."
+      widthClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <div>
+          <label
+            htmlFor="add-friend-username"
+            className="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]"
+          >
+            Username
+          </label>
+          <input
+            id="add-friend-username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+            }}
+            placeholder="alice"
+            autoFocus
+            className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+          />
+        </div>
+
+        <fieldset>
+          <legend className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+            Instance
+          </legend>
+          {/* Two compact radio rows. Picking "Other instance" reveals
+              the host input below so the modal stays focused at
+              first glance and only grows when the user actually
+              needs the federated field. */}
+          <div className="space-y-1.5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="add-friend-instance"
+                value="this"
+                checked={instanceMode === "this"}
+                onChange={() => setInstanceMode("this")}
+              />
+              <span className="text-[var(--color-text)]">This instance</span>
+              <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">
+                Local lookup
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="add-friend-instance"
+                value="other"
+                checked={instanceMode === "other"}
+                onChange={() => setInstanceMode("other")}
+              />
+              <span className="text-[var(--color-text)]">Other instance</span>
+              <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">
+                Federated via WebFinger
+              </span>
+            </label>
+          </div>
+
+          {instanceMode === "other" && (
+            <div className="mt-3">
+              <label
+                htmlFor="add-friend-origin"
+                className="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]"
+              >
+                Instance host
+              </label>
+              <input
+                id="add-friend-origin"
+                type="text"
+                value={originHost}
+                onChange={(e) => setOriginHost(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSubmit();
+                }}
+                placeholder="mastodon.example"
+                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+              />
+              <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+                The remote instance's hostname (no <code>http(s)://</code>).
+              </p>
+            </div>
+          )}
+        </fieldset>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={sendRequestByHandle.isPending}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-on-primary)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+          >
+            {sendRequestByHandle.isPending ? "Sending…" : "Send request"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

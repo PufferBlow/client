@@ -1,17 +1,12 @@
 import log from 'loglevel';
 import consola from 'consola';
-
-// Sensitive data patterns to redact
-const SENSITIVE_PATTERNS = [
-  /password["\s]*:[\s"']*[^"'\s]+/gi,
-  /auth-token["\s]*:[\s"']*[^"'\s]+/gi,
-  /authorization["\s]*:[\s"']*[^"'\s]+/gi,
-  /bearer[\s]+[^"'\s]+/gi,
-  /token["\s]*:[\s"']*[^"'\s]+/gi,
-  /secret["\s]*:[\s"']*[^"'\s]+/gi,
-  /key["\s]*:[\s"']*[^"'\s]+/gi,
-  /api[_-]?key["\s]*:[\s"']*[^"'\s]+/gi,
-];
+import {
+  logStore,
+  redactString,
+  redactValue,
+  type LogLevelName,
+  type LogContextName,
+} from '../services/logStore';
 
 // Log levels
 export enum LogLevel {
@@ -34,26 +29,12 @@ export enum LogContext {
   SYSTEM = 'system',
 }
 
-// Redact sensitive data from messages
-function redactSensitiveData(message: string): string {
-  let redactedMessage = message;
-
-  SENSITIVE_PATTERNS.forEach(pattern => {
-    redactedMessage = redactedMessage.replace(pattern, (match) => {
-      const key = match.split(/["\s]*:[\s"']*/)[0];
-      return `${key}: [REDACTED]`;
-    });
-  });
-
-  return redactedMessage;
-}
-
-// Format log message with timestamp, level, and context
-function formatLogMessage(level: string, context: LogContext, message: string, args: any[] = []): string {
+// Format log message with timestamp, level, and context. Redaction of the
+// message string is handled by the caller (see PufferblowLogger.log) so we
+// don't double-redact.
+function formatLogMessage(level: string, context: LogContext, message: string): string {
   const timestamp = new Date().toISOString();
-  const formattedMessage = redactSensitiveData(message);
-
-  return `[${timestamp}] [${level.toUpperCase()}] [${context.toUpperCase()}] ${formattedMessage}`;
+  return `[${timestamp}] [${level.toUpperCase()}] [${context.toUpperCase()}] ${message}`;
 }
 
 // Custom logger class
@@ -65,24 +46,31 @@ class PufferblowLogger {
   }
 
   private log(level: LogLevel, message: string, ...args: any[]): void {
-    const formattedMessage = formatLogMessage(LogLevel[level], this.context, message, args);
+    // Redact BOTH message and args before they leave this function so that
+    // every downstream surface — devtools console (consola/loglevel), the
+    // in-app Logs viewer, and the on-disk daily log file — sees the same
+    // redacted payload. Anything that walks past this point with the raw
+    // value is a token leak waiting to happen.
+    const safeMessage = redactString(message);
+    const safeArgs: any[] = args.map((arg) => redactValue(arg));
+    const formattedMessage = formatLogMessage(LogLevel[level], this.context, safeMessage);
 
     // Use consola for better formatting in development
     switch (level) {
       case LogLevel.TRACE:
-        consola.trace(formattedMessage, ...args);
+        consola.trace(formattedMessage, ...safeArgs);
         break;
       case LogLevel.DEBUG:
-        consola.debug(formattedMessage, ...args);
+        consola.debug(formattedMessage, ...safeArgs);
         break;
       case LogLevel.INFO:
-        consola.info(formattedMessage, ...args);
+        consola.info(formattedMessage, ...safeArgs);
         break;
       case LogLevel.WARN:
-        consola.warn(formattedMessage, ...args);
+        consola.warn(formattedMessage, ...safeArgs);
         break;
       case LogLevel.ERROR:
-        consola.error(formattedMessage, ...args);
+        consola.error(formattedMessage, ...safeArgs);
         break;
     }
 
@@ -90,8 +78,18 @@ class PufferblowLogger {
     const loglevelMethod = LogLevel[level].toLowerCase() as keyof typeof log;
     if (typeof log[loglevelMethod] === 'function') {
       // Use apply to avoid TypeScript spread issues
-      log[loglevelMethod].apply(log, [formattedMessage, ...args]);
+      log[loglevelMethod].apply(log, [formattedMessage, ...safeArgs]);
     }
+
+    // Persist to the in-app log buffer so the title-bar Logs viewer can show it.
+    // Pass the redacted message; logStore.push will re-run redactString on it
+    // (idempotent) and will also walk args through redactValue defensively.
+    logStore.push(
+      LogLevel[level].toLowerCase() as LogLevelName,
+      this.context as unknown as LogContextName,
+      safeMessage,
+      safeArgs,
+    );
   }
 
   trace(message: string, ...args: any[]): void {
@@ -144,6 +142,18 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// Export types and utilities
+// Convenience helper for instrumenting user-driven actions (clicks, sends,
+// navigation). Routes through logger.user so it lands in the in-app log buffer
+// alongside every other contextual log.
+export const logUserAction = (action: string, details?: Record<string, unknown>): void => {
+  if (details) {
+    logger.user.info(`action:${action}`, details);
+  } else {
+    logger.user.info(`action:${action}`);
+  }
+};
+
+// Export types and utilities. `redactSensitiveData` is kept as a backwards-
+// compatible alias for the new centralized `redactString` from logStore.
 export type { PufferblowLogger };
-export { redactSensitiveData };
+export { redactString as redactSensitiveData, redactString, redactValue };
