@@ -9,6 +9,7 @@
 # Ignore the release build directory
 dist/
 dist-electron/
+release/
 src-tauri/target/
 src-tauri/gen/
 
