@@ -129,6 +129,24 @@ export function RecentActivity() {
 
   const parseActivityDescription = (activity: any) => {
     const description = activity.description || activity.title || '';
+    // Generic system events arrive from the API as a raw internal event
+    // key, e.g. "System activity: user_signed_in" -- shown verbatim it
+    // reads as a leaked implementation detail sitting right next to a
+    // nicely formatted title like "User Signed In". Humanize the key
+    // (snake_case -> Title Case) instead of passing it through as-is.
+    const systemEventMatch = description.match(/^System activity:\s*(.+)$/);
+    if (systemEventMatch) {
+      const humanized = systemEventMatch[1]
+        .split('_')
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      return {
+        username: null,
+        action: humanized,
+        userId: activity.user?.id
+      };
+    }
     if (description.includes('updated') && description.includes('to')) {
       const match = description.match(/updated by (\w+): (.+ changed to .+)/) ||
         description.match(/(\w+) changed (.+)/);
