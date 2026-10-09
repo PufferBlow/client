@@ -783,7 +783,13 @@ export function OverviewTab(_props: { onSettingsClick?: () => void } = {}) {
       label: 'Channels',
       value: formatCompactNumber(serverOverview?.total_channels ?? activityMetrics?.total_channels ?? rawStats.channelCreation?.total_channels),
       detail: `${formatCompactNumber(rawStats.channelCreation?.public_channels)} public / ${formatCompactNumber(rawStats.channelCreation?.private_channels)} private`,
-      tone: 'warning' as const,
+      // Channel count is a plain informational stat, not a health signal --
+      // there's no threshold at which having more or fewer channels is
+      // actually a problem. This was hardcoded to 'warning' with no
+      // underlying condition, so every server (including a brand-new,
+      // perfectly healthy one) showed a WARNING badge here. 'info' matches
+      // the other static-count card (Total members).
+      tone: 'info' as const,
     },
   ];
 
