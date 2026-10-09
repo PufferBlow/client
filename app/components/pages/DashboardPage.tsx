@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, useTransition } from "react";
 import ReactDOM from 'react-dom';
+import { Volume2 } from "lucide-react";
 import { ChannelCreationModal } from "../../components/ChannelCreationModal";
 import { UserContextMenu } from "../../components/UserContextMenu";
 import { EmojiPicker } from "../../components/EmojiPicker";
@@ -3934,8 +3935,9 @@ export default function Dashboard() {
             ) : (
               <div className="flex h-full items-center justify-center p-8">
                 <div className="text-center text-[var(--color-text-secondary)]">
-                  <div className="text-base font-medium text-[var(--color-text)]">
-                    Voice channel · #{selectedChannel.channel_name}
+                  <div className="flex items-center justify-center gap-1.5 text-base font-medium text-[var(--color-text)]">
+                    <Volume2 className="w-4 h-4" />
+                    Voice channel · {selectedChannel.channel_name}
                   </div>
                   <div className="text-sm text-[var(--color-text-muted)] mt-2">
                     Click this channel in the sidebar to join the call.

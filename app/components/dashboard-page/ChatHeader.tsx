@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { Volume2 } from "lucide-react";
 import { NotificationMenu, type NotificationItem } from "../NotificationMenu";
 import { SearchModal, type SearchHandlerReturn } from "../SearchModal";
 import type { Channel } from "../../models";
@@ -75,7 +76,11 @@ export function ChatHeader({
   return (
     <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-secondary)]/70">
       <div className="flex items-center">
-        <span className="text-[var(--color-text-secondary)] mr-2">#</span>
+        {isVoiceChannel ? (
+          <Volume2 className="w-4 h-4 text-[var(--color-text-secondary)] mr-2" />
+        ) : (
+          <span className="text-[var(--color-text-secondary)] mr-2">#</span>
+        )}
         <h2 className="text-[var(--color-text)] font-semibold tracking-tight">
           {selectedChannel?.channel_name || "general"}
         </h2>
