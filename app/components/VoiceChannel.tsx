@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, MicOff, Volume2 } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, MicOff, Volume2 } from 'lucide-react';
 
 import { VoiceParticipantContextMenu } from './VoiceParticipantContextMenu';
 
@@ -664,10 +664,17 @@ export const VoiceChannel: React.FC<VoiceChannelProps> = ({
         </button>
       </div>
 
-      {/* Error */}
+      {/* Error. Stays inline (not a toast) since it's attached to this
+          specific channel's connection state and should stay visible
+          until resolved rather than disappearing after a few seconds --
+          but it now carries the same error icon as the toast system's
+          error tone, instead of being plain bordered text with no icon
+          at all while a successful action elsewhere gets a full icon +
+          color toast. */}
       {error && (
-        <div className="mx-2 mb-1 text-xs text-[var(--color-error)] border border-[var(--color-error)]/30 bg-[var(--color-surface)] px-2 py-1 rounded">
-          {error}
+        <div className="mx-2 mb-1 flex items-start gap-1.5 text-xs text-[var(--color-error)] border border-[var(--color-error)]/30 bg-[var(--color-surface)] px-2 py-1 rounded">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
       )}
 
