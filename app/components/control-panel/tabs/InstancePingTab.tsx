@@ -242,8 +242,20 @@ export function InstancePingTab({ showToast }: InstancePingTabProps) {
         </div>
       </div>
 
-      {/* Results history */}
-      {results.length > 0 && (
+      {/* Results history. Empty state matches the one used on the Storage
+          tab (icon-circle + two-line message) instead of just ending
+          after the input card and leaving a bare page underneath it. */}
+      {results.length === 0 ? (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-14 text-center">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--color-surface-secondary)] flex items-center justify-center">
+            <History size={20} className="text-[var(--color-text-muted)]" />
+          </div>
+          <p className="text-sm font-medium text-[var(--color-text-secondary)]">No probes yet</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            Enter an instance URL above and probe it to see results here.
+          </p>
+        </div>
+      ) : (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
           <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
             <div className="flex items-center gap-2">
