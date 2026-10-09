@@ -261,24 +261,20 @@ export function ChannelsTab({
             {filteredChannels.map((channel) => (
               <div key={channel.channel_id} className={cx(controlPanelRowClass, "flex items-center justify-between p-4")}>
                 <div className="flex items-center space-x-3">
-                  <span className="text-[var(--color-text-secondary)]">#</span>
+                  {channel.channel_type === 'voice' ? (
+                    <Mic className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                  ) : (
+                    <Hash className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                  )}
                   <span className="font-medium text-[var(--color-text)]">{channel.channel_name}</span>
                   {channel.is_private && (
                     <svg className="w-4 h-4 text-[var(--color-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   )}
-                  {channel.channel_type === 'voice' ? (
-                    <>
-                      <Mic className="w-3 h-3 mr-1" />
-                      <span>voice</span>
-                    </>
-                  ) : (
-                    <>
-                      <Hash className="w-3 h-3 mr-1" />
-                      <span>text</span>
-                    </>
-                  )}
+                  <span className="rounded-full border border-[var(--color-border-secondary)] bg-[var(--color-surface-secondary)] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+                    {channel.channel_type === 'voice' ? 'Voice' : 'Text'}
+                  </span>
                 </div>
                 <div className="flex space-x-2">
                   <button
