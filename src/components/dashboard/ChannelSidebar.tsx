@@ -10,7 +10,6 @@ import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useChannelMenu, useServerMenu, type MenuPoint } from "./useSidebarMenus";
-import { UserPanel } from "./UserPanel";
 import { VoiceBar } from "./VoiceBar";
 import { VoiceChannelRow } from "./VoiceChannelRow";
 
@@ -136,7 +135,7 @@ export function ChannelSidebar() {
   const voiceChannels = (channels ?? []).filter((c) => c.channel_type === "voice");
 
   return (
-    <aside className="flex w-[244px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
+    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
       <SidebarHeader onMenu={serverMenu.open} />
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pt-1">
@@ -189,7 +188,7 @@ export function ChannelSidebar() {
       </nav>
 
       <VoiceBar />
-      <UserPanel />
+      <div aria-hidden="true" className="h-[76px] shrink-0" />
 
       {channelMenu.node}
       {serverMenu.node}

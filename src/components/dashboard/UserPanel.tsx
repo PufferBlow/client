@@ -1,8 +1,7 @@
 import { useNavigate } from "react-router";
-import { Headphones, HeadphoneOff, LogOut, Mic, MicOff, Settings } from "lucide-react";
+import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { useMyProfile } from "../../features/users/hooks";
 import { useVoice } from "../../features/voice/voiceContext";
-import { logout } from "../../services/auth";
 import { Avatar } from "./Avatar";
 
 const iconButton =
@@ -14,13 +13,8 @@ export function UserPanel() {
   const voice = useVoice();
   const inCall = voice.status === "connected";
 
-  const handleSignOut = async () => {
-    await logout();
-    navigate("/login", { replace: true });
-  };
-
   return (
-    <div className="m-2 flex items-center gap-2.5 rounded-xl bg-surface-secondary px-2.5 py-2">
+    <div className="pointer-events-auto flex items-center gap-2.5 rounded-[14px] border border-border-secondary bg-surface-secondary px-3 py-2.5 shadow-modal">
       {me ? (
         <>
           <Avatar name={me.username} src={me.avatar_url} seed={me.user_id} size={34} presence={me.status} ringColor="var(--color-surface-secondary)" />
@@ -59,9 +53,6 @@ export function UserPanel() {
       </button>
       <button type="button" className={iconButton} aria-label="Settings" onClick={() => navigate("/settings")}>
         <Settings size={16} />
-      </button>
-      <button type="button" className={iconButton} aria-label="Sign out" title="Sign out" onClick={handleSignOut}>
-        <LogOut size={16} />
       </button>
     </div>
   );

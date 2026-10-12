@@ -5,7 +5,10 @@ import { renderWithProviders } from "../../test/render";
 import { FriendsView } from "./FriendsView";
 import { ServerView } from "./ServerView";
 
-beforeEach(() => signIn("tok"));
+beforeEach(() => {
+  signIn("tok");
+  localStorage.removeItem("pb_members_open");
+});
 
 const me = { user_id: "me", username: "ada", about: null, status: "online", accent_color: null, avatar_url: null, origin_server: "localhost:7575" };
 
@@ -199,6 +202,7 @@ describe("ServerView", () => {
   });
 
   it("groups members by presence and sorts them by name", async () => {
+    localStorage.setItem("pb_members_open", "1"); // the panel is closed by default on a window this narrow
     backend();
     renderServer();
 

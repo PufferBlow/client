@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, AtSign, Check, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { Avatar, CountBadge } from "../../components/dashboard/Avatar";
-import { UserPanel } from "../../components/dashboard/UserPanel";
 import { Button } from "../../components/ui/Button";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
@@ -27,7 +26,7 @@ const handleOf = (person: { username: string; host: string }) => `@${person.user
 
 function Sidebar({ friends }: { friends: Friend[] }) {
   return (
-    <aside className="flex w-[236px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
+    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
       <div className="px-2 pt-3">
         <span className="flex h-10 items-center gap-2.5 rounded-[10px] bg-surface-tertiary px-3 text-[14.5px] font-semibold" aria-current="page">
           <Users size={17} aria-hidden="true" />
@@ -48,7 +47,7 @@ function Sidebar({ friends }: { friends: Friend[] }) {
           </li>
         ))}
       </ul>
-      <UserPanel />
+      <div aria-hidden="true" className="h-[76px] shrink-0" />
     </aside>
   );
 }

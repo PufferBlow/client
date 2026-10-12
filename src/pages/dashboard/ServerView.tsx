@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
 import { ChannelSidebar } from "../../components/dashboard/ChannelSidebar";
 import { ChatPanel } from "../../components/dashboard/ChatPanel";
@@ -14,8 +14,32 @@ function MainPane({ children }: { children: ReactNode }) {
   return <section className="flex min-w-0 flex-1 items-center justify-center rounded-[14px] bg-surface">{children}</section>;
 }
 
+const MEMBERS_KEY = "pb_members_open";
+
+/** Open by default on wide windows, closed on narrow ones; afterwards whatever the person last chose. */
+function initialMembersOpen(): boolean {
+  try {
+    const saved = localStorage.getItem(MEMBERS_KEY);
+    if (saved !== null) return saved === "1";
+  } catch {
+    /* storage unavailable: fall back to the window width */
+  }
+  return window.innerWidth >= 1280;
+}
+
 export function ServerView() {
   const { channelId } = useParams();
+  const [membersOpen, setMembersOpen] = useState(initialMembersOpen);
+  const toggleMembers = useCallback(() => {
+    setMembersOpen((open) => {
+      try {
+        localStorage.setItem(MEMBERS_KEY, open ? "0" : "1");
+      } catch {
+        /* the choice just won't persist */
+      }
+      return !open;
+    });
+  }, []);
   const { data: channels, isPending, error, refetch } = useChannels();
 
   useEffect(() => {
@@ -40,14 +64,14 @@ export function ServerView() {
     // No channel selected (or a stale link): open the first one.
     return <Navigate to={`/dashboard/channels/${encodeURIComponent(textChannels[0]!.channel_id)}`} replace />;
   } else {
-    main = <ChatPanel key={channel.channel_id} channel={channel} />;
+    main = <ChatPanel key={channel.channel_id} channel={channel} membersOpen={membersOpen} onToggleMembers={toggleMembers} />;
   }
 
   return (
     <>
       <ChannelSidebar />
       {main}
-      <MemberList />
+      {membersOpen && <MemberList />}
     </>
   );
 }

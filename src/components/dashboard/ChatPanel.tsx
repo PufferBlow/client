@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Hash, Lock, Loader2 } from "lucide-react";
+import { Hash, Lock, Loader2, Users } from "lucide-react";
 import { useMarkChannelRead } from "../../features/channels/hooks";
 import type { Channel } from "../../features/channels/types";
+import type { Message } from "../../features/messages/types";
 import { groupMessages } from "../../features/messages/grouping";
 import { useDeleteMessage, useEditMessage, useMessages, useReportMessage, useSendMessage, useToggleReaction } from "../../features/messages/hooks";
 import { useServerInfo } from "../../features/server/hooks";
@@ -14,6 +15,7 @@ import { ErrorState } from "../ui/ErrorState";
 import { ToastRegion } from "../ui/Toast";
 import { LoadingState } from "../ui/LoadingState";
 import { classifyAuthError } from "../../utils/authErrors";
+import { ChannelSearch } from "./ChannelSearch";
 import { Composer } from "./Composer";
 import { DeleteMessageDialog, ReportMessageDialog } from "./MessageDialogs";
 import { MessageItem, type MenuPoint } from "./MessageItem";
@@ -21,7 +23,14 @@ import { messageMenuEntries } from "./messageMenu";
 
 const NEAR_BOTTOM_PX = 120;
 
-export function ChatPanel({ channel }: { channel: Channel }) {
+interface ChatPanelProps {
+  channel: Channel;
+  /** Whether the member list is showing on the right. */
+  membersOpen?: boolean;
+  onToggleMembers?: () => void;
+}
+
+export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: ChatPanelProps) {
   const channelId = channel.channel_id;
   const { messages, isPending, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useMessages(channelId);
   const { data: me } = useMyProfile();
@@ -120,6 +129,20 @@ export function ChatPanel({ channel }: { channel: Channel }) {
     void fetchNextPage();
   };
 
+  /** Scroll a search result into view and flash it. Older messages that are not loaded cannot be reached from here. */
+  const jumpTo = (message: Message) => {
+    const row = Array.from(scroller.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === message.id);
+    if (!row) {
+      showToast("That message is further back than what's loaded. Load older messages to reach it.", "info");
+      return;
+    }
+    stickToBottom.current = false;
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+    row.focus({ preventScroll: true });
+    row.classList.add("bg-primary/15");
+    setTimeout(() => row.classList.remove("bg-primary/15"), 1800);
+  };
+
   const Icon = channel.is_private ? Lock : Hash;
 
   return (
@@ -127,6 +150,23 @@ export function ChatPanel({ channel }: { channel: Channel }) {
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
         <Icon size={18} className="text-text-tertiary" aria-hidden="true" />
         <h1 className="m-0 font-heading text-[19px] font-semibold">{channel.channel_name}</h1>
+        <div className="ml-auto flex items-center gap-1">
+          <ChannelSearch channelId={channelId} channelName={channel.channel_name} onPick={jumpTo} />
+          {onToggleMembers && (
+            <button
+              type="button"
+              aria-label={membersOpen ? "Hide member list" : "Show member list"}
+              aria-pressed={membersOpen}
+              title={membersOpen ? "Hide member list" : "Show member list"}
+              onClick={onToggleMembers}
+              className={`grid h-8 w-8 place-items-center rounded-lg transition-colors hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus ${
+                membersOpen ? "bg-surface-secondary text-primary" : "text-text-tertiary"
+              }`}
+            >
+              <Users size={17} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </header>
 
       <div ref={scroller} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">

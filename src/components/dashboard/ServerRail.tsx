@@ -48,7 +48,7 @@ export function ServerRail() {
   const serverName = server?.server_name ?? "Server";
 
   return (
-    <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto py-1.5">
+    <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
       <div className="relative flex w-full justify-center">
         <Indicator selected={onFriends} unread={false} />
         <NavLink

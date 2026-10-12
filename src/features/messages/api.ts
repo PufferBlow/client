@@ -50,6 +50,27 @@ export async function sendMessage(channelId: string, input: { text: string; file
   return normalizeMessage(message_data, channelId);
 }
 
+interface SearchResponse {
+  messages: WireMessage[];
+  scanned: number;
+  truncated_scan: boolean;
+}
+
+export interface SearchResult {
+  /** Newest first. */
+  messages: Message[];
+  /** How many recent messages the server looked through. */
+  scanned: number;
+  /** True when the channel had more history than the server scans, so older matches may be missing. */
+  truncated: boolean;
+}
+
+/** Substring search over a channel's recent messages (the server decrypts and scans them; there is no full-text index). */
+export async function searchMessages(channelId: string, query: string, limit = 20): Promise<SearchResult> {
+  const res = await authed.query<SearchResponse>("GET", `${channelPath(channelId)}/search`, { query: { q: query, limit } });
+  return { messages: (res.messages ?? []).map((m) => normalizeMessage(m, channelId)), scanned: res.scanned ?? 0, truncated: res.truncated_scan === true };
+}
+
 export interface EditResult {
   message: string;
   editCount: number;

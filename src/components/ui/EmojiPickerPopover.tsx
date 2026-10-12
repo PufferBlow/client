@@ -4,8 +4,8 @@ import { clampToViewport } from "./menuPosition";
 
 const EmojiPicker = lazy(() => import("./EmojiPicker"));
 
-// emoji-mart's default picker is about this big; used to keep it on screen before it has rendered.
-const PICKER_SIZE = { width: 352, height: 435 };
+// The picker is 8 columns of 38px plus padding and 392px tall; used to keep it on screen before it has rendered.
+const PICKER_SIZE = { width: 332, height: 392 };
 
 interface Props {
   x: number;
@@ -57,7 +57,7 @@ export function EmojiPickerPopover({ x, y, onSelect, onClose }: Props) {
       role="dialog"
       aria-label="Choose an emoji"
       style={{ left: position.left, top: position.top, width: PICKER_SIZE.width, minHeight: 120 }}
-      className="fixed z-[70] overflow-hidden rounded-xl border border-border-secondary bg-surface-secondary shadow-popover"
+      className="fixed z-[70] overflow-hidden rounded-2xl border border-border bg-surface-secondary shadow-modal"
       onContextMenu={(e) => e.preventDefault()}
     >
       <Suspense fallback={<p className="m-0 p-6 text-center text-sm text-text-muted">Loading emoji…</p>}>

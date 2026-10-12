@@ -1,6 +1,6 @@
 import { useCallback } from "react";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { deleteMessage, editMessage, loadMessages, reportMessage, sendMessage, setReaction } from "./api";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { deleteMessage, editMessage, loadMessages, reportMessage, searchMessages, sendMessage, setReaction } from "./api";
 import { CommandError } from "../realtime/commands";
 import { useMessageCommands } from "../realtime/commandsContext";
 import { userKeys } from "../users/hooks";
@@ -29,6 +29,18 @@ export function useMessages(channelId: string) {
   });
 
   return { ...query, messages: flattenMessages(query.data) };
+}
+
+/** The server refuses shorter queries. */
+export const MIN_SEARCH_LENGTH = 2;
+
+export function useMessageSearch(channelId: string, query: string) {
+  return useQuery({
+    queryKey: ["messages", "search", channelId, query] as const,
+    queryFn: () => searchMessages(channelId, query),
+    enabled: query.length >= MIN_SEARCH_LENGTH,
+    staleTime: 30_000,
+  });
 }
 
 /** Typed `setQueryData` for one channel's message cache. */

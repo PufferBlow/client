@@ -46,6 +46,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           queryClient
             .getQueryCache()
             .findAll({ queryKey: ["messages"] })
+            .filter((query) => query.queryKey[1] !== "search")
             .map((query) => String(query.queryKey[1])),
         onResync: (channelId, messages) => {
           const key = messageKeys.channel(channelId);

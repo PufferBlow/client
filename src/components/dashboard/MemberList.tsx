@@ -42,7 +42,7 @@ export function MemberList() {
   }, [users]);
 
   return (
-    <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-[14px] bg-surface px-2.5 py-3 max-xl:hidden">
+    <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-[14px] bg-surface px-2.5 py-3">
       {isPending ? (
         <div className="flex flex-col gap-2 pt-2" aria-busy="true">
           {[0, 1, 2, 3, 4].map((i) => (

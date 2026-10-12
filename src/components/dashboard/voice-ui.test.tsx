@@ -7,6 +7,7 @@ import type { VoiceDeps } from "../../features/voice/transport";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ChannelSidebar } from "./ChannelSidebar";
+import { UserPanel } from "./UserPanel";
 
 beforeEach(() => signIn("tok"));
 
@@ -124,6 +125,7 @@ async function open(extra?: Record<string, unknown>) {
   renderWithProviders(
     <VoiceProvider deps={deps}>
       <ChannelSidebar />
+      <UserPanel />
     </VoiceProvider>,
     { route: "/dashboard/channels/c1", path: "/dashboard/channels/:channelId" },
   );

@@ -137,6 +137,7 @@ export const MessageItem = memo(function MessageItem({
 
   return (
     <article
+      data-message-id={message.id}
       aria-label={`${message.authorName} at ${formatTime(message.sentAt)}`}
       tabIndex={0}
       onContextMenu={handleContextMenu}
