@@ -1,16 +1,8 @@
+node_modules
+dist
+dist-electron
+release
+*.local
 .DS_Store
-.env
-/node_modules/
-
-# React Router
-/.react-router/
-/build/
-
-# Ignore the release build directory
-dist/
-dist-electron/
-release/
-src-tauri/target/
-src-tauri/gen/
-
-.vite-cache
+*.log
+coverage

@@ -1,103 +1,113 @@
 {
-  "name": "pufferblow",
+  "name": "pufferblow-client",
   "version": "1.0.0",
-  "description": "Official desktop and web client for Pufferblow — built with React, React Router v7, and Electron.",
-  "author": {
-    "name": "Pufferblow contributors",
-    "url": "https://github.com/PufferBlow"
-  },
-  "license": "GPL-3.0",
-  "homepage": "https://pufferblow.space",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PufferBlow/client.git"
-  },
-  "bugs": {
-    "url": "https://github.com/PufferBlow/client/issues"
-  },
+  "description": "Official desktop and web client for Pufferblow",
   "private": true,
   "main": "dist-electron/main.js",
   "engines": {
     "node": ">=20.17.0"
   },
   "scripts": {
-    "build": "node ./node_modules/@react-router/dev/bin.js build",
-    "dev": "node ./node_modules/@react-router/dev/bin.js dev",
-    "dev:desktop-server": "node ./node_modules/@react-router/dev/bin.js dev --host 127.0.0.1 --port 5173 --strictPort",
-    "build:electron:assets": "node -e \"require('fs').mkdirSync('dist-electron',{recursive:true});require('fs').copyFileSync('electron/splash.html','dist-electron/splash.html')\"",
-    "build:electron:main": "tsup electron/main.ts electron/preload.ts electron/tray.ts --format cjs --outDir dist-electron --external electron && npm run build:electron:assets",
-    "build:electron:main:watch": "tsup electron/main.ts electron/preload.ts electron/tray.ts --format cjs --outDir dist-electron --external electron --onSuccess \"npm run build:electron:assets\" --watch",
-    "dev:electron": "wait-on http://127.0.0.1:5173 && nodemon --watch dist-electron --exec electron dist-electron/main.js",
-    "desktop:dev": "concurrently --kill-others-on-fail \"npm run dev:desktop-server\" \"npm run build:electron:main:watch\" \"npm run dev:electron\"",
-    "desktop:build": "npm run build && npm run build:electron:main && electron-builder",
-    "desktop:build:windows": "npm run build && npm run build:electron:main && electron-builder --win",
-    "desktop:build:linux": "npm run build && npm run build:electron:main && electron-builder --linux",
-    "desktop:build:macos": "npm run build && npm run build:electron:main && electron-builder --mac",
-    "start": "node ./node_modules/vite/bin/vite.js preview --host 0.0.0.0 --port 4173 --strictPort",
-    "preview": "npm run start",
-    "typecheck": "node ./node_modules/@react-router/dev/bin.js typegen && node ./node_modules/typescript/bin/tsc",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:run": "vitest run",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "dev": "vite",
+    "dev:desktop": "concurrently -k -n vite,tsup,electron \"vite --host 127.0.0.1 --port 5173\" \"tsup --watch\" \"wait-on tcp:127.0.0.1:5173 && wait-on dist-electron/main.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "vite build && tsup",
+    "build:desktop": "npm run build && electron-builder",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext ts,tsx --max-warnings 0",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "@floating-ui/react": "^0.27.16",
-    "@react-router/node": "7.13.0",
-    "@react-router/serve": "7.13.0",
-    "@tanstack/query-sync-storage-persister": "^5.100.10",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/marcellus": "^5.3.0",
     "@tanstack/react-query": "^5.90.2",
-    "@tanstack/react-query-persist-client": "^5.100.10",
-    "chart.js": "^4.5.1",
-    "consola": "^3.4.2",
-    "dompurify": "^3.2.7",
-    "electron-updater": "^6.3.9",
-    "isbot": "^5.1.31",
-    "loglevel": "^1.9.2",
+    "@twemoji/svg": "^15.0.0",
+    "emoji-datasource-twitter": "^15.0.1",
+    "emoji-mart": "^5.6.0",
     "lucide-react": "^0.548.0",
     "react": "^19.1.1",
-    "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.1",
-    "react-easy-crop": "^5.5.3",
-    "react-markdown": "^10.1.0",
-    "react-router": "7.13.0",
-    "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1"
+    "react-router": "^7.13.0"
   },
   "devDependencies": {
-    "@react-router/dev": "7.13.0",
+    "@eslint/js": "^9.25.0",
     "@tailwindcss/vite": "^4.1.13",
-    "@testing-library/jest-dom": "^6.8.0",
-    "@testing-library/react": "^16.3.0",
-    "@types/dompurify": "^3.0.5",
-    "@types/jsdom": "^27.0.0",
+    "@tanstack/react-query-devtools": "^5.90.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^22",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "@vitest/ui": "^3.2.4",
-    "baseline-browser-mapping": "^2.9.3",
+    "@vitest/coverage-v8": "^5.0.3",
     "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "electron": "^42.1.0",
     "electron-builder": "^26.0.12",
-    "eslint": "^8.57.1",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.14",
-    "jsdom": "^27.0.0",
-    "nodemon": "^3.1.9",
+    "globals": "^16.0.0",
+    "jsdom": "^30.1.2",
     "prettier": "^3.3.3",
     "tailwindcss": "^4.1.13",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.30.0",
     "vite": "^7.1.7",
-    "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.3",
     "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "space.pufferblow.client",
+    "productName": "Pufferblow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
   }
 }

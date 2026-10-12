@@ -1,0 +1,144 @@
+@import "@fontsource/marcellus/400.css";
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/500.css";
+@import "@fontsource/barlow/700.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif,
+    "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-display: "Marcellus", Georgia, serif;
+  --font-heading: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Monaco,
+    Inconsolata, "Roboto Mono", "Source Code Pro", monospace;
+
+  /* Switchyard: warm charcoal ground, parchment text, brass accent */
+  --color-background: #0d0b09;
+  --color-background-secondary: #16120e;
+  --color-background-tertiary: #1a1612;
+  --color-surface: #1a1612;
+  --color-surface-secondary: #231e19;
+  --color-surface-tertiary: #2e2720;
+  --color-text: #efe6d4;
+  --color-text-secondary: #e6dcc8;
+  --color-text-tertiary: #a99e8b;
+  --color-text-muted: #7d7365;
+  --color-border: rgba(239, 230, 212, 0.14);
+  --color-border-secondary: rgba(239, 230, 212, 0.08);
+  --color-primary: #e3ae4f;
+  --color-primary-hover: #efbf63;
+  --color-secondary: #a99e8b;
+  --color-secondary-hover: #efe6d4;
+  --color-accent: #e3ae4f;
+  --color-accent-hover: #efbf63;
+  --color-success: #9fd487;
+  --color-warning: #e3ae4f;
+  --color-error: #e2654f;
+  --color-info: #8cc9d6;
+  --color-hover: #231e19;
+  --color-active: #2e2720;
+  --color-focus: #e3ae4f;
+  --color-on-primary: #1c1408;
+  --color-on-secondary: #1c1408;
+  --color-on-accent: #1c1408;
+  --color-on-success: #1c1408;
+  --color-on-warning: #1c1408;
+  --color-on-error: #ffffff;
+  --color-on-info: #1c1408;
+
+  --color-shadow-base: rgba(0, 0, 0, 0.22);
+  --color-shadow-strong: rgba(0, 0, 0, 0.34);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-pill: 999px;
+
+  --shadow-popover: 0 8px 24px var(--color-shadow-base);
+  --shadow-modal: 0 18px 42px var(--color-shadow-strong);
+}
+
+:root {
+  --motion-fast: 100ms;
+  --motion-base: 150ms;
+  --motion-slow: 220ms;
+  --motion-ease-out: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+
+  --message-font-size: 14px;
+  --message-group-gap: 1rem;
+  --message-row-padding-y: 0.25rem;
+}
+
+html,
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  scrollbar-color: var(--color-border-secondary) transparent;
+  box-sizing: border-box;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  color: var(--color-text);
+}
+
+img,
+video,
+audio {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+button,
+[role="button"],
+summary,
+a[href],
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-bounce,
+  .animate-fade-in,
+  .animate-slide-in-right,
+  .animate-scale-in {
+    animation: none !important;
+    transform: none !important;
+  }
+}
