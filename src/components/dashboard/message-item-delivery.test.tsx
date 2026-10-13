@@ -24,8 +24,9 @@ const handlers = () => ({ onEdit: vi.fn(), onDelete: vi.fn(), onToggleReaction: 
 describe("MessageItem delivery state", () => {
   it("shows a pending message dimmed with no actions", () => {
     render(<MessageItem message={message({ status: "pending", nonce: "n1" })} myUserId="me" {...handlers()} />);
-    expect(screen.getByText("hello there")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByText("hello there")).toHaveClass("opacity-60");
+    const body = screen.getByText("hello there").closest("[aria-busy]");
+    expect(body).toHaveAttribute("aria-busy", "true");
+    expect(body).toHaveClass("opacity-60");
     expect(screen.queryByRole("button", { name: "Edit message" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

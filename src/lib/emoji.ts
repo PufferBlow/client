@@ -35,6 +35,19 @@ export function splitEmoji(text: string): EmojiSegment[] {
   return segments;
 }
 
+/** True for a message of nothing but emoji (and spaces), at most `max` of them: drawn large. */
+export function isEmojiOnly(text: string, max = 27): boolean {
+  let count = 0;
+  for (const segment of splitEmoji(text)) {
+    if (segment.kind === "text") {
+      if (segment.value.trim()) return false;
+    } else if (++count > max) {
+      return false;
+    }
+  }
+  return count > 0;
+}
+
 /** `1f469-200d-1f4bb`, the way Twemoji names its files (variation selectors dropped unless joined). */
 export function emojiFileName(emoji: string): string {
   const points = Array.from(emoji, (ch) => ch.codePointAt(0)!.toString(16));

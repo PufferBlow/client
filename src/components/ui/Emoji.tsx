@@ -17,13 +17,13 @@ export function Emoji({ char, size = "1.25em", className = "" }: { char: string;
 }
 
 /** Text with its emoji drawn as Twemoji. Text without emoji renders as a plain string. */
-export function EmojiText({ text }: { text: string }) {
+export function EmojiText({ text, size }: { text: string; size?: number | string }) {
   const segments = splitEmoji(text);
   if (segments.every((s) => s.kind === "text")) return <>{text}</>;
   return (
     <>
       {segments.map((segment, i) =>
-        segment.kind === "emoji" ? <Emoji key={i} char={segment.value} /> : <span key={i}>{segment.value}</span>,
+        segment.kind === "emoji" ? <Emoji key={i} char={segment.value} size={size} /> : <span key={i}>{segment.value}</span>,
       )}
     </>
   );

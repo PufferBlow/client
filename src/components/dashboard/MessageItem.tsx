@@ -1,6 +1,9 @@
-import { memo, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { FileText, MoreHorizontal, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
+import { Markdown } from "../ui/Markdown";
+import { isEmojiOnly } from "../../lib/emoji";
+import { parseMarkdown } from "../../lib/markdown";
 import type { Message } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { Avatar } from "./Avatar";
@@ -117,6 +120,8 @@ export const MessageItem = memo(function MessageItem({
   const isOwn = myUserId !== undefined && message.authorId === myUserId;
   // Not on the server yet (sending) or never got there (failed): nothing can act on it but retry/discard.
   const isLocal = message.status !== undefined;
+  const blocks = useMemo(() => parseMarkdown(message.text), [message.text]);
+  const editedMarker = !isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>;
 
   const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
     if (!onOpenMenu || editing || isLocal) return;
@@ -172,13 +177,19 @@ export const MessageItem = memo(function MessageItem({
           <EditForm initial={message.text} onSubmit={(text) => onEdit(message.id, text)} onCancel={() => setEditing(false)} />
         ) : (
           message.text && (
-            <p
-              className={`m-0 whitespace-pre-wrap break-words text-[15px] text-text-secondary ${message.status === "pending" ? "opacity-60" : ""}`}
+            <div
+              className={`whitespace-pre-wrap break-words text-[15px] text-text-secondary ${message.status === "pending" ? "opacity-60" : ""}`}
               aria-busy={message.status === "pending" || undefined}
             >
-              <EmojiText text={message.text} />
-              {!isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>}
-            </p>
+              {isEmojiOnly(message.text) ? (
+                <p className="m-0 leading-[1.15]">
+                  <EmojiText text={message.text} size={48} />
+                  {editedMarker}
+                </p>
+              ) : (
+                <Markdown blocks={blocks} trailing={editedMarker} />
+              )}
+            </div>
           )
         )}
 
