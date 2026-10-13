@@ -1,11 +1,10 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import EmojiPicker from "./EmojiPicker";
 import { clampToViewport } from "./menuPosition";
 
-const EmojiPicker = lazy(() => import("./EmojiPicker"));
-
 // The picker is 8 columns of 38px plus padding and scrollbar (332px) and 392px tall, inside a 1px border;
-// used to keep it on screen before it has rendered.
+// the popover is exactly this size from the first frame, with the emoji loading inside it.
 const PICKER_SIZE = { width: 334, height: 394 };
 
 interface Props {
@@ -57,13 +56,11 @@ export function EmojiPickerPopover({ x, y, onSelect, onClose }: Props) {
       ref={box}
       role="dialog"
       aria-label="Choose an emoji"
-      style={{ left: position.left, top: position.top, width: PICKER_SIZE.width, minHeight: 120 }}
+      style={{ left: position.left, top: position.top, width: PICKER_SIZE.width, height: PICKER_SIZE.height }}
       className="fixed z-[70] overflow-hidden rounded-2xl border border-border bg-surface-secondary shadow-modal"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <Suspense fallback={<p className="m-0 p-6 text-center text-sm text-text-muted">Loading emoji…</p>}>
-        <EmojiPicker onSelect={(emoji) => onSelect(emoji.native)} />
-      </Suspense>
+      <EmojiPicker onSelect={(emoji) => onSelect(emoji.native)} />
     </div>,
     document.body,
   );
