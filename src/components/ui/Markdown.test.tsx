@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parseMarkdown } from "../../lib/markdown";
 import { isEmojiOnly } from "../../lib/emoji";
@@ -57,6 +57,22 @@ describe("Markdown", () => {
     expect(screen.getByText("py")).toBeInTheDocument();
     expect(screen.getByText("print('hi')")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
+  });
+
+  it("highlights code in a named language once the highlighter loads", async () => {
+    const { container } = show("```js\nconst answer = 42; // yes\n```");
+    // The first load also transforms the grammars under test, which is slow.
+    await waitFor(() => expect(container.querySelector(".hljs-keyword")).toHaveTextContent("const"), { timeout: 20_000 });
+    expect(container.querySelector(".hljs-number")).toHaveTextContent("42");
+    expect(container.querySelector(".hljs-comment")).toHaveTextContent("// yes");
+    expect(container.querySelector("code")).toHaveTextContent("const answer = 42; // yes");
+  }, 30_000);
+
+  it("leaves an unknown language plain", async () => {
+    const { container } = show("```notalanguage\nconst x = 1\n```");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(container.querySelector("[class^='hljs']")).toBeNull();
+    expect(container.querySelector("code")).toHaveTextContent("const x = 1");
   });
 
   it("puts the trailing marker at the end of the last paragraph", () => {

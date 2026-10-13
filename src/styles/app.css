@@ -142,3 +142,66 @@ button[aria-disabled="true"],
     transform: none !important;
   }
 }
+
+/* Code block syntax colours (highlight.js token classes), in the Switchyard palette. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: var(--color-primary);
+}
+.hljs-string,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-addition,
+.hljs-regexp {
+  color: var(--color-success);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable.constant_ {
+  color: #e8955a;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--color-info);
+}
+.hljs-type,
+.hljs-title.class_,
+.hljs-built_in,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #d4a5e8;
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-params {
+  color: #e9c98f;
+}
+.hljs-tag,
+.hljs-name,
+.hljs-deletion {
+  color: var(--color-error);
+}
+.hljs-meta,
+.hljs-punctuation,
+.hljs-operator {
+  color: var(--color-text-tertiary);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
