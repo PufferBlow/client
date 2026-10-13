@@ -10,6 +10,7 @@ import { HomePage } from "./pages/HomePage";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFoundPage";
 import { ServerView } from "./pages/dashboard/ServerView";
 import { FriendsView } from "./pages/dashboard/FriendsView";
+import { DirectMessageView } from "./pages/dashboard/DirectMessageView";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { ControlPanelPage } from "./pages/control-panel/ControlPanelPage";
 
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/dashboard/channels" replace /> },
           { path: "channels/:channelId?", element: <ServerView /> },
           { path: "friends", element: <FriendsView /> },
+          { path: "dms/:conversationId", element: <DirectMessageView /> },
         ],
       },
       {

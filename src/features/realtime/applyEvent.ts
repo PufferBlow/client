@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "../channels/hooks";
+import { dmKeys } from "../dms/keys";
 import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
 import type { Friend } from "../friends/types";
@@ -23,6 +24,12 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       const { message } = event;
       updateMessages(message.channelId, (cache) => upsertMessage(cache, message));
 
+      if (event.dm) {
+        // The conversation list shows the latest message and orders by it.
+        void queryClient.invalidateQueries({ queryKey: dmKeys.conversations });
+        return;
+      }
+
       const myId = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id;
       if (message.channelId !== context.activeChannelId && message.authorId !== myId) {
         queryClient.setQueryData<UnreadCounts>(channelKeys.unread, (counts) => ({
@@ -41,6 +48,7 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
 
     case "message_deleted":
       updateMessages(event.channelId, (cache) => removeMessage(cache, event.messageId));
+      if (event.dm) void queryClient.invalidateQueries({ queryKey: dmKeys.conversations });
       return;
 
     case "reactions":

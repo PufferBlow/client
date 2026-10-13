@@ -1,13 +1,14 @@
-import { messageFromView, reactionsFromView } from "../messages/normalize";
+import { messageFromView, normalizeMessage, reactionsFromView, type WireMessage } from "../messages/normalize";
 import type { Message, Reaction } from "../messages/types";
 import { asPresence } from "../members/presence";
 import type { PresenceStatus } from "../users/types";
 import type { EventFrame } from "./protocol";
 
 export type RealtimeEvent =
-  | { kind: "message"; message: Message }
+  /** `dm` marks direct messages (their `channelId` is the conversation id). */
+  | { kind: "message"; message: Message; dm?: boolean }
   | { kind: "message_edited"; channelId: string; messageId: string; text: string; editCount: number; editedAt: string | null }
-  | { kind: "message_deleted"; channelId: string; messageId: string }
+  | { kind: "message_deleted"; channelId: string; messageId: string; dm?: boolean }
   | { kind: "reactions"; channelId: string; messageId: string; reactions: Reaction[] }
   | { kind: "presence"; userId: string; status: PresenceStatus }
   /** A channel was renamed, changed privacy, deleted, or this connection lost access to it. */
@@ -54,6 +55,30 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
 
     case "notification.created":
       return { kind: "notification" };
+
+    // Direct messages: the conversation id stands in for the channel id.
+    case "dm.message.created": {
+      const conversationId = str(data.conversation_id);
+      if (!conversationId || !str(data.message_id)) return null;
+      const wire = { ...data, sent_at: str(data.sent_at) || new Date().toISOString() } as unknown as WireMessage;
+      return { kind: "message", message: normalizeMessage(wire, conversationId), dm: true };
+    }
+
+    case "dm.message.updated":
+      return {
+        kind: "message_edited",
+        channelId: str(data.conversation_id),
+        messageId: str(data.message_id),
+        text: str(data.message),
+        editCount: typeof data.edit_count === "number" ? data.edit_count : 0,
+        editedAt: typeof data.last_edited_at === "string" ? data.last_edited_at : null,
+      };
+
+    case "dm.message.deleted":
+      return { kind: "message_deleted", channelId: str(data.conversation_id), messageId: str(data.message_id), dm: true };
+
+    case "dm.reaction.updated":
+      return { kind: "reactions", channelId: str(data.conversation_id), messageId: str(data.message_id), reactions: reactionsFromView(data.reactions) };
 
     default:
       return null;

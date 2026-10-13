@@ -35,6 +35,8 @@ const iconTileBase = tileBase.replace(" text-on-primary", "");
  */
 export function ServerRail() {
   const onFriends = useMatch("/dashboard/friends") !== null;
+  const onDms = useMatch("/dashboard/dms/*") !== null;
+  const onHome = onFriends || onDms;
   const onServer = useMatch("/dashboard/channels/*") !== null;
   const onControlPanel = useMatch("/control-panel/*") !== null;
   const { data: server } = useServerInfo();
@@ -50,7 +52,7 @@ export function ServerRail() {
   return (
     <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
       <div className="relative flex w-full justify-center">
-        <Indicator selected={onFriends} unread={false} />
+        <Indicator selected={onHome} unread={false} />
         <NavLink
           to="/dashboard/friends"
           aria-label="Friends"

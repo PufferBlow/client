@@ -9,6 +9,8 @@ import { asSpoiler, fileKind, formatBytes } from "../../lib/files";
 
 interface ComposerProps {
   channelName: string;
+  /** Who the message goes to, as shown in the field ("#general", "@grace"). Defaults to `#channelName`. */
+  target?: string;
   /** Instance limit for message text, when known. */
   maxLength?: number;
   /** Instance limit for all attachments of one message together, in MB, when known. */
@@ -40,7 +42,7 @@ const releasePreview = (pending: PendingFile) => {
   if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
 };
 
-export function Composer({ channelName, maxLength, maxAttachmentMB, replyingTo, onCancelReply, onSend }: ComposerProps) {
+export function Composer({ channelName, target = `#${channelName}`, maxLength, maxAttachmentMB, replyingTo, onCancelReply, onSend }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -257,8 +259,8 @@ export function Composer({ channelName, maxLength, maxAttachmentMB, replyingTo, 
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             maxLength={maxLength}
-            placeholder={`Message #${channelName}`}
-            aria-label={`Message #${channelName}`}
+            placeholder={`Message ${target}`}
+            aria-label={`Message ${target}`}
             aria-describedby={showCounter ? "composer-remaining" : undefined}
             className="max-h-[50vh] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[14.5px] leading-5 text-text outline-none placeholder:text-text-tertiary"
           />
@@ -311,7 +313,7 @@ export function Composer({ channelName, maxLength, maxAttachmentMB, replyingTo, 
                 <Upload size={26} />
               </span>
               <p className="m-0 text-[17px] font-bold text-text">Drop to attach</p>
-              <p className="m-0 text-[13px] text-text-muted">The files will be added to your message in #{channelName}.</p>
+              <p className="m-0 text-[13px] text-text-muted">The files will be added to your message to {target}.</p>
             </div>
           </div>,
           document.body,

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, AtSign, Check, UserMinus, UserPlus, Users, X } from "lucide-react";
+import { AlertCircle, AtSign, Check, MessageCircle, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { Avatar, CountBadge } from "../../components/dashboard/Avatar";
+import { HomeSidebar } from "../../components/dashboard/HomeSidebar";
 import { Button } from "../../components/ui/Button";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
@@ -17,40 +18,15 @@ import {
 import type { Friend } from "../../features/friends/types";
 import { isOnline, PRESENCE } from "../../features/members/presence";
 import { classifyAuthError } from "../../utils/authErrors";
+import { peerHandle } from "../../features/dms/api";
+import { useOpenDirectMessage } from "../../features/dms/hooks";
+import { useMyProfile } from "../../features/users/hooks";
 
 type Tab = "online" | "all" | "pending" | "blocked";
 
 const circleButton = "grid h-9 w-9 place-items-center rounded-full bg-surface-secondary text-text-tertiary transition-colors hover:text-text disabled:opacity-50";
 
 const handleOf = (person: { username: string; host: string }) => `@${person.username}${person.host ? `@${person.host}` : ""}`;
-
-function Sidebar({ friends }: { friends: Friend[] }) {
-  return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
-      <div className="px-2 pt-3">
-        <span className="flex h-10 items-center gap-2.5 rounded-[10px] bg-surface-tertiary px-3 text-[14.5px] font-semibold" aria-current="page">
-          <Users size={17} aria-hidden="true" />
-          Friends
-        </span>
-      </div>
-      <h2 className="m-0 px-4 pb-1.5 pt-4 font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-text-muted">
-        All friends — {friends.length}
-      </h2>
-      <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto px-2 py-0">
-        {friends.map((f) => (
-          <li key={f.userId} className="flex h-[46px] items-center gap-2.5 rounded-[10px] px-2 hover:bg-surface-secondary">
-            <Avatar name={f.username} src={f.avatarUrl} seed={f.userId} size={32} presence={f.status} />
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-medium">{f.username}</div>
-              <div className="truncate text-[11px] text-text-muted">{f.host || "This instance"}</div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div aria-hidden="true" className="h-[76px] shrink-0" />
-    </aside>
-  );
-}
 
 function PersonRow({ person, subtitle, children }: { person: Friend; subtitle: ReactNode; children: ReactNode }) {
   return (
@@ -129,6 +105,8 @@ function AddFriendForm() {
 
 function FriendsList({ friends, empty }: { friends: Friend[]; empty: string }) {
   const remove = useRemoveFriend();
+  const openDm = useOpenDirectMessage();
+  const { data: me } = useMyProfile();
   if (friends.length === 0) return <p className="m-auto text-sm text-text-muted">{empty}</p>;
   return (
     <>
@@ -136,6 +114,16 @@ function FriendsList({ friends, empty }: { friends: Friend[]; empty: string }) {
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {friends.map((f) => (
           <PersonRow key={f.userId} person={f} subtitle={PRESENCE[f.status].label}>
+            <button
+              type="button"
+              className={circleButton}
+              aria-label={`Message ${f.username}`}
+              title="Message"
+              disabled={openDm.isPending}
+              onClick={() => openDm.mutate(peerHandle(f, me?.origin_server))}
+            >
+              <MessageCircle size={16} />
+            </button>
             <button type="button" className={`${circleButton} hover:text-error`} aria-label={`Remove ${f.username} from friends`} disabled={remove.isPending} onClick={() => remove.mutate(f.userId)}>
               <UserMinus size={16} />
             </button>
@@ -247,7 +235,7 @@ export function FriendsView() {
 
   return (
     <>
-      <Sidebar friends={all} />
+      <HomeSidebar />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[14px] bg-surface" aria-label="Friends">
         <header className="flex h-[60px] shrink-0 items-center gap-3.5 border-b border-border-secondary px-[18px]">
           <h1 className="m-0 flex items-center gap-2 font-heading text-xl font-semibold">
