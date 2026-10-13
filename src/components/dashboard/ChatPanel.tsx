@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Hash, Lock, Loader2, Users } from "lucide-react";
 import { useMarkChannelRead } from "../../features/channels/hooks";
 import type { Channel } from "../../features/channels/types";
 import type { Message } from "../../features/messages/types";
 import { groupMessages } from "../../features/messages/grouping";
+import { useChatScroll } from "../../features/messages/useChatScroll";
 import { useDeleteMessage, useEditMessage, useMessages, useReportMessage, useSendMessage, useToggleReaction } from "../../features/messages/hooks";
 import { useServerInfo } from "../../features/server/hooks";
 import { useMyProfile } from "../../features/users/hooks";
@@ -18,11 +19,10 @@ import { LoadingState } from "../ui/LoadingState";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelSearch } from "./ChannelSearch";
 import { Composer } from "./Composer";
+import { JumpToPresent } from "./JumpToPresent";
 import { DeleteMessageDialog, ReportMessageDialog } from "./MessageDialogs";
 import { MessageItem, type MenuPoint } from "./MessageItem";
 import { messageMenuEntries } from "./messageMenu";
-
-const NEAR_BOTTOM_PX = 120;
 
 interface ChatPanelProps {
   channel: Channel;
@@ -55,9 +55,6 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   // Held with its channel so switching channels can't carry a reply over.
   const [reply, setReply] = useState<{ channelId: string; id: string } | null>(null);
 
-  const scroller = useRef<HTMLDivElement>(null);
-  const stickToBottom = useRef(true);
-  const heightBeforeLoad = useRef<number | null>(null);
 
   const newestId = messages.at(-1)?.id;
   const rows = useMemo(() => groupMessages(messages), [messages]);
@@ -131,45 +128,29 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `markRead` is a new object each render
   }, [channelId, newestId]);
 
-  // Scroll behaviour: restore position after older messages are prepended, otherwise follow new ones.
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    if (heightBeforeLoad.current !== null) {
-      el.scrollTop += el.scrollHeight - heightBeforeLoad.current;
-      heightBeforeLoad.current = null;
-    } else if (stickToBottom.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [messages.length, channelId]);
-
-  useEffect(() => {
-    stickToBottom.current = true;
-  }, [channelId]);
-
-  const handleScroll = () => {
-    const el = scroller.current;
-    if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
-  };
-
-  const loadOlder = () => {
-    heightBeforeLoad.current = scroller.current?.scrollHeight ?? null;
-    void fetchNextPage();
-  };
+  const scroll = useChatScroll({
+    conversationId: channelId,
+    messages,
+    myUserId: me?.user_id,
+    hasOlder: hasNextPage,
+    loadingOlder: isFetchingNextPage,
+    loadOlder: useCallback(() => void fetchNextPage(), [fetchNextPage]),
+  });
+  const { scrollerRef, release } = scroll;
 
   /** Scroll a message into view and flash it. Older messages that are not loaded cannot be reached from here. */
   const jumpToId = useCallback((id: string) => {
-    const row = Array.from(scroller.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === id);
+    const row = Array.from(scrollerRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === id);
     if (!row) {
       showToast("That message is further back than what's loaded. Load older messages to reach it.", "info");
       return;
     }
-    stickToBottom.current = false;
+    release();
     row.scrollIntoView({ block: "center", behavior: "smooth" });
     row.focus({ preventScroll: true });
     row.classList.add("bg-primary/15");
     setTimeout(() => row.classList.remove("bg-primary/15"), 1800);
-  }, [showToast]);
+  }, [showToast, scrollerRef, release]);
   const jumpTo = (message: Message) => jumpToId(message.id);
 
   const Icon = channel.is_private ? Lock : Hash;
@@ -198,51 +179,64 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         </div>
       </header>
 
-      <div ref={scroller} onScroll={handleScroll} data-message-list className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">
-        {isPending ? (
-          <LoadingState message="Loading messages…" />
-        ) : error ? (
-          <ErrorState title="Couldn't load messages" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />
-        ) : (
-          <>
-            {hasNextPage && (
-              <button
-                type="button"
-                onClick={loadOlder}
-                disabled={isFetchingNextPage}
-                className="mx-auto mb-3 mt-1 flex items-center gap-2 rounded-full bg-surface-secondary px-4 py-1.5 text-[13px] text-text-tertiary hover:text-text disabled:opacity-60"
-              >
-                {isFetchingNextPage && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
-                Load older messages
-              </button>
-            )}
-            {messages.length === 0 ? (
-              <p className="m-auto text-sm text-text-muted">No messages in #{channel.channel_name} yet. Say hello.</p>
-            ) : (
-              <div className="mt-auto">
-                {rows.map(({ message, startsGroup }) => (
-                  <MessageItem
-                    key={message.id}
-                    message={message}
-                    isGroupStart={startsGroup}
-                    myUserId={me?.user_id}
-                    onEdit={handleEdit}
-                    quickReaction={topReactions[0]}
-                    onToggleReaction={handleReaction}
-                    onOpenMenu={handleOpenMenu}
-                    onOpenPicker={handleOpenPicker}
-                    editing={editingId === message.id}
-                    onEditingChange={handleEditingChange}
-                    onRetry={retry}
-                    onDiscard={discard}
-                    onReply={handleReply}
-                    onJumpTo={jumpToId}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={scrollerRef} onScroll={scroll.onScroll} data-message-list className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">
+          {isPending ? (
+            <LoadingState message="Loading messages…" />
+          ) : error ? (
+            <ErrorState title="Couldn't load messages" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />
+          ) : (
+            <>
+              {messages.length === 0 ? (
+                <p className="m-auto text-sm text-text-muted">No messages in #{channel.channel_name} yet. Say hello.</p>
+              ) : (
+                <div ref={scroll.contentRef} className="mt-auto">
+                  {/* Older history loads as this comes within reach; the button is the fallback. */}
+                  <div ref={scroll.topSentinelRef} aria-hidden="true" className="h-px" />
+                  {hasNextPage ? (
+                    <button
+                      type="button"
+                      onClick={scroll.requestOlder}
+                      disabled={isFetchingNextPage}
+                      className="mx-auto mb-3 mt-1 flex items-center gap-2 rounded-full bg-surface-secondary px-4 py-1.5 text-[13px] text-text-tertiary hover:text-text disabled:opacity-60"
+                    >
+                      {isFetchingNextPage && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
+                      {isFetchingNextPage ? "Loading older messages…" : "Load older messages"}
+                    </button>
+                  ) : (
+                    <div className="mb-4 mt-2 px-[18px]">
+                      <div className="mb-3 grid size-14 place-items-center rounded-full bg-surface-secondary">
+                        <Icon size={26} className="text-text-tertiary" aria-hidden="true" />
+                      </div>
+                      <h2 className="m-0 font-heading text-[24px] font-semibold text-text">Welcome to #{channel.channel_name}</h2>
+                      <p className="m-0 mt-1 text-[14px] text-text-muted">This is the start of the #{channel.channel_name} channel.</p>
+                    </div>
+                  )}
+                  {rows.map(({ message, startsGroup }) => (
+                    <MessageItem
+                      key={message.id}
+                      message={message}
+                      isGroupStart={startsGroup}
+                      myUserId={me?.user_id}
+                      onEdit={handleEdit}
+                      quickReaction={topReactions[0]}
+                      onToggleReaction={handleReaction}
+                      onOpenMenu={handleOpenMenu}
+                      onOpenPicker={handleOpenPicker}
+                      editing={editingId === message.id}
+                      onEditingChange={handleEditingChange}
+                      onRetry={retry}
+                      onDiscard={discard}
+                      onReply={handleReply}
+                      onJumpTo={jumpToId}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {scroll.showJumpButton && <JumpToPresent unseen={scroll.unseen} onClick={scroll.jumpToBottom} />}
       </div>
 
       <Composer

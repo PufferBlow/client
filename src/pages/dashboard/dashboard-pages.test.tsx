@@ -161,8 +161,9 @@ describe("ServerView", () => {
     const { user: u } = renderServer();
     await screen.findByText("mine");
 
-    await u.click(await screen.findByRole("button", { name: "Delete message" }));
-    // Deleting asks first.
+    // Delete is only in the message menu (not the hover toolbar), and it asks first.
+    await u.click(await screen.findByRole("button", { name: "More actions" }));
+    await u.click(await screen.findByRole("menuitem", { name: "Delete message" }));
     expect(requestLog(fetchMock)).not.toContain("DELETE /api/v1/channels/c1/delete_message");
     await u.click(within(await screen.findByText("Delete message?").then((h) => h.parentElement!.parentElement!)).getByRole("button", { name: "Delete" }));
 
