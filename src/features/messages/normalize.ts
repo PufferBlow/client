@@ -1,4 +1,4 @@
-import type { Attachment, Message, Reaction } from "./types";
+import type { Attachment, Message, Reaction, ReplyPreview } from "./types";
 
 /**
  * A message arrives in two shapes: the live broadcast / send response (`username`) and the
@@ -20,6 +20,8 @@ export interface WireMessage {
   reactions?: { emoji: string; count?: number; user_ids?: string[] }[] | null;
   edit_count?: number;
   last_edited_at?: string | null;
+  reply_to_message_id?: string | null;
+  reply_to?: unknown;
 }
 
 export function normalizeReactions(raw: WireMessage["reactions"]): Reaction[] {
@@ -29,6 +31,32 @@ export function normalizeReactions(raw: WireMessage["reactions"]): Reaction[] {
     count: r.count ?? r.user_ids?.length ?? 0,
   }));
 }
+
+/**
+ * The answered message's preview, from `reply_to` (both wire shapes use the same object). A reply
+ * whose preview is missing still points at its target, shown as unavailable.
+ */
+export function replyFromWire(preview: unknown, replyToId: unknown): ReplyPreview | undefined {
+  const fields = preview && typeof preview === "object" && !Array.isArray(preview) ? (preview as Record<string, unknown>) : null;
+  const id = (fields && typeof fields.message_id === "string" ? fields.message_id : null) ?? (typeof replyToId === "string" && replyToId ? replyToId : null);
+  if (!id) return undefined;
+  const str = (value: unknown) => (typeof value === "string" ? value : "");
+  return {
+    id,
+    authorId: str(fields?.author_id),
+    authorName: str(fields?.author_name),
+    authorAvatarUrl: typeof fields?.author_avatar_url === "string" ? fields.author_avatar_url : null,
+    text: str(fields?.content),
+    hasAttachments: fields?.has_attachments === true,
+    deleted: !fields || fields.deleted === true,
+  };
+}
+
+/** `{ replyTo }` for a reply, nothing otherwise (so plain messages keep their exact shape). */
+const replyField = (preview: unknown, replyToId: unknown) => {
+  const replyTo = replyFromWire(preview, replyToId);
+  return replyTo ? { replyTo } : {};
+};
 
 export function normalizeMessage(raw: WireMessage, fallbackChannelId = ""): Message {
   return {
@@ -43,6 +71,7 @@ export function normalizeMessage(raw: WireMessage, fallbackChannelId = ""): Mess
     reactions: normalizeReactions(raw.reactions),
     editCount: raw.edit_count ?? 0,
     editedAt: raw.last_edited_at ?? null,
+    ...replyField(raw.reply_to, raw.reply_to_message_id),
   };
 }
 
@@ -78,6 +107,7 @@ export function messageFromView(view: unknown, fallbackChannelId = ""): Message 
     reactions: normalizeReactions(Array.isArray(view.reactions) ? (view.reactions as WireMessage["reactions"]) : []),
     editCount: typeof view.edit_count === "number" ? view.edit_count : 0,
     editedAt: text(view.last_edited_at),
+    ...replyField(view.reply_to, view.reply_to_message_id),
   };
 }
 

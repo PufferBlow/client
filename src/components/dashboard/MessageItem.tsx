@@ -8,16 +8,16 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { FileText, MoreHorizontal, Music, Pencil, SmilePlus, Trash2 } from "lucide-react";
+import { FileText, Image as ImageIcon, MoreHorizontal, Music, Pencil, Reply, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
 import { isEmojiOnly } from "../../lib/emoji";
-import { embeddableUrls, parseMarkdown } from "../../lib/markdown";
+import { embeddableUrls, parseMarkdown, toPlainText } from "../../lib/markdown";
 import { handleFormatShortcut } from "../../lib/textEditing";
 import { displayName, fileKind, formatBytes, isSpoilerName } from "../../lib/files";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
-import type { Message } from "../../features/messages/types";
+import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { Avatar } from "./Avatar";
 import { QUICK_REACTIONS } from "./messageMenu";
@@ -49,6 +49,10 @@ interface MessageItemProps {
   onRetry?: (id: string) => void;
   /** Throw away a message that failed to go out. */
   onDiscard?: (id: string) => void;
+  /** Start replying to this message in the composer. */
+  onReply?: (id: string) => void;
+  /** Scroll to (and flash) another message, e.g. the one a reply answers. */
+  onJumpTo?: (id: string) => void;
 }
 
 const formatTime = (iso: string) => {
@@ -113,6 +117,44 @@ function AttachmentView({ url, filename, type, size }: Message["attachments"][nu
       >
         <span className="rounded-full bg-black/75 px-3 py-1 text-[11.5px] font-bold tracking-[0.12em] text-white">SPOILER</span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * The line above a reply: who and what it answers, joined to the avatar below by a curved spine
+ * the way Discord draws it. Clicking it jumps to the original.
+ */
+function ReplyLine({ reply, onJumpTo }: { reply: ReplyPreview; onJumpTo?: (id: string) => void }) {
+  const snippet = reply.deleted ? "" : toPlainText(reply.text);
+  return (
+    <div className="flex basis-full items-center gap-3">
+      <div className="relative h-[22px] w-10 shrink-0" aria-hidden="true">
+        <span className="absolute -bottom-1 left-[19px] top-[11px] w-[29px] rounded-tl-[7px] border-l-2 border-t-2 border-border" />
+      </div>
+      {reply.deleted ? (
+        <span className="min-w-0 truncate text-[13px] italic text-text-muted">Original message was deleted</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onJumpTo?.(reply.id)}
+          aria-label={`Replying to ${reply.authorName || "a message"}: ${snippet || (reply.hasAttachments ? "attachment" : "")}. Jump to it`}
+          className="flex min-w-0 items-center gap-1.5 rounded text-left text-[13px] text-text-muted outline-none hover:text-text-secondary focus-visible:outline-2 focus-visible:outline-focus"
+        >
+          <Avatar name={reply.authorName} src={reply.authorAvatarUrl} seed={reply.authorId} size={16} />
+          <span className="shrink-0 font-semibold text-text-tertiary">{reply.authorName || "Unknown user"}</span>
+          {snippet ? (
+            <span className="min-w-0 truncate">
+              <EmojiText text={snippet} size="1.1em" />
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 italic">
+              {reply.hasAttachments ? "Click to see attachment" : "Click to see the message"}
+              {reply.hasAttachments && <ImageIcon size={13} aria-hidden="true" />}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -185,6 +227,8 @@ export const MessageItem = memo(function MessageItem({
   onEditingChange,
   onRetry,
   onDiscard,
+  onReply,
+  onJumpTo,
 }: MessageItemProps) {
   const [localEditing, setLocalEditing] = useState(false);
   const editing = controlledEditing ?? localEditing;
@@ -194,6 +238,9 @@ export const MessageItem = memo(function MessageItem({
   const isLocal = message.status !== undefined;
   const blocks = useMemo(() => parseMarkdown(message.text), [message.text]);
   const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
+  // Someone else answering one of my messages: tinted, like a mention.
+  const repliesToMe =
+    myUserId !== undefined && message.replyTo !== undefined && !message.replyTo.deleted && message.replyTo.authorId === myUserId && message.authorId !== myUserId;
   const editedMarker = !isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>;
 
   const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
@@ -220,8 +267,9 @@ export const MessageItem = memo(function MessageItem({
       tabIndex={0}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
-      className={`group relative flex gap-3 px-[18px] outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"}`}
+      className={`group relative flex flex-wrap gap-x-3 gap-y-0.5 px-[18px] outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"} ${repliesToMe ? "bg-primary/[0.06] shadow-[inset_2px_0_0_var(--color-primary)] hover:bg-primary/[0.09]" : ""}`}
     >
+      {message.replyTo && <ReplyLine reply={message.replyTo} onJumpTo={onJumpTo} />}
       {/* Same gutter width for every row so content never shifts horizontally. */}
       <div className="w-10 shrink-0">
         {isGroupStart ? (
@@ -337,6 +385,11 @@ export const MessageItem = memo(function MessageItem({
               }}
             >
               <SmilePlus size={14} />
+            </button>
+          )}
+          {onReply && (
+            <button type="button" className={toolButton} aria-label="Reply" title="Reply" onClick={() => onReply(message.id)}>
+              <Reply size={14} />
             </button>
           )}
           {isOwn && (

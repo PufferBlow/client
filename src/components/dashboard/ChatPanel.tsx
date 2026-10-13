@@ -51,6 +51,8 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
+  // Held with its channel so switching channels can't carry a reply over.
+  const [reply, setReply] = useState<{ channelId: string; id: string } | null>(null);
 
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -85,12 +87,34 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const pickerMessage = byId(picker?.id ?? null);
   const deleteMessageTarget = byId(deleteId);
   const reportTarget = byId(reportId);
+  const replyTarget = reply?.channelId === channelId ? byId(reply.id) : undefined;
 
   // A message that disappears (deleted elsewhere, history refetched) takes its menu and dialogs with it.
   if (menu && !menuMessage) setMenu(null);
   if (picker && !pickerMessage) setPicker(null);
   if (deleteId && !deleteMessageTarget) setDeleteId(null);
   if (reportId && !reportTarget) setReportId(null);
+  if (reply && !replyTarget) setReply(null);
+
+  const handleReply = useCallback((id: string) => setReply({ channelId, id }), [channelId]);
+  const cancelReply = useCallback(() => setReply(null), []);
+
+  /** Sends, as a reply when one is being written; the composer only clears once this resolves. */
+  const handleSend = async (input: { text: string; files: File[] }) => {
+    const replyTo = replyTarget
+      ? {
+          id: replyTarget.id,
+          authorId: replyTarget.authorId,
+          authorName: replyTarget.authorName,
+          authorAvatarUrl: replyTarget.authorAvatarUrl,
+          text: replyTarget.text,
+          hasAttachments: replyTarget.attachments.length > 0,
+          deleted: false,
+        }
+      : undefined;
+    await send({ ...input, replyTo });
+    setReply(null);
+  };
 
   const copy = async (text: string, done: string) => {
     const ok = await copyToClipboard(text);
@@ -129,9 +153,9 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     void fetchNextPage();
   };
 
-  /** Scroll a search result into view and flash it. Older messages that are not loaded cannot be reached from here. */
-  const jumpTo = (message: Message) => {
-    const row = Array.from(scroller.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === message.id);
+  /** Scroll a message into view and flash it. Older messages that are not loaded cannot be reached from here. */
+  const jumpToId = useCallback((id: string) => {
+    const row = Array.from(scroller.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === id);
     if (!row) {
       showToast("That message is further back than what's loaded. Load older messages to reach it.", "info");
       return;
@@ -141,7 +165,8 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     row.focus({ preventScroll: true });
     row.classList.add("bg-primary/15");
     setTimeout(() => row.classList.remove("bg-primary/15"), 1800);
-  };
+  }, [showToast]);
+  const jumpTo = (message: Message) => jumpToId(message.id);
 
   const Icon = channel.is_private ? Lock : Hash;
 
@@ -206,6 +231,8 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
                     onEditingChange={handleEditingChange}
                     onRetry={retry}
                     onDiscard={discard}
+                    onReply={handleReply}
+                    onJumpTo={jumpToId}
                   />
                 ))}
               </div>
@@ -218,7 +245,9 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         channelName={channel.channel_name}
         maxLength={server?.max_message_length ?? undefined}
         maxAttachmentMB={server?.max_total_attachment_size ?? undefined}
-        onSend={send}
+        replyingTo={replyTarget ? { id: replyTarget.id, authorName: replyTarget.authorName } : undefined}
+        onCancelReply={cancelReply}
+        onSend={handleSend}
       />
 
       {menu && menuMessage && (
@@ -230,6 +259,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
           entries={messageMenuEntries(menuMessage, me, {
             react: (emoji, present) => handleReaction(menuMessage.id, emoji, present),
             openPicker: () => setPicker({ id: menuMessage.id, x: menu.x, y: menu.y }),
+            reply: () => handleReply(menuMessage.id),
             copyText: () => void copy(menuMessage.text, "Message text copied."),
             copyId: () => void copy(menuMessage.id, "Message ID copied."),
             edit: () => setEditingId(menuMessage.id),

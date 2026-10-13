@@ -154,7 +154,7 @@ describe("message context menu", () => {
       await open();
       rightClick("mine");
 
-      for (const name of ["Copy text", "Copy message ID", "Edit message", "Delete message"]) expect(hasItem(name)).toBe(true);
+      for (const name of ["Reply", "Copy text", "Copy message ID", "Edit message", "Delete message"]) expect(hasItem(name)).toBe(true);
       expect(hasItem("Report message")).toBe(false);
     });
 
@@ -187,7 +187,7 @@ describe("message context menu", () => {
     it("does not list actions the app does not support", async () => {
       await open();
       rightClick("mine");
-      for (const name of [/reply/i, /pin/i, /forward/i, /unread/i, /link/i]) expect(hasItem(name)).toBe(false);
+      for (const name of [/pin/i, /forward/i, /unread/i, /link/i]) expect(hasItem(name)).toBe(false);
     });
 
     it("hides Copy text for a message with no text", async () => {

@@ -4,7 +4,10 @@ import { CommandError, type CommandClient, type SendOptions } from "./commands";
 
 /** What the message hooks need from the socket. `RealtimeSession` provides it. */
 export interface MessageCommands {
-  createMessage(input: { channelId: string; content: string; nonce: string }, options?: SendOptions): Promise<Message>;
+  createMessage(
+    input: { channelId: string; content: string; nonce: string; replyToMessageId?: string },
+    options?: SendOptions,
+  ): Promise<Message>;
   editMessage(channelId: string, messageId: string, content: string): Promise<EditResult>;
   deleteMessage(channelId: string, messageId: string): Promise<void>;
   setReaction(channelId: string, messageId: string, emoji: string, present: boolean): Promise<Reaction[]>;
@@ -36,10 +39,10 @@ export const DEFAULT_RESYNC_LIMIT = 50;
 
 export function messageCommands(client: CommandClient): MessageCommands {
   return {
-    async createMessage({ channelId, content, nonce }, options) {
+    async createMessage({ channelId, content, nonce, replyToMessageId }, options) {
       const result = await client.send<{ message?: unknown }>(
         "message.create",
-        { channel_id: channelId, content, nonce },
+        { channel_id: channelId, content, nonce, ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}) },
         options,
       );
       const message = messageFromView(result.message, channelId);

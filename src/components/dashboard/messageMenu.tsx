@@ -1,4 +1,4 @@
-import { Copy, Fingerprint, Flag, Pencil, SmilePlus, Trash2 } from "lucide-react";
+import { Copy, Fingerprint, Flag, Pencil, Reply, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji } from "../ui/Emoji";
 import type { MenuEntry } from "../ui/ContextMenu";
 import { canDeleteMessage, canEditMessage, canReportMessage } from "../../features/messages/permissions";
@@ -10,6 +10,7 @@ export const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉"];
 export interface MessageMenuActions {
   react: (emoji: string, present: boolean) => void;
   openPicker: () => void;
+  reply: () => void;
   copyText: () => void;
   copyId: () => void;
   edit: () => void;
@@ -19,7 +20,7 @@ export interface MessageMenuActions {
 
 /**
  * The actions offered for one message. Only things the app and backend support are listed;
- * reply, pin, forward, mark-unread and permalinks are intentionally absent until they exist.
+ * pin, forward, mark-unread and permalinks are intentionally absent until they exist.
  */
 export function messageMenuEntries(message: Message, viewer: UserProfile | undefined, actions: MessageMenuActions): MenuEntry[] {
   const mine = (emoji: string) => message.reactions.some((r) => r.emoji === emoji && viewer !== undefined && r.userIds.includes(viewer.user_id));
@@ -40,6 +41,7 @@ export function messageMenuEntries(message: Message, viewer: UserProfile | undef
     },
     { kind: "item", id: "more-reactions", label: "More reactions…", icon: <SmilePlus size={15} />, onSelect: actions.openPicker },
     { kind: "separator", id: "sep-react" },
+    { kind: "item", id: "reply", label: "Reply", icon: <Reply size={15} />, onSelect: actions.reply },
   ];
 
   if (hasText) entries.push({ kind: "item", id: "copy-text", label: "Copy text", icon: <Copy size={15} />, onSelect: actions.copyText });

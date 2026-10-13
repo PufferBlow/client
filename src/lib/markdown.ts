@@ -352,3 +352,25 @@ export function embeddableUrls(blocks: Block[], limit = 3): string[] {
   visitBlocks(blocks);
   return found;
 }
+
+/**
+ * The message as one line of plain text, for previews (replies, notifications). Formatting is
+ * dropped, and spoilers stay hidden as a bar of blocks so a preview can't give one away.
+ */
+export function toPlainText(text: string): string {
+  const inline = (nodes: Inline[]): string =>
+    nodes
+      .map((node) => {
+        if (node.type === "text" || node.type === "code") return node.value;
+        if (node.type === "spoiler") return "█".repeat(Math.min(10, Math.max(4, inline(node.children).length)));
+        return inline(node.children);
+      })
+      .join("");
+  const block = (node: Block): string => {
+    if (node.type === "codeblock") return node.value;
+    if (node.type === "quote") return node.children.map(block).join(" ");
+    if (node.type === "list") return node.items.map(inline).join(" ");
+    return inline(node.children);
+  };
+  return parseMarkdown(text).map(block).join(" ").replace(/\s+/g, " ").trim();
+}

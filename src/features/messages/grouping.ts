@@ -41,6 +41,8 @@ export function continuesGroup(
   if (previous.channelId !== current.channelId) return false;
   if (!current.authorId || previous.authorId !== current.authorId) return false;
   if (previous.kind === "system" || current.kind === "system") return false;
+  // A reply shows what it answers above its header, so it always starts a group.
+  if (current.replyTo) return false;
 
   const before = Date.parse(previous.sentAt);
   const after = Date.parse(current.sentAt);

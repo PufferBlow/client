@@ -6,6 +6,19 @@ export interface Attachment {
   size?: number;
 }
 
+/** What a reply shows of the message it answers. */
+export interface ReplyPreview {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  /** The start of its text (the server sends at most 200 characters). */
+  text: string;
+  hasAttachments: boolean;
+  /** The answered message no longer exists. */
+  deleted: boolean;
+}
+
 export interface Reaction {
   emoji: string;
   count: number;
@@ -26,6 +39,8 @@ export interface Message {
   reactions: Reaction[];
   editCount: number;
   editedAt: string | null;
+  /** The message this one replies to. Absent when it isn't a reply. */
+  replyTo?: ReplyPreview;
   /** Join/pin notices and similar. Absent means an ordinary user message. */
   kind?: "user" | "system";
   /**

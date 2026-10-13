@@ -17,7 +17,7 @@ import {
   upsertMessage,
   type MessageCache,
 } from "./cache";
-import type { Message } from "./types";
+import type { Message, ReplyPreview } from "./types";
 
 export function useMessages(channelId: string) {
   const query = useInfiniteQuery({
@@ -67,6 +67,8 @@ function describeFailure(error: unknown): { message: string; retryable: boolean 
 export interface SendInput {
   text: string;
   files?: File[];
+  /** The message this replies to (its preview is shown on the pending row straight away). */
+  replyTo?: ReplyPreview;
 }
 
 /**
@@ -82,10 +84,10 @@ export function useSendMessage(channelId: string) {
   const update = useMessageCache(channelId);
 
   const deliver = useCallback(
-    async (localId: string, nonce: string, text: string) => {
+    async (localId: string, nonce: string, text: string, replyToMessageId?: string) => {
       if (!commands) return;
       try {
-        const message = await commands.createMessage({ channelId, content: text, nonce });
+        const message = await commands.createMessage({ channelId, content: text, nonce, replyToMessageId });
         update((cache) => settlePending(cache, localId, message));
       } catch (error) {
         update((cache) => failPending(cache, localId, describeFailure(error)));
@@ -95,14 +97,15 @@ export function useSendMessage(channelId: string) {
   );
 
   const send = useCallback(
-    async ({ text, files }: SendInput): Promise<void> => {
+    async ({ text, files, replyTo }: SendInput): Promise<void> => {
       const cached = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
+      const replyToMessageId = replyTo?.id;
 
       // Files, no connection layer, or nothing on screen to show a pending row in: send and wait.
       if (files?.length || !commands || !cached) {
         const message = files?.length || !commands
-          ? await sendMessage(channelId, { text, files })
-          : await commands.createMessage({ channelId, content: text, nonce: crypto.randomUUID() });
+          ? await sendMessage(channelId, { text, files, replyToMessageId })
+          : await commands.createMessage({ channelId, content: text, nonce: crypto.randomUUID(), replyToMessageId });
         update((cache) => upsertMessage(cache, message));
         return;
       }
@@ -124,9 +127,10 @@ export function useSendMessage(channelId: string) {
         editedAt: null,
         status: "pending",
         nonce,
+        ...(replyTo ? { replyTo } : {}),
       };
       update((cache) => upsertMessage(cache, pending));
-      void deliver(localId, nonce, text);
+      void deliver(localId, nonce, text, replyToMessageId);
     },
     [queryClient, commands, channelId, update, deliver],
   );
@@ -137,7 +141,7 @@ export function useSendMessage(channelId: string) {
       const failed = flattenMessages(cache).find((m) => m.id === localId && m.status === "failed");
       if (!failed?.nonce) return;
       update((c) => restartPending(c, localId));
-      void deliver(localId, failed.nonce, failed.text);
+      void deliver(localId, failed.nonce, failed.text, failed.replyTo?.id);
     },
     [queryClient, channelId, update, deliver],
   );

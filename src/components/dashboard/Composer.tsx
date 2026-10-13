@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Eye, EyeOff, File as FileIcon, Music, Paperclip, Send, Smile, Trash2, Upload } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, File as FileIcon, Music, Paperclip, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
 import { EmojiPickerPopover } from "../ui/EmojiPickerPopover";
 import { classifyAuthError } from "../../utils/authErrors";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
@@ -13,6 +13,9 @@ interface ComposerProps {
   maxLength?: number;
   /** Instance limit for all attachments of one message together, in MB, when known. */
   maxAttachmentMB?: number;
+  /** The message being replied to, shown above the field until sent or cancelled. */
+  replyingTo?: { id: string; authorName: string };
+  onCancelReply?: () => void;
   onSend: (input: { text: string; files: File[] }) => Promise<unknown>;
 }
 
@@ -37,7 +40,7 @@ const releasePreview = (pending: PendingFile) => {
   if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
 };
 
-export function Composer({ channelName, maxLength, maxAttachmentMB, onSend }: ComposerProps) {
+export function Composer({ channelName, maxLength, maxAttachmentMB, replyingTo, onCancelReply, onSend }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -146,7 +149,18 @@ export function Composer({ channelName, maxLength, maxAttachmentMB, onSend }: Co
     });
   };
 
+  // Starting a reply puts the caret in the field, ready to type it.
+  const replyingToId = replyingTo?.id;
+  useEffect(() => {
+    if (replyingToId) textInput.current?.focus();
+  }, [replyingToId]);
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape" && replyingTo && onCancelReply) {
+      e.preventDefault();
+      onCancelReply();
+      return;
+    }
     // Enter sends; Shift+Enter is a new line. Not while an IME is composing (Enter picks the candidate).
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -185,6 +199,25 @@ export function Composer({ channelName, maxLength, maxAttachmentMB, onSend }: Co
         onSubmit={submit}
         className="rounded-[14px] bg-surface-secondary text-text-tertiary focus-within:ring-2 focus-within:ring-primary/30"
       >
+        {replyingTo && (
+          <div className="flex items-center gap-2 rounded-t-[14px] border-b border-border-secondary bg-surface-tertiary/50 py-1.5 pl-3.5 pr-2 text-[13px]">
+            <Reply size={14} aria-hidden="true" className="shrink-0 text-text-muted" />
+            <span className="min-w-0 truncate text-text-muted">
+              Replying to <span className="font-semibold text-text-secondary">{replyingTo.authorName}</span>
+            </span>
+            {onCancelReply && (
+              <button
+                type="button"
+                aria-label="Cancel reply"
+                title="Cancel reply (Esc)"
+                onClick={onCancelReply}
+                className="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded-full text-text-muted transition-colors hover:bg-surface-tertiary hover:text-text"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
         {files.length > 0 && (
           <>
             <ul aria-label="Attachments" className="m-0 flex list-none gap-3 overflow-x-auto px-3 pb-2 pt-3.5">
