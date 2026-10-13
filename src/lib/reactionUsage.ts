@@ -1,4 +1,7 @@
 import { useSyncExternalStore } from "react";
+import { createLogger } from "./logger";
+
+const log = createLogger("reactions");
 
 /**
  * Which emoji this person reacts with most, kept on this device, so the quick-reaction slots
@@ -15,7 +18,8 @@ function read(): Usage {
     const raw = localStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Usage) : {};
-  } catch {
+  } catch (error) {
+    log.warn("stored reaction history is unreadable, starting over", error);
     return {};
   }
 }
@@ -30,8 +34,9 @@ export function recordReaction(emoji: string): void {
   usage = { ...usage, [emoji]: { count: entry.count + 1, last: Date.now() } };
   try {
     localStorage.setItem(KEY, JSON.stringify(usage));
-  } catch {
+  } catch (error) {
     // Private mode or full storage: it still counts for this session.
+    log.warn("couldn't save reaction history", error);
   }
   version += 1;
   listeners.forEach((listener) => listener());

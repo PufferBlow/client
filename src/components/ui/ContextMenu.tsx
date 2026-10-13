@@ -113,7 +113,7 @@ export function ContextMenu({ x, y, entries, label, onClose }: ContextMenuProps)
         if (entry.kind === "choices") {
           return (
             // The label is for assistive tech only; the choices speak for themselves on screen.
-            <div key={entry.id} role="group" aria-label={entry.label} className="flex items-center justify-between gap-1 px-1 py-1">
+            <div key={entry.id} role="group" aria-label={entry.label} className="flex items-center gap-0.5 px-1 py-1">
               {entry.choices.map((choice) => (
                 <button
                   key={choice.id}

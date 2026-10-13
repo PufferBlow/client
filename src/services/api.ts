@@ -1,4 +1,9 @@
+import { createLogger, redactText } from "../lib/logger";
+
+const log = createLogger("net");
+
 const DEFAULT_TIMEOUT = 15_000;
+let nextRequestId = 1;
 
 export class ApiError extends Error {
   constructor(
@@ -64,6 +69,10 @@ function buildUrl(url: string, query?: Query): string {
  */
 async function request<T>(method: Method, url: string, options: RequestOptions = {}): Promise<T> {
   const { query, json, form, timeout = DEFAULT_TIMEOUT, signal } = options;
+  const id = nextRequestId++;
+  const startedAt = performance.now();
+  const target = redactText(buildUrl(url, query));
+  const elapsed = () => `${Math.round(performance.now() - startedAt)}ms`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -78,17 +87,29 @@ async function request<T>(method: Method, url: string, options: RequestOptions =
     body = JSON.stringify(json);
   }
 
+  const bodyKind = form ? `multipart, ${[...form.keys()].filter((k) => k !== "auth_token").length} fields` : json !== undefined ? "json" : "no body";
+  log.debug(`#${id} → ${method} ${target} (${bodyKind})`);
+
   try {
     const response = await fetch(buildUrl(url, query), { method, headers, body, signal: controller.signal });
     const payload: unknown = await response.json().catch(() => null);
 
     if (!response.ok) throw toApiError(response.status, payload);
+    log.debug(`#${id} ← ${response.status} ${method} ${target} in ${elapsed()}`);
     return payload as T;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError(0, signal?.aborted ? "aborted" : "timeout", signal?.aborted ? "Request cancelled" : "Request timed out");
+    if (error instanceof ApiError) {
+      // A 4xx is the server answering "no" (often routine, e.g. a wrong password); a 5xx is its fault.
+      const report = error.status >= 500 ? log.error : log.warn;
+      report(`#${id} ← ${error.status} ${method} ${target} in ${elapsed()}: ${error.code}`, { message: error.message, details: error.details });
+      throw error;
     }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      const cancelled = signal?.aborted === true;
+      (cancelled ? log.debug : log.warn)(`#${id} ✕ ${method} ${target} ${cancelled ? "cancelled" : `timed out after ${timeout}ms`}`);
+      throw new ApiError(0, cancelled ? "aborted" : "timeout", cancelled ? "Request cancelled" : "Request timed out");
+    }
+    log.error(`#${id} ✕ ${method} ${target} failed after ${elapsed()}: network error`, error);
     throw new ApiError(0, "network", error instanceof Error ? error.message : "Network error");
   } finally {
     clearTimeout(timer);

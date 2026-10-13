@@ -208,3 +208,56 @@ describe("logout", () => {
     expect(getAuthToken()).toBeNull();
   });
 });
+
+describe("signing out for real", () => {
+  it("is already signed out locally while the revoke call is still waiting on the instance", async () => {
+    signIn();
+    persistSession(tokens(), true);
+    let release: (response: Response) => void = () => undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => (release = resolve))));
+
+    const done = logout();
+    expect(getAuthToken()).toBeNull();
+    expect(localStorage.getItem("pb_session")).toBeNull();
+
+    release(jsonResponse({ status_code: 200 }));
+    await done;
+  });
+
+  it("removes a cookie that was stored as Secure too", () => {
+    const writes: string[] = [];
+    const real = Object.getOwnPropertyDescriptor(Document.prototype, "cookie")!;
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => real.get!.call(document),
+      set: (value: string) => {
+        writes.push(value);
+        real.set!.call(document, value);
+      },
+    });
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, protocol: "https:" } as Location);
+    try {
+      clearAuthToken();
+    } finally {
+      delete (document as { cookie?: string }).cookie;
+    }
+
+    expect(writes.some((w) => w.includes("Secure") && w.includes("Max-Age=0"))).toBe(true);
+    expect(writes.some((w) => !w.includes("Secure") && w.includes("Expires=Thu, 01 Jan 1970"))).toBe(true);
+  });
+
+  it("is not undone by a token renewal that was already on its way", async () => {
+    signIn();
+    persistSession(tokens(), true);
+    let release: (response: Response) => void = () => undefined;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => (release = resolve))));
+
+    const renewing = renewSession();
+    clearAuthToken();
+    release(jsonResponse(tokens({ auth_token: "access-2" })));
+
+    await expect(renewing).resolves.toBe("rejected");
+    expect(getAuthToken()).toBeNull();
+    expect(localStorage.getItem("pb_session")).toBeNull();
+  });
+});

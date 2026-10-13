@@ -22,6 +22,7 @@ export interface WireMessage {
   last_edited_at?: string | null;
   reply_to_message_id?: string | null;
   reply_to?: unknown;
+  forwarded_from_message_id?: string | null;
 }
 
 export function normalizeReactions(raw: WireMessage["reactions"]): Reaction[] {
@@ -53,6 +54,9 @@ export function replyFromWire(preview: unknown, replyToId: unknown): ReplyPrevie
 }
 
 /** `{ replyTo }` for a reply, nothing otherwise (so plain messages keep their exact shape). */
+/** `{ forwarded: true }` for a forwarded message. The original's id is dropped on purpose. */
+const forwardedField = (fromId: unknown) => (typeof fromId === "string" && fromId ? { forwarded: true as const } : {});
+
 const replyField = (preview: unknown, replyToId: unknown) => {
   const replyTo = replyFromWire(preview, replyToId);
   return replyTo ? { replyTo } : {};
@@ -72,6 +76,7 @@ export function normalizeMessage(raw: WireMessage, fallbackChannelId = ""): Mess
     editCount: raw.edit_count ?? 0,
     editedAt: raw.last_edited_at ?? null,
     ...replyField(raw.reply_to, raw.reply_to_message_id),
+    ...forwardedField(raw.forwarded_from_message_id),
   };
 }
 
@@ -108,6 +113,7 @@ export function messageFromView(view: unknown, fallbackChannelId = ""): Message 
     editCount: typeof view.edit_count === "number" ? view.edit_count : 0,
     editedAt: text(view.last_edited_at),
     ...replyField(view.reply_to, view.reply_to_message_id),
+    ...forwardedField(view.forwarded_from_message_id),
   };
 }
 

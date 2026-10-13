@@ -49,15 +49,22 @@ export function messageMenuEntries(
       kind: "choices",
       id: "react",
       label: "Add reaction",
-      choices: actions.quickReactions.map((emoji) => ({
-        id: emoji,
-        label: `${mine(emoji) ? "Remove" : "Add"} ${emoji} reaction`,
-        content: <Emoji char={emoji} size={22} />,
-        pressed: mine(emoji),
-        onSelect: () => actions.react(emoji, !mine(emoji)),
-      })),
+      choices: [
+        ...actions.quickReactions.map((emoji) => ({
+          id: emoji,
+          label: `${mine(emoji) ? "Remove" : "Add"} ${emoji} reaction`,
+          content: <Emoji char={emoji} size={22} />,
+          pressed: mine(emoji),
+          onSelect: () => actions.react(emoji, !mine(emoji)),
+        })),
+        {
+          id: "more-reactions",
+          label: "More reactions…",
+          content: <SmilePlus size={20} aria-hidden="true" className="text-text-secondary" />,
+          onSelect: actions.openPicker,
+        },
+      ],
     },
-    { kind: "item", id: "more-reactions", label: "More reactions…", icon: <SmilePlus size={15} />, onSelect: actions.openPicker },
     { kind: "separator", id: "sep-react" },
     { kind: "item", id: "reply", label: "Reply", icon: <Reply size={15} />, onSelect: actions.reply },
   ];

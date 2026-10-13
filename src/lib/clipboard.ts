@@ -1,3 +1,7 @@
+import { createLogger } from "./logger";
+
+const log = createLogger("clipboard");
+
 /** Copies text, falling back to a hidden textarea where the async clipboard API is unavailable. Resolves false on failure. */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -5,8 +9,9 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch {
+  } catch (error) {
     // Permission denied or insecure context: try the fallback below.
+    log.debug("async clipboard refused, using the fallback", error);
   }
 
   try {
@@ -19,8 +24,10 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     field.select();
     const ok = document.execCommand("copy");
     field.remove();
+    if (!ok) log.warn("copy command was refused");
     return ok;
-  } catch {
+  } catch (error) {
+    log.warn("couldn't copy to the clipboard", error);
     return false;
   }
 }

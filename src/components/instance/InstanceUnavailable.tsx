@@ -145,6 +145,7 @@ function Unreachable({ host }: { host: string }) {
   const signOut = () => {
     // Local only: the instance isn't answering, so there is no one to revoke the token with.
     clearAuthToken();
+    queryClient.clear();
     setInstanceStatus("ok");
     navigate("/login", { replace: true });
   };

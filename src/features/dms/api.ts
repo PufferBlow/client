@@ -97,6 +97,20 @@ export async function sendDirectMessage(input: {
   return { conversationId: result.conversation_id, messageId: result.message_id };
 }
 
+/** Where a message is forwarded to: the DM with a person, or a channel of this instance. */
+export type ForwardTarget = { peer: string } | { channelId: string };
+
+/**
+ * Forwards a message (a channel's or a DM's). `peer` is a bare username here or `name@host` for
+ * someone on another instance. The server re-sends the text and attachments as the caller and
+ * marks the copy as forwarded. For a DM it also says which conversation that is.
+ */
+export async function forwardMessage(messageId: string, target: ForwardTarget): Promise<{ conversationId: string | null }> {
+  const body = "peer" in target ? { peer: target.peer } : { channel_id: target.channelId };
+  const { result } = await authed.body<{ result?: { conversation_id?: string } }>("POST", `/api/v1/messages/${encodeURIComponent(messageId)}/forward`, body);
+  return { conversationId: result?.conversation_id ?? null };
+}
+
 export async function editDirectMessage(messageId: string, text: string) {
   const result = await authed.body<{ message: string; edit_count: number; last_edited_at: string | null }>(
     "PATCH",

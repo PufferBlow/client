@@ -1,3 +1,4 @@
+import { createLogger } from "../../lib/logger";
 import type { Message } from "../messages/types";
 import { RealtimeClient, type ConnectionStatus } from "./client";
 import { CommandClient, CommandError } from "./commands";
@@ -5,6 +6,8 @@ import { toRealtimeEvent, type RealtimeEvent } from "./events";
 import { messageCommands, resyncChannel, subscribeChannel, type MessageCommands } from "./messageCommands";
 import type { ServerFrame } from "./protocol";
 import { EventTracker } from "./tracker";
+
+const log = createLogger("realtime");
 
 export interface SessionOptions {
   /** Same contract as `RealtimeClient`: the URL must already carry `protocol=1`. */
@@ -109,7 +112,7 @@ export class RealtimeSession {
           const code = error instanceof CommandError ? error.code : null;
           // The socket is gone: the rest of the queue is cleared on close and redone on reconnect.
           if (code === null || code === "DISCONNECTED" || code === "NOT_CONNECTED") break;
-          console.warn(`[realtime] resync of ${id} failed: ${code}`);
+          log.warn(`resync of ${id} failed: ${code}`);
         }
       }
     } finally {

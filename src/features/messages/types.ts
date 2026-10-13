@@ -41,6 +41,8 @@ export interface Message {
   editedAt: string | null;
   /** The message this one replies to. Absent when it isn't a reply. */
   replyTo?: ReplyPreview;
+  /** Passed on from another conversation. Where from is deliberately not kept: only that it was forwarded. */
+  forwarded?: true;
   /** Join/pin notices and similar. Absent means an ordinary user message. */
   kind?: "user" | "system";
   /**

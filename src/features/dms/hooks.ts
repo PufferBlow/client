@@ -26,9 +26,16 @@ import {
   uploadAttachment,
 } from "./api";
 import { dmKeys } from "./keys";
+import { conversationFor, mergeOutgoing, rememberOutgoing } from "./outgoing";
 
+/** The server's conversations plus the ones you started that it doesn't list yet (see `outgoing.ts`). */
 export function useConversations() {
-  return useQuery({ queryKey: dmKeys.conversations, queryFn: listConversations, staleTime: 30_000 });
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: dmKeys.conversations,
+    queryFn: async () => mergeOutgoing(await listConversations(), queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id),
+    staleTime: 30_000,
+  });
 }
 
 /** A conversation's history, newest page first; kept live by `dm.*` events. */
@@ -90,8 +97,15 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
     async (localId: string, input: SendInput) => {
       try {
         const attachments = await Promise.all((input.files ?? []).map(uploadAttachment));
-        const { messageId } = await sendDirectMessage({ peer, text: input.text, attachments, replyToMessageId: input.replyTo?.id });
+        const { messageId, conversationId: sentTo } = await sendDirectMessage({ peer, text: input.text, attachments, replyToMessageId: input.replyTo?.id });
         const me = queryClient.getQueryData<UserProfile>(userKeys.profile);
+        // The server won't list this conversation until they answer, so keep it ourselves.
+        if (me) {
+          rememberOutgoing(
+            me.user_id,
+            conversationFor({ id: sentTo || conversationId, peer, myHost: me.origin_server ?? "", preview: input.text || "Attachment" }),
+          );
+        }
         const sent: Message = {
           id: messageId,
           channelId: conversationId,

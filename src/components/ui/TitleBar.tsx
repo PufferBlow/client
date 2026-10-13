@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { useMatch } from "react-router";
 import { Minus, Square, X, Copy } from "lucide-react";
+import { InboxButton } from "../inbox/Inbox";
 
 declare global {
   interface Window {
@@ -16,6 +18,8 @@ declare global {
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = typeof window !== "undefined" && !!window.electron;
+  // The inbox belongs to a signed-in account, so it stays off the login and sign-up screens.
+  const signedInArea = [useMatch("/dashboard/*"), useMatch("/settings/*"), useMatch("/control-panel/*")].some((match) => match !== null);
 
   useEffect(() => {
     if (!window.electron) return;
@@ -39,6 +43,7 @@ export function TitleBar() {
 
       {isElectron && (
         <div className="flex h-full" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          {signedInArea && <InboxButton />}
           <button
             onClick={handleMinimize}
             className="flex h-full w-11 items-center justify-center text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-text"

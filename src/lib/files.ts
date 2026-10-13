@@ -3,6 +3,10 @@
  * `SPOILER_` file name prefix, so it needs nothing from the server and survives federation.
  */
 
+import { createLogger } from "./logger";
+
+const log = createLogger("files");
+
 export const SPOILER_PREFIX = "SPOILER_";
 
 export const isSpoilerName = (name: string) => name.startsWith(SPOILER_PREFIX);
@@ -37,4 +41,50 @@ export function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${value >= 10 ? Math.round(value) : Math.round(value * 10) / 10} ${units[unit]}`;
+}
+
+/**
+ * How a message's image and video attachments are laid out as a gallery: the number of tiles per
+ * row, top to bottom. It follows Discord's grid, so the short row goes on top (3 → 1 + 2, 5 → 2 + 3,
+ * 7 → 1 + 3 + 3) and every other row holds up to three.
+ */
+export function galleryRows(count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [1];
+  if (count === 3) return [1, 2];
+  if (count === 4) return [2, 2];
+  const rows: number[] = [];
+  let left = count;
+  if (left % 3 === 1) {
+    rows.push(1);
+    left -= 1;
+  } else if (left % 3 === 2) {
+    rows.push(2);
+    left -= 2;
+  }
+  while (left > 0) {
+    rows.push(3);
+    left -= 3;
+  }
+  return rows;
+}
+
+/** Downloads a file from `url` as the given name. A cross-origin link ignores `download`, so the bytes are fetched first. */
+export async function downloadFile(url: string, filename: string): Promise<void> {
+  log.debug(`downloading ${filename}`, { url });
+  const response = await fetch(url);
+  if (!response.ok) {
+    log.warn(`download of ${filename} failed with ${response.status}`, { url });
+    throw new Error(`Download failed (${response.status}).`);
+  }
+  const blob = await response.blob();
+  log.info(`downloaded ${filename} (${formatBytes(blob.size)})`);
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }

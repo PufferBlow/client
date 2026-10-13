@@ -8,14 +8,15 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { FileText, Image as ImageIcon, MoreHorizontal, Music, Pencil, Reply, SmilePlus } from "lucide-react";
+import { FileText, Forward, Image as ImageIcon, MoreHorizontal, Music, Pencil, Play, Reply, SmilePlus } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
+import { MediaViewer, type ViewerItem } from "../ui/MediaViewer";
 import { isEmojiOnly } from "../../lib/emoji";
 import { embeddableUrls, parseMarkdown, toPlainText } from "../../lib/markdown";
 import { handleFormatShortcut } from "../../lib/textEditing";
-import { displayName, fileKind, formatBytes, isSpoilerName } from "../../lib/files";
+import { displayName, fileKind, formatBytes, galleryRows, isSpoilerName } from "../../lib/files";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
@@ -61,23 +62,22 @@ const formatTime = (iso: string) => {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
-function AttachmentView({ url, filename, type, size }: Message["attachments"][number]) {
+type Attachment = Message["attachments"][number];
+
+const isMedia = (attachment: Attachment) => {
+  const kind = fileKind(attachment.type);
+  return (kind === "image" || kind === "video") && resolveAssetUrl(attachment.url) !== undefined;
+};
+
+/** A file card for anything that isn't an image or video (those go in the gallery). */
+function AttachmentView({ url, filename, type, size }: Attachment) {
   const href = resolveAssetUrl(url);
-  const spoiler = isSpoilerName(filename);
   const name = displayName(filename);
+  const spoiler = isSpoilerName(filename);
   const [revealed, setRevealed] = useState(false);
-  const kind = fileKind(type);
 
   let body;
-  if (kind === "image" && href) {
-    body = (
-      <a href={href} target="_blank" rel="noreferrer" className="block">
-        <img src={href} alt={name} loading="lazy" className="block max-h-72 max-w-full rounded-xl border border-border-secondary" />
-      </a>
-    );
-  } else if (kind === "video" && href) {
-    body = <video src={href} controls preload="metadata" aria-label={name} className="block max-h-80 max-w-[min(100%,480px)] rounded-xl border border-border-secondary bg-black" />;
-  } else if (kind === "audio" && href) {
+  if (fileKind(type) === "audio" && href) {
     body = (
       <div className="flex w-[min(100%,400px)] flex-col gap-2 rounded-xl border border-border-secondary bg-surface-secondary p-3">
         <a href={href} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 text-[13px] text-text-secondary hover:text-text">
@@ -118,6 +118,101 @@ function AttachmentView({ url, filename, type, size }: Message["attachments"][nu
       >
         <span className="rounded-full bg-black/75 px-3 py-1 text-[11.5px] font-bold tracking-[0.12em] text-white">SPOILER</span>
       </button>
+    </div>
+  );
+}
+
+const ROW_HEIGHT: Record<number, number> = { 1: 280, 2: 240, 3: 170 };
+
+/** One image or video in the gallery. Selecting it opens the full-screen viewer; a spoiler is revealed first. */
+function MediaTile({ item, single, rowSize, onOpen }: { item: ViewerItem; single: boolean; rowSize: number; onOpen: () => void }) {
+  const name = displayName(item.filename);
+  const [revealed, setRevealed] = useState(!isSpoilerName(item.filename));
+  const hidden = !revealed;
+  // A lone item keeps its own proportions; items sharing a row are cropped to fill it.
+  const fill = single ? "block max-h-80 max-w-full" : "block h-full w-full object-cover";
+  const media =
+    item.kind === "image" ? (
+      <img src={item.href} alt={name} loading="lazy" draggable={false} className={fill} />
+    ) : (
+      <>
+        <video src={item.href} preload="metadata" muted aria-label={name} className={`${fill} bg-black`} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-black/60 text-white">
+            <Play size={20} fill="currentColor" />
+          </span>
+        </span>
+      </>
+    );
+
+  return (
+    <div
+      className={`relative overflow-hidden bg-black ${single ? "inline-block max-w-full rounded-xl align-top" : "min-w-0 flex-1"}`}
+      style={single ? undefined : { height: ROW_HEIGHT[rowSize] ?? 170 }}
+    >
+      <button
+        type="button"
+        aria-label={hidden ? `Spoiler attachment ${name}, select to reveal` : `Open ${name}`}
+        onClick={hidden ? () => setRevealed(true) : onOpen}
+        className="relative block h-full w-full cursor-zoom-in border-0 bg-transparent p-0 outline-none focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        <span aria-hidden={hidden || undefined} inert={hidden || undefined} className={`block h-full w-full ${hidden ? "pointer-events-none select-none blur-2xl" : ""}`}>
+          {media}
+        </span>
+        {hidden && (
+          <span className="absolute inset-0 grid place-items-center bg-black/35">
+            <span className="rounded-full bg-black/75 px-3 py-1 text-[11.5px] font-bold tracking-[0.12em] text-white">SPOILER</span>
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** A message's images and videos as a Discord-style grid, with the full-screen viewer behind it. */
+function MediaGallery({ message }: { message: Message }) {
+  const [viewing, setViewing] = useState<number | null>(null);
+  const items: ViewerItem[] = message.attachments.flatMap((a) => {
+    const href = resolveAssetUrl(a.url);
+    const kind = fileKind(a.type);
+    return href && (kind === "image" || kind === "video") ? [{ href, filename: a.filename, type: a.type, kind }] : [];
+  });
+  const [only] = items;
+  if (!only) return null;
+
+  const rows: { start: number; size: number }[] = [];
+  let start = 0;
+  for (const size of galleryRows(items.length)) {
+    rows.push({ start, size });
+    start += size;
+  }
+
+  return (
+    <div className="mt-2 max-w-full">
+      {items.length === 1 ? (
+        <MediaTile item={only} single rowSize={1} onOpen={() => setViewing(0)} />
+      ) : (
+        <div className="flex w-[min(100%,520px)] flex-col gap-0.5 overflow-hidden rounded-xl">
+          {rows.map(({ start: first, size }) => (
+            <div key={first} className="flex gap-0.5">
+              {items.slice(first, first + size).map((item, i) => (
+                <MediaTile key={item.href} item={item} single={false} rowSize={size} onOpen={() => setViewing(first + i)} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {viewing !== null && (
+        <MediaViewer
+          messageId={message.id}
+          items={items}
+          index={viewing}
+          onIndexChange={setViewing}
+          onClose={() => setViewing(null)}
+          author={{ name: message.authorName, avatarUrl: message.authorAvatarUrl }}
+          sentAt={message.sentAt}
+        />
+      )}
     </div>
   );
 }
@@ -295,6 +390,13 @@ export const MessageItem = memo(function MessageItem({
           </header>
         )}
 
+        {message.forwarded && (
+          <p className="m-0 flex items-center gap-1 text-[12.5px] italic text-text-muted">
+            <Forward size={13} aria-hidden="true" />
+            Forwarded
+          </p>
+        )}
+
         {editing ? (
           <EditForm initial={message.text} onSubmit={(text) => onEdit(message.id, text)} onCancel={() => setEditing(false)} />
         ) : (
@@ -315,9 +417,12 @@ export const MessageItem = memo(function MessageItem({
           )
         )}
 
-        {message.attachments.map((attachment) => (
-          <AttachmentView key={attachment.url} {...attachment} />
-        ))}
+        <MediaGallery message={message} />
+        {message.attachments
+          .filter((attachment) => !isMedia(attachment))
+          .map((attachment) => (
+            <AttachmentView key={attachment.url} {...attachment} />
+          ))}
 
         {!editing &&
           embedUrls.map((url) => (

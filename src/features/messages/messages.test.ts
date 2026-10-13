@@ -69,6 +69,19 @@ describe("normalizeMessage", () => {
   });
 });
 
+describe("forwarded messages", () => {
+  it("are flagged, and the original's id is not kept", () => {
+    const forwarded = normalizeMessage(wire("m1", { forwarded_from_message_id: "orig-9" }));
+    expect(forwarded.forwarded).toBe(true);
+    expect(JSON.stringify(forwarded)).not.toContain("orig-9");
+  });
+
+  it("are not flagged when nothing was forwarded", () => {
+    expect(normalizeMessage(wire("m1"))).not.toHaveProperty("forwarded");
+    expect(normalizeMessage(wire("m1", { forwarded_from_message_id: null }))).not.toHaveProperty("forwarded");
+  });
+});
+
 describe("normalizeReactions", () => {
   it("derives the count from user ids when absent", () => {
     expect(normalizeReactions([{ emoji: "🎉", user_ids: ["a", "b", "c"] }])).toEqual([{ emoji: "🎉", count: 3, userIds: ["a", "b", "c"] }]);

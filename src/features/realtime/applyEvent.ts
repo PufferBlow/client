@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "../channels/hooks";
 import { dmKeys } from "../dms/keys";
+import { notificationKeys } from "../notifications/hooks";
 import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
 import type { Friend } from "../friends/types";
@@ -73,8 +74,8 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       return;
 
     case "notification":
-      // No notification list is shown yet; the unread counts are what changes.
       void queryClient.invalidateQueries({ queryKey: channelKeys.unread });
+      void queryClient.invalidateQueries({ queryKey: notificationKeys.list });
       return;
   }
 }

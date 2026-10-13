@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
@@ -49,11 +50,14 @@ function ResetTokensCard() {
 
 function SignOutCard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
 
   const handleSignOut = async () => {
     setLoading(true);
     await logout();
+    // Nothing of this account may survive for whoever signs in next.
+    queryClient.clear();
     navigate("/login", { replace: true });
   };
 

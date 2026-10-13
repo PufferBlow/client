@@ -1,7 +1,55 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listPreferences, setAllChannelsMuted, setChannelMuted, type ChannelPreference } from "./api";
+import {
+  listNotifications,
+  listPreferences,
+  markAllNotificationsRead,
+  markNotificationRead,
+  setAllChannelsMuted,
+  setChannelMuted,
+  type AppNotification,
+  type ChannelPreference,
+} from "./api";
 
-export const notificationKeys = { preferences: ["notifications", "preferences"] as const };
+export const notificationKeys = {
+  preferences: ["notifications", "preferences"] as const,
+  list: ["notifications", "list"] as const,
+};
+
+/** The viewer's notifications (mentions), newest first. Kept fresh by `notification.created` events. */
+export function useNotifications() {
+  return useQuery({ queryKey: notificationKeys.list, queryFn: () => listNotifications(), staleTime: 30_000 });
+}
+
+/** How many notifications are still unread: the inbox badge. */
+export function useUnreadNotificationCount(): number {
+  const { data } = useNotifications();
+  return data?.filter((n) => !n.read).length ?? 0;
+}
+
+/** Marks one notification read and shows it as read at once. */
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: markNotificationRead,
+    onMutate: (id: string) => {
+      queryClient.setQueryData<AppNotification[]>(notificationKeys.list, (list) => list?.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: markAllNotificationsRead,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: notificationKeys.list });
+      const previous = queryClient.getQueryData<AppNotification[]>(notificationKeys.list);
+      queryClient.setQueryData<AppNotification[]>(notificationKeys.list, (list) => list?.map((n) => ({ ...n, read: true })));
+      return { previous };
+    },
+    onError: (_error, _variables, context) => queryClient.setQueryData(notificationKeys.list, context?.previous),
+  });
+}
 
 const EMPTY: ReadonlySet<string> = new Set();
 

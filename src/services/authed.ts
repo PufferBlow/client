@@ -1,6 +1,9 @@
 import { api, ApiError, type RequestOptions } from "./api";
 import { getAuthToken } from "./auth";
+import { createLogger } from "../lib/logger";
 import { getApiUrl, getStoredInstance } from "./instance";
+
+const log = createLogger("session");
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type QueryOptions = Omit<RequestOptions, "json"> & { json?: unknown };
@@ -14,6 +17,9 @@ export interface Session {
 export function requireSession(): Session {
   const instance = getStoredInstance();
   const token = getAuthToken();
+  if (!instance || !token) {
+    log.warn("authenticated call without a session", { instance: instance?.origin ?? null, hasToken: token !== null });
+  }
   if (!instance || !token) throw new ApiError(401, "auth.token_required", "You are signed out.");
   return { origin: getApiUrl(instance), token };
 }

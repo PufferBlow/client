@@ -1,4 +1,7 @@
+import { createLogger } from "../lib/logger";
 import type { InstanceConfig } from "./types";
+
+const log = createLogger("instance");
 
 const INSTANCE_KEY = "pb_instance";
 const DEFAULT_PORT = "7575";
@@ -12,15 +15,18 @@ export function getStoredInstance(): InstanceConfig | null {
     const config = JSON.parse(raw) as InstanceConfig;
     return config.origin ? config : null;
   } catch {
+    log.warn("stored instance is corrupt, ignoring it");
     return null;
   }
 }
 
 export function setStoredInstance(config: InstanceConfig): void {
+  log.info(`using instance ${config.origin}`);
   localStorage.setItem(INSTANCE_KEY, JSON.stringify(config));
 }
 
 export function clearStoredInstance(): void {
+  log.info("cleared the stored instance");
   localStorage.removeItem(INSTANCE_KEY);
 }
 
@@ -47,7 +53,10 @@ function inferScheme(authority: string): "http" | "https" {
  */
 export function resolveInstance(input: string): InstanceConfig {
   const trimmed = input.trim().replace(/\/+$/, "");
-  if (!trimmed) throw new Error("Missing instance address");
+  if (!trimmed) {
+    log.debug("no instance address given");
+    throw new Error("Missing instance address");
+  }
   // A scheme with nothing after it ("http://" loses its slashes above) is not an address.
   if (/^[a-z][a-z0-9+.-]*:$/i.test(trimmed)) throw new Error("Missing instance address");
 
@@ -65,6 +74,7 @@ export function resolveInstance(input: string): InstanceConfig {
 
   const parsed = new URL(candidate);
   const secure = parsed.protocol === "https:";
+  log.debug(`resolved "${trimmed}" to ${parsed.origin}`);
 
   return {
     raw: parsed.host,
