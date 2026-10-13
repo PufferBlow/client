@@ -9,59 +9,44 @@ export function LinkEmbed({ url }: { url: string }) {
   return embed.kind === "iframe" ? <IframeCard embed={embed} /> : <DirectMedia embed={embed} />;
 }
 
-const displayUrl = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
-
 /**
- * The player sits behind a click-to-load placeholder of the same size, so the third-party site is
- * only contacted (and can only track) once someone asks for it, and a busy channel doesn't spin
- * up a dozen players at once.
+ * Just the player, under the link the message already shows. It sits behind a click-to-load
+ * placeholder of the same size, so the third-party site is only contacted (and can only track)
+ * once someone asks for it, and a busy channel doesn't spin up a dozen players at once.
  */
 function IframeCard({ embed }: { embed: IframeEmbed }) {
   const [loaded, setLoaded] = useState(false);
   const size = embed.aspect ? { aspectRatio: String(embed.aspect) } : { height: embed.height };
   return (
-    <div
-      className="mt-2 w-full overflow-hidden rounded-xl border border-border-secondary bg-surface-secondary"
-      style={{ maxWidth: embed.maxWidth ?? 480, borderLeftColor: embed.color, borderLeftWidth: 4 }}
-    >
-      <div className="flex items-center gap-2 px-3 py-2 text-[12.5px]">
-        <span className="shrink-0 font-semibold" style={{ color: embed.color }}>
-          {embed.provider}
-        </span>
-        <a href={embed.url} target="_blank" rel="noreferrer noopener" className="min-w-0 truncate text-text-muted hover:text-text hover:underline">
-          {displayUrl(embed.url)}
-        </a>
-      </div>
-      <div className="relative w-full bg-background-secondary" style={size}>
-        {loaded ? (
-          <iframe
-            src={embed.src}
-            title={`${embed.provider} player`}
-            className="absolute inset-0 h-full w-full border-0"
-            allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setLoaded(true)}
-            aria-label={`Load ${embed.provider} player`}
-            className="group/play absolute inset-0 grid place-items-center outline-none"
-          >
-            <span className="flex flex-col items-center gap-2.5 px-4 text-center">
-              <span
-                className="grid size-14 place-items-center rounded-full bg-black/55 text-white transition-transform group-hover/play:scale-105 group-focus-visible/play:scale-105"
-                style={{ boxShadow: `0 0 0 2px ${embed.color}` }}
-              >
-                <Play size={24} fill="currentColor" className="ml-0.5" />
-              </span>
-              <span className="text-[12px] text-text-muted">Click to load · connects to {embed.provider}</span>
+    <div className="relative mt-2 w-full overflow-hidden rounded-xl bg-background-secondary" style={{ maxWidth: embed.maxWidth ?? 480, ...size }}>
+      {loaded ? (
+        <iframe
+          src={embed.src}
+          title={`${embed.provider} player`}
+          className="absolute inset-0 h-full w-full border-0"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setLoaded(true)}
+          aria-label={`Load ${embed.provider} player`}
+          className="group/play absolute inset-0 grid place-items-center outline-none"
+        >
+          <span className="flex flex-col items-center gap-2.5 px-4 text-center">
+            <span
+              className="grid size-14 place-items-center rounded-full bg-black/55 text-white transition-transform group-hover/play:scale-105 group-focus-visible/play:scale-105"
+              style={{ boxShadow: `0 0 0 2px ${embed.color}` }}
+            >
+              <Play size={24} fill="currentColor" className="ml-0.5" />
             </span>
-          </button>
-        )}
-      </div>
+            <span className="text-[12px] text-text-muted">Click to load {embed.provider}</span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }

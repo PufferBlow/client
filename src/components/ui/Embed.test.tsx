@@ -8,7 +8,8 @@ describe("LinkEmbed", () => {
     const user = userEvent.setup();
     const { container } = render(<LinkEmbed url="https://youtu.be/dQw4w9WgXcQ" />);
     expect(container.querySelector("iframe")).toBeNull();
-    expect(screen.getByText("YouTube")).toBeInTheDocument();
+    expect(screen.getByText("Click to load YouTube")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument(); // the message already shows the link
 
     await user.click(screen.getByRole("button", { name: "Load YouTube player" }));
     const frame = container.querySelector("iframe");
