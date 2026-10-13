@@ -316,7 +316,7 @@ export const MessageItem = memo(function MessageItem({
       </div>
 
       {!editing && !isLocal && (
-        <div className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-lg border border-border-secondary bg-surface-secondary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
+        <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-lg border border-border-secondary bg-surface-secondary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
           {QUICK_REACTIONS.map((emoji) => {
             const mine = message.reactions.some((r) => r.emoji === emoji && myUserId !== undefined && r.userIds.includes(myUserId));
             return (

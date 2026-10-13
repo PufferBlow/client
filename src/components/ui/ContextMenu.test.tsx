@@ -157,6 +157,10 @@ describe("ContextMenu", () => {
         entries={[{ kind: "choices", id: "r", label: "Add reaction", choices: [{ id: "up", label: "Add 👍 reaction", content: "👍", onSelect: onPick }] }]}
       />,
     );
+    // Announced as the group's name, not printed next to the emoji.
+    expect(screen.getByRole("group", { name: "Add reaction" })).toBeInTheDocument();
+    expect(screen.queryByText("Add reaction")).not.toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("menuitem", { name: "Add 👍 reaction" }));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);

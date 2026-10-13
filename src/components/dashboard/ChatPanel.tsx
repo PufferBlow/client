@@ -169,7 +169,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         </div>
       </header>
 
-      <div ref={scroller} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">
+      <div ref={scroller} onScroll={handleScroll} data-message-list className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">
         {isPending ? (
           <LoadingState message="Loading messages…" />
         ) : error ? (

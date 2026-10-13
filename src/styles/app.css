@@ -205,3 +205,12 @@ button[aria-disabled="true"],
 .hljs-strong {
   font-weight: 700;
 }
+
+/*
+ * One message toolbar at a time. A row shows its toolbar while hovered or while focus is inside
+ * it (keyboard use, or focus handed back by a closed menu); while the pointer is over the list,
+ * only the row under it keeps one, so a focused row elsewhere doesn't show a second.
+ */
+[data-message-list]:hover [data-message-id]:not(:hover) [data-message-toolbar] {
+  display: none;
+}

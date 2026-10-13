@@ -4,7 +4,7 @@ import { clampToViewport } from "./menuPosition";
 
 export type MenuEntry =
   | { kind: "item"; id: string; label: string; icon?: ReactNode; onSelect: () => void; danger?: boolean; disabled?: boolean }
-  /** A row of compact buttons under a shared label, e.g. quick emoji reactions. */
+  /** A row of compact buttons sharing an (unseen, announced) label, e.g. quick emoji reactions. */
   | { kind: "choices"; id: string; label: string; choices: { id: string; label: string; content: ReactNode; pressed?: boolean; onSelect: () => void }[] }
   | { kind: "separator"; id: string };
 
@@ -112,8 +112,8 @@ export function ContextMenu({ x, y, entries, label, onClose }: ContextMenuProps)
 
         if (entry.kind === "choices") {
           return (
-            <div key={entry.id} role="group" aria-label={entry.label} className="flex items-center gap-1 px-1 py-1">
-              <span className="mr-1 text-[11px] uppercase tracking-[0.1em] text-text-muted">{entry.label}</span>
+            // The label is for assistive tech only; the choices speak for themselves on screen.
+            <div key={entry.id} role="group" aria-label={entry.label} className="flex items-center justify-between gap-1 px-1 py-1">
               {entry.choices.map((choice) => (
                 <button
                   key={choice.id}
