@@ -18,11 +18,29 @@ export interface MessageMenuActions {
   quickReactions: string[];
 }
 
+/** Who may do what to a message. Channels use the role-based rules; DMs pass their own. */
+export interface MessagePermissions {
+  canEdit: (message: Message, viewer: UserProfile | undefined) => boolean;
+  canDelete: (message: Message, viewer: UserProfile | undefined) => boolean;
+  canReport: (message: Message, viewer: UserProfile | undefined) => boolean;
+}
+
+export const CHANNEL_PERMISSIONS: MessagePermissions = {
+  canEdit: canEditMessage,
+  canDelete: canDeleteMessage,
+  canReport: canReportMessage,
+};
+
 /**
  * The actions offered for one message. Only things the app and backend support are listed;
  * pin, forward, mark-unread and permalinks are intentionally absent until they exist.
  */
-export function messageMenuEntries(message: Message, viewer: UserProfile | undefined, actions: MessageMenuActions): MenuEntry[] {
+export function messageMenuEntries(
+  message: Message,
+  viewer: UserProfile | undefined,
+  actions: MessageMenuActions,
+  permissions: MessagePermissions = CHANNEL_PERMISSIONS,
+): MenuEntry[] {
   const mine = (emoji: string) => message.reactions.some((r) => r.emoji === emoji && viewer !== undefined && r.userIds.includes(viewer.user_id));
   const hasText = message.text.trim().length > 0;
 
@@ -47,13 +65,13 @@ export function messageMenuEntries(message: Message, viewer: UserProfile | undef
   if (hasText) entries.push({ kind: "item", id: "copy-text", label: "Copy text", icon: <Copy size={15} />, onSelect: actions.copyText });
   entries.push({ kind: "item", id: "copy-id", label: "Copy message ID", icon: <Fingerprint size={15} />, onSelect: actions.copyId });
 
-  if (canEditMessage(message, viewer)) {
+  if (permissions.canEdit(message, viewer)) {
     entries.push({ kind: "item", id: "edit", label: "Edit message", icon: <Pencil size={15} />, onSelect: actions.edit });
   }
-  if (canReportMessage(message, viewer)) {
+  if (permissions.canReport(message, viewer)) {
     entries.push({ kind: "item", id: "report", label: "Report message", icon: <Flag size={15} />, onSelect: actions.report });
   }
-  if (canDeleteMessage(message, viewer)) {
+  if (permissions.canDelete(message, viewer)) {
     entries.push(
       { kind: "separator", id: "sep-danger" },
       { kind: "item", id: "delete", label: "Delete message", icon: <Trash2 size={15} />, onSelect: actions.requestDelete, danger: true },
