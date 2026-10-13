@@ -1,10 +1,21 @@
-import { memo, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  memo,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { FileText, MoreHorizontal, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
 import { isEmojiOnly } from "../../lib/emoji";
 import { embeddableUrls, parseMarkdown } from "../../lib/markdown";
+import { handleFormatShortcut } from "../../lib/textEditing";
+import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { Avatar } from "./Avatar";
@@ -69,6 +80,25 @@ function AttachmentView({ url, filename, type }: Message["attachments"][number])
 function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: (text: string) => Promise<unknown>; onCancel: () => void }) {
   const [text, setText] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  useAutoGrow(field, text);
+
+  // Focus with the caret at the end, ready to keep typing.
+  useLayoutEffect(() => {
+    const el = field.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape") return onCancel();
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+      return;
+    }
+    handleFormatShortcut(e, setText);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -85,16 +115,17 @@ function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: 
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-1.5">
-      <input
-        autoFocus
+      <textarea
+        ref={field}
+        rows={1}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && onCancel()}
+        onKeyDown={handleKeyDown}
         disabled={saving}
         aria-label="Edit message"
-        className="h-10 rounded-xl border border-primary/40 bg-background px-3 text-[15px] text-text outline-none"
+        className="max-h-[40vh] resize-none overflow-y-auto rounded-xl border border-primary/40 bg-background px-3 py-2.25 text-[15px] leading-5 text-text outline-none"
       />
-      <span className="text-xs text-text-muted">Escape to cancel · Enter to save</span>
+      <span className="text-xs text-text-muted">Escape to cancel · Enter to save · Shift+Enter for a new line</span>
     </form>
   );
 }

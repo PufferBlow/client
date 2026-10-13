@@ -92,6 +92,47 @@ describe("Composer", () => {
     expect(screen.getByLabelText("Message #general")).toHaveAttribute("maxlength", "500");
   });
 
+  it("adds a new line with Shift+Enter and sends every line with Enter", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<Composer channelName="general" onSend={onSend} />);
+
+    await user.type(screen.getByLabelText("Message #general"), "line one{Shift>}{Enter}{/Shift}line two");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Message #general")).toHaveValue("line one\nline two");
+
+    await user.keyboard("{Enter}");
+    expect(onSend).toHaveBeenCalledWith({ text: "line one\nline two", files: [] });
+  });
+
+  it("toggles bold, italics and underline around the selection with Ctrl+B/I/U", async () => {
+    const user = userEvent.setup();
+    render(<Composer channelName="general" onSend={vi.fn()} />);
+    const field = screen.getByLabelText("Message #general") as HTMLTextAreaElement;
+
+    await user.type(field, "make this bold");
+    field.setSelectionRange(10, 14);
+    await user.keyboard("{Control>}b{/Control}");
+    expect(field).toHaveValue("make this **bold**");
+
+    field.setSelectionRange(12, 16);
+    await user.keyboard("{Control>}b{/Control}");
+    expect(field).toHaveValue("make this bold");
+
+    field.setSelectionRange(0, 4);
+    await user.keyboard("{Control>}i{/Control}");
+    expect(field).toHaveValue("*make* this bold");
+  });
+
+  it("counts down the characters left near the limit", async () => {
+    const user = userEvent.setup();
+    render(<Composer channelName="general" maxLength={100} onSend={vi.fn()} />);
+    expect(screen.queryByLabelText(/characters left/)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Message #general"), "x".repeat(85));
+    expect(screen.getByLabelText("15 characters left")).toHaveTextContent("15");
+  });
+
   it("blocks a double send while the first is in flight", async () => {
     let finish!: () => void;
     const onSend = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));

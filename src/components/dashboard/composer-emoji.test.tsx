@@ -17,7 +17,7 @@ const setup = (props: { maxLength?: number } = {}) => {
   const onSend = vi.fn().mockResolvedValue(undefined);
   const user = userEvent.setup();
   renderWithProviders(<Composer channelName="general" onSend={onSend} {...props} />);
-  return { onSend, user, field: () => screen.getByLabelText("Message #general") as HTMLInputElement };
+  return { onSend, user, field: () => screen.getByLabelText("Message #general") as HTMLTextAreaElement };
 };
 
 describe("Composer emoji button", () => {
@@ -47,7 +47,8 @@ describe("Composer emoji button", () => {
     await user.click(screen.getByRole("button", { name: "Add emoji" }));
     await user.click(await screen.findByText("pick unicorn"));
 
-    expect(field()).toHaveValue("hello🦄 world");
+    // Inserted once the popover has closed and given focus back.
+    await waitFor(() => expect(field()).toHaveValue("hello🦄 world"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() => expect(field()).toHaveFocus());
   });
@@ -58,7 +59,7 @@ describe("Composer emoji button", () => {
     field().setSelectionRange(0, 3);
     await user.click(screen.getByRole("button", { name: "Add emoji" }));
     await user.click(await screen.findByText("pick unicorn"));
-    expect(field()).toHaveValue("🦄 def");
+    await waitFor(() => expect(field()).toHaveValue("🦄 def"));
   });
 
   it("does not exceed the message length limit", async () => {
@@ -66,6 +67,7 @@ describe("Composer emoji button", () => {
     await user.type(field(), "abc");
     await user.click(screen.getByRole("button", { name: "Add emoji" }));
     await user.click(await screen.findByText("pick unicorn")); // the emoji is two UTF-16 units: 3 + 2 > 4
+    await waitFor(() => expect(field()).toHaveFocus());
     expect(field()).toHaveValue("abc");
   });
 
@@ -74,6 +76,7 @@ describe("Composer emoji button", () => {
     await user.type(field(), "hi ");
     await user.click(screen.getByRole("button", { name: "Add emoji" }));
     await user.click(await screen.findByText("pick unicorn"));
+    await waitFor(() => expect(field()).toHaveValue("hi 🦄"));
     await user.click(screen.getByRole("button", { name: "Send message" }));
     expect(onSend).toHaveBeenCalledWith({ text: "hi 🦄", files: [] });
   });
