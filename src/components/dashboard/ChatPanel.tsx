@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Hash, Lock, Users } from "lucide-react";
 import { useMarkChannelRead } from "../../features/channels/hooks";
+import { useChannelPings } from "../../features/notifications/hooks";
 import type { Channel } from "../../features/channels/types";
 import type { Message } from "../../features/messages/types";
 import { toReplyPreview } from "../../features/messages/replies";
 import { useDeleteMessage, useEditMessage, useMessages, useReportMessage, useSendMessage, useToggleReaction } from "../../features/messages/hooks";
 import { useServerInfo } from "../../features/server/hooks";
-import { useMyProfile } from "../../features/users/hooks";
+import { useMyProfile, useUsers } from "../../features/users/hooks";
+import { canMentionEveryone } from "../../features/users/roles";
+import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
 import { ToastRegion } from "../ui/Toast";
 import { classifyAuthError } from "../../utils/authErrors";
@@ -26,6 +29,17 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const channelId = channel.channel_id;
   const { messages, isPending, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useMessages(channelId);
   const { data: me } = useMyProfile();
+  const { data: users } = useUsers();
+
+  // Who can be mentioned here, and who the log should recognise as a mention.
+  const mentionables = useMemo<Mentionable[]>(() => {
+    const people = (users ?? []).map((u) => ({ id: u.user_id, name: u.username, avatarUrl: u.avatar_url }));
+    return canMentionEveryone(me) ? [{ id: EVERYONE, name: EVERYONE, avatarUrl: null, everyone: true }, ...people] : people;
+  }, [users, me]);
+  const directory = useMemo<MentionDirectory>(
+    () => ({ me: me?.username, known: new Set((users ?? []).map((u) => u.username.toLowerCase())) }),
+    [users, me?.username],
+  );
   const { data: server } = useServerInfo();
 
   const { send, retry, discard } = useSendMessage(channelId);
@@ -77,6 +91,13 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `markRead` is a new object each render
   }, [channelId, newestId]);
 
+  // A reply or ping that lands while you are reading this channel is seen the moment it arrives.
+  const pingsHere = useChannelPings()[channelId] ?? 0;
+  useEffect(() => {
+    if (pingsHere > 0) markRead.mutate(channelId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `markRead` is a new object each render
+  }, [channelId, pingsHere]);
+
   const Icon = channel.is_private ? Lock : Hash;
 
   return (
@@ -103,6 +124,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         </div>
       </header>
 
+      <MentionDirectoryContext.Provider value={directory}>
       <MessageLog
         ref={log}
         conversationId={channelId}
@@ -133,9 +155,11 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         onReport={handleReport}
         showToast={showToast}
       />
+      </MentionDirectoryContext.Provider>
 
       <Composer
         channelName={channel.channel_name}
+        mentionables={mentionables}
         maxLength={server?.max_message_length ?? undefined}
         maxAttachmentMB={server?.max_total_attachment_size ?? undefined}
         replyingTo={replyTarget ? { id: replyTarget.id, authorName: replyTarget.authorName } : undefined}

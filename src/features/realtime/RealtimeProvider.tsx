@@ -34,6 +34,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const activeChannelId = useMatch("/dashboard/channels/:channelId")?.params.channelId;
   const activeChannelRef = useRef(activeChannelId);
   activeChannelRef.current = activeChannelId;
+  const activeConversationId = useMatch("/dashboard/dms/:conversationId")?.params.conversationId;
+  const activeConversationRef = useRef(activeConversationId);
+  activeConversationRef.current = activeConversationId;
 
   const session = useMemo(
     () =>
@@ -41,7 +44,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         buildUrl: buildSocketUrl,
         refreshCredentials: refreshSession,
         onStatus: setStatus,
-        onEvent: (event) => applyEvent(queryClient, event, { activeChannelId: activeChannelRef.current }),
+        onEvent: (event) => applyEvent(queryClient, event, { activeChannelId: activeChannelRef.current, activeConversationId: activeConversationRef.current }),
         openChannelIds: () =>
           queryClient
             .getQueryCache()

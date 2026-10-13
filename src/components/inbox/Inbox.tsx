@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Bell, BellOff, Check, CheckCheck, Hash, Inbox as InboxIcon } from "lucide-react";
 import { useChannels, useMarkAllChannelsRead, useMarkChannelRead, useUnreadCounts } from "../../features/channels/hooks";
+import { useConversations } from "../../features/dms/hooks";
+import { useDmUnread } from "../../features/dms/unread";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -9,6 +11,7 @@ import {
   useMutedChannels,
   useNotifications,
   useUnreadNotificationCount,
+  PING_TYPES,
 } from "../../features/notifications/hooks";
 import type { AppNotification } from "../../features/notifications/api";
 import { useUsers } from "../../features/users/hooks";
@@ -42,8 +45,12 @@ export function InboxButton() {
   const mentions = useUnreadNotificationCount();
   const { data: unread } = useUnreadCounts();
   const muted = useMutedChannels();
+  const { data: conversations = [] } = useConversations();
+  const { total: unreadDms } = useDmUnread(conversations);
   const unreadChannels = Object.entries(unread ?? {}).filter(([id, count]) => count > 0 && !muted.has(id)).length;
-  const badge = mentions + unreadChannels;
+  // Red count: replies, pings and DMs. Channels that merely have new messages don't add to it.
+  const badge = mentions + unreadDms;
+  const hasUnreadChannels = unreadChannels > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -73,10 +80,12 @@ export function InboxButton() {
         className={`relative flex h-full w-11 items-center justify-center text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-text ${open ? "bg-hover text-text" : ""}`}
       >
         <InboxIcon className="h-4 w-4" aria-hidden="true" />
-        {badge > 0 && (
+        {badge > 0 ? (
           <span aria-hidden="true" className="absolute right-1.5 top-1.5 grid h-[15px] min-w-[15px] place-items-center rounded-full bg-error px-1 text-[9.5px] font-bold leading-none text-white">
             {badge > 9 ? "9+" : badge}
           </span>
+        ) : (
+          hasUnreadChannels && <span aria-hidden="true" className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-text" />
         )}
       </button>
       {open && <InboxPanel onClose={() => setOpen(false)} />}
@@ -188,7 +197,7 @@ function UnreadsList({ onNavigate }: { onNavigate: () => void }) {
           >
             <Hash size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
             <span className="min-w-0 truncate text-[15px] font-bold">{channel.channel_name}</span>
-            <CountBadge count={count} />
+            <span className="shrink-0 text-[12px] text-text-muted">{count} new</span>
           </button>
           <button
             type="button"
@@ -224,8 +233,8 @@ function MentionsList({ onNavigate }: { onNavigate: () => void }) {
   if (isPending) return <p className="m-0 px-3 py-8 text-center text-sm text-text-muted">Loading…</p>;
   if (error) return <Empty icon={<BellOff size={28} />}>Couldn't load your mentions.</Empty>;
 
-  const mentions = (data ?? []).filter((n) => n.type === "mention");
-  if (mentions.length === 0) return <Empty icon={<BellOff size={28} />}>No one has mentioned you yet.</Empty>;
+  const mentions = (data ?? []).filter((n) => PING_TYPES.has(n.type));
+  if (mentions.length === 0) return <Empty icon={<BellOff size={28} />}>No replies or mentions yet.</Empty>;
 
   const open = (notification: AppNotification) => {
     if (!notification.read) markRead.mutate(notification.id);
@@ -249,7 +258,7 @@ function MentionsList({ onNavigate }: { onNavigate: () => void }) {
               <Avatar name={name} src={actor?.avatar_url} seed={notification.actorUserId ?? name} size={36} />
               <span className="min-w-0 flex-1">
                 <span className={`block text-[14px] ${notification.read ? "text-text-secondary" : "font-semibold text-text"}`}>
-                  <strong className="font-bold">{name}</strong> mentioned you{channel ? <> in <span className="text-text">#{channel.channel_name}</span></> : null}
+                  <strong className="font-bold">{name}</strong> {notification.type === "reply" ? "replied to you" : "mentioned you"}{channel ? <> in <span className="text-text">#{channel.channel_name}</span></> : null}
                 </span>
                 <span className="block text-[12px] text-text-muted">{formatWhen(notification.createdAt)}</span>
               </span>
@@ -258,7 +267,7 @@ function MentionsList({ onNavigate }: { onNavigate: () => void }) {
             {!notification.read && (
               <button
                 type="button"
-                aria-label={`Mark the mention from ${name} as read`}
+                aria-label={`Mark ${notification.type === "reply" ? "the reply" : "the mention"} from ${name} as read`}
                 title="Mark as read"
                 className={iconButton}
                 onClick={() => markRead.mutate(notification.id)}

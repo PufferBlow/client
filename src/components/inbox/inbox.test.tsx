@@ -9,6 +9,7 @@ const state = {
   unread: { c1: 3, c2: 0, c3: 5 } as Record<string, number>,
   muted: new Set<string>(["c3"]),
   notifications: [] as AppNotification[],
+  unreadDms: 0,
 };
 const markChannelRead = vi.fn();
 const markAllChannelsRead = vi.fn();
@@ -28,7 +29,10 @@ vi.mock("../../features/channels/hooks", () => ({
   useMarkChannelRead: () => ({ mutate: markChannelRead }),
   useMarkAllChannelsRead: () => ({ mutate: markAllChannelsRead }),
 }));
+vi.mock("../../features/dms/hooks", () => ({ useConversations: () => ({ data: [] }) }));
+vi.mock("../../features/dms/unread", () => ({ useDmUnread: () => ({ total: state.unreadDms, countFor: () => 0 }) }));
 vi.mock("../../features/notifications/hooks", () => ({
+  PING_TYPES: new Set(["mention", "reply"]),
   useMutedChannels: () => state.muted,
   useMuteChannel: () => ({ mutate: muteChannel }),
   useNotifications: () => ({ data: state.notifications, isPending: false, error: null }),
@@ -67,15 +71,22 @@ beforeEach(() => {
   state.unread = { c1: 3, c2: 0, c3: 5 };
   state.muted = new Set(["c3"]);
   state.notifications = [];
+  state.unreadDms = 0;
   for (const spy of [markChannelRead, markAllChannelsRead, markNotificationRead, markAllNotificationsRead, muteChannel]) spy.mockReset();
 });
 
 describe("inbox button", () => {
-  it("badges unread mentions plus unread, unmuted channels", () => {
-    state.notifications = [mention(), mention({ id: "n2", read: true })];
+  it("counts unread replies, pings and DMs in the red badge, but not channels that only have new messages", () => {
+    state.notifications = [mention(), mention({ id: "n2", type: "reply" }), mention({ id: "n3", read: true })];
+    state.unreadDms = 3;
     renderInbox();
-    // 1 unread mention + 1 unread unmuted channel (the muted one and the empty one don't count)
-    expect(screen.getByRole("button", { name: "Inbox, 2 unread" })).toBeInTheDocument();
+    // 2 unread pings + 3 unread DMs. The unread channel (general, 3 messages) adds nothing.
+    expect(screen.getByRole("button", { name: "Inbox, 5 unread" })).toBeInTheDocument();
+  });
+
+  it("has no red badge when channels merely have new messages", () => {
+    renderInbox(); // general has 3 unread messages, nothing else
+    expect(screen.getByRole("button", { name: "Inbox" })).toBeInTheDocument();
   });
 
   it("has no badge when everything is read", () => {
@@ -113,7 +124,7 @@ describe("unreads tab", () => {
 
     const panel = screen.getByRole("dialog", { name: "Inbox" });
     expect(within(panel).getByText("general")).toBeInTheDocument();
-    expect(within(panel).getByText("3")).toBeInTheDocument();
+    expect(within(panel).getByText("3 new")).toBeInTheDocument(); // plain text, not a red badge
     expect(within(panel).queryByText("random")).not.toBeInTheDocument();
     expect(within(panel).queryByText("muted-room")).not.toBeInTheDocument();
   });
@@ -166,6 +177,15 @@ describe("mentions tab", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/dashboard/channels/c1");
   });
 
+  it("lists replies to you next to mentions", async () => {
+    state.notifications = [mention({ id: "n9", type: "reply" })];
+    const user = userEvent.setup();
+    renderInbox();
+    await user.click(screen.getByRole("button", { name: /^Inbox/ }));
+    await user.click(screen.getByRole("tab", { name: /Mentions/ }));
+    expect(screen.getByRole("button", { name: /grace replied to you in #general/ })).toBeInTheDocument();
+  });
+
   it("does not mark an already-read mention again, and offers no check for it", async () => {
     state.notifications = [mention({ read: true })];
     const user = userEvent.setup();
@@ -183,6 +203,6 @@ describe("mentions tab", () => {
     renderInbox();
     await user.click(screen.getByRole("button", { name: /^Inbox/ }));
     await user.click(screen.getByRole("tab", { name: /Mentions/ }));
-    expect(screen.getByText(/No one has mentioned you/)).toBeInTheDocument();
+    expect(screen.getByText(/No replies or mentions yet/)).toBeInTheDocument();
   });
 });

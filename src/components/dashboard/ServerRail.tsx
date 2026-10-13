@@ -1,6 +1,9 @@
 import { NavLink, useMatch } from "react-router";
 import { SlidersHorizontal } from "lucide-react";
 import { useUnreadCounts } from "../../features/channels/hooks";
+import { useConversations } from "../../features/dms/hooks";
+import { useDmUnread } from "../../features/dms/unread";
+import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
 import { useServerInfo } from "../../features/server/hooks";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
@@ -46,27 +49,35 @@ export function ServerRail() {
   const { toast, show } = useToast();
   const serverMenu = useServerMenu(show);
 
-  const totalUnread = Object.values(unread ?? {}).reduce((sum, n) => sum + n, 0);
+  const muted = useMutedChannels();
+  const pings = useChannelPings();
+  const { data: conversations = [] } = useConversations();
+  const { total: unreadDms } = useDmUnread(conversations);
+
+  // Unread messages only light the server's marker; the red count is replies to you and pings.
+  const anyUnread = Object.entries(unread ?? {}).some(([id, n]) => n > 0 && !muted.has(id));
+  const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const serverName = server?.server_name ?? "Server";
 
   return (
     <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
       <div className="relative flex w-full justify-center">
-        <Indicator selected={onHome} unread={false} />
+        <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
           to="/dashboard/friends"
           aria-label="Friends"
           title="Friends"
-          className={`${tileBase} rounded-2xl bg-surface hover:bg-surface-secondary`}
+          className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
         >
           <PufferblowBrand size={38} />
+          <CountBadge count={unreadDms} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
         </NavLink>
       </div>
 
       <div className="h-0.5 w-7 rounded bg-border-secondary" />
 
       <div className="relative flex w-full justify-center">
-        <Indicator selected={onServer} unread={totalUnread > 0} />
+        <Indicator selected={onServer} unread={anyUnread || totalPings > 0} />
         <NavLink
           to="/dashboard/channels"
           onContextMenu={(e) => {
@@ -88,7 +99,7 @@ export function ServerRail() {
           ) : (
             initialsFor(serverName)
           )}
-          <CountBadge count={totalUnread} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
+          <CountBadge count={totalPings} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
         </NavLink>
       </div>
 

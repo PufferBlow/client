@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from "react-router";
 import { DirectMessagePanel } from "../../components/dashboard/DirectMessagePanel";
 import { HomeSidebar } from "../../components/dashboard/HomeSidebar";
 import { useConversations } from "../../features/dms/hooks";
+import { useMarkDmRead } from "../../features/dms/unread";
 
 /** `/dashboard/dms/:conversationId?peer=<handle>`: the home sidebar and one DM conversation. */
 export function DirectMessageView() {
@@ -11,6 +12,7 @@ export function DirectMessageView() {
   const { data: conversations } = useConversations();
   const conversation = conversations?.find((c) => c.id === conversationId);
   const peer = params.get("peer") ?? conversation?.peerUsername ?? "";
+  useMarkDmRead(conversationId);
 
   useEffect(() => {
     localStorage.setItem("pb_last_route", "/dashboard");

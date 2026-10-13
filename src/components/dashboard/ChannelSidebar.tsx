@@ -3,7 +3,7 @@ import { NavLink } from "react-router";
 import { BellOff, ChevronDown, Globe, Hash, Lock, MoreHorizontal } from "lucide-react";
 import { useChannels, useUnreadCounts } from "../../features/channels/hooks";
 import { hasText, type Channel } from "../../features/channels/types";
-import { useMutedChannels } from "../../features/notifications/hooks";
+import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
 import { useServerInfo } from "../../features/server/hooks";
 import { useToast } from "../../hooks/useToast";
 import { resolveAssetUrl } from "../../services/authed";
@@ -44,10 +44,14 @@ function MoreButton({ label, onOpen }: { label: string; onOpen: (point: MenuPoin
   );
 }
 
-function TextChannelLink({ channel, unread, muted, onMenu }: { channel: Channel; unread: number; muted: boolean; onMenu: OpenChannelMenu }) {
+/**
+ * `unread` messages only highlight the channel; the red count is for `pings`: replies to you and
+ * @-mentions.
+ */
+function TextChannelLink({ channel, unread, pings, muted, onMenu }: { channel: Channel; unread: number; pings: number; muted: boolean; onMenu: OpenChannelMenu }) {
   const Icon = channel.is_private ? Lock : Hash;
   const id = channel.channel_id;
-  const showUnread = unread > 0 && !muted;
+  const showUnread = (unread > 0 || pings > 0) && !muted;
   return (
     <div
       className="group relative"
@@ -71,10 +75,11 @@ function TextChannelLink({ channel, unread, muted, onMenu }: { channel: Channel;
           ].join(" ")
         }
       >
+        {showUnread && <span aria-hidden="true" className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-text" />}
         <Icon size={16} aria-hidden="true" />
         <span className="flex-1 truncate">{channel.channel_name}</span>
         {muted && <BellOff size={12} aria-label="Muted" className="shrink-0" />}
-        {!muted && <CountBadge count={unread} />}
+        {!muted && <CountBadge count={pings} />}
       </NavLink>
       <MoreButton label={`Channel actions for ${channel.channel_name}`} onOpen={(point) => onMenu(id, point)} />
     </div>
@@ -126,6 +131,7 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
 export function ChannelSidebar() {
   const { data: channels, isPending, error } = useChannels();
   const { data: unread = {} } = useUnreadCounts();
+  const pings = useChannelPings();
   const muted = useMutedChannels();
   const { toast, show } = useToast();
   const channelMenu = useChannelMenu(show);
@@ -158,6 +164,7 @@ export function ChannelSidebar() {
                       key={channel.channel_id}
                       channel={channel}
                       unread={unread[channel.channel_id] ?? 0}
+                      pings={pings[channel.channel_id] ?? 0}
                       muted={muted.has(channel.channel_id)}
                       onMenu={channelMenu.open}
                     />

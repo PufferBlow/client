@@ -1,5 +1,6 @@
 import {
   memo,
+  useContext,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -16,6 +17,7 @@ import { MediaViewer, type ViewerItem } from "../ui/MediaViewer";
 import { isEmojiOnly } from "../../lib/emoji";
 import { embeddableUrls, parseMarkdown, toPlainText } from "../../lib/markdown";
 import { handleFormatShortcut } from "../../lib/textEditing";
+import { MentionDirectoryContext, mentionsUser } from "../../lib/mentions";
 import { displayName, fileKind, formatBytes, galleryRows, isSpoilerName } from "../../lib/files";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
@@ -335,6 +337,9 @@ export const MessageItem = memo(function MessageItem({
   const blocks = useMemo(() => parseMarkdown(message.text), [message.text]);
   const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
   // Someone else answering one of my messages: tinted, like a mention.
+  // Someone @-mentioned the viewer by name: the row is picked out the same way as a reply to them.
+  const { me: myName } = useContext(MentionDirectoryContext);
+  const mentionsMe = myName !== undefined && message.authorId !== myUserId && mentionsUser(message.text, myName);
   const repliesToMe =
     myUserId !== undefined && message.replyTo !== undefined && !message.replyTo.deleted && message.replyTo.authorId === myUserId && message.authorId !== myUserId;
   const editedMarker = !isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>;
@@ -363,7 +368,7 @@ export const MessageItem = memo(function MessageItem({
       tabIndex={0}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
-      className={`group relative flex flex-wrap gap-x-3 gap-y-0.5 px-[18px] outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"} ${repliesToMe ? "bg-primary/[0.06] shadow-[inset_2px_0_0_var(--color-primary)] hover:bg-primary/[0.09]" : ""}`}
+      className={`group relative flex flex-wrap gap-x-3 gap-y-0.5 px-[18px] outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"} ${repliesToMe || mentionsMe ? "bg-primary/[0.06] shadow-[inset_2px_0_0_var(--color-primary)] hover:bg-primary/[0.09]" : ""}`}
     >
       {message.replyTo && <ReplyLine reply={message.replyTo} onJumpTo={onJumpTo} />}
       {/* Same gutter width for every row so content never shifts horizontally. */}

@@ -36,11 +36,22 @@ const msg = (id: string, text: string, overrides: Record<string, unknown> = {}) 
 
 const user = (id: string, name: string, status: string) => ({ ...me, user_id: id, username: name, status });
 
+const note = (id: string, channel: string, type: "reply" | "mention" = "reply") => ({
+  notification_id: id,
+  type,
+  actor_user_id: "u2",
+  channel_id: channel,
+  message_id: `m-${id}`,
+  created_at: "2030-01-01T10:00:00Z",
+  read_at: null,
+});
+
 /** Backend routes shared by every ServerView test. */
 const backend = (extra: Record<string, unknown> = {}) =>
   routeFetch({
     "POST /api/v1/channels/list/": { channels },
     "GET /api/v1/channels/read-history": { unread_counts: { c2: 3 } },
+    "GET /api/v1/notifications/": { notifications: [] },
     "GET /api/v1/system/server-info": server,
     "POST /api/v1/users/profile": { user_data: me },
     "GET /api/v1/users/list": { users: [user("me", "ada", "online"), user("u2", "grace", "idle"), user("u3", "linus", "offline")] },
@@ -66,12 +77,24 @@ describe("ServerView", () => {
     expect(within(nav).queryByRole("link", { name: /Lounge/ })).not.toBeInTheDocument();
   });
 
-  it("shows unread counts from the server", async () => {
+  it("only highlights a channel with unread messages: no red number", async () => {
     backend();
     renderServer();
 
     const random = await screen.findByRole("link", { name: /random/ });
-    await waitFor(() => expect(random).toHaveTextContent("3"));
+    await waitFor(() => expect(random).toHaveClass("font-semibold"));
+    expect(random).not.toHaveTextContent(/\d/);
+    expect(screen.getByRole("link", { name: /secret/ })).not.toHaveClass("font-semibold"); // nothing unread there
+  });
+
+  it("gives a channel a red count only for replies to you and pings", async () => {
+    backend({
+      "GET /api/v1/notifications/": { notifications: [note("n1", "c2"), note("n2", "c2", "mention"), { ...note("n3", "c2"), read_at: "2030-01-01T11:00:00Z" }] },
+    });
+    renderServer();
+
+    const random = await screen.findByRole("link", { name: /random/ });
+    await waitFor(() => expect(random).toHaveTextContent("2")); // the read one is not counted
     expect(screen.getByRole("link", { name: /general/ })).not.toHaveTextContent(/\d/);
   });
 

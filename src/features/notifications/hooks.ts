@@ -26,6 +26,19 @@ export function useUnreadNotificationCount(): number {
   return data?.filter((n) => !n.read).length ?? 0;
 }
 
+/** Notification types that put a red badge on a channel: someone replied to you, or pinged you. */
+export const PING_TYPES: ReadonlySet<string> = new Set(["mention", "reply"]);
+
+/** Unread pings (replies to you and @-mentions) per channel id. */
+export function useChannelPings(): Record<string, number> {
+  const { data } = useNotifications();
+  const pings: Record<string, number> = {};
+  for (const n of data ?? []) {
+    if (!n.read && n.channelId && PING_TYPES.has(n.type)) pings[n.channelId] = (pings[n.channelId] ?? 0) + 1;
+  }
+  return pings;
+}
+
 /** Marks one notification read and shows it as read at once. */
 export function useMarkNotificationRead() {
   const queryClient = useQueryClient();

@@ -2,8 +2,9 @@ import { NavLink } from "react-router";
 import { Users } from "lucide-react";
 import { peerHandle, type Conversation } from "../../features/dms/api";
 import { useConversations } from "../../features/dms/hooks";
+import { useDmUnread } from "../../features/dms/unread";
 import { useMyProfile } from "../../features/users/hooks";
-import { Avatar } from "./Avatar";
+import { Avatar, CountBadge } from "./Avatar";
 
 /** Where a conversation row links to: the conversation, with the peer to load it by. */
 function conversationPath(conversation: Conversation, myHost: string | undefined): string {
@@ -15,6 +16,7 @@ function conversationPath(conversation: Conversation, myHost: string | undefined
 export function HomeSidebar({ activeConversationId }: { activeConversationId?: string }) {
   const { data: conversations = [], isPending } = useConversations();
   const { data: me } = useMyProfile();
+  const { countFor } = useDmUnread(conversations);
 
   return (
     <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden" aria-label="Home">
@@ -40,6 +42,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
           <ul className="m-0 list-none p-0">
             {conversations.map((c) => {
               const active = c.id === activeConversationId;
+              const unread = active ? 0 : countFor(c);
               return (
                 <li key={c.id}>
                   <NavLink
@@ -51,7 +54,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
                   >
                     <Avatar name={c.peerUsername} src={c.peerAvatarUrl} seed={c.peerUserId} size={32} presence={c.peerStatus} />
                     <div className="min-w-0 leading-tight">
-                      <div className={`truncate text-sm font-medium ${active ? "text-text" : "text-text-secondary"}`}>{c.peerUsername}</div>
+                      <div className={`truncate text-sm ${unread > 0 ? "font-bold text-text" : "font-medium"} ${active ? "text-text" : unread > 0 ? "" : "text-text-secondary"}`}>{c.peerUsername}</div>
                       {c.lastMessagePreview && (
                         <div className="truncate text-[11.5px] text-text-muted">
                           {c.lastMessageSenderIsMe ? "You: " : ""}
@@ -59,6 +62,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
                         </div>
                       )}
                     </div>
+                    <CountBadge count={unread} className="ml-auto" />
                   </NavLink>
                 </li>
               );

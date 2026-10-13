@@ -18,6 +18,16 @@ export function isServerOwner(profile: WithRoles | null | undefined): boolean {
   );
 }
 
+/**
+ * Whether this user may ping the whole channel with `@everyone`: owners, admins and moderators,
+ * who share the `moderate_content` privilege. The server decides for real; this only decides
+ * whether to offer it.
+ */
+export function canMentionEveryone(profile: (WithRoles & Pick<UserProfile, "resolved_privileges">) | null | undefined): boolean {
+  if (!profile) return false;
+  return isServerOwner(profile) || (profile.resolved_privileges ?? []).includes("moderate_content");
+}
+
 /** Display names of a user's roles, falling back to the raw ids. */
 export function roleNames(profile: WithRoles): string[] {
   if (profile.resolved_roles?.length) return profile.resolved_roles.map((r) => r.role_name);

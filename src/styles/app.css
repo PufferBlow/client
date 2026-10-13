@@ -88,6 +88,24 @@ body {
   box-sizing: border-box;
 }
 
+/*
+ * The interface isn't text to select: dragging across the sidebar or a header only highlights
+ * things by accident. What people read and copy stays selectable: messages and form fields.
+ */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+article[data-message-id],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-primary) 20%, transparent);
   color: var(--color-text);

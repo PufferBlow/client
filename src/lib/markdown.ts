@@ -5,9 +5,13 @@
  * inject markup. Anything that doesn't parse as formatting stays as the literal text.
  */
 
+import { mentionAt } from "./mentions";
+
 export type Inline =
   | { type: "text"; value: string }
   | { type: "code"; value: string }
+  /** `@name`; whether it is a real person is for the renderer to decide. */
+  | { type: "mention"; name: string }
   | { type: "strong" | "em" | "underline" | "strike" | "spoiler"; children: Inline[] }
   /** `embed` is true for a bare URL; masked `[text](url)` and `<url>` links never embed. */
   | { type: "link"; href: string; children: Inline[]; embed: boolean };
@@ -169,6 +173,16 @@ export function parseInline(text: string, options: { links?: boolean } = {}, dep
         i += run;
       }
       continue;
+    }
+
+    if (ch === "@") {
+      const name = mentionAt(text, i);
+      if (name) {
+        pushText();
+        out.push({ type: "mention", name });
+        i += 1 + name.length;
+        continue;
+      }
     }
 
     if (depth < MAX_DEPTH) {
@@ -337,7 +351,7 @@ export function embeddableUrls(blocks: Block[], limit = 3): string[] {
       if (found.length >= limit) return;
       if (node.type === "link") {
         if (node.embed && !found.includes(node.href)) found.push(node.href);
-      } else if (node.type !== "text" && node.type !== "code" && node.type !== "spoiler") {
+      } else if (node.type !== "text" && node.type !== "code" && node.type !== "mention" && node.type !== "spoiler") {
         visitInline(node.children);
       }
     }
@@ -362,6 +376,7 @@ export function toPlainText(text: string): string {
     nodes
       .map((node) => {
         if (node.type === "text" || node.type === "code") return node.value;
+        if (node.type === "mention") return `@${node.name}`;
         if (node.type === "spoiler") return "█".repeat(Math.min(10, Math.max(4, inline(node.children).length)));
         return inline(node.children);
       })

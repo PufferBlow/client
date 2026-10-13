@@ -31,6 +31,16 @@ const profile = (extra: Record<string, unknown> = {}) => ({
 const admin = profile({ resolved_privileges: ["create_channels", "edit_channels", "delete_channels"] });
 const owner = profile({ roles_ids: ["owner"], resolved_privileges: ["create_channels", "edit_channels", "delete_channels"] });
 
+const note = (id: string, channel: string, type: "reply" | "mention" = "reply") => ({
+  notification_id: id,
+  type,
+  actor_user_id: "u2",
+  channel_id: channel,
+  message_id: `m-${id}`,
+  created_at: "2030-01-01T10:00:00Z",
+  read_at: null,
+});
+
 const backend = (extra: Record<string, unknown> = {}, me = profile(), prefs: unknown[] = []) =>
   routeFetch({
     "POST /api/v1/users/profile": { user_data: me },
@@ -38,6 +48,9 @@ const backend = (extra: Record<string, unknown> = {}, me = profile(), prefs: unk
     "GET /api/v1/channels/read-history": { unread_counts: { c2: 3, c3: 1 } },
     "GET /api/v1/system/server-info": { server_info: { server_id: "localhost:7575", server_name: "Test Server" } },
     "GET /api/v1/notifications/preferences": { preferences: prefs },
+    // Red counts are replies and pings; the unread messages above only highlight a channel.
+    "GET /api/v1/notifications/": { notifications: [note("n1", "c2"), note("n2", "c2"), note("n3", "c2", "mention"), note("n4", "c3")] },
+    "POST /api/v1/notifications/read-all": { status_code: 200 },
     "GET /api/v1/users/list": { users: [] },
     ...extra,
   });

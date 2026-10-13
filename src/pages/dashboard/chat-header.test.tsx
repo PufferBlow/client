@@ -41,7 +41,7 @@ describe("chat header", () => {
     const header = screen.getByRole("heading", { name: "general" }).closest("header")!;
     const group = within(header).getByRole("button", { name: /Show member list/ }).parentElement!;
     expect(group).toHaveClass("ml-auto");
-    expect(within(group).getByRole("button", { name: /Search #general/ })).toBeInTheDocument();
+    expect(within(group).getByRole("searchbox", { name: /Search #general/ })).toBeInTheDocument();
     expect(header.lastElementChild).toBe(group);
   });
 });
@@ -82,16 +82,33 @@ describe("channel search", () => {
     const user = userEvent.setup();
     renderWithProviders(<ServerView />, { route: "/dashboard/channels/c1", path: "/dashboard/channels/:channelId?" });
     await screen.findByRole("heading", { name: "general" });
-    await user.click(screen.getByRole("button", { name: /Search #general/ }));
-    return { user, fetchMock, field: screen.getByRole("searchbox", { name: /Search #general/ }) };
+    const field = screen.getByRole("searchbox", { name: /Search #general/ });
+    await user.click(field);
+    return { user, fetchMock, field };
   }
 
-  it("opens a field, focuses it, and closes on Escape", async () => {
+  it("is always there as a full field, and Escape empties it without removing it", async () => {
     const { user, field } = await openSearch();
-    expect(field).toHaveFocus();
+    expect(field).toBeVisible();
+    await user.type(field, "dep");
+    expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Search #general/ })).toBeInTheDocument();
+    expect(field).toHaveValue("");
+    expect(screen.getByRole("searchbox", { name: /Search #general/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  });
+
+  it("puts the matches away when you click elsewhere but keeps what you typed", async () => {
+    const { user, field } = await openSearch(searchRoute([wire("m2", "deploy tonight")]));
+    await user.type(field, "deploy");
+    expect(await screen.findByRole("region", { name: "Search results" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("heading", { name: "general" }));
+    expect(screen.queryByRole("region", { name: "Search results" })).not.toBeInTheDocument();
+    expect(field).toHaveValue("deploy");
+
+    await user.click(field);
+    expect(await screen.findByRole("region", { name: "Search results" })).toBeInTheDocument();
   });
 
   it("asks for at least two characters before searching", async () => {
@@ -131,13 +148,14 @@ describe("channel search", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/maximum/);
   });
 
-  it("jumps to a loaded message when a result is chosen, and closes the search", async () => {
+  it("jumps to a loaded message when a result is chosen, and clears the search", async () => {
     const { user, field } = await openSearch(searchRoute([wire("m2", "deploy tonight")]));
     await user.type(field, "deploy");
     const results = await screen.findByRole("region", { name: "Search results" });
     await user.click(await within(results).findByRole("button", { name: /grace/ }));
 
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(field).toHaveValue("");
+    expect(screen.queryByRole("region", { name: "Search results" })).not.toBeInTheDocument();
     const row = document.querySelector<HTMLElement>('[data-message-id="m2"]')!;
     expect(row).toHaveClass("bg-primary/15");
   });

@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "../channels/hooks";
 import { dmKeys } from "../dms/keys";
+import { markDmRead, noteIncomingDm } from "../dms/unread";
 import { notificationKeys } from "../notifications/hooks";
 import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
@@ -13,6 +14,8 @@ import type { RealtimeEvent } from "./events";
 export interface EventContext {
   /** Channel currently on screen; messages arriving there are not counted as unread. */
   activeChannelId: string | undefined;
+  /** The DM conversation on screen, if any. */
+  activeConversationId?: string | undefined;
 }
 
 /** Fold one realtime event into the query cache. Only already-cached data is touched. */
@@ -25,13 +28,19 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       const { message } = event;
       updateMessages(message.channelId, (cache) => upsertMessage(cache, message));
 
+      const myId = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id;
+
       if (event.dm) {
         // The conversation list shows the latest message and orders by it.
         void queryClient.invalidateQueries({ queryKey: dmKeys.conversations });
+        // Every message in a DM is worth a notification, reply or not, unless you are reading it.
+        if (myId && message.authorId !== myId) {
+          if (message.channelId === context.activeConversationId) markDmRead(myId, message.channelId);
+          else noteIncomingDm(myId, message.channelId);
+        }
         return;
       }
 
-      const myId = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id;
       if (message.channelId !== context.activeChannelId && message.authorId !== myId) {
         queryClient.setQueryData<UnreadCounts>(channelKeys.unread, (counts) => ({
           ...counts,

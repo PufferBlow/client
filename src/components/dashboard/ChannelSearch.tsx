@@ -35,79 +35,66 @@ interface ChannelSearchProps {
   onPick: (message: Message) => void;
 }
 
-/** A search button that opens a field next to the channel name, with matches listed under it. */
+/** The channel search field, always shown in the header, with matches listed under it while you type. */
 export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchProps) {
-  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  // The matches are a popover: clicking elsewhere puts them away without touching what you typed.
+  const [showResults, setShowResults] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
-  const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setQuery(text.trim()), DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [text]);
 
-  useEffect(() => {
-    if (open) field.current?.focus();
-  }, [open]);
-
-  const close = () => {
-    setOpen(false);
+  const clear = () => {
     setText("");
     setQuery("");
+    setShowResults(false);
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!showResults) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) close();
+      if (!root.current?.contains(e.target as Node)) setShowResults(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+  }, [showResults]);
 
   const ready = query.length >= MIN_SEARCH_LENGTH;
   const search = useMessageSearch(channelId, query);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        aria-label={`Search #${channelName}`}
-        title="Search this channel"
-        onClick={() => setOpen(true)}
-        className="grid h-8 w-8 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
-      >
-        <Search size={17} aria-hidden="true" />
-      </button>
-    );
-  }
 
   const results = search.data?.messages ?? [];
 
   return (
     <div ref={root} className="relative">
-      <div role="search" className="flex h-8 w-[240px] items-center gap-2 rounded-lg border border-border bg-background pl-2.5 pr-1 focus-within:border-primary/55">
+      <div role="search" className="flex h-8 w-[240px] max-w-full items-center gap-2 rounded-lg border border-border bg-background pl-2.5 pr-1 focus-within:border-primary/55">
         <Search size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
         <input
-          ref={field}
           type="search"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setShowResults(true);
+          }}
+          onFocus={() => setShowResults(true)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") close();
+            if (e.key === "Escape") clear();
           }}
           placeholder={`Search #${channelName}`}
           aria-label={`Search #${channelName}`}
           className="min-w-0 flex-1 bg-transparent text-[13.5px] text-text outline-none placeholder:text-text-muted [&::-webkit-search-cancel-button]:hidden"
         />
-        <button type="button" aria-label="Close search" onClick={close} className="grid h-6 w-6 place-items-center rounded-md text-text-tertiary hover:bg-active hover:text-text">
-          <X size={14} aria-hidden="true" />
-        </button>
+        {text.length > 0 && (
+          <button type="button" aria-label="Clear search" onClick={clear} className="grid h-6 w-6 place-items-center rounded-md text-text-tertiary hover:bg-active hover:text-text">
+            <X size={14} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
-      {text.trim().length > 0 && (
+      {showResults && text.trim().length > 0 && (
         <div
           role="region"
           aria-label="Search results"
@@ -135,7 +122,7 @@ export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchP
                       type="button"
                       onClick={() => {
                         onPick(m);
-                        close();
+                        clear();
                       }}
                       className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-surface-tertiary focus-visible:outline-2 focus-visible:outline-focus"
                     >

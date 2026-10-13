@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Eye, EyeOff, File as FileIcon, Music, Paperclip, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, AtSign, Eye, EyeOff, File as FileIcon, Music, Paperclip, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
 import { EmojiPickerPopover } from "../ui/EmojiPickerPopover";
 import { classifyAuthError } from "../../utils/authErrors";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import { applyEdit, fits, handleFormatShortcut } from "../../lib/textEditing";
 import { asSpoiler, fileKind, formatBytes } from "../../lib/files";
+import { findMentionQuery, insertMention, matchMentionables, type Mentionable } from "../../lib/mentions";
+import { Avatar } from "./Avatar";
 
 interface ComposerProps {
   channelName: string;
@@ -18,6 +20,8 @@ interface ComposerProps {
   /** The message being replied to, shown above the field until sent or cancelled. */
   replyingTo?: { id: string; authorName: string };
   onCancelReply?: () => void;
+  /** People (and `@everyone`, if the viewer may use it) offered when typing `@`. Omit for no suggestions. */
+  mentionables?: Mentionable[];
   onSend: (input: { text: string; files: File[] }) => Promise<unknown>;
 }
 
@@ -42,7 +46,7 @@ const releasePreview = (pending: PendingFile) => {
   if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
 };
 
-export function Composer({ channelName, target = `#${channelName}`, maxLength, maxAttachmentMB, replyingTo, onCancelReply, onSend }: ComposerProps) {
+export function Composer({ channelName, target = `#${channelName}`, maxLength, maxAttachmentMB, replyingTo, onCancelReply, mentionables, onSend }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -55,6 +59,34 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
   /** The popover closes itself on any press outside it, including on this button, so remember it was open to make the button a toggle. */
   const pickerWasOpen = useRef(false);
   useAutoGrow(textInput, text);
+
+  // Typing `@` offers people to mention. The caret decides which `@word` is being typed.
+  const [caret, setCaret] = useState(0);
+  const [activeMention, setActiveMention] = useState(0);
+  /** The `@word` whose list was dismissed with Escape; it stays away until the word changes. */
+  const [dismissedMention, setDismissedMention] = useState<string | null>(null);
+  const mention = useMemo(() => (mentionables?.length ? findMentionQuery(text, caret) : null), [mentionables, text, caret]);
+  const mentionKey = mention ? `${mention.start}:${mention.query}` : null;
+  const suggestions = useMemo(
+    () => (mention && mentionables && mentionKey !== dismissedMention ? matchMentionables(mentionables, mention.query) : []),
+    [mention, mentionables, mentionKey, dismissedMention],
+  );
+  const suggesting = suggestions.length > 0;
+  useEffect(() => setActiveMention(0), [mentionKey]);
+
+  const pickMention = (choice: Mentionable) => {
+    if (!mention) return;
+    const next = insertMention(text, mention, caret, choice.name);
+    if (maxLength !== undefined && next.text.length > maxLength) return;
+    setText(next.text);
+    setCaret(next.caret);
+    requestAnimationFrame(() => {
+      const input = textInput.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(next.caret, next.caret);
+    });
+  };
 
   const totalBytes = files.reduce((sum, f) => sum + f.file.size, 0);
   const tooLarge = maxAttachmentMB !== undefined && totalBytes > maxAttachmentMB * 1024 * 1024;
@@ -158,6 +190,25 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
   }, [replyingToId]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggesting && !e.nativeEvent.isComposing) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setActiveMention((i) => (i + step + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const choice = suggestions[activeMention] ?? suggestions[0];
+        if (choice) pickMention(choice);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDismissedMention(mentionKey);
+        return;
+      }
+    }
     if (e.key === "Escape" && replyingTo && onCancelReply) {
       e.preventDefault();
       onCancelReply();
@@ -190,7 +241,41 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
   };
 
   return (
-    <div className="mx-3.5 mb-3.5 shrink-0">
+    <div className="relative mx-3.5 mb-3.5 shrink-0">
+      {suggesting && (
+        <ul
+          id="composer-mentions"
+          role="listbox"
+          aria-label="People to mention"
+          className="absolute bottom-full left-0 right-0 z-20 m-0 mb-2 max-h-72 list-none overflow-y-auto rounded-xl border border-border-secondary bg-surface-secondary p-1.5 shadow-popover"
+        >
+          {suggestions.map((choice, i) => (
+            <li
+              key={choice.id}
+              id={`composer-mention-${i}`}
+              role="option"
+              aria-label={choice.name}
+              aria-selected={i === activeMention}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the caret in the field
+                pickMention(choice);
+              }}
+              onMouseEnter={() => setActiveMention(i)}
+              className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm ${i === activeMention ? "bg-surface-tertiary text-text" : "text-text-secondary"}`}
+            >
+              {choice.everyone ? (
+                <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/20 text-primary">
+                  <AtSign size={14} />
+                </span>
+              ) : (
+                <Avatar name={choice.name} src={choice.avatarUrl} seed={choice.id} size={24} />
+              )}
+              <span className="min-w-0 truncate font-medium">{choice.name}</span>
+              {choice.everyone && <span className="ml-auto shrink-0 text-[12px] text-text-muted">Notify everyone who can read this channel</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {error && (
         <p role="alert" className="mb-1.5 flex items-center gap-1.5 px-1 text-[13px] text-error">
           <AlertCircle size={14} aria-hidden="true" />
@@ -255,13 +340,20 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
             ref={textInput}
             rows={1}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart);
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             maxLength={maxLength}
             placeholder={`Message ${target}`}
             aria-label={`Message ${target}`}
             aria-describedby={showCounter ? "composer-remaining" : undefined}
+            aria-autocomplete={mentionables?.length ? "list" : undefined}
+            aria-controls={suggesting ? "composer-mentions" : undefined}
+            aria-activedescendant={suggesting ? `composer-mention-${activeMention}` : undefined}
             className="max-h-[50vh] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[14.5px] leading-5 text-text outline-none placeholder:text-text-tertiary"
           />
           {showCounter && remaining !== null && (

@@ -9,6 +9,8 @@ import {
   markChannelRead,
   updateChannel,
 } from "./api";
+import { markAllNotificationsRead, markNotificationRead, type AppNotification } from "../notifications/api";
+import { notificationKeys } from "../notifications/hooks";
 import type { Channel, UnreadCounts } from "./types";
 
 export const channelKeys = {
@@ -33,6 +35,16 @@ export function useMarkChannelRead() {
       queryClient.setQueryData<UnreadCounts>(channelKeys.unread, (counts) =>
         counts && counts[channelId] ? { ...counts, [channelId]: 0 } : counts,
       );
+      // Reading a channel answers the replies and pings waiting in it too.
+      const pending = (queryClient.getQueryData<AppNotification[]>(notificationKeys.list) ?? []).filter(
+        (n) => !n.read && n.channelId === channelId,
+      );
+      if (pending.length > 0) {
+        queryClient.setQueryData<AppNotification[]>(notificationKeys.list, (list) =>
+          list?.map((n) => (n.channelId === channelId ? { ...n, read: true } : n)),
+        );
+        for (const n of pending) void markNotificationRead(n.id).catch(() => undefined);
+      }
     },
   });
 }
@@ -48,6 +60,11 @@ export function useMarkAllChannelsRead() {
       queryClient.setQueryData<UnreadCounts>(channelKeys.unread, (counts) =>
         counts ? Object.fromEntries(Object.keys(counts).map((id) => [id, 0])) : counts,
       );
+      // "Everything read" includes the replies and pings waiting in those channels.
+      if ((queryClient.getQueryData<AppNotification[]>(notificationKeys.list) ?? []).some((n) => !n.read)) {
+        queryClient.setQueryData<AppNotification[]>(notificationKeys.list, (list) => list?.map((n) => ({ ...n, read: true })));
+        void markAllNotificationsRead().catch(() => undefined);
+      }
       return { previous };
     },
     onError: (_error, _variables, context) => queryClient.setQueryData(channelKeys.unread, context?.previous),
