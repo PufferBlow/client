@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { HeadphoneOff, Loader2, MicOff, Volume2 } from "lucide-react";
+import { HeadphoneOff, Loader2, MicOff, Users, Volume2 } from "lucide-react";
 import { useVoiceParticipants } from "../../features/voice/hooks";
 import { useVoice } from "../../features/voice/voiceContext";
 import type { VoiceParticipant } from "../../features/voice/types";
@@ -42,6 +42,8 @@ export function VoiceChannelRow({ channel, onMenu, moreButton }: VoiceChannelRow
   // The call you are in reports its own roster; every other channel is read from the API.
   const { data: polled = [] } = useVoiceParticipants(id, !(connected || connecting));
   const participants = connected ? voice.participants : polled;
+  const count = participants.length;
+  const inCall = count > 0 ? `, ${count} ${count === 1 ? "person" : "people"} in the call` : "";
 
   return (
     <div
@@ -51,20 +53,33 @@ export function VoiceChannelRow({ channel, onMenu, moreButton }: VoiceChannelRow
         onMenu(id, { x: e.clientX, y: e.clientY });
       }}
     >
-      <button
-        type="button"
-        disabled={connecting}
-        aria-pressed={connected}
-        aria-label={connected ? `${channel.channel_name}, connected. Click to leave` : `Join voice channel ${channel.channel_name}`}
-        onClick={() => void (connected ? voice.leave() : voice.join(id))}
-        className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2.5 pr-8 text-left text-[14.5px] transition-colors hover:bg-surface-secondary disabled:cursor-wait ${
-          connected ? "font-semibold text-success" : "text-text-tertiary"
-        }`}
-      >
-        {connecting ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
-        <span className="flex-1 truncate">{channel.channel_name}</span>
-      </button>
-      {moreButton}
+      {/* Its own box, so the "more" button centres on this line however long the roster below grows. */}
+      <div className="relative">
+        <button
+          type="button"
+          disabled={connecting}
+          aria-pressed={connected}
+          aria-label={connected ? `${channel.channel_name}, connected${inCall}. Click to leave` : `Join voice channel ${channel.channel_name}${inCall}`}
+          onClick={() => void (connected ? voice.leave() : voice.join(id))}
+          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2.5 text-left text-[14.5px] transition-colors hover:bg-surface-secondary disabled:cursor-wait ${
+            count > 0 ? "pr-[4.25rem]" : "pr-8"
+          } ${connected ? "font-semibold text-success" : "text-text-tertiary"}`}
+        >
+          {connecting ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+          <span className="flex-1 truncate">{channel.channel_name}</span>
+        </button>
+        {count > 0 && (
+          <span
+            aria-hidden="true"
+            title={`${count} in the call`}
+            className="pointer-events-none absolute right-8 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-full bg-surface-secondary px-1.5 py-px text-[11.5px] font-medium tabular-nums text-text-muted"
+          >
+            <Users size={11} />
+            {count}
+          </span>
+        )}
+        {moreButton}
+      </div>
       <Roster participants={participants} />
     </div>
   );

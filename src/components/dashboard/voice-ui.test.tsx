@@ -155,6 +155,14 @@ describe("voice channels in the sidebar", () => {
     expect(within(roster).getByLabelText("Muted")).toBeInTheDocument();
   });
 
+  it("shows how many people are in a call next to its name", async () => {
+    await open();
+    await screen.findByRole("list", { name: "In this call" });
+    const join = screen.getByRole("button", { name: /Join voice channel Lounge/ });
+    expect(join).toHaveAccessibleName("Join voice channel Lounge, 1 person in the call");
+    expect(join.parentElement).toHaveTextContent(/^Lounge1$/);
+  });
+
   it("has mute and deafen disabled until you are in a call", async () => {
     await open();
     expect(screen.getByRole("button", { name: "Mute microphone" })).toBeDisabled();
