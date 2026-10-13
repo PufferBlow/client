@@ -1,7 +1,7 @@
 import { api } from "../../services/api";
 import { authed, requireSession } from "../../services/authed";
-import { normalizeMessage, normalizeReactions, type WireMessage } from "./normalize";
-import type { Message, MessagePage, Reaction } from "./types";
+import { normalizeMessage, type WireMessage } from "./normalize";
+import type { Message, MessagePage } from "./types";
 
 export const PAGE_SIZE = 30;
 
@@ -70,36 +70,6 @@ export interface SearchResult {
 export async function searchMessages(channelId: string, query: string, limit = 20): Promise<SearchResult> {
   const res = await authed.query<SearchResponse>("GET", `${channelPath(channelId)}/search`, { query: { q: query, limit } });
   return { messages: (res.messages ?? []).map((m) => normalizeMessage(m, channelId)), scanned: res.scanned ?? 0, truncated: res.truncated_scan === true };
-}
-
-export interface EditResult {
-  message: string;
-  editCount: number;
-  editedAt: string | null;
-}
-
-export async function editMessage(channelId: string, messageId: string, text: string): Promise<EditResult> {
-  const res = await authed.body<{ message: string; edit_count: number; last_edited_at: string | null }>(
-    "PATCH",
-    `${channelPath(channelId)}/messages/${encodeURIComponent(messageId)}`,
-    { message: text },
-  );
-  return { message: res.message, editCount: res.edit_count, editedAt: res.last_edited_at };
-}
-
-export async function deleteMessage(channelId: string, messageId: string): Promise<void> {
-  await authed.query("DELETE", `${channelPath(channelId)}/delete_message`, { query: { message_id: messageId } });
-}
-
-interface ReactionResponse {
-  reactions: { emoji: string; count: number; user_ids: string[] }[];
-}
-
-/** Add or remove the viewer's reaction; resolves with the message's full reaction list. */
-export async function setReaction(channelId: string, messageId: string, emoji: string, present: boolean): Promise<Reaction[]> {
-  const path = `${channelPath(channelId)}/messages/${encodeURIComponent(messageId)}/reactions`;
-  const res = await authed.query<ReactionResponse>(present ? "POST" : "DELETE", path, { query: { emoji } });
-  return normalizeReactions(res.reactions);
 }
 
 /** Files a moderation report for a message; the server checks you can see its channel. */

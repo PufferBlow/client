@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteMessage, editMessage, loadMessages, reportMessage, searchMessages, sendMessage, setReaction } from "./api";
+import { loadMessages, reportMessage, searchMessages, sendMessage } from "./api";
 import { CommandError } from "../realtime/commands";
 import { useMessageCommands } from "../realtime/commandsContext";
 import { userKeys } from "../users/hooks";
@@ -151,15 +151,17 @@ export function useSendMessage(channelId: string) {
   return { send, retry, discard };
 }
 
+/** Edit, delete and reactions only exist as socket commands; without a connection they fail with a plain message. */
+function requireCommands<T>(commands: T | null | undefined): T {
+  if (!commands) throw new Error("You are offline. Reconnect and try again.");
+  return commands;
+}
+
 export function useEditMessage(channelId: string) {
   const update = useMessageCache(channelId);
   const commands = useMessageCommands();
   return useMutation({
-    mutationFn: async ({ id, text }: { id: string; text: string }) => {
-      if (commands) return commands.editMessage(channelId, id, text);
-      const result = await editMessage(channelId, id, text);
-      return { text: result.message, editCount: result.editCount, editedAt: result.editedAt };
-    },
+    mutationFn: ({ id, text }: { id: string; text: string }) => requireCommands(commands).editMessage(channelId, id, text),
     onSuccess: (result, { id }) =>
       update((cache) => patchMessage(cache, id, { text: result.text, editCount: result.editCount, editedAt: result.editedAt })),
   });
@@ -169,7 +171,7 @@ export function useDeleteMessage(channelId: string) {
   const update = useMessageCache(channelId);
   const commands = useMessageCommands();
   return useMutation({
-    mutationFn: (id: string) => (commands ? commands.deleteMessage(channelId, id) : deleteMessage(channelId, id)),
+    mutationFn: (id: string) => requireCommands(commands).deleteMessage(channelId, id),
     // Everyone else gets a `message.deleted` event; this removes it for the sender straight away.
     onSuccess: (_result, id) => update((cache) => removeMessage(cache, id)),
   });
@@ -180,7 +182,7 @@ export function useToggleReaction(channelId: string) {
   const commands = useMessageCommands();
   return useMutation({
     mutationFn: ({ id, emoji, present }: { id: string; emoji: string; present: boolean }) =>
-      commands ? commands.setReaction(channelId, id, emoji, present) : setReaction(channelId, id, emoji, present),
+      requireCommands(commands).setReaction(channelId, id, emoji, present),
     onSuccess: (reactions, { id }) => update((cache) => setReactions(cache, id, reactions)),
   });
 }

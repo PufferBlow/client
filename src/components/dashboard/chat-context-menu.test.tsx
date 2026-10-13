@@ -5,6 +5,7 @@ import { removeMessage, type MessageCache } from "../../features/messages/cache"
 import { messageKeys } from "../../features/messages/cache";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
+import type { MessageCommands } from "../../features/realtime/messageCommands";
 import { ChatPanel } from "./ChatPanel";
 
 // emoji-mart needs a real browser; the picker is replaced with one button per emoji we want to pick.
@@ -54,7 +55,8 @@ const backend = (extra: Record<string, unknown> = {}, me = profile(), history = 
     ...extra,
   });
 
-const renderChat = () => renderWithProviders(<ChatPanel channel={channel} />, { route: "/dashboard/channels/c1", path: "*" });
+const renderChat = (commands: Partial<MessageCommands> = {}) =>
+  renderWithProviders(<ChatPanel channel={channel} />, { route: "/dashboard/channels/c1", path: "*", commands });
 
 const rowOf = (text: string) => screen.getByText(text).closest("article") as HTMLElement;
 const rightClick = (text: string, point = { clientX: 40, clientY: 60 }) => fireEvent.contextMenu(rowOf(text), point);
@@ -63,9 +65,9 @@ const item = (name: string | RegExp) => within(screen.getByRole("menu")).getByRo
 const hasItem = (name: string | RegExp) => within(screen.getByRole("menu")).queryByRole("menuitem", { name }) !== null;
 
 /** Open a loaded channel and wait for the history. */
-async function open(extra?: Record<string, unknown>, me = profile(), history = messages) {
+async function open(extra?: Record<string, unknown>, me = profile(), history = messages, commands: Partial<MessageCommands> = {}) {
   const fetchMock = backend(extra, me, history);
-  const view = renderChat();
+  const view = renderChat(commands);
   await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(history.length));
   // Wait for the profile so permission checks are settled.
   await waitFor(() => expect(requestLog(fetchMock)).toContain("POST /api/v1/users/profile"));
@@ -221,22 +223,17 @@ describe("message context menu", () => {
 
   describe("reactions", () => {
     it("adds a reaction to the exact message from the menu", async () => {
-      const { user, fetchMock } = await open({
-        "POST /api/v1/channels/c1/messages/m3/reactions": { reactions: [{ emoji: "🎉", count: 1, user_ids: ["me"] }] },
-      });
+      const setReaction = vi.fn().mockResolvedValue([{ emoji: "🎉", count: 1, userIds: ["me"] }]);
+      const { user } = await open({}, profile(), messages, { setReaction });
       rightClick("third");
       await user.click(item("Add 🎉 reaction"));
 
-      await waitFor(() => expect(requestLog(fetchMock)).toContain("POST /api/v1/channels/c1/messages/m3/reactions"));
-      const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/m3/reactions"))!;
-      expect(new URL(String(call[0])).searchParams.get("emoji")).toBe("🎉");
+      await waitFor(() => expect(setReaction).toHaveBeenCalledWith("c1", "m3", "🎉", true));
       expect(await screen.findByRole("button", { name: /🎉\s*1/ })).toBeInTheDocument();
     });
 
     it("shows a notice when a reaction fails", async () => {
-      const { user } = await open({
-        "POST /api/v1/channels/c1/messages/m2/reactions": jsonResponse({ error_code: "server.internal_error", message: "boom" }, 500),
-      });
+      const { user } = await open({}, profile(), messages, { setReaction: vi.fn().mockRejectedValue(new Error("boom")) });
       rightClick("second");
       await user.click(item("Add 👍 reaction"));
 
@@ -245,19 +242,16 @@ describe("message context menu", () => {
   });
 
   describe("emoji picker", () => {
-    const unicorn = "POST /api/v1/channels/c1/messages/m3/reactions";
-
     it("opens from 'More reactions…' and reacts to the right message", async () => {
-      const { user, fetchMock } = await open({ [unicorn]: { reactions: [{ emoji: "🦄", count: 1, user_ids: ["me"] }] } });
+      const setReaction = vi.fn().mockResolvedValue([{ emoji: "🦄", count: 1, userIds: ["me"] }]);
+      const { user } = await open({}, profile(), messages, { setReaction });
       rightClick("third");
       await user.click(item("More reactions…"));
 
       expect(menu()).not.toBeInTheDocument();
       await user.click(await screen.findByRole("button", { name: "pick unicorn" }));
 
-      await waitFor(() => expect(requestLog(fetchMock)).toContain(unicorn));
-      const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/m3/reactions"))!;
-      expect(new URL(String(call[0])).searchParams.get("emoji")).toBe("🦄");
+      await waitFor(() => expect(setReaction).toHaveBeenCalledWith("c1", "m3", "🦄", true));
       expect(screen.queryByTestId("picker")).not.toBeInTheDocument();
     });
 
@@ -318,25 +312,20 @@ describe("message context menu", () => {
     });
 
     it("deletes exactly the chosen message once confirmed", async () => {
-      const { user, fetchMock } = await open(
-        { "DELETE /api/v1/channels/c1/delete_message": { status_code: 204 } },
-        profile({ resolved_privileges: ["delete_messages"] }),
-      );
+      const deleteMessage = vi.fn().mockResolvedValue(undefined);
+      const { user } = await open({}, profile({ resolved_privileges: ["delete_messages"] }), messages, { deleteMessage });
       rightClick("third");
       await user.click(item("Delete message"));
       await user.click(within(await screen.findByText("Delete message?").then((h) => h.parentElement!.parentElement!)).getByRole("button", { name: "Delete" }));
 
       await waitFor(() => expect(screen.queryByText("third")).not.toBeInTheDocument());
-      const call = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE")!;
-      expect(new URL(String(call[0])).searchParams.get("message_id")).toBe("m3");
+      expect(deleteMessage).toHaveBeenCalledWith("c1", "m3");
       expect(screen.getByText("second")).toBeInTheDocument();
     });
 
     it("keeps the message and shows the server's reason when deleting is refused", async () => {
-      const { user } = await open(
-        { "DELETE /api/v1/channels/c1/delete_message": jsonResponse({ error_code: "auth.forbidden", message: "You are not authorized to delete this message" }, 403) },
-        profile({ resolved_privileges: ["delete_messages"] }),
-      );
+      const deleteMessage = vi.fn().mockRejectedValue(new Error("You are not authorized to delete this message"));
+      const { user } = await open({}, profile({ resolved_privileges: ["delete_messages"] }), messages, { deleteMessage });
       rightClick("second");
       await user.click(item("Delete message"));
       const dialog = (await screen.findByText("Delete message?")).parentElement!.parentElement!;

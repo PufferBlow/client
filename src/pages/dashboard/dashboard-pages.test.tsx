@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MessageCommands } from "../../features/realtime/messageCommands";
 import { screen, waitFor, within } from "@testing-library/react";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
@@ -60,8 +61,8 @@ const backend = (extra: Record<string, unknown> = {}) =>
     ...extra,
   });
 
-const renderServer = (route = "/dashboard/channels/c1") =>
-  renderWithProviders(<ServerView />, { route, path: "/dashboard/channels/:channelId?" });
+const renderServer = (route = "/dashboard/channels/c1", commands?: Partial<MessageCommands>) =>
+  renderWithProviders(<ServerView />, { route, path: "/dashboard/channels/:channelId?", commands });
 
 describe("ServerView", () => {
   it("lists text channels (including private and mixed) and voice channels separately", async () => {
@@ -177,21 +178,21 @@ describe("ServerView", () => {
   });
 
   it("lets you delete your own message", async () => {
-    const fetchMock = backend({
+    backend({
       "GET /api/v1/channels/c1/load_messages": { messages: [msg("m1", "mine", { sender_user_id: "me", sender_username: "ada" })], next_cursor: null },
-      "DELETE /api/v1/channels/c1/delete_message": { status_code: 204 },
     });
-    const { user: u } = renderServer();
+    const deleteMessage = vi.fn().mockResolvedValue(undefined);
+    const { user: u } = renderServer("/dashboard/channels/c1", { deleteMessage });
     await screen.findByText("mine");
 
     // Delete is only in the message menu (not the hover toolbar), and it asks first.
     await u.click(await screen.findByRole("button", { name: "More actions" }));
     await u.click(await screen.findByRole("menuitem", { name: "Delete message" }));
-    expect(requestLog(fetchMock)).not.toContain("DELETE /api/v1/channels/c1/delete_message");
+    expect(deleteMessage).not.toHaveBeenCalled();
     await u.click(within(await screen.findByText("Delete message?").then((h) => h.parentElement!.parentElement!)).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(screen.queryByText("mine")).not.toBeInTheDocument());
-    expect(requestLog(fetchMock)).toContain("DELETE /api/v1/channels/c1/delete_message");
+    expect(deleteMessage).toHaveBeenCalledWith("c1", "m1");
   });
 
   it("says so when a channel is empty", async () => {

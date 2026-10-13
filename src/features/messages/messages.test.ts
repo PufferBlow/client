@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
-import { deleteMessage, editMessage, loadMessages, PAGE_SIZE, sendMessage, setReaction } from "./api";
+import { loadMessages, PAGE_SIZE, sendMessage } from "./api";
 import { flattenMessages, patchMessage, removeMessage, setReactions, upsertMessage, type MessageCache } from "./cache";
 import { isWireMessage, normalizeMessage, normalizeReactions, type WireMessage } from "./normalize";
 import type { Message } from "./types";
@@ -228,51 +228,5 @@ describe("sendMessage", () => {
     const fetchMock = mockFetch(jsonResponse({ message_data: wire("m") }));
     await sendMessage("c1", { text: "x" });
     expect((fetchMock.mock.calls[0]![1]!.body as FormData).getAll("attachments")).toHaveLength(0);
-  });
-});
-
-describe("edit, delete and react", () => {
-  it("edits with a PATCH carrying the token in the JSON body", async () => {
-    signIn("tok");
-    const fetchMock = mockFetch(jsonResponse({ message: "new text", edit_count: 1, last_edited_at: "now" }));
-
-    await expect(editMessage("c1", "m1", "new text")).resolves.toEqual({ message: "new text", editCount: 1, editedAt: "now" });
-
-    const [, init] = fetchMock.mock.calls[0]!;
-    expect(init!.method).toBe("PATCH");
-    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/channels/c1/messages/m1");
-    expect(JSON.parse(String(init!.body))).toEqual({ message: "new text", auth_token: "tok" });
-  });
-
-  it("deletes with the message id and token in the query", async () => {
-    signIn("tok");
-    const fetchMock = mockFetch(jsonResponse({ status_code: 204 }));
-    await deleteMessage("c1", "m1");
-
-    const url = calledUrl(fetchMock);
-    expect(fetchMock.mock.calls[0]![1]!.method).toBe("DELETE");
-    expect(url.pathname).toBe("/api/v1/channels/c1/delete_message");
-    expect(url.searchParams.get("message_id")).toBe("m1");
-    expect(url.searchParams.get("auth_token")).toBe("tok");
-  });
-
-  it("adds a reaction with POST and removes it with DELETE, returning the full list", async () => {
-    signIn();
-    const fetchMock = mockFetch(
-      jsonResponse({ reactions: [{ emoji: "👍", count: 1, user_ids: ["u1"] }] }),
-      jsonResponse({ reactions: [] }),
-    );
-
-    await expect(setReaction("c1", "m1", "👍", true)).resolves.toEqual([{ emoji: "👍", count: 1, userIds: ["u1"] }]);
-    await expect(setReaction("c1", "m1", "👍", false)).resolves.toEqual([]);
-
-    expect(fetchMock.mock.calls.map(([, init]) => init!.method)).toEqual(["POST", "DELETE"]);
-    expect(calledUrl(fetchMock).searchParams.get("emoji")).toBe("👍");
-    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/channels/c1/messages/m1/reactions");
-  });
-
-  it("fails fast when signed out", async () => {
-    mockFetch();
-    await expect(deleteMessage("c1", "m1")).rejects.toMatchObject({ code: "auth.token_required" });
   });
 });

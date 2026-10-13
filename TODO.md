@@ -122,8 +122,8 @@ repo's tests parse every one. What is left:
   commit and publish after a crash.
 - [ ] **Publish `channel.updated` for role/privilege changes** and call `revalidate_subscriptions` from
   those routes. Today it only runs on channel update and delete.
-- [ ] **Close the legacy private-channel leak.** The legacy `/ws` loop and `broadcast_to_eligible_users` do
-  not check `view_private_channels`. The v1 path does.
+- [x] **Close the legacy private-channel leak.** Closed by removing the legacy `/ws` loop, the per-channel
+  socket and `broadcast_to_eligible_users`; the v1 path checks `view_private_channels`.
 - [ ] **Bots**: reactions (needs a schema change like `sender_bot_id`), creating and revoking bots (owner
   only API), end-to-end scope tests.
 - [ ] **Credentials in the URL.** `/ws?auth_token=` puts the token in the query string. Logs redact it, but add
@@ -133,7 +133,11 @@ repo's tests parse every one. What is left:
 - [ ] **Run command handlers off the event loop** once the database layer is thread safe.
 - [ ] **Audit `with self.database_session() as session:` blocks.** The context manager does not commit.
   Seven writers lacked a commit and are fixed; check new ones in review.
-- [ ] **Decide when to retire the legacy frames and HTTP routes** once every client speaks the protocol.
+- [x] **Retire the legacy frames and HTTP routes.** `/ws` requires `protocol=1`; `/ws/channels/{id}`, the
+  polling loop and legacy frames are gone, and so are the HTTP edit, delete and reaction routes for channel
+  messages (`message.edit`, `message.delete`, `reaction.add` and `reaction.remove` replace them). pypufferblow
+  and bots default to the protocol. HTTP stays for sending with files, history, search and read markers.
+  Direct messages still use HTTP for edit, delete and reactions (no DM commands yet).
 
 ### Frontend (`client-new/src/features/realtime/`)
 - [x] Protocol client (`protocol.ts`, `commands.ts`, `session.ts`), shared fixtures, events with de-duplication
