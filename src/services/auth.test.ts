@@ -9,6 +9,7 @@ import {
   msUntilAuthExpiry,
   persistSession,
   refreshSession,
+  renewSession,
   signup,
   type AuthTokens,
 } from "./auth";
@@ -157,6 +158,31 @@ describe("refreshSession", () => {
     persistSession(tokens(), true);
     mockFetch(jsonResponse({ error_code: "auth.refresh_token_expired" }, 401));
     await expect(refreshSession()).resolves.toBe(false);
+  });
+});
+
+describe("renewSession", () => {
+  beforeEach(() => {
+    signIn();
+    persistSession(tokens(), true);
+  });
+
+  it("says rejected when the instance refuses the refresh token", async () => {
+    mockFetch(jsonResponse({ error_code: "auth.refresh_token_expired" }, 401));
+    await expect(renewSession()).resolves.toBe("rejected");
+  });
+
+  it("says unreachable when the instance doesn't answer or fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    await expect(renewSession()).resolves.toBe("unreachable");
+
+    mockFetch(jsonResponse({ detail: "boom" }, 503));
+    await expect(renewSession()).resolves.toBe("unreachable");
+  });
+
+  it("says renewed on success", async () => {
+    mockFetch(jsonResponse(tokens({ auth_token: "access-2" })));
+    await expect(renewSession()).resolves.toBe("renewed");
   });
 });
 

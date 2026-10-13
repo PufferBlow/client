@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, createMemoryRouter, RouterProvider } from "react-router";
 import { render, renderHook, screen, waitFor } from "@testing-library/react";
 import { useSessionKeeper } from "../hooks/useSessionKeeper";
+import { getInstanceStatus, resetInstanceStatus } from "../features/instance/status";
 import { getAuthToken, persistSession } from "../services/auth";
 import { jsonResponse, routeFetch, signIn } from "../test/helpers";
 import { renderWithProviders } from "../test/render";
@@ -85,6 +86,7 @@ describe("useSessionKeeper", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    resetInstanceStatus();
   });
 
   const session = (expiresIn: number) => ({
@@ -132,7 +134,7 @@ describe("useSessionKeeper", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   });
 
-  it("sends the user to sign-in when the session can't be renewed", async () => {
+  it("marks the session ended when it can't be renewed (the dashboard then asks to sign in again)", async () => {
     persistSession(session(30_000), true);
     routeFetch({ "POST /api/v1/auth/refresh": jsonResponse({ error_code: "auth.refresh_token_expired" }, 401) });
     document.cookie = "auth_token=; Path=/; Max-Age=0"; // the cookie already expired
@@ -140,8 +142,19 @@ describe("useSessionKeeper", () => {
     renderHook(() => useSessionKeeper(), { wrapper });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await screen.findByTestId("login-page")).toBeInTheDocument();
-    expect(getAuthToken()).toBeNull();
+    await waitFor(() => expect(getInstanceStatus()).toBe("signed_out"));
+    expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+  });
+
+  it("does not end the session when the instance just isn't answering", async () => {
+    persistSession(session(30_000), true);
+    routeFetch({ "POST /api/v1/auth/refresh": () => Promise.reject(new TypeError("Failed to fetch")) });
+    document.cookie = "auth_token=; Path=/; Max-Age=0";
+
+    renderHook(() => useSessionKeeper(), { wrapper });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await waitFor(() => expect(getInstanceStatus()).toBe("unreachable"));
   });
 
   it("stops checking when unmounted", async () => {

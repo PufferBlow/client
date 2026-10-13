@@ -1,17 +1,16 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
-import { clearAuthToken, getAuthToken, msUntilAuthExpiry, refreshSession } from "../services/auth";
+import { getAuthToken, msUntilAuthExpiry, renewSession } from "../services/auth";
+import { setInstanceStatus } from "../features/instance/status";
 
 const CHECK_INTERVAL_MS = 30_000;
 const REFRESH_AHEAD_MS = 2 * 60_000;
 
 /**
- * Keeps the access token fresh while the app is open: renews it shortly before it expires,
- * and sends the user back to sign-in if the session can no longer be renewed.
+ * Keeps the access token fresh while the app is open: renews it shortly before it expires. When
+ * the instance refuses to renew it (and the old token is gone), the dashboard switches to its
+ * "session ended" screen; when the instance just doesn't answer, it tries again next check.
  */
 export function useSessionKeeper(): void {
-  const navigate = useNavigate();
-
   useEffect(() => {
     let cancelled = false;
 
@@ -20,11 +19,10 @@ export function useSessionKeeper(): void {
       const needsRefresh = !getAuthToken() || (remaining !== null && remaining < REFRESH_AHEAD_MS);
       if (!needsRefresh) return;
 
-      const renewed = await refreshSession();
-      if (!renewed && !cancelled && !getAuthToken()) {
-        clearAuthToken();
-        navigate("/login", { replace: true });
-      }
+      const outcome = await renewSession();
+      if (cancelled) return;
+      if (outcome === "rejected" && !getAuthToken()) setInstanceStatus("signed_out");
+      else if (outcome === "unreachable") setInstanceStatus("unreachable");
     };
 
     void check();
@@ -33,5 +31,5 @@ export function useSessionKeeper(): void {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [navigate]);
+  }, []);
 }

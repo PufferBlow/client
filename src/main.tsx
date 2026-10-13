@@ -1,19 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { router } from "./router";
+import { createAppQueryClient } from "./features/instance/queryClient";
 import "./styles/app.css";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+const queryClient = createAppQueryClient();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");

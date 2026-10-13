@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { getApiUrl, getStoredInstance } from "./instance";
 import type { InstanceConfig } from "./types";
 
@@ -115,22 +115,35 @@ export async function signup({ username, password, instance, remember }: Credent
   return startSession(tokens, remember);
 }
 
-/** Exchange the stored refresh token for a new pair. Returns false when it can't be refreshed. */
-export async function refreshSession(): Promise<boolean> {
+/**
+ * How a refresh went: `renewed`; `rejected` (no refresh token, or the instance refused it, so
+ * the user has to sign in again); or `unreachable` (the instance didn't answer, so the session
+ * may well still be good once it is back).
+ */
+export type RenewOutcome = "renewed" | "rejected" | "unreachable";
+
+/** Exchange the stored refresh token for a new pair, saying why when that fails. */
+export async function renewSession(): Promise<RenewOutcome> {
   const session = readSession();
   const instance = getStoredInstance();
-  if (!session || !instance) return false;
+  if (!session || !instance) return "rejected";
 
   try {
     const data = await api.post<AuthTokens>(`${getApiUrl(instance)}/api/v1/auth/refresh`, {
       json: { refresh_token: session.refreshToken },
     });
-    if (!data?.auth_token) return false;
+    if (!data?.auth_token) return "rejected";
     persistSession({ ...data, refresh_token: data.refresh_token ?? session.refreshToken }, session.remember);
-    return true;
-  } catch {
-    return false;
+    return "renewed";
+  } catch (error) {
+    const unanswered = error instanceof ApiError && (error.status === 0 || error.status >= 500);
+    return unanswered ? "unreachable" : "rejected";
   }
+}
+
+/** Exchange the stored refresh token for a new pair. Returns false when it can't be refreshed. */
+export async function refreshSession(): Promise<boolean> {
+  return (await renewSession()) === "renewed";
 }
 
 /** Revoke the refresh token server-side (best effort), then drop the local session. */
