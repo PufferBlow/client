@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
-import data from "@emoji-mart/data";
+// The Twitter set, not the package default: only the per-set files carry each emoji's x/y cell in
+// the sprite sheet. The default (native) set has none, so every emoji drew cell 0,0 — "#️⃣".
+import data from "@emoji-mart/data/sets/15/twitter.json";
 import { Picker } from "emoji-mart";
 import spriteSheet from "emoji-datasource-twitter/img/twitter/sheets-256/64.png";
 
@@ -15,20 +17,33 @@ export interface PickedEmoji {
  */
 const PICKER_CSS = `
   :host { height: 392px; width: 100%; display: flex; }
-  #root { --color-a: #efe6d4; --color-b: #7d7365; --color-c: #a99e8b; }
-  .search { padding: 10px 10px 2px; }
+  #root { --color-b: #a99e8b; --color-c: #7d7365; }
+
+  .spacer { height: 12px; }
   .search input[type="search"] {
-    background: #1a1612;
-    border: 1px solid rgba(239, 230, 212, 0.12);
+    background-color: #1a1612;
+    border: 1px solid rgba(239, 230, 212, 0.08);
     border-radius: 12px;
-    color: #efe6d4;
-    padding: 10px 2.2em;
+    padding: 9px 2em 9px 2.4em;
+    transition-property: border-color, box-shadow;
   }
-  .search input[type="search"]:focus { border-color: rgba(227, 174, 79, 0.55); box-shadow: 0 0 0 3px rgba(227, 174, 79, 0.12); }
-  .scroll { padding: 0 6px 4px; }
+  .search input[type="search"]:hover { border-color: rgba(239, 230, 212, 0.14); }
+  .search input[type="search"]:focus {
+    background-color: #1a1612;
+    border-color: rgba(227, 174, 79, 0.55);
+    box-shadow: 0 0 0 3px rgba(227, 174, 79, 0.12);
+  }
+  .search input[type="search"]::placeholder { color: #7d7365; opacity: 1; }
+  .search .loupe { left: 0.85em; color: #7d7365; }
+  .search .delete { color: #a99e8b; }
+  .skin-tone-button:hover, .skin-tone-button[aria-selected] { background-color: #2e2720; border-color: transparent; }
+  .menu { background-color: rgba(26, 22, 18, 0.96); border-color: rgba(239, 230, 212, 0.14); }
+  .option:hover { color: #1c1408; }
+
+  .scroll { padding-top: 4px; }
   .sticky {
-    padding: 10px 6px 6px;
-    background: rgba(35, 30, 25, 0.94);
+    padding: 10px 4px 6px;
+    background-color: rgba(35, 30, 25, 0.92);
     color: #7d7365;
     font-family: "Barlow Condensed", "Barlow", system-ui, sans-serif;
     font-size: 11.5px;
@@ -36,13 +51,26 @@ const PICKER_CSS = `
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
-  .category button .background { border-radius: 10px; background: #2e2720; }
-  #nav { padding: 8px; background: #1a1612; }
+  .category button .background { border-radius: 10px; background-color: #2e2720; }
+
+  /*
+   * The app sets scrollbar-color globally and it inherits into this shadow root; any non-auto
+   * value makes Chromium ignore emoji-mart's ::-webkit-scrollbar rules and draw the native
+   * scrollbar, arrows and all. Reset it so those rules (thin rounded thumb, no buttons) apply.
+   */
+  .scroll { scrollbar-color: auto; scrollbar-width: auto; }
+  .scroll:hover::-webkit-scrollbar-thumb { background-color: rgba(239, 230, 212, 0.1); }
+  .scroll::-webkit-scrollbar-thumb:hover { background-color: rgba(239, 230, 212, 0.18) !important; }
+  @supports not selector(::-webkit-scrollbar) {
+    .scroll { scrollbar-width: thin; scrollbar-color: rgba(239, 230, 212, 0.12) transparent; }
+  }
+
+  #nav { padding: 8px 12px 12px; background-color: #1a1612; border-top: 1px solid rgba(239, 230, 212, 0.08); }
+  #nav:before, #nav .bar { display: none; }
   #nav .flex { gap: 2px; }
-  #nav button { height: 32px; border-radius: 9px; }
-  #nav button:hover { background: #2e2720; color: #efe6d4; }
-  #nav button[aria-selected] { background: #e3ae4f; color: #1c1408; }
-  #nav .bar { display: none; }
+  #nav button { height: 32px; align-items: center; border-radius: 10px; }
+  #nav button:hover { background-color: #2e2720; color: #efe6d4; }
+  #nav button[aria-selected] { background-color: #e3ae4f; color: #1c1408; }
 `;
 
 /**
@@ -73,15 +101,17 @@ export default function EmojiPicker({ onSelect }: { onSelect: (emoji: PickedEmoj
       onEmojiSelect: (emoji: PickedEmoji) => onSelectRef.current(emoji),
     }) as unknown as HTMLElement;
 
-    // Match the Switchyard palette (emoji-mart reads these from the host element).
+    // Match the Switchyard palette. These are the theme's inputs: emoji-mart's [data-theme] rule
+    // redefines every --em-* variable from them on its own root, so setting --em-* here is ignored.
     const vars: Record<string, string> = {
-      "--em-rgb-accent": "227, 174, 79",
-      "--em-rgb-background": "35, 30, 25",
-      "--em-rgb-input": "26, 22, 18",
-      "--em-rgb-color": "239, 230, 212",
-      "--em-color-border": "rgba(239, 230, 212, 0.07)",
-      "--em-color-border-over": "rgba(239, 230, 212, 0.14)",
-      "--border-radius": "16px",
+      "--rgb-accent": "227, 174, 79",
+      "--rgb-background": "35, 30, 25",
+      "--rgb-input": "26, 22, 18",
+      "--rgb-color": "239, 230, 212",
+      "--color-border": "rgba(239, 230, 212, 0.08)",
+      "--color-border-over": "rgba(239, 230, 212, 0.14)",
+      // The popover around the picker draws the rounded border and clips to it.
+      "--border-radius": "0px",
       "--category-icon-size": "18px",
       "--font-size": "14px",
       "--font-family": '"Barlow", ui-sans-serif, system-ui, sans-serif',

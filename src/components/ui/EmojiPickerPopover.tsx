@@ -4,8 +4,9 @@ import { clampToViewport } from "./menuPosition";
 
 const EmojiPicker = lazy(() => import("./EmojiPicker"));
 
-// The picker is 8 columns of 38px plus padding and 392px tall; used to keep it on screen before it has rendered.
-const PICKER_SIZE = { width: 332, height: 392 };
+// The picker is 8 columns of 38px plus padding and scrollbar (332px) and 392px tall, inside a 1px border;
+// used to keep it on screen before it has rendered.
+const PICKER_SIZE = { width: 334, height: 394 };
 
 interface Props {
   x: number;
