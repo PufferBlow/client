@@ -9,6 +9,7 @@ import { useServerInfo } from "../../features/server/hooks";
 import { useMyProfile } from "../../features/users/hooks";
 import { useToast } from "../../hooks/useToast";
 import { copyToClipboard } from "../../lib/clipboard";
+import { recordReaction, useTopReactions } from "../../lib/reactionUsage";
 import { ContextMenu } from "../ui/ContextMenu";
 import { EmojiPickerPopover } from "../ui/EmojiPickerPopover";
 import { ErrorState } from "../ui/ErrorState";
@@ -67,10 +68,13 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const { reset: resetDelete } = remove;
   const handleEdit = useCallback((id: string, text: string) => editMessage({ id, text }), [editMessage]);
     const handleReaction = useCallback(
-    (id: string, emoji: string, present: boolean) =>
-      toggleReaction({ id, emoji, present }, { onError: (err) => showToast(classifyAuthError(err, "Couldn't update the reaction.").message, "error") }),
+    (id: string, emoji: string, present: boolean) => {
+      if (present) recordReaction(emoji);
+      toggleReaction({ id, emoji, present }, { onError: (err) => showToast(classifyAuthError(err, "Couldn't update the reaction.").message, "error") });
+    },
     [toggleReaction, showToast],
   );
+  const topReactions = useTopReactions(4);
   const handleOpenMenu = useCallback((id: string, point: MenuPoint) => setMenu({ id, ...point }), []);
   const handleOpenPicker = useCallback((id: string, point: MenuPoint) => setPicker({ id, ...point }), []);
   const handleEditingChange = useCallback((id: string, editing: boolean) => setEditingId(editing ? id : null), []);
@@ -223,7 +227,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
                     isGroupStart={startsGroup}
                     myUserId={me?.user_id}
                     onEdit={handleEdit}
-                    onDelete={handleRequestDelete}
+                    quickReaction={topReactions[0]}
                     onToggleReaction={handleReaction}
                     onOpenMenu={handleOpenMenu}
                     onOpenPicker={handleOpenPicker}
@@ -268,6 +272,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
               report.reset();
               setReportId(menuMessage.id);
             },
+            quickReactions: topReactions,
           })}
         />
       )}

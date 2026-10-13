@@ -5,8 +5,6 @@ import { canDeleteMessage, canEditMessage, canReportMessage } from "../../featur
 import type { Message } from "../../features/messages/types";
 import type { UserProfile } from "../../features/users/types";
 
-export const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉"];
-
 export interface MessageMenuActions {
   react: (emoji: string, present: boolean) => void;
   openPicker: () => void;
@@ -16,6 +14,8 @@ export interface MessageMenuActions {
   edit: () => void;
   requestDelete: () => void;
   report: () => void;
+  /** The quick reactions offered at the top (the viewer's most used). */
+  quickReactions: string[];
 }
 
 /**
@@ -31,7 +31,7 @@ export function messageMenuEntries(message: Message, viewer: UserProfile | undef
       kind: "choices",
       id: "react",
       label: "Add reaction",
-      choices: QUICK_REACTIONS.map((emoji) => ({
+      choices: actions.quickReactions.map((emoji) => ({
         id: emoji,
         label: `${mine(emoji) ? "Remove" : "Add"} ${emoji} reaction`,
         content: <Emoji char={emoji} size={22} />,

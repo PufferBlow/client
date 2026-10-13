@@ -215,14 +215,12 @@ describe("MessageItem", () => {
     expect(screen.getByText("2 KB")).toBeInTheDocument();
   });
 
-  it("offers edit and delete only on your own messages", () => {
+  it("offers edit only on your own messages", () => {
     const { rerender } = render(<MessageItem message={message({ authorId: "me" })} myUserId="me" {...handlers()} />);
     expect(screen.getByRole("button", { name: "Edit message" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete message" })).toBeInTheDocument();
 
     rerender(<MessageItem message={message()} myUserId="me" {...handlers()} />);
     expect(screen.queryByRole("button", { name: "Edit message" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete message" })).not.toBeInTheDocument();
   });
 
   it("does not treat anything as 'own' before the profile has loaded", () => {
@@ -230,13 +228,9 @@ describe("MessageItem", () => {
     expect(screen.queryByRole("button", { name: "Delete message" })).not.toBeInTheDocument();
   });
 
-  it("deletes through the callback", async () => {
-    const h = handlers();
-    const user = userEvent.setup();
-    render(<MessageItem message={message({ authorId: "me" })} myUserId="me" {...h} />);
-
-    await user.click(screen.getByRole("button", { name: "Delete message" }));
-    expect(h.onDelete).toHaveBeenCalledWith("m1");
+  it("keeps delete off the toolbar (it is in the menu, behind a confirmation)", () => {
+    render(<MessageItem message={message({ authorId: "me" })} myUserId="me" {...handlers()} />);
+    expect(screen.queryByRole("button", { name: "Delete message" })).not.toBeInTheDocument();
   });
 
   it("edits inline and saves with Enter", async () => {
@@ -348,13 +342,16 @@ describe("MessageItem", () => {
     expect(h.onToggleReaction).toHaveBeenLastCalledWith("m1", "🎉", true); // add
   });
 
-  it("adds a quick reaction from the toolbar", async () => {
+  it("offers one quick reaction on the toolbar: the viewer's most used", async () => {
     const h = handlers();
     const user = userEvent.setup();
-    render(<MessageItem message={message()} myUserId="me" {...h} />);
+    const { rerender } = render(<MessageItem message={message()} myUserId="me" {...h} />);
+    expect(screen.getByRole("button", { name: "Add 👍 reaction" })).toBeInTheDocument(); // the default
+    expect(screen.queryByRole("button", { name: "Add ❤️ reaction" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Add ❤️ reaction" }));
-    expect(h.onToggleReaction).toHaveBeenCalledWith("m1", "❤️", true);
+    rerender(<MessageItem message={message()} myUserId="me" quickReaction="🔥" {...h} />);
+    await user.click(screen.getByRole("button", { name: "Add 🔥 reaction" }));
+    expect(h.onToggleReaction).toHaveBeenCalledWith("m1", "🔥", true);
   });
 
   it("renders image attachments inline from the instance and other files as links", () => {

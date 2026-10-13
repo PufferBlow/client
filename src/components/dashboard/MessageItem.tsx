@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { FileText, Image as ImageIcon, MoreHorizontal, Music, Pencil, Reply, SmilePlus, Trash2 } from "lucide-react";
+import { FileText, Image as ImageIcon, MoreHorizontal, Music, Pencil, Reply, SmilePlus } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
@@ -20,7 +20,7 @@ import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { Avatar } from "./Avatar";
-import { QUICK_REACTIONS } from "./messageMenu";
+import { DEFAULT_REACTIONS } from "../../lib/reactionUsage";
 
 export interface MenuPoint {
   x: number;
@@ -33,7 +33,8 @@ interface MessageItemProps {
   isGroupStart?: boolean;
   myUserId: string | undefined;
   onEdit: (id: string, text: string) => Promise<unknown>;
-  onDelete: (id: string) => void;
+  /** The one emoji offered straight on the hover toolbar (the viewer's most used). */
+  quickReaction?: string;
   onToggleReaction: (id: string, emoji: string, present: boolean) => void;
   /** Opens the message menu at a point. Right-click, the context-menu key and the "More" button all land here. */
   onOpenMenu?: (id: string, point: MenuPoint) => void;
@@ -219,7 +220,7 @@ export const MessageItem = memo(function MessageItem({
   isGroupStart = true,
   myUserId,
   onEdit,
-  onDelete,
+  quickReaction = DEFAULT_REACTIONS[0] ?? "👍",
   onToggleReaction,
   onOpenMenu,
   onOpenPicker,
@@ -365,14 +366,19 @@ export const MessageItem = memo(function MessageItem({
 
       {!editing && !isLocal && (
         <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-lg border border-border-secondary bg-surface-secondary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
-          {QUICK_REACTIONS.map((emoji) => {
-            const mine = message.reactions.some((r) => r.emoji === emoji && myUserId !== undefined && r.userIds.includes(myUserId));
+          {(() => {
+            const mine = message.reactions.some((r) => r.emoji === quickReaction && myUserId !== undefined && r.userIds.includes(myUserId));
             return (
-              <button key={emoji} type="button" className={toolButton} aria-label={`${mine ? "Remove" : "Add"} ${emoji} reaction`} onClick={() => onToggleReaction(message.id, emoji, !mine)}>
-                <Emoji char={emoji} size={18} />
+              <button
+                type="button"
+                className={toolButton}
+                aria-label={`${mine ? "Remove" : "Add"} ${quickReaction} reaction`}
+                onClick={() => onToggleReaction(message.id, quickReaction, !mine)}
+              >
+                <Emoji char={quickReaction} size={18} />
               </button>
             );
-          })}
+          })()}
           {onOpenPicker && (
             <button
               type="button"
@@ -392,15 +398,11 @@ export const MessageItem = memo(function MessageItem({
               <Reply size={14} />
             </button>
           )}
+          {/* Delete is deliberately not here: it lives in the menu, behind a confirmation. */}
           {isOwn && (
-            <>
-              <button type="button" className={toolButton} aria-label="Edit message" onClick={() => setEditing(true)}>
-                <Pencil size={14} />
-              </button>
-              <button type="button" className={`${toolButton} hover:text-error`} aria-label="Delete message" onClick={() => onDelete(message.id)}>
-                <Trash2 size={14} />
-              </button>
-            </>
+            <button type="button" className={toolButton} aria-label="Edit message" onClick={() => setEditing(true)}>
+              <Pencil size={14} />
+            </button>
           )}
           {onOpenMenu && (
             <button
