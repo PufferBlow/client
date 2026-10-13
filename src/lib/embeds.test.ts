@@ -13,7 +13,13 @@ describe("resolveEmbed", () => {
       `https://youtube.com/embed/${id}`,
       `https://music.youtube.com/watch?v=${id}`,
     ]) {
-      expect(src(url)).toBe(`https://www.youtube-nocookie.com/embed/${id}?autoplay=1`);
+      expect(src(url)).toBe(`https://www.youtube-nocookie.com/embed/${id}`);
+    }
+  });
+
+  it("never asks a player to autoplay", () => {
+    for (const url of ["https://youtu.be/dQw4w9WgXcQ", "https://vimeo.com/1", "https://soundcloud.com/a/b", "https://streamable.com/x", "https://www.loom.com/share/0123456789abcdef0123456789abcdef"]) {
+      expect(src(url)).not.toMatch(/auto_?play=(1|true)/);
     }
   });
 
@@ -24,7 +30,7 @@ describe("resolveEmbed", () => {
 
   it("embeds YouTube playlists", () => {
     expect(src("https://www.youtube.com/playlist?list=PL123abc")).toBe(
-      "https://www.youtube-nocookie.com/embed/videoseries?autoplay=1&list=PL123abc",
+      "https://www.youtube-nocookie.com/embed/videoseries?list=PL123abc",
     );
   });
 
@@ -34,7 +40,7 @@ describe("resolveEmbed", () => {
   });
 
   it("embeds Vimeo, including unlisted hashes", () => {
-    expect(src("https://vimeo.com/76979871")).toBe("https://player.vimeo.com/video/76979871?autoplay=1&dnt=1");
+    expect(src("https://vimeo.com/76979871")).toBe("https://player.vimeo.com/video/76979871?dnt=1");
     expect(src("https://vimeo.com/76979871/abc123")).toContain("h=abc123");
   });
 
@@ -48,12 +54,12 @@ describe("resolveEmbed", () => {
 
   it("embeds SoundCloud through its widget", () => {
     expect(src("https://soundcloud.com/artist/track-name")).toBe(
-      "https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack-name&auto_play=true&visual=false&color=%23e3ae4f",
+      "https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack-name&visual=false&color=%23e3ae4f",
     );
   });
 
   it("embeds Twitch with the page as parent, and not at all without one", () => {
-    expect(src("https://www.twitch.tv/videos/123456")).toBe("https://player.twitch.tv/?video=123456&parent=app.example&autoplay=true");
+    expect(src("https://www.twitch.tv/videos/123456")).toBe("https://player.twitch.tv/?video=123456&parent=app.example&autoplay=false");
     expect(src("https://clips.twitch.tv/FunnyClipSlug")).toContain("clip=FunnyClipSlug&parent=app.example");
     expect(src("https://www.twitch.tv/somechannel")).toContain("channel=somechannel");
     expect(resolveEmbed("https://www.twitch.tv/somechannel", "")).toBeNull();
@@ -63,7 +69,7 @@ describe("resolveEmbed", () => {
     expect(src("https://x.com/user/status/1234567890")).toContain("platform.twitter.com/embed/Tweet.html?id=1234567890");
     expect(src("https://twitter.com/user/status/1234567890")).toContain("id=1234567890");
     expect(src("https://www.tiktok.com/@user/video/7000000000000000000")).toBe("https://www.tiktok.com/embed/v2/7000000000000000000");
-    expect(src("https://streamable.com/abc12")).toBe("https://streamable.com/e/abc12?autoplay=1");
+    expect(src("https://streamable.com/abc12")).toBe("https://streamable.com/e/abc12");
     expect(src("https://www.loom.com/share/0123456789abcdef0123456789abcdef")).toContain("loom.com/embed/0123456789abcdef");
     expect(src("https://codepen.io/someone/pen/AbCdEf")).toContain("codepen.io/someone/embed/AbCdEf");
   });

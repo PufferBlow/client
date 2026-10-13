@@ -2,7 +2,8 @@
  * Turns a link posted in a message into something playable inline: an iframe player for popular
  * sites, or the file itself for direct image/video/audio links. Only URLs we recognise become
  * iframes, and the iframe `src` is always built here from the parsed ID, never taken from the
- * message, so a message can't point an iframe anywhere else.
+ * message, so a message can't point an iframe anywhere else. Players load with the message, so
+ * none of them autoplay (Twitch, which does by default, is told not to).
  */
 
 export interface IframeEmbed {
@@ -26,6 +27,9 @@ export interface MediaEmbed {
 }
 
 export type Embed = IframeEmbed | MediaEmbed;
+
+/** `base?query`, or just `base` when there are no parameters. */
+const withQuery = (base: string, params: URLSearchParams) => (params.size ? `${base}?${params}` : base);
 
 const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i;
 const VIDEO = /\.(mp4|webm|mov|m4v|ogv)$/i;
@@ -66,12 +70,12 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
       vertical = path[0] === "shorts";
     }
     const list = url.searchParams.get("list");
-    const params = new URLSearchParams({ autoplay: "1" });
+    const params = new URLSearchParams();
     const start = parseTimestamp(url.searchParams.get("t") ?? url.searchParams.get("start"));
     if (start) params.set("start", String(start));
     if (id && /^[\w-]{11}$/.test(id)) {
       if (list && /^[\w-]+$/.test(list)) params.set("list", list);
-      return iframe("YouTube", "#ff0033", `https://www.youtube-nocookie.com/embed/${id}?${params}`, vertical ? { aspect: 9 / 16, maxWidth: 315 } : { aspect: 16 / 9 });
+      return iframe("YouTube", "#ff0033", withQuery(`https://www.youtube-nocookie.com/embed/${id}`, params), vertical ? { aspect: 9 / 16, maxWidth: 315 } : { aspect: 16 / 9 });
     }
     if (path[0] === "playlist" && list && /^[\w-]+$/.test(list)) {
       params.set("list", list);
@@ -82,7 +86,7 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
 
   // Vimeo: vimeo.com/ID, or vimeo.com/ID/HASH for unlisted videos.
   if (host === "vimeo.com" && path[0] && /^\d+$/.test(path[0])) {
-    const params = new URLSearchParams({ autoplay: "1", dnt: "1" });
+    const params = new URLSearchParams({ dnt: "1" });
     if (path[1] && /^[\da-f]+$/i.test(path[1])) params.set("h", path[1]);
     return iframe("Vimeo", "#1ab7ea", `https://player.vimeo.com/video/${path[0]}?${params}`, { aspect: 16 / 9 });
   }
@@ -102,7 +106,7 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
   if (host === "soundcloud.com" && path.length >= 2 && path.every((p) => /^[\w-]+$/.test(p))) {
     const clean = `https://soundcloud.com/${path.join("/")}`;
     const set = path[1] === "sets";
-    const params = new URLSearchParams({ url: clean, auto_play: "true", visual: "false", color: "#e3ae4f" });
+    const params = new URLSearchParams({ url: clean, visual: "false", color: "#e3ae4f" });
     return iframe("SoundCloud", "#ff5500", `https://w.soundcloud.com/player/?${params}`, { height: set ? 352 : 166 });
   }
 
@@ -113,13 +117,13 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
     if (host === "clips.twitch.tv") clip = path[0];
     else if (path[1] === "clip") clip = path[2];
     if (clip && /^[\w-]+$/.test(clip)) {
-      return iframe("Twitch", "#9146ff", `https://clips.twitch.tv/embed?clip=${clip}&parent=${parent}&autoplay=true`, { aspect: 16 / 9 });
+      return iframe("Twitch", "#9146ff", `https://clips.twitch.tv/embed?clip=${clip}&parent=${parent}&autoplay=false`, { aspect: 16 / 9 });
     }
     if (path[0] === "videos" && path[1] && /^\d+$/.test(path[1])) {
-      return iframe("Twitch", "#9146ff", `https://player.twitch.tv/?video=${path[1]}&parent=${parent}&autoplay=true`, { aspect: 16 / 9 });
+      return iframe("Twitch", "#9146ff", `https://player.twitch.tv/?video=${path[1]}&parent=${parent}&autoplay=false`, { aspect: 16 / 9 });
     }
     if (host === "twitch.tv" && path.length === 1 && path[0] && /^\w{3,25}$/.test(path[0])) {
-      return iframe("Twitch", "#9146ff", `https://player.twitch.tv/?channel=${path[0]}&parent=${parent}&autoplay=true`, { aspect: 16 / 9 });
+      return iframe("Twitch", "#9146ff", `https://player.twitch.tv/?channel=${path[0]}&parent=${parent}&autoplay=false`, { aspect: 16 / 9 });
     }
     return null;
   }
@@ -136,10 +140,10 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
 
   // Streamable, Loom, CodePen.
   if (host === "streamable.com" && path.length === 1 && path[0] && /^\w+$/.test(path[0])) {
-    return iframe("Streamable", "#0f90fa", `https://streamable.com/e/${path[0]}?autoplay=1`, { aspect: 16 / 9 });
+    return iframe("Streamable", "#0f90fa", `https://streamable.com/e/${path[0]}`, { aspect: 16 / 9 });
   }
   if (host === "loom.com" && path[0] === "share" && path[1] && /^[\da-f]{32}$/i.test(path[1])) {
-    return iframe("Loom", "#625df5", `https://www.loom.com/embed/${path[1]}?autoplay=1`, { aspect: 16 / 9 });
+    return iframe("Loom", "#625df5", `https://www.loom.com/embed/${path[1]}`, { aspect: 16 / 9 });
   }
   if (host === "codepen.io" && path[1] === "pen" && path[0] && path[2] && /^[\w-]+$/.test(path[0]) && /^\w+$/.test(path[2])) {
     return iframe("CodePen", "#c9c9c9", `https://codepen.io/${path[0]}/embed/${path[2]}?default-tab=result&theme-id=dark`, { height: 400 });

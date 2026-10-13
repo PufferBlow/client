@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { LinkEmbed } from "./Embed";
 
 describe("LinkEmbed", () => {
-  it("only loads the player once it is clicked", async () => {
-    const user = userEvent.setup();
+  it("shows the player straight away, loaded lazily, with nothing around it", () => {
     const { container } = render(<LinkEmbed url="https://youtu.be/dQw4w9WgXcQ" />);
-    expect(container.querySelector("iframe")).toBeNull();
-    expect(screen.getByText("Click to load YouTube")).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument(); // the message already shows the link
-
-    await user.click(screen.getByRole("button", { name: "Load YouTube player" }));
     const frame = container.querySelector("iframe");
-    expect(frame).toHaveAttribute("src", "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1");
+    expect(frame).toHaveAttribute("src", "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ");
+    expect(frame).toHaveAttribute("loading", "lazy");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument(); // the message already shows the link
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(frame?.getAttribute("sandbox")).not.toContain("allow-top-navigation");
   });
 
