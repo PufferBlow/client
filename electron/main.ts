@@ -5,8 +5,12 @@ declare const __dirname: string;
 
 let mainWindow: BrowserWindow | null = null;
 
+/** The Pufferblow mark, for the window and taskbar. Dev runs from `public/`; a build has it in `dist/`. */
+const windowIcon = join(__dirname, process.env.VITE_DEV_SERVER_URL ? "../public/icon.png" : "../dist/icon.png");
+
 function createWindow() {
   mainWindow = new BrowserWindow({
+    icon: windowIcon,
     width: 1280,
     height: 800,
     minWidth: 900,
