@@ -9,3 +9,7 @@ coverage
 
 # React Router type generation
 .react-router/
+
+# Local build output and Vite cache
+build/
+.vite-cache/
