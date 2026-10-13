@@ -217,6 +217,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
       <Composer
         channelName={channel.channel_name}
         maxLength={server?.max_message_length ?? undefined}
+        maxAttachmentMB={server?.max_total_attachment_size ?? undefined}
         onSend={send}
       />
 

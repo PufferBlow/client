@@ -8,13 +8,14 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { FileText, MoreHorizontal, Pencil, SmilePlus, Trash2 } from "lucide-react";
+import { FileText, MoreHorizontal, Music, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
 import { isEmojiOnly } from "../../lib/emoji";
 import { embeddableUrls, parseMarkdown } from "../../lib/markdown";
 import { handleFormatShortcut } from "../../lib/textEditing";
+import { displayName, fileKind, formatBytes, isSpoilerName } from "../../lib/files";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
@@ -55,25 +56,64 @@ const formatTime = (iso: string) => {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
-function AttachmentView({ url, filename, type }: Message["attachments"][number]) {
+function AttachmentView({ url, filename, type, size }: Message["attachments"][number]) {
   const href = resolveAssetUrl(url);
-  if (type.startsWith("image/") && href) {
-    return (
-      <a href={href} target="_blank" rel="noreferrer">
-        <img src={href} alt={filename} loading="lazy" className="mt-2 max-h-72 max-w-full rounded-xl border border-border-secondary" />
+  const spoiler = isSpoilerName(filename);
+  const name = displayName(filename);
+  const [revealed, setRevealed] = useState(false);
+  const kind = fileKind(type);
+
+  let body;
+  if (kind === "image" && href) {
+    body = (
+      <a href={href} target="_blank" rel="noreferrer" className="block">
+        <img src={href} alt={name} loading="lazy" className="block max-h-72 max-w-full rounded-xl border border-border-secondary" />
+      </a>
+    );
+  } else if (kind === "video" && href) {
+    body = <video src={href} controls preload="metadata" aria-label={name} className="block max-h-80 max-w-[min(100%,480px)] rounded-xl border border-border-secondary bg-black" />;
+  } else if (kind === "audio" && href) {
+    body = (
+      <div className="flex w-[min(100%,400px)] flex-col gap-2 rounded-xl border border-border-secondary bg-surface-secondary p-3">
+        <a href={href} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 text-[13px] text-text-secondary hover:text-text">
+          <Music size={15} aria-hidden="true" className="shrink-0" />
+          <span className="truncate">{name}</span>
+          {size !== undefined && <span className="shrink-0 text-[11.5px] text-text-muted">{formatBytes(size)}</span>}
+        </a>
+        <audio src={href} controls preload="none" className="w-full" />
+      </div>
+    );
+  } else {
+    body = (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border-secondary bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary hover:text-text"
+      >
+        <FileText size={15} aria-hidden="true" className="shrink-0" />
+        <span className="truncate">{name}</span>
+        {size !== undefined && <span className="shrink-0 text-[11.5px] text-text-muted">{formatBytes(size)}</span>}
       </a>
     );
   }
+
+  if (!spoiler || revealed) return <div className="mt-2 max-w-full">{body}</div>;
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-border-secondary bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary hover:text-text"
-    >
-      <FileText size={15} aria-hidden="true" />
-      <span className="truncate">{filename}</span>
-    </a>
+    <div className="relative mt-2 inline-block max-w-full overflow-hidden rounded-xl align-top">
+      {/* Blurred and unreachable until revealed. */}
+      <div aria-hidden="true" inert className="pointer-events-none select-none blur-2xl">
+        {body}
+      </div>
+      <button
+        type="button"
+        aria-label={`Spoiler attachment ${name}, select to reveal`}
+        onClick={() => setRevealed(true)}
+        className="absolute inset-0 grid place-items-center bg-black/35 transition-colors hover:bg-black/25"
+      >
+        <span className="rounded-full bg-black/75 px-3 py-1 text-[11.5px] font-bold tracking-[0.12em] text-white">SPOILER</span>
+      </button>
+    </div>
   );
 }
 

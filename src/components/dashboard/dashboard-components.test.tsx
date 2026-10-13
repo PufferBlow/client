@@ -75,6 +75,42 @@ describe("Composer", () => {
     expect(onSend).toHaveBeenCalledWith({ text: "", files: [b] });
   });
 
+  it("sends a file marked as spoiler under a SPOILER_ name", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const { container } = render(<Composer channelName="general" onSend={onSend} />);
+
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(["x"], "plot.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: "Mark plot.png as spoiler" }));
+    expect(screen.getByText("SPOILER")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    const sent = (onSend.mock.calls[0]?.[0] as { files: File[] }).files;
+    expect(sent.map((f) => [f.name, f.type])).toEqual([["SPOILER_plot.png", "image/png"]]);
+  });
+
+  it("attaches pasted files instead of pasting them as text", async () => {
+    const user = userEvent.setup();
+    render(<Composer channelName="general" onSend={vi.fn()} />);
+    const shot = new File(["png"], "image.png", { type: "image/png" });
+
+    fireEvent.paste(screen.getByLabelText("Message #general"), { clipboardData: { files: [shot], getData: () => "" } });
+    expect(await screen.findByText("image.png")).toBeInTheDocument();
+    expect(screen.getByText("3 B")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove image.png" }));
+    expect(screen.queryByText("image.png")).not.toBeInTheDocument();
+  });
+
+  it("will not send attachments over the server's size limit", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Composer channelName="general" maxAttachmentMB={1} onSend={vi.fn()} />);
+    const big = new File([new Uint8Array(1024 * 1024 + 1)], "big.bin");
+
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, big);
+    expect(screen.getByRole("alert")).toHaveTextContent("this server allows 1 MB per message");
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  });
+
   it("keeps the draft and shows the reason when sending fails", async () => {
     const onSend = vi.fn().mockRejectedValue(new ApiError(403, "auth.privilege_denied", "You can't send messages here."));
     const user = userEvent.setup();
@@ -156,6 +192,27 @@ describe("MessageItem", () => {
     render(<MessageItem message={message()} myUserId="me" {...handlers()} />);
     expect(screen.getByText("grace")).toBeInTheDocument();
     expect(screen.getByText("hello there")).toBeInTheDocument();
+  });
+
+  it("blurs a spoiler attachment until it is revealed", async () => {
+    const user = userEvent.setup();
+    const attachments = [{ url: "https://cdn.example/a.png", filename: "SPOILER_ending.png", type: "image/png" }];
+    const { container } = render(<MessageItem message={message({ text: "", attachments })} myUserId="me" {...handlers()} />);
+
+    expect(screen.queryByRole("img", { name: "ending.png" })).not.toBeInTheDocument(); // hidden from assistive tech too
+    await user.click(screen.getByRole("button", { name: "Spoiler attachment ending.png, select to reveal" }));
+    expect(screen.getByRole("img", { name: "ending.png" })).toBeInTheDocument();
+    expect(container.querySelector(".blur-2xl")).toBeNull();
+  });
+
+  it("plays video attachments inline and shows file sizes", () => {
+    const attachments = [
+      { url: "https://cdn.example/v.mp4", filename: "clip.mp4", type: "video/mp4" },
+      { url: "https://cdn.example/r.pdf", filename: "report.pdf", type: "application/pdf", size: 2048 },
+    ];
+    const { container } = render(<MessageItem message={message({ text: "", attachments })} myUserId="me" {...handlers()} />);
+    expect(container.querySelector("video")).toHaveAttribute("src", "https://cdn.example/v.mp4");
+    expect(screen.getByText("2 KB")).toBeInTheDocument();
   });
 
   it("offers edit and delete only on your own messages", () => {
