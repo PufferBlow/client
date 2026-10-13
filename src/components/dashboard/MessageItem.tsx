@@ -1,9 +1,10 @@
 import { memo, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { FileText, MoreHorizontal, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
+import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
 import { isEmojiOnly } from "../../lib/emoji";
-import { parseMarkdown } from "../../lib/markdown";
+import { embeddableUrls, parseMarkdown } from "../../lib/markdown";
 import type { Message } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { Avatar } from "./Avatar";
@@ -121,6 +122,7 @@ export const MessageItem = memo(function MessageItem({
   // Not on the server yet (sending) or never got there (failed): nothing can act on it but retry/discard.
   const isLocal = message.status !== undefined;
   const blocks = useMemo(() => parseMarkdown(message.text), [message.text]);
+  const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
   const editedMarker = !isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>;
 
   const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
@@ -196,6 +198,11 @@ export const MessageItem = memo(function MessageItem({
         {message.attachments.map((attachment) => (
           <AttachmentView key={attachment.url} {...attachment} />
         ))}
+
+        {!editing &&
+          embedUrls.map((url) => (
+            <LinkEmbed key={url} url={url} />
+          ))}
 
         {message.status === "failed" && (
           <p role="alert" className="m-0 mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px] text-error">
