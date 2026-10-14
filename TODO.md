@@ -143,8 +143,10 @@ repo's tests parse every one. What is left:
 - [ ] **Attachments over the socket.** Files still use the HTTP `send_message` upload path.
 - [ ] **Per-IP and global connection limits**, in addition to the 10 sockets per user.
 - [ ] **Run command handlers off the event loop** once the database layer is thread safe.
-- [ ] **Audit `with self.database_session() as session:` blocks.** The context manager does not commit.
-  Seven writers lacked a commit and are fixed; check new ones in review.
+- [x] **Audit `with self.database_session() as session:` blocks.** The context manager does not commit.
+  Ten writers lacked a commit and are fixed (the last three: marking one notification read, saving a
+  channel's notification preference, the appearance backfill). `tests/test_41_session_blocks_commit.py`
+  now fails on any block that writes without committing, so review doesn't have to catch them.
 - [x] **Retire the legacy frames and HTTP routes.** `/ws` requires `protocol=1`; `/ws/channels/{id}`, the
   polling loop and legacy frames are gone, and so are the HTTP edit, delete and reaction routes for channel
   messages (`message.edit`, `message.delete`, `reaction.add` and `reaction.remove` replace them). pypufferblow
