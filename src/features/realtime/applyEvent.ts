@@ -7,6 +7,7 @@ import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
 import type { Friend } from "../friends/types";
 import { messageKeys, patchMessage, removeMessage, setReactions, upsertMessage, type MessageCache } from "../messages/cache";
+import { clearTyping, noteTyping } from "../typing/store";
 import { userKeys } from "../users/hooks";
 import type { UserProfile } from "../users/types";
 import type { RealtimeEvent } from "./events";
@@ -27,6 +28,8 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
     case "message": {
       const { message } = event;
       updateMessages(message.channelId, (cache) => upsertMessage(cache, message));
+      clearTyping(message.channelId, message.authorId); // they finished
+
 
       const myId = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id;
 
@@ -85,6 +88,12 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
     case "notification":
       void queryClient.invalidateQueries({ queryKey: channelKeys.unread });
       void queryClient.invalidateQueries({ queryKey: notificationKeys.list });
+      return;
+
+    case "typing":
+      // Your own other tabs and devices announce you too; you don't need to see that.
+      if (event.userId === queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id) return;
+      noteTyping(event.scope, event.userId, event.expiresInMs);
       return;
   }
 }

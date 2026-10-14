@@ -96,7 +96,7 @@ describe("sending a reply", () => {
     const client = new QueryClient();
     client.setQueryData(userKeys.profile, { user_id: "u-ada", username: "ada" });
     client.setQueryData<MessageCache>(messageKeys.channel("c1"), { pageParams: [null], pages: [{ messages: [], nextCursor: null }] });
-    const commands = { createMessage: vi.fn(() => new Promise(() => undefined)), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn() };
+    const commands = { createMessage: vi.fn(() => new Promise(() => undefined)), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn(), startTyping: vi.fn() };
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>
         <MessageCommandsContext.Provider value={commands as unknown as MessageCommands}>{children}</MessageCommandsContext.Provider>

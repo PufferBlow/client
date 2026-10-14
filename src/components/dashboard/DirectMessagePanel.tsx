@@ -10,6 +10,8 @@ import {
 } from "../../features/dms/hooks";
 import { toReplyPreview } from "../../features/messages/replies";
 import { useServerInfo } from "../../features/server/hooks";
+import { useTypingUsers } from "../../features/typing/store";
+import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile } from "../../features/users/hooks";
 import { useToast } from "../../hooks/useToast";
 import { ToastRegion } from "../ui/Toast";
@@ -45,6 +47,9 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const { toast, show: showToast } = useToast();
 
   const name = conversation?.peerUsername ?? peer.split("@")[0] ?? peer;
+  // In a 1:1 conversation the only other person who can be typing is the peer.
+  const typingNames = useTypingUsers(conversationId).length > 0 ? [name] : [];
+  const typing = useTypingNotifier({ conversationId });
   const [reply, setReply] = useState<{ conversationId: string; id: string } | null>(null);
   const replyTarget = reply?.conversationId === conversationId ? messages.find((m) => m.id === reply.id) : undefined;
   if (reply && !replyTarget) setReply(null);
@@ -58,6 +63,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const loadOlder = useCallback(() => void fetchNextPage(), [fetchNextPage]);
 
   const handleSend = async (input: { text: string; files: File[] }) => {
+    typing.reset();
     const replyTo = replyTarget ? toReplyPreview(replyTarget) : undefined;
     setReply(null);
     await send({ ...input, replyTo });
@@ -119,6 +125,8 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         replyingTo={replyTarget ? { id: replyTarget.id, authorName: replyTarget.authorName } : undefined}
         onCancelReply={cancelReply}
         onSend={handleSend}
+        onTyping={typing.notify}
+        typingNames={typingNames}
       />
 
       <ToastRegion toast={toast} />

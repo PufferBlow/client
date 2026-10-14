@@ -16,7 +16,12 @@ export type RealtimeEvent =
    * was created or shared with this connection, which the server has already subscribed.
    */
   | { kind: "channel"; channelId: string; change: "updated" | "deleted" | "revoked" | "created" | "granted" }
-  | { kind: "notification" };
+  | { kind: "notification" }
+  /** Someone started typing; `scope` is the channel id, or the conversation id for a DM. */
+  | { kind: "typing"; scope: string; userId: string; expiresInMs: number };
+
+/** Used when a server leaves `expires_in_ms` out; matches the server's own default. */
+const DEFAULT_TYPING_MS = 8_000;
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
 
@@ -62,6 +67,14 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
 
     case "notification.created":
       return { kind: "notification" };
+
+    case "typing.started": {
+      const scope = str(data.conversation_id) || channelId;
+      const userId = str(data.user_id);
+      if (!scope || !userId) return null;
+      const expires = typeof data.expires_in_ms === "number" && data.expires_in_ms > 0 ? data.expires_in_ms : DEFAULT_TYPING_MS;
+      return { kind: "typing", scope, userId, expiresInMs: Math.min(expires, 30_000) };
+    }
 
     // Direct messages: the conversation id stands in for the channel id.
     case "dm.message.created": {

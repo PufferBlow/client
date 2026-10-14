@@ -11,7 +11,12 @@ export interface MessageCommands {
   editMessage(channelId: string, messageId: string, content: string): Promise<EditResult>;
   deleteMessage(channelId: string, messageId: string): Promise<void>;
   setReaction(channelId: string, messageId: string, emoji: string, present: boolean): Promise<Reaction[]>;
+  /** Tell the others in a channel or DM that you are typing. Resolves false when nobody was told. */
+  startTyping(target: TypingTarget): Promise<boolean>;
 }
+
+/** Where someone is typing: a channel, or a direct-message conversation. */
+export type TypingTarget = { channelId: string; conversationId?: undefined } | { conversationId: string; channelId?: undefined };
 
 export interface EditResult {
   text: string;
@@ -70,6 +75,14 @@ export function messageCommands(client: CommandClient): MessageCommands {
         emoji,
       });
       return reactionsFromView(result.reactions);
+    },
+
+    async startTyping(target) {
+      const result = await client.send(
+        "typing.start",
+        target.conversationId ? { conversation_id: target.conversationId } : { channel_id: target.channelId },
+      );
+      return result.delivered !== false;
     },
   };
 }

@@ -150,7 +150,23 @@ button[aria-disabled="true"],
   background: var(--color-border);
 }
 
+/* The dots in "Ada is typing…". */
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.typing-dot {
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .typing-dot,
   .animate-pulse,
   .animate-bounce,
   .animate-fade-in,

@@ -7,6 +7,8 @@ import type { Message } from "../../features/messages/types";
 import { toReplyPreview } from "../../features/messages/replies";
 import { useDeleteMessage, useEditMessage, useMessages, useReportMessage, useSendMessage, useToggleReaction } from "../../features/messages/hooks";
 import { useServerInfo } from "../../features/server/hooks";
+import { useTypingUsers } from "../../features/typing/store";
+import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { canMentionEveryone } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
@@ -41,6 +43,13 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     [users, me?.username],
   );
   const { data: server } = useServerInfo();
+
+  const typingIds = useTypingUsers(channelId);
+  const typingNames = useMemo(
+    () => typingIds.map((id) => users?.find((u) => u.user_id === id)?.username ?? "Someone"),
+    [typingIds, users],
+  );
+  const typing = useTypingNotifier({ channelId });
 
   const { send, retry, discard } = useSendMessage(channelId);
   const edit = useEditMessage(channelId);
@@ -80,6 +89,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
 
   /** Sends, as a reply when one is being written; the composer only clears once this resolves. */
   const handleSend = async (input: { text: string; files: File[] }) => {
+    typing.reset();
     await send({ ...input, replyTo: replyTarget ? toReplyPreview(replyTarget) : undefined });
     setReply(null);
   };
@@ -165,6 +175,8 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         replyingTo={replyTarget ? { id: replyTarget.id, authorName: replyTarget.authorName } : undefined}
         onCancelReply={cancelReply}
         onSend={handleSend}
+        onTyping={typing.notify}
+        typingNames={typingNames}
       />
 
       {reportTarget && (

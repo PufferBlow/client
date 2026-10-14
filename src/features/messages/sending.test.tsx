@@ -44,7 +44,7 @@ describe("sending over the protocol", () => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(userKeys.profile, profile);
     client.setQueryData<MessageCache>(messageKeys.channel("c1"), { pageParams: [null], pages: [{ messages: [], nextCursor: null }] });
-    commands = { createMessage: vi.fn(), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn() };
+    commands = { createMessage: vi.fn(), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn(), startTyping: vi.fn() };
   });
 
   it("shows the message as pending at once, then replaces it with the server's copy on the ack", async () => {
@@ -186,7 +186,7 @@ describe("edit, delete and react over the protocol", () => {
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     client.setQueryData<MessageCache>(messageKeys.channel("c1"), { pageParams: [null], pages: [{ messages: [server()], nextCursor: null }] });
-    commands = { createMessage: vi.fn(), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn() };
+    commands = { createMessage: vi.fn(), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn(), startTyping: vi.fn() };
   });
 
   it("edits through message.edit and patches the cache", async () => {

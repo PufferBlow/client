@@ -8,6 +8,7 @@ import { applyEdit, fits, handleFormatShortcut } from "../../lib/textEditing";
 import { asSpoiler, fileKind, formatBytes } from "../../lib/files";
 import { findMentionQuery, insertMention, matchMentionables, type Mentionable } from "../../lib/mentions";
 import { Avatar } from "./Avatar";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ComposerProps {
   channelName: string;
@@ -23,6 +24,10 @@ interface ComposerProps {
   /** People (and `@everyone`, if the viewer may use it) offered when typing `@`. Omit for no suggestions. */
   mentionables?: Mentionable[];
   onSend: (input: { text: string; files: File[] }) => Promise<unknown>;
+  /** Called as the user types, so the others can be told (the caller throttles). */
+  onTyping?: () => void;
+  /** Names of the people typing here, shown under the field. */
+  typingNames?: readonly string[];
 }
 
 /** How close to the length limit the remaining-characters count appears. */
@@ -46,7 +51,18 @@ const releasePreview = (pending: PendingFile) => {
   if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
 };
 
-export function Composer({ channelName, target = `#${channelName}`, maxLength, maxAttachmentMB, replyingTo, onCancelReply, mentionables, onSend }: ComposerProps) {
+export function Composer({
+  channelName,
+  target = `#${channelName}`,
+  maxLength,
+  maxAttachmentMB,
+  replyingTo,
+  onCancelReply,
+  mentionables,
+  onSend,
+  onTyping,
+  typingNames = [],
+}: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -343,6 +359,7 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
             onChange={(e) => {
               setText(e.target.value);
               setCaret(e.target.selectionStart);
+              if (e.target.value.trim()) onTyping?.();
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={handleKeyDown}
@@ -396,6 +413,10 @@ export function Composer({ channelName, target = `#${channelName}`, maxLength, m
           </button>
         </div>
       </form>
+      {/* Lives in the space under the field, so it never moves the layout. */}
+      <div className="absolute left-2 right-2 top-full h-3.5">
+        <TypingIndicator names={typingNames} />
+      </div>
       {picker && <EmojiPickerPopover x={picker.x} y={picker.y} onSelect={insertEmoji} onClose={() => setPicker(null)} />}
       {dragging &&
         createPortal(
