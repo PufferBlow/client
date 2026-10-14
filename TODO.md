@@ -18,9 +18,16 @@ Bugs and known limits for `client-new`. Items marked **backend** need a change i
 - [ ] **backend — password change never checks the old password.** `PUT /users/profile` requires
   `old_password` but only the new one is used. The settings form collects it, but the server does
   not enforce it.
-- [ ] **Session storage.** The refresh token lives in `localStorage` / `sessionStorage` and the
-  access token is a JS-readable cookie, so any XSS can read both. Consider Electron
-  `safeStorage` (desktop) or `HttpOnly` cookies issued by the backend.
+- [x] **Session storage (desktop).** The desktop app hands the refresh token to the main process
+  at sign-in (`electron/sessionVault.ts`): encrypted with the OS keychain (`safeStorage`) when
+  "stay signed in" is on, memory only when off. The main process refreshes and revokes itself and
+  returns only access tokens, so page script can't read the long-lived credential.
+- [ ] **Session storage (web, and desktop without a keychain).** The refresh token is still in
+  `localStorage` / `sessionStorage` and the access token is a JS-readable cookie, so XSS can read
+  both. Fixing it needs the backend to issue the refresh token as an `HttpOnly; Secure;
+  SameSite=Strict` cookie on its own origin and accept it on `/auth/refresh`, which only works when
+  the web client is served from the instance's origin (cross-site, browsers drop such cookies).
+  **backend**
 - [ ] **backend — tokens in URLs.** The websocket takes `?auth_token=` and most routes take it in
   the query string, so tokens appear in logs. Move to an `Authorization` header (the server ignores
   it today).
@@ -38,14 +45,15 @@ Open:
 
 - [ ] **Login redirect drops the `#fragment`.** Route loaders only see the request URL, which never
   includes a fragment. Harmless today (no route uses hashes); covered by a test in `router.test.tsx`.
-- [ ] **Deleted messages only disappear for other people on refetch.** The backend broadcasts no
-  delete event, so the client can't react live. **backend**
-- [ ] **New channels need a reconnect.** The backend computes a socket's channel access once at
-  connect time, so channels created or shared afterwards don't push messages until the socket
-  reconnects. **backend**
-- [ ] **Slow pongs.** The server services client frames about every 10 s, so pings can lag. The
-  client waits 25 s for any traffic before reconnecting (`PONG_TIMEOUT_MS`); revisit if the
-  server loop changes. **backend**
+- [x] **Deleted messages only disappeared for other people on refetch.** Deletes now go through
+  `message.delete` and publish `message.deleted` (DMs: `dm.message.deleted`); the client removes
+  the row live.
+- [x] **New channels needed a reconnect.** The backend now subscribes open sockets when a channel
+  is created, made public or shared with them (`channel.created`, `access: "granted"`), and
+  unsubscribes them on removal; the client refreshes its channel list. People added to a private
+  channel also receive its events now (the protocol used to admit only `view_private_channels`).
+- [x] **Slow pongs.** The protocol session answers a ping as soon as it reads it, so the client
+  now drops a link 10 s after an unanswered ping (`PONG_TIMEOUT_MS`) instead of up to a minute.
 - [ ] Message history is capped by `MAX_OFFSET_PAGINATION_ROWS` for the first page mode, and the
   first page has no cursor, so the client derives one from the oldest message. **backend**
 
@@ -53,7 +61,10 @@ Open:
 
 - [ ] **One server.** A Pufferblow "server" is the instance you signed in to. Joining other
   instances needs a separate account on each; the rail shows only the home instance.
-- [ ] **No typing indicators, replies, or embeds.** The backend has no events or fields for them.
+- [x] **Typing indicators, replies and embeds.** Typing: `typing.start` / `typing.started` in
+  channels and DMs (DM typing reaches a local peer who has written in the conversation; not
+  federated). Replies: `reply_to_message_id` with a preview. Embeds: client-side iframes for
+  popular sites and direct media.
 - [ ] **No direct messages.** `conversation_id` exists on messages but there are no DM routes, so
   the friends view has no message button.
 - [ ] **Member list is the whole instance.** There is no per-channel members endpoint.
@@ -120,8 +131,9 @@ repo's tests parse every one. What is left:
 - [ ] **Persist per-channel sequence numbers.** Sequence is in memory and resets with the process `epoch`;
   clients resync on an epoch change. A persisted sequence (or an outbox) would close the gap between
   commit and publish after a crash.
-- [ ] **Publish `channel.updated` for role/privilege changes** and call `revalidate_subscriptions` from
-  those routes. Today it only runs on channel update and delete.
+- [ ] **Publish `channel.updated` for role/privilege changes** and call `revalidate_subscriptions` and
+  `grant_subscriptions` from those routes. Today they run on channel create, update, delete and
+  member add/remove only, so gaining or losing `view_private_channels` takes effect on reconnect.
 - [x] **Close the legacy private-channel leak.** Closed by removing the legacy `/ws` loop, the per-channel
   socket and `broadcast_to_eligible_users`; the v1 path checks `view_private_channels`.
 - [ ] **Bots**: reactions (needs a schema change like `sender_bot_id`), creating and revoking bots (owner
