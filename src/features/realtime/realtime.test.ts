@@ -293,7 +293,9 @@ describe("RealtimeClient", () => {
     first.open();
 
     await vi.advanceTimersByTimeAsync(30_000); // ping sent, no reply
-    await vi.advanceTimersByTimeAsync(30_000); // 30s > 25s pong timeout
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(first.readyState).toBe(1);
+    await vi.advanceTimersByTimeAsync(1); // 10 s without an answer
     expect(first.readyState).toBe(3);
 
     await vi.advanceTimersByTimeAsync(1_000);
@@ -308,9 +310,10 @@ describe("RealtimeClient", () => {
     const socket = latest();
     socket.open();
 
-    await vi.advanceTimersByTimeAsync(30_000);
-    socket.receive({ type: "pong" });
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(30_000); // ping sent
+    await vi.advanceTimersByTimeAsync(5_000);
+    socket.receive({ type: "pong" }); // answered inside the 10 s deadline
+    await vi.advanceTimersByTimeAsync(10_000); // past where the deadline would have been
 
     expect(socket.readyState).toBe(1);
     client.stop();

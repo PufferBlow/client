@@ -20,8 +20,8 @@ export interface RealtimeOptions {
 }
 
 const PING_INTERVAL_MS = 30_000;
-// The server only services client frames about every 10s, so a pong can lag; wait well past that.
-const PONG_TIMEOUT_MS = 25_000;
+// The server answers a ping as soon as it reads it; allow for a slow network, not a slow server.
+const PONG_TIMEOUT_MS = 10_000;
 const BASE_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 30_000;
 
@@ -34,10 +34,10 @@ export class RealtimeClient {
   private socket: WebSocket | null = null;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private attempt = 0;
   private hasConnected = false;
   private stopped = true;
-  private awaitingPongSince: number | null = null;
 
   constructor(private readonly options: RealtimeOptions) {}
 
@@ -115,7 +115,7 @@ export class RealtimeClient {
     };
 
     socket.onmessage = (message: MessageEvent) => {
-      this.awaitingPongSince = null; // any traffic proves the link is alive
+      this.clearPongTimer(); // any traffic proves the link is alive
       const frame = parseServerFrame(message.data);
       if (!frame) log.warn("dropped an undecodable frame");
       else if (frame.type !== "pong") {
@@ -143,14 +143,20 @@ export class RealtimeClient {
       const socket = this.socket;
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
-      if (this.awaitingPongSince !== null && Date.now() - this.awaitingPongSince > PONG_TIMEOUT_MS) {
+      socket.send(JSON.stringify({ type: "ping" }));
+      // Only the first unanswered ping starts the clock; traffic of any kind stops it.
+      this.pongTimer ??= setTimeout(() => {
+        this.pongTimer = null;
+        if (this.socket !== socket) return;
         log.warn(`no answer to a ping for ${PONG_TIMEOUT_MS}ms, dropping the link`);
         socket.close(); // dead link: let onclose reconnect
-        return;
-      }
-      this.awaitingPongSince ??= Date.now();
-      socket.send(JSON.stringify({ type: "ping" }));
+      }, PONG_TIMEOUT_MS);
     }, PING_INTERVAL_MS);
+  }
+
+  private clearPongTimer(): void {
+    if (this.pongTimer) clearTimeout(this.pongTimer);
+    this.pongTimer = null;
   }
 
   private scheduleReconnect(): void {
@@ -166,6 +172,6 @@ export class RealtimeClient {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.heartbeat = null;
     this.retryTimer = null;
-    this.awaitingPongSince = null;
+    this.clearPongTimer();
   }
 }
