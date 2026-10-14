@@ -3,7 +3,7 @@ import { createLogger } from "../lib/logger";
 import { getApiUrl, getStoredInstance } from "./instance";
 import type { InstanceConfig } from "./types";
 
-/** Flat body returned by `GET /users/signin`, `POST /users/signup` and `POST /auth/refresh`. */
+/** Flat body returned by `POST /users/signin`, `POST /users/signup` and `POST /auth/refresh`. */
 export interface AuthTokens {
   auth_token: string;
   refresh_token: string;
@@ -159,9 +159,17 @@ async function startSession(tokens: AuthTokens | null, remember: boolean, instan
 
 export async function login({ username, password, instance, remember }: Credentials): Promise<AuthTokens> {
   log.info(`signing in as ${username} on ${instance.origin}`);
-  const tokens = await api.get<AuthTokens>(`${getApiUrl(instance)}/api/v1/users/signin`, {
-    query: { username, password },
-  });
+  const url = `${getApiUrl(instance)}/api/v1/users/signin`;
+  let tokens: AuthTokens;
+  try {
+    // In the body, never the URL: query strings end up in access logs, proxies and history.
+    tokens = await api.post<AuthTokens>(url, { json: { username, password } });
+  } catch (error) {
+    // An instance from before POST sign-in existed only knows the query form.
+    if (!(error instanceof ApiError && error.status === 405)) throw error;
+    log.warn("this instance only accepts sign-in in the URL; update it to keep passwords out of its logs");
+    tokens = await api.get<AuthTokens>(url, { query: { username, password } });
+  }
   log.info(`signed in as ${username}`);
   return startSession(tokens, remember, instance);
 }

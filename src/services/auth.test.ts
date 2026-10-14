@@ -96,16 +96,31 @@ describe("msUntilAuthExpiry", () => {
 });
 
 describe("login and signup", () => {
-  it("signs in with a GET and query credentials, then persists the session", async () => {
+  it("signs in with a POST and the credentials in the body, never the URL, then persists the session", async () => {
     const fetchMock = mockFetch(jsonResponse(tokens()));
     await login({ username: "ada", password: "p&ss word", instance, remember: true });
 
     const url = calledUrl(fetchMock);
     expect(url.pathname).toBe("/api/v1/users/signin");
-    expect(url.searchParams.get("username")).toBe("ada");
-    expect(url.searchParams.get("password")).toBe("p&ss word");
-    expect(fetchMock.mock.calls[0]![1]!.method).toBe("GET");
+    expect(url.search).toBe("");
+    expect(fetchMock.mock.calls[0]![1]!.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ username: "ada", password: "p&ss word" });
     expect(getAuthToken()).toBe("access-1");
+  });
+
+  it("falls back to the query form on an instance that predates POST sign-in", async () => {
+    const fetchMock = mockFetch(jsonResponse({ detail: "Method Not Allowed" }, 405), jsonResponse(tokens()));
+    await login({ username: "ada", password: "pw", instance, remember: true });
+
+    expect(fetchMock.mock.calls[1]![1]!.method).toBe("GET");
+    expect(calledUrl(fetchMock, 1).searchParams.get("username")).toBe("ada");
+    expect(getAuthToken()).toBe("access-1");
+  });
+
+  it("does not retry in the URL after a refusal", async () => {
+    const fetchMock = mockFetch(jsonResponse({ error_code: "auth.invalid_credentials", message: "no" }, 401));
+    await expect(login({ username: "ada", password: "pw", instance, remember: true })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("signs up with a JSON POST", async () => {

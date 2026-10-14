@@ -75,8 +75,8 @@ describe("LoginPage", () => {
     const url = calledUrl(fetchMock);
     expect(url.origin).toBe("http://localhost:7575");
     expect(url.pathname).toBe("/api/v1/users/signin");
-    expect(url.searchParams.get("username")).toBe("ada");
-    expect(url.searchParams.get("password")).toBe("correct horse");
+    expect(url.search).toBe("");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ username: "ada", password: "correct horse" });
     expect(getStoredInstance()?.origin).toBe("http://localhost:7575");
     expect(getAuthToken()).toBe("access-1");
     expect(localStorage.getItem("pb_session")).not.toBeNull();
