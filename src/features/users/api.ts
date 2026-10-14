@@ -48,5 +48,5 @@ export async function resetSessionTokens(password: string, remember: boolean): P
     json: { auth_token: token, password },
   });
   if (!tokens?.auth_token) throw new Error("The instance returned an unexpected response.");
-  persistSession(tokens, remember);
+  await persistSession(tokens, remember);
 }

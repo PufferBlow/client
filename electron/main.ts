@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, net, safeStorage, shell } from "electron";
+import { readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
+import { SessionVault } from "./sessionVault";
 
 declare const __dirname: string;
 
@@ -52,8 +54,38 @@ function createWindow() {
   }
 }
 
+/** The refresh token lives here, encrypted with the OS keychain; see `sessionVault.ts`. */
+function createSessionVault(): SessionVault {
+  const file = join(app.getPath("userData"), "session.bin");
+  return new SessionVault({
+    encryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plain) => safeStorage.encryptString(plain),
+    decrypt: (sealed) => safeStorage.decryptString(Buffer.from(sealed)),
+    read: () => {
+      try {
+        return readFileSync(file);
+      } catch {
+        return null;
+      }
+    },
+    write: (sealed) => writeFileSync(file, sealed, { mode: 0o600 }),
+    remove: () => rmSync(file, { force: true }),
+    // Chromium's network stack: honours the system proxy and certificate store, like the page does.
+    fetch: (url, init) => net.fetch(url, init),
+  });
+}
+
 app.whenReady().then(() => {
   createWindow();
+
+  const vault = createSessionVault();
+  ipcMain.handle("session:available", () => vault.available());
+  ipcMain.handle("session:store", (_event, apiUrl: unknown, refreshToken: unknown, remember: unknown) =>
+    vault.store(apiUrl, refreshToken, remember),
+  );
+  ipcMain.handle("session:refresh", () => vault.refresh());
+  ipcMain.handle("session:revoke", () => vault.revoke());
+  ipcMain.handle("session:clear", () => vault.clear());
 
   ipcMain.on("minimize", () => mainWindow?.minimize());
   ipcMain.on("maximize", () => {

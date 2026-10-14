@@ -3,18 +3,6 @@ import { useMatch } from "react-router";
 import { Minus, Square, X, Copy } from "lucide-react";
 import { InboxButton } from "../inbox/Inbox";
 
-declare global {
-  interface Window {
-    electron?: {
-      platform: string;
-      minimize: () => void;
-      maximize: () => void;
-      close: () => void;
-      onMaximizeChange: (callback: (isMaximized: boolean) => void) => void;
-    };
-  }
-}
-
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = typeof window !== "undefined" && !!window.electron;

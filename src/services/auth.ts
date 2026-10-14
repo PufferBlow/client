@@ -25,7 +25,11 @@ const AUTH_TOKEN_KEY = "auth_token";
 const SESSION_KEY = "pb_session";
 
 interface StoredSession {
-  refreshToken: string;
+  /**
+   * Null when the desktop app's main process holds it (`electron/sessionVault.ts`): the page then
+   * never sees the long-lived credential, only the access tokens the main process hands back.
+   */
+  refreshToken: string | null;
   authExpiresAt: string | null;
   refreshExpiresAt: string | null;
   remember: boolean;
@@ -68,11 +72,40 @@ function parseDate(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** The desktop app's refresh-token vault, when running there. */
+const vault = () => (typeof window === "undefined" ? undefined : window.electron?.session);
+
+function storedApiUrl(): string | null {
+  const instance = getStoredInstance();
+  return instance ? getApiUrl(instance) : null;
+}
+
 /**
  * Persist a session. With "remember me" the cookie lives as long as the refresh
  * token; without it, only as long as the (short-lived) access token.
+ *
+ * In the desktop app the refresh token goes to the main process, encrypted with the OS
+ * keychain, and is not kept here; a browser, or a system without a keychain, keeps it in web
+ * storage. `apiUrl` is the instance the refresh token belongs to (the stored instance by default).
  */
-export function persistSession(tokens: AuthTokens, remember: boolean): void {
+export async function persistSession(tokens: AuthTokens, remember: boolean, apiUrl = storedApiUrl()): Promise<void> {
+  const bridge = vault();
+  if (bridge && apiUrl && tokens.refresh_token) {
+    const epoch = sessionEpoch;
+    const stored = await bridge.store(apiUrl, tokens.refresh_token, remember).catch(() => false);
+    if (epoch !== sessionEpoch) return; // signed out meanwhile (which also cleared the vault)
+    if (stored) {
+      writeSession(tokens, remember, null);
+      return;
+    }
+    log.warn("no OS keychain for the session, keeping it in web storage");
+  }
+  writeSession(tokens, remember, tokens.refresh_token);
+}
+
+type AccessTokens = Pick<AuthTokens, "auth_token" | "auth_token_expire_time" | "refresh_token_expire_time">;
+
+function writeSession(tokens: AccessTokens, remember: boolean, refreshToken: string | null): void {
   const authExpiry = parseDate(tokens.auth_token_expire_time);
   const refreshExpiry = parseDate(tokens.refresh_token_expire_time);
   const cookieExpiry = remember ? (refreshExpiry ?? authExpiry) : authExpiry;
@@ -84,13 +117,13 @@ export function persistSession(tokens: AuthTokens, remember: boolean): void {
   localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_KEY);
   const session: StoredSession = {
-    refreshToken: tokens.refresh_token,
+    refreshToken,
     authExpiresAt: authExpiry?.toISOString() ?? null,
     refreshExpiresAt: refreshExpiry?.toISOString() ?? null,
     remember,
   };
   (remember ? localStorage : sessionStorage).setItem(SESSION_KEY, JSON.stringify(session));
-  log.debug(`session saved (${remember ? "remembered" : "this tab only"})`, {
+  log.debug(`session saved (${remember ? "remembered" : "this tab only"}${refreshToken === null ? ", refresh token in the OS keychain" : ""})`, {
     accessExpires: session.authExpiresAt,
     refreshExpires: session.refreshExpiresAt,
   });
@@ -110,16 +143,17 @@ export function clearAuthToken() {
   if (location.protocol === "https:") document.cookie = `${expired}; Secure`;
   localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_KEY);
+  void vault()?.clear().catch(() => undefined);
   if (getAuthToken()) log.warn("the auth cookie is still there after clearing it");
   else log.info("session cleared");
 }
 
-function startSession(tokens: AuthTokens | null, remember: boolean): AuthTokens {
+async function startSession(tokens: AuthTokens | null, remember: boolean, instance: InstanceConfig): Promise<AuthTokens> {
   if (!tokens?.auth_token) {
     log.error("the instance answered a sign-in without a token");
     throw new Error("The instance returned an unexpected response.");
   }
-  persistSession(tokens, remember);
+  await persistSession(tokens, remember, getApiUrl(instance));
   return tokens;
 }
 
@@ -129,7 +163,7 @@ export async function login({ username, password, instance, remember }: Credenti
     query: { username, password },
   });
   log.info(`signed in as ${username}`);
-  return startSession(tokens, remember);
+  return startSession(tokens, remember, instance);
 }
 
 export async function signup({ username, password, instance, remember }: Credentials): Promise<AuthTokens> {
@@ -137,7 +171,7 @@ export async function signup({ username, password, instance, remember }: Credent
   const tokens = await api.post<AuthTokens>(`${getApiUrl(instance)}/api/v1/users/signup`, {
     json: { username, password },
   });
-  return startSession(tokens, remember);
+  return startSession(tokens, remember, instance);
 }
 
 /**
@@ -158,6 +192,8 @@ export async function renewSession(): Promise<RenewOutcome> {
   log.debug("renewing the session");
   const epoch = sessionEpoch;
 
+  if (session.refreshToken === null) return renewThroughVault(session, epoch);
+
   try {
     const data = await api.post<AuthTokens>(`${getApiUrl(instance)}/api/v1/auth/refresh`, {
       json: { refresh_token: session.refreshToken },
@@ -170,7 +206,7 @@ export async function renewSession(): Promise<RenewOutcome> {
       log.warn("session renewal answered without a token");
       return "rejected";
     }
-    persistSession({ ...data, refresh_token: data.refresh_token ?? session.refreshToken }, session.remember);
+    await persistSession({ ...data, refresh_token: data.refresh_token ?? session.refreshToken }, session.remember, getApiUrl(instance));
     log.info("session renewed");
     return "renewed";
   } catch (error) {
@@ -178,6 +214,24 @@ export async function renewSession(): Promise<RenewOutcome> {
     log.warn(`session renewal ${unanswered ? "got no answer from the instance" : "was refused"}`, error);
     return unanswered ? "unreachable" : "rejected";
   }
+}
+
+/** Renewal for a desktop session: the main process holds the refresh token and does the call. */
+async function renewThroughVault(session: StoredSession, epoch: number): Promise<RenewOutcome> {
+  const bridge = vault();
+  if (!bridge) return "rejected";
+  const result = await bridge.refresh().catch(() => ({ outcome: "unreachable" as const }));
+  if (epoch !== sessionEpoch) {
+    log.info("dropping a session renewal that finished after sign-out");
+    return "rejected";
+  }
+  if (result.outcome !== "renewed") {
+    log.warn(`session renewal ${result.outcome === "unreachable" ? "got no answer from the instance" : "was refused"}`);
+    return result.outcome;
+  }
+  writeSession(result.tokens, session.remember, null);
+  log.info("session renewed");
+  return "renewed";
 }
 
 /** Exchange the stored refresh token for a new pair. Returns false when it can't be refreshed. */
@@ -193,8 +247,11 @@ export async function logout(): Promise<void> {
   log.info("signing out");
   const session = readSession();
   const instance = getStoredInstance();
+  // A desktop session is revoked by the main process, which holds its refresh token. Queued first,
+  // so it reads the token before clearAuthToken() below asks the main process to forget it.
+  if (session?.refreshToken === null) void vault()?.revoke().catch(() => undefined);
   clearAuthToken();
-  if (session && instance) {
+  if (session?.refreshToken && instance) {
     try {
       await api.post(`${getApiUrl(instance)}/api/v1/auth/revoke`, { json: { refresh_token: session.refreshToken } });
     } catch (error) {

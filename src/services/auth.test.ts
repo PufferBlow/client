@@ -261,3 +261,88 @@ describe("signing out for real", () => {
     expect(localStorage.getItem("pb_session")).toBeNull();
   });
 });
+
+describe("in the desktop app", () => {
+  const install = (overrides: Partial<NonNullable<Window["electron"]>["session"]> = {}) => {
+    const session = {
+      available: vi.fn().mockResolvedValue(true),
+      store: vi.fn().mockResolvedValue(true),
+      refresh: vi.fn(),
+      revoke: vi.fn().mockResolvedValue(undefined),
+      clear: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    };
+    window.electron = { session } as unknown as Window["electron"];
+    return session;
+  };
+  afterEach(() => {
+    delete window.electron;
+  });
+
+  it("hands the refresh token to the main process and keeps no copy", async () => {
+    const vault = install();
+    mockFetch(jsonResponse(tokens()));
+    await login({ username: "ada", password: "pw", instance, remember: true });
+
+    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-1", true);
+    expect(getAuthToken()).toBe("access-1");
+    const stored = JSON.parse(localStorage.getItem("pb_session")!);
+    expect(stored).toMatchObject({ refreshToken: null, remember: true });
+    expect(JSON.stringify(stored)).not.toContain("refresh-1");
+  });
+
+  it("keeps the token itself when the system has no keychain", async () => {
+    install({ store: vi.fn().mockResolvedValue(false) });
+    await persistSession(tokens(), true, "http://localhost:7575");
+    expect(JSON.parse(localStorage.getItem("pb_session")!).refreshToken).toBe("refresh-1");
+  });
+
+  it("renews through the main process, which never returns the refresh token", async () => {
+    signIn();
+    const vault = install({
+      refresh: vi.fn().mockResolvedValue({ outcome: "renewed", tokens: { auth_token: "access-2", auth_token_expire_time: "2099-01-01T00:00:00Z" } }),
+    });
+    await persistSession(tokens(), true);
+    const fetchMock = mockFetch(jsonResponse({}));
+
+    await expect(renewSession()).resolves.toBe("renewed");
+
+    expect(vault.refresh).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getAuthToken()).toBe("access-2");
+    expect(JSON.parse(localStorage.getItem("pb_session")!).refreshToken).toBeNull();
+  });
+
+  it("passes on why a renewal through the main process failed", async () => {
+    signIn();
+    install({ refresh: vi.fn().mockResolvedValue({ outcome: "unreachable" }) });
+    await persistSession(tokens(), true);
+    await expect(renewSession()).resolves.toBe("unreachable");
+  });
+
+  it("moves an older session's token into the main process on its next renewal", async () => {
+    signIn();
+    persistSession(tokens(), true); // stored in web storage, as before the vault existed
+    const vault = install();
+    mockFetch(jsonResponse(tokens({ auth_token: "access-2", refresh_token: "refresh-2" })));
+
+    await expect(renewSession()).resolves.toBe("renewed");
+
+    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-2", true);
+    expect(JSON.parse(localStorage.getItem("pb_session")!).refreshToken).toBeNull();
+  });
+
+  it("signs out through the main process and forgets the session there", async () => {
+    signIn();
+    const vault = install();
+    await persistSession(tokens(), true);
+    const fetchMock = mockFetch(jsonResponse({}));
+
+    await logout();
+
+    expect(vault.revoke).toHaveBeenCalledOnce();
+    expect(vault.clear).toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getAuthToken()).toBeNull();
+  });
+});
