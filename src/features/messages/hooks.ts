@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadMessages, reportMessage, searchMessages, sendMessage } from "./api";
+import { ApiError } from "../../services/api";
 import { CommandError } from "../realtime/commands";
 import { useMessageCommands } from "../realtime/commandsContext";
 import { userKeys } from "../users/hooks";
@@ -17,6 +18,7 @@ import {
   upsertMessage,
   type MessageCache,
 } from "./cache";
+import { dropQueuedReactions, heldFiles, holdFiles, isLocalId, queueReaction, releaseFiles, takeQueuedReactions, toggleReaction } from "./pending";
 import type { Message, ReplyPreview } from "./types";
 
 export function useMessages(channelId: string) {
@@ -61,6 +63,10 @@ function describeFailure(error: unknown): { message: string; retryable: boolean 
   if (error instanceof CommandError) {
     return { message: FAILURE_COPY[error.code] ?? error.message, retryable: error.retryable };
   }
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 409 && error.status !== 429) {
+    // The instance refused it (too large, not allowed...): say why; retrying won't help.
+    return { message: error.message || "The message couldn't be sent.", retryable: false };
+  }
   return { message: "The message couldn't be sent.", retryable: true };
 }
 
@@ -72,45 +78,74 @@ export interface SendInput {
 }
 
 /**
- * Sends over the socket with an optimistic message. The composer clears at once; the row shows as
- * pending, becomes the server's message on the ack, or turns into a failed row with Retry. A retry
- * reuses the original nonce, so a message the server did commit is never posted twice.
+ * Sends with an optimistic message. The composer clears at once; the row shows as pending (with
+ * on-device previews of any files), becomes the server's message once it has it, or turns into a
+ * failed row with Retry. Every send carries a nonce that a retry reuses, so a message the server
+ * did commit is never posted twice.
  *
- * Attachments cannot travel over the socket, so those go through the HTTP upload route.
+ * Text goes over the socket; attachments cannot, so a message with files goes through the HTTP
+ * upload route (which honours the nonce too).
  */
 export function useSendMessage(channelId: string) {
   const queryClient = useQueryClient();
   const commands = useMessageCommands();
   const update = useMessageCache(channelId);
 
-  const deliver = useCallback(
-    async (localId: string, nonce: string, text: string, replyToMessageId?: string) => {
-      if (!commands) return;
-      try {
-        const message = await commands.createMessage({ channelId, content: text, nonce, replyToMessageId });
-        update((cache) => settlePending(cache, localId, message));
-      } catch (error) {
-        update((cache) => failPending(cache, localId, describeFailure(error)));
+  const post = useCallback(
+    (input: { text: string; files: File[]; nonce: string; replyToMessageId?: string }) =>
+      input.files.length || !commands
+        ? sendMessage(channelId, input)
+        : commands.createMessage({ channelId, content: input.text, nonce: input.nonce, replyToMessageId: input.replyToMessageId }),
+    [commands, channelId],
+  );
+
+  // Reactions added while the message was pending, sent now that it has its real id. The row keeps
+  // showing them meanwhile; if one can't be added, the row falls back to what the server has.
+  const flushReactions = useCallback(
+    async (localId: string, message: Message) => {
+      const emojis = takeQueuedReactions(localId);
+      let reactions = message.reactions;
+      for (const emoji of emojis) {
+        try {
+          reactions = await requireCommands(commands).setReaction(channelId, message.id, emoji, true);
+        } catch {
+          // The message itself is sent; a lost reaction is not worth an error.
+        }
       }
+      if (emojis.length) update((cache) => setReactions(cache, message.id, reactions));
     },
     [commands, channelId, update],
   );
 
+  const deliver = useCallback(
+    async (localId: string, nonce: string, text: string, replyToMessageId?: string) => {
+      try {
+        const message = await post({ text, files: heldFiles(localId), nonce, replyToMessageId });
+        const cache = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
+        const optimistic = flattenMessages(cache).find((m) => m.id === localId)?.reactions ?? [];
+        releaseFiles(localId);
+        update((c) => settlePending(c, localId, optimistic.length ? { ...message, reactions: optimistic } : message));
+        void flushReactions(localId, message);
+      } catch (error) {
+        update((cache) => failPending(cache, localId, describeFailure(error)));
+      }
+    },
+    [post, queryClient, channelId, update, flushReactions],
+  );
+
   const send = useCallback(
-    async ({ text, files, replyTo }: SendInput): Promise<void> => {
+    async ({ text, files = [], replyTo }: SendInput): Promise<void> => {
       const cached = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
       const replyToMessageId = replyTo?.id;
+      const nonce = crypto.randomUUID();
 
-      // Files, no connection layer, or nothing on screen to show a pending row in: send and wait.
-      if (files?.length || !commands || !cached) {
-        const message = files?.length || !commands
-          ? await sendMessage(channelId, { text, files, replyToMessageId })
-          : await commands.createMessage({ channelId, content: text, nonce: crypto.randomUUID(), replyToMessageId });
+      // Nothing on screen to show a pending row in: send and wait.
+      if (!cached) {
+        const message = await post({ text, files, nonce, replyToMessageId });
         update((cache) => upsertMessage(cache, message));
         return;
       }
 
-      const nonce = crypto.randomUUID();
       const localId = `local_${nonce}`;
       const me = queryClient.getQueryData<UserProfile>(userKeys.profile);
       const pending: Message = {
@@ -121,7 +156,7 @@ export function useSendMessage(channelId: string) {
         authorAvatarUrl: me?.avatar_url ?? null,
         text,
         sentAt: new Date().toISOString(),
-        attachments: [],
+        attachments: files.length ? holdFiles(localId, files) : [],
         reactions: [],
         editCount: 0,
         editedAt: null,
@@ -132,7 +167,7 @@ export function useSendMessage(channelId: string) {
       update((cache) => upsertMessage(cache, pending));
       void deliver(localId, nonce, text, replyToMessageId);
     },
-    [queryClient, commands, channelId, update, deliver],
+    [queryClient, channelId, update, post, deliver],
   );
 
   const retry = useCallback(
@@ -146,7 +181,14 @@ export function useSendMessage(channelId: string) {
     [queryClient, channelId, update, deliver],
   );
 
-  const discard = useCallback((localId: string) => update((cache) => removeMessage(cache, localId)), [update]);
+  const discard = useCallback(
+    (localId: string) => {
+      releaseFiles(localId);
+      dropQueuedReactions(localId);
+      update((cache) => removeMessage(cache, localId));
+    },
+    [update],
+  );
 
   return { send, retry, discard };
 }
@@ -178,11 +220,20 @@ export function useDeleteMessage(channelId: string) {
 }
 
 export function useToggleReaction(channelId: string) {
+  const queryClient = useQueryClient();
   const update = useMessageCache(channelId);
   const commands = useMessageCommands();
   return useMutation({
-    mutationFn: ({ id, emoji, present }: { id: string; emoji: string; present: boolean }) =>
-      requireCommands(commands).setReaction(channelId, id, emoji, present),
+    mutationFn: async ({ id, emoji, present }: { id: string; emoji: string; present: boolean }) => {
+      if (isLocalId(id)) {
+        // Still sending: show it now and add it for real once the message has its id.
+        queueReaction(id, emoji, present);
+        const me = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id ?? "";
+        const cache = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
+        return toggleReaction(flattenMessages(cache).find((m) => m.id === id)?.reactions ?? [], emoji, me, present);
+      }
+      return requireCommands(commands).setReaction(channelId, id, emoji, present);
+    },
     onSuccess: (reactions, { id }) => update((cache) => setReactions(cache, id, reactions)),
   });
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { jsonResponse, mockFetch, signIn } from "../../test/helpers";
 import { applyEvent } from "../realtime/applyEvent";
 import { CommandError } from "../realtime/commands";
 import { MessageCommandsContext } from "../realtime/commandsContext";
@@ -218,5 +219,124 @@ describe("edit, delete and react over the protocol", () => {
     const { result } = renderHook(() => useEditMessage("c1"), { wrapper });
     await expect(act(() => result.current.mutateAsync({ id: "m_server", text: "x" }))).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     expect(rows()[0]!.text).toBe("hello");
+  });
+});
+
+describe("pending rows for attachments, and reactions while sending", () => {
+  let client: QueryClient;
+  let commands: { [K in keyof MessageCommands]: ReturnType<typeof vi.fn> };
+
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <MessageCommandsContext.Provider value={commands as unknown as MessageCommands}>{children}</MessageCommandsContext.Provider>
+    </QueryClientProvider>
+  );
+  const rows = () => flattenMessages(client.getQueryData<MessageCache>(messageKeys.channel("c1")));
+  const file = () => new File(["png"], "cat.png", { type: "image/png" });
+  const sentWithFiles = {
+    message_data: { message_id: "m_files", message: "look", sent_at: "2030-01-01T10:00:00+00:00", sender_user_id: "me", username: "ada", attachments: [{ url: "/storage/cat.png", filename: "cat.png", type: "image/png", size: 3 }] },
+  };
+  const nonceOf = (fetchMock: ReturnType<typeof mockFetch>, call = 0) => (fetchMock.mock.calls[call]![1]!.body as FormData).get("nonce");
+
+  const createObjectURL = vi.fn(() => "blob:preview");
+  const revokeObjectURL = vi.fn();
+
+  beforeEach(() => {
+    signIn();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    client.setQueryData(userKeys.profile, profile);
+    client.setQueryData<MessageCache>(messageKeys.channel("c1"), { pageParams: [null], pages: [{ messages: [], nextCursor: null }] });
+    commands = { createMessage: vi.fn(), editMessage: vi.fn(), deleteMessage: vi.fn(), setReaction: vi.fn(), startTyping: vi.fn() };
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+  });
+
+  it("shows a message with files at once, previewed from the device, then the server's copy", async () => {
+    let respond!: (r: Response) => void;
+    const fetchMock = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => (respond = resolve)));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useSendMessage("c1"), { wrapper });
+
+    await act(() => result.current.send({ text: "look", files: [file()] }));
+
+    expect(rows()[0]).toMatchObject({ status: "pending", text: "look", attachments: [{ url: "blob:preview", filename: "cat.png", type: "image/png" }] });
+    expect(nonceOf(fetchMock)).toBe(rows()[0]!.nonce);
+    expect(commands.createMessage).not.toHaveBeenCalled();
+
+    await act(async () => respond(jsonResponse(sentWithFiles, 201)));
+    await waitFor(() => expect(rows()[0]!.id).toBe("m_files"));
+    expect(rows()[0]!.attachments[0]!.url).toBe("/storage/cat.png");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("retries a failed upload with the same files and nonce", async () => {
+    const fetchMock = mockFetch(jsonResponse({ detail: "boom" }, 503), jsonResponse(sentWithFiles, 201));
+    const { result } = renderHook(() => useSendMessage("c1"), { wrapper });
+
+    await act(() => result.current.send({ text: "look", files: [file()] }));
+    await waitFor(() => expect(rows()[0]!.status).toBe("failed"));
+    expect(rows()[0]!.failure?.retryable).toBe(true);
+
+    act(() => result.current.retry(rows()[0]!.id));
+    await waitFor(() => expect(rows()[0]!.id).toBe("m_files"));
+
+    expect(nonceOf(fetchMock, 1)).toBe(nonceOf(fetchMock, 0));
+    expect((fetchMock.mock.calls[1]![1]!.body as FormData).getAll("attachments")).toHaveLength(1);
+  });
+
+  it("does not offer a retry when the instance refuses the files", async () => {
+    mockFetch(jsonResponse({ detail: "Combined attachment size exceeds the instance limit of 25MB." }, 400));
+    const { result } = renderHook(() => useSendMessage("c1"), { wrapper });
+
+    await act(() => result.current.send({ text: "", files: [file()] }));
+    await waitFor(() => expect(rows()[0]!.status).toBe("failed"));
+    expect(rows()[0]!.failure).toMatchObject({ retryable: false });
+    expect(rows()[0]!.failure!.message).toMatch(/25MB/);
+  });
+
+  it("discarding a failed upload releases its previews", async () => {
+    mockFetch(jsonResponse({}, 503));
+    const { result } = renderHook(() => useSendMessage("c1"), { wrapper });
+    await act(() => result.current.send({ text: "look", files: [file()] }));
+    await waitFor(() => expect(rows()[0]!.status).toBe("failed"));
+
+    act(() => result.current.discard(rows()[0]!.id));
+    expect(rows()).toHaveLength(0);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("shows a reaction on a pending message at once and adds it for real after the ack", async () => {
+    let ack!: (m: Message) => void;
+    commands.createMessage.mockReturnValue(new Promise<Message>((resolve) => (ack = resolve)));
+    commands.setReaction.mockResolvedValue([{ emoji: "👍", count: 1, userIds: ["me"] }]);
+    const { result } = renderHook(() => ({ send: useSendMessage("c1"), react: useToggleReaction("c1") }), { wrapper });
+
+    await act(() => result.current.send.send({ text: "hello" }));
+    const localId = rows()[0]!.id;
+    await act(() => result.current.react.mutateAsync({ id: localId, emoji: "👍", present: true }));
+
+    expect(rows()[0]!.reactions).toEqual([{ emoji: "👍", count: 1, userIds: ["me"] }]);
+    expect(commands.setReaction).not.toHaveBeenCalled();
+
+    await act(async () => ack(server()));
+    await waitFor(() => expect(commands.setReaction).toHaveBeenCalledWith("c1", "m_server", "👍", true));
+    expect(rows()[0]).toMatchObject({ id: "m_server", reactions: [{ emoji: "👍", count: 1, userIds: ["me"] }] });
+  });
+
+  it("does not send a reaction that was taken back before the ack", async () => {
+    let ack!: (m: Message) => void;
+    commands.createMessage.mockReturnValue(new Promise<Message>((resolve) => (ack = resolve)));
+    const { result } = renderHook(() => ({ send: useSendMessage("c1"), react: useToggleReaction("c1") }), { wrapper });
+
+    await act(() => result.current.send.send({ text: "hello" }));
+    const localId = rows()[0]!.id;
+    await act(() => result.current.react.mutateAsync({ id: localId, emoji: "👍", present: true }));
+    await act(() => result.current.react.mutateAsync({ id: localId, emoji: "👍", present: false }));
+    expect(rows()[0]!.reactions).toEqual([]);
+
+    await act(async () => ack(server()));
+    await waitFor(() => expect(rows()[0]!.id).toBe("m_server"));
+    expect(commands.setReaction).not.toHaveBeenCalled();
   });
 });

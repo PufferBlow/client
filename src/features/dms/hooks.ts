@@ -13,6 +13,7 @@ import {
   upsertMessage,
   type MessageCache,
 } from "../messages/cache";
+import { dropQueuedReactions, holdFiles, isLocalId, queueReaction, releaseFiles, takeQueuedReactions, toggleReaction } from "../messages/pending";
 import type { Message, ReplyPreview } from "../messages/types";
 import { userKeys } from "../users/hooks";
 import type { UserProfile } from "../users/types";
@@ -93,6 +94,23 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
   const queryClient = useQueryClient();
   const update = useConversationCache(conversationId);
 
+  const flushReactions = useCallback(
+    async (localId: string, messageId: string) => {
+      const emojis = takeQueuedReactions(localId);
+      if (!emojis.length) return;
+      let reactions: Message["reactions"] = [];
+      for (const emoji of emojis) {
+        try {
+          reactions = await setDirectReaction(messageId, emoji, true);
+        } catch {
+          // The message itself is sent; a lost reaction is not worth an error.
+        }
+      }
+      update((cache) => setReactions(cache, messageId, reactions));
+    },
+    [update],
+  );
+
   const deliver = useCallback(
     async (localId: string, input: SendInput) => {
       try {
@@ -121,13 +139,17 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
           ...(input.replyTo ? { replyTo: input.replyTo } : {}),
         };
         pendingInputs.delete(localId);
-        update((cache) => settlePending(cache, localId, sent));
+        releaseFiles(localId);
+        // Reactions added while it was sending: keep showing them, then add them for real.
+        const optimistic = flattenMessages(queryClient.getQueryData<MessageCache>(messageKeys.channel(conversationId))).find((m) => m.id === localId)?.reactions ?? [];
+        update((cache) => settlePending(cache, localId, { ...sent, reactions: optimistic }));
+        void flushReactions(localId, messageId);
         void queryClient.invalidateQueries({ queryKey: dmKeys.conversations });
       } catch {
         update((cache) => failPending(cache, localId, { message: "The message couldn't be sent.", retryable: true }));
       }
     },
-    [peer, conversationId, queryClient, update],
+    [peer, conversationId, queryClient, update, flushReactions],
   );
 
   const send = useCallback(
@@ -143,7 +165,7 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
         authorAvatarUrl: me?.avatar_url ?? null,
         text: input.text,
         sentAt: new Date().toISOString(),
-        attachments: [],
+        attachments: input.files?.length ? holdFiles(localId, input.files) : [],
         reactions: [],
         editCount: 0,
         editedAt: null,
@@ -171,6 +193,8 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
   const discard = useCallback(
     (localId: string) => {
       pendingInputs.delete(localId);
+      releaseFiles(localId);
+      dropQueuedReactions(localId);
       update((cache) => removeMessage(cache, localId));
     },
     [update],
@@ -200,9 +224,19 @@ export function useDeleteDirectMessage(conversationId: string) {
 }
 
 export function useToggleDirectReaction(conversationId: string) {
+  const queryClient = useQueryClient();
   const update = useConversationCache(conversationId);
   return useMutation({
-    mutationFn: ({ id, emoji, present }: { id: string; emoji: string; present: boolean }) => setDirectReaction(id, emoji, present),
+    mutationFn: async ({ id, emoji, present }: { id: string; emoji: string; present: boolean }) => {
+      if (isLocalId(id)) {
+        // Still sending: show it now and add it for real once the message has its id.
+        queueReaction(id, emoji, present);
+        const me = queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id ?? "";
+        const cache = queryClient.getQueryData<MessageCache>(messageKeys.channel(conversationId));
+        return toggleReaction(flattenMessages(cache).find((m) => m.id === id)?.reactions ?? [], emoji, me, present);
+      }
+      return setDirectReaction(id, emoji, present);
+    },
     onSuccess: (reactions, { id }) => update((cache) => setReactions(cache, id, reactions)),
   });
 }

@@ -49,7 +49,8 @@ export const authed = {
 /** Absolute URL for a backend asset (`/storage/<hash>`); passes absolute URLs through. */
 export function resolveAssetUrl(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
-  if (/^https?:\/\//i.test(path)) return path;
+  // Absolute, or on this device (a file still being sent): use as is.
+  if (/^(https?:\/\/|blob:|data:)/i.test(path)) return path;
   const instance = getStoredInstance();
   return instance ? `${getApiUrl(instance)}${path.startsWith("/") ? "" : "/"}${path}` : undefined;
 }

@@ -332,8 +332,10 @@ export const MessageItem = memo(function MessageItem({
   const editing = controlledEditing ?? localEditing;
   const setEditing = (next: boolean) => (controlledEditing === undefined ? setLocalEditing(next) : onEditingChange?.(message.id, next));
   const isOwn = myUserId !== undefined && message.authorId === myUserId;
-  // Not on the server yet (sending) or never got there (failed): nothing can act on it but retry/discard.
+  // Not on the server yet (sending) or never got there (failed): it has no real id, so the menu,
+  // reply and edit wait. A pending message can still be reacted to (sent once it arrives).
   const isLocal = message.status !== undefined;
+  const isPending = message.status === "pending";
   const blocks = useMemo(() => parseMarkdown(message.text), [message.text]);
   const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
   // Someone else answering one of my messages: tinted, like a mention.
@@ -428,6 +430,11 @@ export const MessageItem = memo(function MessageItem({
           .map((attachment) => (
             <AttachmentView key={attachment.url} {...attachment} />
           ))}
+        {isPending && message.attachments.length > 0 && (
+          <p className="m-0 mt-1 text-[12px] text-text-muted" aria-live="polite">
+            Uploading {message.attachments.length === 1 ? "1 file" : `${message.attachments.length} files`}…
+          </p>
+        )}
 
         {!editing &&
           embedUrls.map((url) => (
@@ -474,7 +481,7 @@ export const MessageItem = memo(function MessageItem({
         )}
       </div>
 
-      {!editing && !isLocal && (
+      {!editing && (!isLocal || isPending) && (
         <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-lg border border-border-secondary bg-surface-secondary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
           {(() => {
             const mine = message.reactions.some((r) => r.emoji === quickReaction && myUserId !== undefined && r.userIds.includes(myUserId));
@@ -503,18 +510,18 @@ export const MessageItem = memo(function MessageItem({
               <SmilePlus size={14} />
             </button>
           )}
-          {onReply && (
+          {onReply && !isLocal && (
             <button type="button" className={toolButton} aria-label="Reply" title="Reply" onClick={() => onReply(message.id)}>
               <Reply size={14} />
             </button>
           )}
           {/* Delete is deliberately not here: it lives in the menu, behind a confirmation. */}
-          {isOwn && (
+          {isOwn && !isLocal && (
             <button type="button" className={toolButton} aria-label="Edit message" onClick={() => setEditing(true)}>
               <Pencil size={14} />
             </button>
           )}
-          {onOpenMenu && (
+          {onOpenMenu && !isLocal && (
             <button
               type="button"
               className={toolButton}

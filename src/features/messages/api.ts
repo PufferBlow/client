@@ -36,13 +36,18 @@ interface SendMessageResponse {
 }
 
 /** `send_message` is multipart and reads `auth_token` from a form field rather than the query. */
-export async function sendMessage(channelId: string, input: { text: string; files?: File[]; replyToMessageId?: string }): Promise<Message> {
+/** Sends over HTTP (the route that takes attachments). A retry with the same `nonce` never posts twice. */
+export async function sendMessage(
+  channelId: string,
+  input: { text: string; files?: File[]; replyToMessageId?: string; nonce?: string },
+): Promise<Message> {
   const { origin, token } = requireSession();
   const form = new FormData();
   form.set("auth_token", token);
   form.set("message", input.text);
   for (const file of input.files ?? []) form.append("attachments", file);
   if (input.replyToMessageId) form.set("reply_to_message_id", input.replyToMessageId);
+  if (input.nonce) form.set("nonce", input.nonce);
 
   const { message_data } = await api.post<SendMessageResponse>(`${origin}${channelPath(channelId)}/send_message`, {
     form,

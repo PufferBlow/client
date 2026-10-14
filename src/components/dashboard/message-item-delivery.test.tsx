@@ -32,6 +32,25 @@ describe("MessageItem delivery state", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("lets you react to a pending message, but not reply, edit or open the menu", async () => {
+    const h = handlers();
+    render(<MessageItem message={message({ status: "pending", nonce: "n1" })} myUserId="me" quickReaction="👍" onReply={vi.fn()} {...h} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add 👍 reaction" }));
+    expect(h.onToggleReaction).toHaveBeenCalledWith("local_n1", "👍", true);
+    expect(screen.queryByRole("button", { name: "Reply" })).not.toBeInTheDocument();
+  });
+
+  it("offers no reactions on a failed message", () => {
+    render(<MessageItem message={message({ status: "failed", nonce: "n1" })} myUserId="me" quickReaction="👍" {...handlers()} />);
+    expect(screen.queryByRole("button", { name: "Add 👍 reaction" })).not.toBeInTheDocument();
+  });
+
+  it("says files are still uploading", () => {
+    const attachments = [{ url: "blob:a", filename: "notes.pdf", type: "application/pdf", size: 10 }];
+    render(<MessageItem message={message({ status: "pending", nonce: "n1", attachments })} myUserId="me" {...handlers()} />);
+    expect(screen.getByText("Uploading 1 file…")).toBeInTheDocument();
+  });
+
   it("does not open the message menu for a message that is not on the server", async () => {
     const h = handlers();
     render(<MessageItem message={message({ status: "pending" })} myUserId="me" {...h} />);
