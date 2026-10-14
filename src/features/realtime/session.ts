@@ -27,8 +27,9 @@ export interface SessionOptions {
 /**
  * One protocol connection: transport, commands, event de-duplication and gap recovery.
  *
- * Events are pushed for every channel the server auto-subscribed at connect time; channels
- * created afterwards need an explicit `channel.subscribe`, which {@link syncChannels} sends.
+ * Events are pushed for every channel the server auto-subscribed at connect time. The server also
+ * subscribes open connections to channels created or shared later and says so (`channel.created`,
+ * or `access: "granted"`); {@link syncChannels} covers anything else that shows up in the list.
  */
 export class RealtimeSession {
   readonly commands: MessageCommands;
@@ -154,9 +155,13 @@ export class RealtimeSession {
         if (verdict.apply) {
           const event = toRealtimeEvent(frame);
           if (event) {
-            if (event.kind === "channel" && event.change !== "updated") {
-              this.tracker.forget(event.channelId);
-              this.subscribed?.delete(event.channelId);
+            if (event.kind === "channel") {
+              if (event.change === "deleted" || event.change === "revoked") {
+                this.tracker.forget(event.channelId);
+                this.subscribed?.delete(event.channelId);
+              } else if (event.change === "created" || event.change === "granted") {
+                this.subscribed?.add(event.channelId); // the server did it; don't subscribe again
+              }
             }
             this.options.onEvent(event);
           }

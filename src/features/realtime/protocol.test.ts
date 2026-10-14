@@ -136,6 +136,12 @@ describe("toRealtimeEvent", () => {
     expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", access: "revoked" } })).toMatchObject({ change: "revoked" });
   });
 
+  it("recognises a new channel and granted access", () => {
+    const base = event("event_channel_updated");
+    expect(toRealtimeEvent({ ...base, name: "channel.created", data: { channel_id: "c1" } })).toEqual({ kind: "channel", channelId: "c1", change: "created" });
+    expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", access: "granted" } })).toMatchObject({ change: "granted" });
+  });
+
   it("maps unknown presence statuses to offline and ignores unknown events", () => {
     const presence = event("event_presence_changed");
     expect(toRealtimeEvent({ ...presence, data: { user_id: "u", status: "mystery" } })).toMatchObject({ status: "offline" });

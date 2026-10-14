@@ -277,6 +277,16 @@ describe("RealtimeSession", () => {
       expect(socket().commands().filter((c) => c.name === "channel.subscribe")).toHaveLength(0);
     });
 
+    it("does not subscribe to a channel the server already subscribed it to", async () => {
+      const session = make();
+      await connect(session);
+      session.syncChannels(["a"]);
+      socket().receive({ type: "event", version: 1, id: "evt_new", name: "channel.created", channel_id: "new", data: { channel_id: "new" } });
+      socket().receive({ type: "event", version: 1, id: "evt_grant", name: "channel.updated", channel_id: "shared", data: { channel_id: "shared", access: "granted" } });
+      session.syncChannels(["a", "new", "shared"]);
+      expect(socket().commands()).toHaveLength(0);
+    });
+
     it("does nothing while disconnected", () => {
       const session = make();
       expect(() => session.syncChannels(["a"])).not.toThrow();

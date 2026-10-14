@@ -78,7 +78,7 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       return;
 
     case "channel":
-      if (event.change !== "updated") queryClient.removeQueries({ queryKey: messageKeys.channel(event.channelId) });
+      if (event.change === "deleted" || event.change === "revoked") queryClient.removeQueries({ queryKey: messageKeys.channel(event.channelId) });
       void queryClient.invalidateQueries({ queryKey: channelKeys.list });
       return;
 

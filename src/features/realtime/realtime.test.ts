@@ -133,6 +133,15 @@ describe("applyEvent", () => {
     applyEvent(client, { kind: "channel", channelId: "c1", change: "updated" }, { activeChannelId: undefined });
     expect(cachedIds()).toEqual(["m1"]);
   });
+
+  it("refreshes the channel list when a channel is created or shared", () => {
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    for (const change of ["created", "granted"] as const) {
+      applyEvent(client, { kind: "channel", channelId: "c2", change }, { activeChannelId: undefined });
+    }
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: channelKeys.list });
+  });
 });
 
 class FakeSocket {

@@ -11,8 +11,11 @@ export type RealtimeEvent =
   | { kind: "message_deleted"; channelId: string; messageId: string; dm?: boolean }
   | { kind: "reactions"; channelId: string; messageId: string; reactions: Reaction[] }
   | { kind: "presence"; userId: string; status: PresenceStatus }
-  /** A channel was renamed, changed privacy, deleted, or this connection lost access to it. */
-  | { kind: "channel"; channelId: string; change: "updated" | "deleted" | "revoked" }
+  /**
+   * A channel was renamed or changed privacy, deleted, or this connection lost access to it; or it
+   * was created or shared with this connection, which the server has already subscribed.
+   */
+  | { kind: "channel"; channelId: string; change: "updated" | "deleted" | "revoked" | "created" | "granted" }
   | { kind: "notification" };
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -48,9 +51,13 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
     case "presence.changed":
       return { kind: "presence", userId: str(data.user_id), status: asPresence(str(data.status)) };
 
+    case "channel.created":
+      return { kind: "channel", channelId, change: "created" };
+
     case "channel.updated":
       if (data.deleted === true) return { kind: "channel", channelId, change: "deleted" };
       if (data.access === "revoked") return { kind: "channel", channelId, change: "revoked" };
+      if (data.access === "granted") return { kind: "channel", channelId, change: "granted" };
       return { kind: "channel", channelId, change: "updated" };
 
     case "notification.created":
