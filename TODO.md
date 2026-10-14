@@ -156,9 +156,12 @@ repo's tests parse every one. What is left:
   and per-channel sequence tracking (`tracker.ts`), resync on a gap, a restart or a reconnect, sending with a
   nonce and an optimistic pending row, Retry that reuses the nonce, edit/delete/reactions as commands, pending
   and failed states in `MessageItem`, channels created after connect subscribed explicitly. Tests cover each.
-- [ ] **Attachments** still use HTTP and have no pending row; a message with files waits for the response.
-- [ ] **`notification.created`** only refreshes unread counts; there is no notification list yet.
-- [ ] **Reactions on a pending message** are not offered (the row has a local id until the ack).
+- [x] **Attachments** still travel over HTTP, but now get a pending row with on-device previews and a
+  Retry that resends the same files with the same nonce (`send_message` takes a `nonce` now).
+  Uploads show no progress bar yet.
+- [x] **`notification.created`** refreshes unread counts and the Inbox's notification list.
+- [x] **Reactions on a pending message** show at once and are added once the message has its id
+  (channels and DMs). Reply, edit and the menu still wait for the id.
 - [ ] **Manual check against a running instance** with two browsers: send, edit, delete, react, drop the
   network and watch the resync, retry a failed send. Only unit tests have run so far.
 
