@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 /**
- * The Pufferblow puffer face (brand sheet v2: `UI mockups form v2/export/pufferblow-logo`).
+ * The Pufferblow puffer face (brand sheet v2: `brand/ui-mockups-v2/export/pufferblow-logo`).
  *
  * Drawn inline so the colour follows the surface it sits on: the face is a solid fill seen through
  * a mask, so the eyes and mouth are real cut-outs, not painted dots. At 32 px and above it is the
