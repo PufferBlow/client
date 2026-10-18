@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { calledUrl, jsonResponse, routeFetch, signIn } from "../../test/helpers";
+import { bearerOf, calledUrl, jsonResponse, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ServerView } from "./ServerView";
 
@@ -127,7 +127,8 @@ describe("channel search", () => {
     expect(within(results).getByText("grace")).toBeInTheDocument();
     const index = fetchMock.mock.calls.findIndex(([url]) => String(url).includes("/search"));
     expect(calledUrl(fetchMock, index).searchParams.get("q")).toBe("deploy");
-    expect(calledUrl(fetchMock, index).searchParams.get("auth_token")).toBe("tok");
+    expect(bearerOf(fetchMock, index)).toBe("Bearer tok");
+    expect(calledUrl(fetchMock, index).searchParams.has("auth_token")).toBe(false);
   });
 
   it("says when nothing matches", async () => {

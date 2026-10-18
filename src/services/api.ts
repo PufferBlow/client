@@ -27,6 +27,8 @@ export interface RequestOptions {
   json?: unknown;
   /** Multipart request body (uploads, `send_message`). */
   form?: FormData;
+  /** Extra request headers (e.g. `Authorization`). */
+  headers?: Record<string, string>;
   timeout?: number;
   signal?: AbortSignal;
 }
@@ -68,7 +70,7 @@ function buildUrl(url: string, query?: Query): string {
  * Resolves with the parsed body, throws `ApiError` otherwise.
  */
 async function request<T>(method: Method, url: string, options: RequestOptions = {}): Promise<T> {
-  const { query, json, form, timeout = DEFAULT_TIMEOUT, signal } = options;
+  const { query, json, form, headers: extraHeaders, timeout = DEFAULT_TIMEOUT, signal } = options;
   const id = nextRequestId++;
   const startedAt = performance.now();
   const target = redactText(buildUrl(url, query));
@@ -78,7 +80,7 @@ async function request<T>(method: Method, url: string, options: RequestOptions =
   const timer = setTimeout(() => controller.abort(), timeout);
   signal?.addEventListener("abort", () => controller.abort(), { once: true });
 
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
   let body: BodyInit | undefined;
   if (form) {
     body = form; // the browser sets the multipart boundary

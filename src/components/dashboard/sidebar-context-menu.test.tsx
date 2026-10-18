@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { channelKeys } from "../../features/channels/hooks";
 import type { Channel } from "../../features/channels/types";
-import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
+import { bearerOfCall, jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { ServerRail } from "./ServerRail";
@@ -361,7 +361,8 @@ describe("channel context menu", () => {
 
       await waitFor(() => expect(screen.queryByRole("link", { name: /random/ })).not.toBeInTheDocument());
       const call = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE")!;
-      expect(new URL(String(call[0])).searchParams.get("auth_token")).toBe("tok");
+      expect(bearerOfCall(call)).toBe("Bearer tok");
+      expect(new URL(String(call[0])).searchParams.has("auth_token")).toBe(false);
       expect(link(/general/)).toBeInTheDocument();
       expect(await screen.findByText("Deleted #random.")).toBeInTheDocument();
     });

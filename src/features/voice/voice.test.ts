@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
+import { bearerOf, calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
 import { applyVoiceAction, joinVoiceSession, leaveVoiceSession, listVoiceParticipants } from "./api";
 import { parseSignal, signal } from "./signaling";
 
@@ -131,7 +131,8 @@ describe("voice API", () => {
       }),
     );
     const list = await listVoiceParticipants("v1");
-    expect(calledUrl(fetchMock).searchParams.get("auth_token")).toBe("tok");
+    expect(bearerOf(fetchMock)).toBe("Bearer tok");
+    expect(calledUrl(fetchMock).searchParams.has("auth_token")).toBe(false);
     expect(list).toEqual([{ userId: "u1", username: "ada", isMuted: true, isDeafened: false, isSpeaking: false }]);
   });
 

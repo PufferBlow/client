@@ -24,19 +24,37 @@ export function requireSession(): Session {
   return { origin: getApiUrl(instance), token };
 }
 
+/** Instances that predate header auth, found by a route refusing a request with no `auth_token` parameter. */
+const queryTokenOrigins = new Set<string>();
+
+/** The server's answer to a request that carried the token only in a header it does not read. */
+function isMissingTokenParameter(error: unknown): boolean {
+  if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 422)) return false;
+  const fields = error.details.fields;
+  return Array.isArray(fields) && fields.some((f) => (f as { field?: string } | null)?.field === "auth_token");
+}
+
 /**
- * The backend never reads an `Authorization` header: each route takes `auth_token`
- * either in the query string or inside the JSON body. `authed.query` and `authed.body`
- * cover the two cases so feature code only states which one a route uses.
+ * Credentials go where they stay out of access logs: routes that read the token from the query
+ * string get it in an `Authorization: Bearer` header, and the server turns it back into the
+ * parameter. Routes that read it from a JSON body or form field (`authed.body`) keep it there; a
+ * body is not logged. An older instance that ignores the header answers that the parameter is
+ * missing; the call is then repeated with the token in the URL and that instance is remembered.
  */
 export const authed = {
   /** Routes that read `auth_token` from the query string (most GET/DELETE routes and many POSTs). */
-  query<T>(method: Method, path: string, options: QueryOptions = {}): Promise<T> {
+  async query<T>(method: Method, path: string, options: QueryOptions = {}): Promise<T> {
     const { origin, token } = requireSession();
-    return api.request<T>(method, `${origin}${path}`, {
-      ...options,
-      query: { ...options.query, auth_token: token },
-    });
+    const withQueryToken = () => api.request<T>(method, `${origin}${path}`, { ...options, query: { ...options.query, auth_token: token } });
+    if (queryTokenOrigins.has(origin)) return withQueryToken();
+    try {
+      return await api.request<T>(method, `${origin}${path}`, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } });
+    } catch (error) {
+      if (!isMissingTokenParameter(error)) throw error;
+      log.warn("this instance does not read the Authorization header; update it to keep tokens out of its logs");
+      queryTokenOrigins.add(origin);
+      return withQueryToken();
+    }
   },
 
   /** Routes that read `auth_token` from the JSON body. */

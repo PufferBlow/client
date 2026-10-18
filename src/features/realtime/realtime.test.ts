@@ -155,7 +155,10 @@ class FakeSocket {
   onerror: (() => void) | null = null;
   closeArgs: unknown[] | null = null;
 
-  constructor(public url: string) {
+  constructor(
+    public url: string,
+    public protocols: string[] = [],
+  ) {
     FakeSocket.instances.push(this);
   }
   send(data: string) {
@@ -220,7 +223,9 @@ describe("RealtimeClient", () => {
     const client = make();
     client.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(latest().url).toBe("ws://localhost:7575/ws?protocol=1&auth_token=t");
+    // The token rides in a subprotocol, not the URL.
+    expect(latest().url).toBe("ws://localhost:7575/ws?protocol=1");
+    expect(latest().protocols).toEqual(["pufferblow.v1", "bearer.t"]);
 
     latest().open();
     expect(statuses).toEqual(["connecting", "connected"]);
@@ -390,7 +395,7 @@ describe("RealtimeClient", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(latest().url).toContain("fresh");
+    expect(latest().protocols).toContain("bearer.fresh");
   });
 
   it("stops cleanly: closes the socket and never reconnects", async () => {

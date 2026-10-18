@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
+import { bearerOf, calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
 import { loadMessages, PAGE_SIZE, sendMessage } from "./api";
 import { flattenMessages, patchMessage, removeMessage, setReactions, upsertMessage, type MessageCache } from "./cache";
 import { isWireMessage, normalizeMessage, normalizeReactions, type WireMessage } from "./normalize";
@@ -167,7 +167,8 @@ describe("loadMessages", () => {
     expect(url.pathname).toBe("/api/v1/channels/c1/load_messages");
     expect(url.searchParams.get("page")).toBe("1");
     expect(url.searchParams.get("messages_per_page")).toBe(String(PAGE_SIZE));
-    expect(url.searchParams.get("auth_token")).toBe("tok");
+    expect(bearerOf(fetchMock)).toBe("Bearer tok"); // in a header, not the URL
+    expect(url.searchParams.has("auth_token")).toBe(false);
     expect(page.messages[0]!.id).toBe("m0");
     expect(page.nextCursor).toBe("2030-01-01T00:00:00Z|m0");
   });

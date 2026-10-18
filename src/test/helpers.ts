@@ -13,6 +13,15 @@ export function mockFetch(...responses: Response[]) {
   return fn;
 }
 
+/** The `Authorization` header a mocked fetch call was made with. */
+export function bearerOf(fn: ReturnType<typeof mockFetch>, call = 0): string | undefined {
+  return bearerOfCall(fn.mock.calls[call]!);
+}
+
+export function bearerOfCall(call: readonly [unknown, RequestInit?]): string | undefined {
+  return (call[1]?.headers as Record<string, string> | undefined)?.Authorization;
+}
+
 /** The URL (as a URL object) of the nth call to a `fetch` mock. */
 export function calledUrl(fn: ReturnType<typeof mockFetch>, call = 0): URL {
   return new URL(String(fn.mock.calls[call]![0]));

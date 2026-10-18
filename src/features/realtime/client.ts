@@ -19,6 +19,24 @@ export interface RealtimeOptions {
   refreshCredentials?: () => Promise<unknown>;
 }
 
+/** Offered next to `bearer.<token>` so the token travels in a header, not the URL (browsers cannot set headers on a WebSocket). */
+export const WS_SUBPROTOCOL = "pufferblow.v1";
+const SUBPROTOCOL_TOKEN = /^[A-Za-z0-9._~-]+$/;
+
+/** Moves `auth_token` out of a socket URL into the subprotocols the server reads it from. */
+export function splitCredential(url: string): { url: string; protocols: string[] } {
+  try {
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get("auth_token");
+    // A token with characters a subprotocol cannot carry stays in the URL rather than failing to connect.
+    if (!token || !SUBPROTOCOL_TOKEN.test(token)) return { url, protocols: [] };
+    parsed.searchParams.delete("auth_token");
+    return { url: parsed.toString(), protocols: [WS_SUBPROTOCOL, `bearer.${token}`] };
+  } catch {
+    return { url, protocols: [] };
+  }
+}
+
 const PING_INTERVAL_MS = 30_000;
 // The server answers a ping as soon as it reads it; allow for a slow network, not a slow server.
 const PONG_TIMEOUT_MS = 10_000;
@@ -27,7 +45,7 @@ const MAX_DELAY_MS = 30_000;
 
 /**
  * Connection to the instance's global `/ws` socket. The caller's URL opts into protocol v1
- * (`?protocol=1`). The token travels in the URL (the server has no auth frame yet), heartbeats use
+ * (`?protocol=1`). The token travels in a `bearer.<token>` subprotocol, never the URL, heartbeats use
  * `{type: "ping"}`, and reconnects back off without a retry cap.
  */
 export class RealtimeClient {
@@ -101,8 +119,9 @@ export class RealtimeClient {
     }
 
     this.options.onStatus("connecting");
-    log.info(`connecting (attempt ${this.attempt + 1})`, { url });
-    const socket = new WebSocket(url);
+    const target = splitCredential(url);
+    log.info(`connecting (attempt ${this.attempt + 1})`, { url: target.url });
+    const socket = target.protocols.length > 0 ? new WebSocket(target.url, target.protocols) : new WebSocket(target.url);
     this.socket = socket;
 
     socket.onopen = () => {

@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ServerRail } from "../../components/dashboard/ServerRail";
 import { isServerOwner, roleNames } from "../../features/users/roles";
-import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
+import { bearerOfCall, jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ControlPanelPage } from "./ControlPanelPage";
 
@@ -332,7 +332,8 @@ describe("ControlPanelPage", () => {
 
         await waitFor(() => expect(requestLog(fetchMock)).toContain("DELETE /api/v1/channels/c2/delete"));
         const call = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE")!;
-        expect(new URL(String(call[0])).searchParams.get("auth_token")).toBe("tok");
+        expect(bearerOfCall(call)).toBe("Bearer tok");
+        expect(new URL(String(call[0])).searchParams.has("auth_token")).toBe(false);
       });
 
       it("cancelling a delete changes nothing", async () => {

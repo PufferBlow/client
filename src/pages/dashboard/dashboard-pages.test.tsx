@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageCommands } from "../../features/realtime/messageCommands";
 import { screen, waitFor, within } from "@testing-library/react";
-import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
+import { bearerOfCall, jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { FriendsView } from "./FriendsView";
 import { ServerView } from "./ServerView";
@@ -357,7 +357,8 @@ describe("FriendsView", () => {
     expect(await screen.findByText("Request sent to newbie.")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([input, init]) => String(input).includes("/friends/requests") && init?.method === "POST")!;
     expect(JSON.parse(String(call[1]!.body))).toEqual({ target_username: "newbie" });
-    expect(new URL(String(call[0])).searchParams.get("auth_token")).toBe("tok");
+    expect(bearerOfCall(call)).toBe("Bearer tok");
+    expect(new URL(String(call[0])).searchParams.has("auth_token")).toBe(false);
     expect(screen.getByLabelText("Friend handle")).toHaveValue("");
   });
 

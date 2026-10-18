@@ -4,20 +4,21 @@ Bugs and known limits for `client-new`. Items marked **backend** need a change i
 
 ## Needs verification first
 
-- [ ] **backend — profile payload may leak secrets.** `UserManager.user_profile()` only drops empty
+- [x] **backend — profile payload may leak secrets.** `UserManager.user_profile()` only drops empty
   strings, and `Users.to_dict()` includes `password`, `auth_token` and `raw_auth_token`. If those
   are populated, `POST /api/v1/users/profile` (any `user_id`) and `GET /api/v1/users/list` return
-  them to every signed-in user. Check a real response, and if confirmed, strip them in
-  `user_profile()` and rotate affected tokens. (`pufferblow/pufferblow/api/user/user_manager.py`)
+  them to every signed-in user. **Confirmed and fixed** (`b0eaed6`): `Users.to_dict()` no longer carries
+  credentials and `Users.__repr__` masks them (`test_42_profile_has_no_secrets.py`; not re-checked against
+  a live response). Tokens issued before the fix were exposed; on an instance that matters, sign everyone
+  out or reset their tokens.
 
 ## Security
 
-- [ ] **backend — password in the sign-in URL.** `GET /api/v1/users/signin?username=&password=` puts
-  the password in the query string (server access logs, proxies, history). Add a `POST` signin and
-  switch `services/auth.ts` to it.
-- [ ] **backend — password change never checks the old password.** `PUT /users/profile` requires
-  `old_password` but only the new one is used. The settings form collects it, but the server does
-  not enforce it.
+- [x] **backend — password in the sign-in URL.** `POST /api/v1/users/signin` takes a JSON body and
+  `services/auth.ts` uses it; the `GET` form is deprecated and kept only for older clients (the client
+  falls back to it on a 405). Remove the `GET` route once old instances are gone.
+- [x] **backend — password change never checks the old password.** `PUT /users/profile` now verifies
+  `old_password` (`4036e8c`, `test_43_signin_body_and_password_change.py`).
 - [x] **Session storage (desktop).** The desktop app hands the refresh token to the main process
   at sign-in (`electron/sessionVault.ts`): encrypted with the OS keychain (`safeStorage`) when
   "stay signed in" is on, memory only when off. The main process refreshes and revokes itself and
@@ -28,9 +29,15 @@ Bugs and known limits for `client-new`. Items marked **backend** need a change i
   SameSite=Strict` cookie on its own origin and accept it on `/auth/refresh`, which only works when
   the web client is served from the instance's origin (cross-site, browsers drop such cookies).
   **backend**
-- [ ] **backend — tokens in URLs.** The websocket takes `?auth_token=` and most routes take it in
-  the query string, so tokens appear in logs. Move to an `Authorization` header (the server ignores
-  it today).
+- [x] **backend — tokens in URLs.** The server accepts `Authorization: Bearer <token>` on HTTP and
+  websocket upgrades, and `Sec-WebSocket-Protocol: pufferblow.v1, bearer.<token>` for browsers
+  (`core/header_auth.py`; the token is copied into the `auth_token` parameter on a copy of the request
+  scope, so the access log never sees it). client-new sends the header for query-token routes and the
+  subprotocol for the socket; pypufferblow's `ProtocolClient` and websocket use the subprotocol. An
+  instance from before this change answers that `auth_token` is missing and gets the URL form.
+- [ ] **Tokens in URLs, what is left.** The server still accepts `?auth_token=`, so a client can still
+  leak it; routes that read the token from a JSON body or form field (`authed.body`, `send_message`)
+  keep it there (bodies are not logged). Decide when to refuse the query form. **backend**
 
 ## Bugs
 
@@ -138,8 +145,8 @@ repo's tests parse every one. What is left:
   socket and `broadcast_to_eligible_users`; the v1 path checks `view_private_channels`.
 - [ ] **Bots**: reactions (needs a schema change like `sender_bot_id`), creating and revoking bots (owner
   only API), end-to-end scope tests.
-- [ ] **Credentials in the URL.** `/ws?auth_token=` puts the token in the query string. Logs redact it, but add
-  a first-frame `auth` command or a subprotocol header.
+- [x] **Credentials in the URL.** The socket takes the token as a `bearer.<token>` subprotocol (browsers) or
+  an `Authorization` header instead of `?auth_token=`; the query form still works for older clients.
 - [ ] **Attachments over the socket.** Files still use the HTTP `send_message` upload path.
 - [ ] **Per-IP and global connection limits**, in addition to the 10 sockets per user.
 - [ ] **Run command handlers off the event loop** once the database layer is thread safe.
