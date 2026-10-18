@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1c46a"></stop><stop offset="1" stop-color="#cf8f2c"></stop></linearGradient></defs><rect width="120" height="120" rx="27" fill="url(#g)"></rect><g transform="translate(60 60) scale(.86) translate(-50 -52)"><path d="M27 45 C19 39 13 33.5 6.5 32.5 C8.5 40 10 46.5 13.5 52 C10 57.5 8.5 64 6.5 71.5 C13 70.5 19 65 27 59Z" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(0 48 52)" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(45 48 52)" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(135 48 52)" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(180 48 52)" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(225 48 52)" fill="#1c1408"></path><path d="M43.2 31 Q43.8 22 46 14.5 Q50.6 22 52.8 31Z" transform="rotate(315 48 52)" fill="#1c1408"></path><circle cx="48" cy="52" r="25.5" fill="#1c1408"></circle><circle cx="59" cy="45" r="7" fill="#e3ae4f"></circle><circle cx="74" cy="55" r="4.4" fill="#1c1408"></circle><circle cx="75" cy="55" r="2.3" fill="#e3ae4f"></circle><circle cx="86" cy="47" r="4" fill="#1c1408"></circle></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120">
+  <style>
+    .face { fill: #efe6d4; }
+    @media (prefers-color-scheme: light) { .face { fill: #1c1408; } }
+  </style>
+  <defs>
+    <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
+      <rect width="120" height="120" fill="#000"/>
+      <rect x="10" y="34" width="100" height="68" rx="34" fill="#fff"/>
+      <path d="M22 50Q12.76 36.92 11 21Q28.24 24.9 42 36ZM78 36Q91.76 24.9 109 21Q107.24 36.92 98 50ZM48 36Q51.34 23.11 60 13Q68.66 23.11 72 36Z" fill="#fff" stroke="#fff" stroke-width="7" stroke-linejoin="round"/>
+      <circle cx="41" cy="66" r="14" fill="#000"/>
+      <circle cx="79" cy="66" r="14" fill="#000"/>
+      <ellipse cx="60" cy="90" rx="8" ry="6" fill="#000"/>
+    </mask>
+  </defs>
+  <rect class="face" width="120" height="120" mask="url(#m)"/>
+</svg>

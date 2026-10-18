@@ -423,27 +423,49 @@ describe("CountBadge", () => {
 });
 
 describe("PufferblowBrand", () => {
-  const paths = (container: HTMLElement) => container.querySelectorAll("path").length;
+  const variant = (container: HTMLElement) => container.querySelector("svg")?.getAttribute("data-variant");
 
   it("uses the full mark at normal sizes and the simplified mark below 32px", () => {
-    const large = render(<PufferblowBrand size={48} />);
-    const small = render(<PufferblowBrand size={24} />);
-    expect(paths(large.container)).toBeGreaterThan(paths(small.container));
+    expect(variant(render(<PufferblowBrand size={48} />).container)).toBe("full");
+    expect(variant(render(<PufferblowBrand size={24} />).container)).toBe("small");
   });
 
   it("switches at exactly 32px", () => {
-    const at32 = render(<PufferblowBrand size={32} />);
-    const at31 = render(<PufferblowBrand size={31} />);
-    expect(paths(at32.container)).toBeGreaterThan(paths(at31.container));
+    expect(variant(render(<PufferblowBrand size={32} />).container)).toBe("full");
+    expect(variant(render(<PufferblowBrand size={31} />).container)).toBe("small");
+  });
+
+  it("cuts the eyes and mouth out of the face", () => {
+    const { container } = render(<PufferblowBrand />);
+    const mask = container.querySelector("mask")!;
+    expect(mask.querySelectorAll("circle")).toHaveLength(2);
+    expect(mask.querySelectorAll("ellipse")).toHaveLength(1);
+    expect(container.querySelector("rect[mask]")).toHaveAttribute("mask", `url(#${mask.id})`);
+  });
+
+  it("gives each mark its own mask, so several can share a page", () => {
+    const { container } = render(
+      <>
+        <PufferblowBrand />
+        <PufferblowBrand />
+      </>,
+    );
+    const ids = [...container.querySelectorAll("mask")].map((m) => m.id);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it.each([
-    ["gold", "#e3ae4f"],
-    ["ink", "#1c1408"],
     ["paper", "#efe6d4"],
+    ["ink", "#1c1408"],
+    ["gold", "#e3ae4f"],
   ] as const)("paints the %s tone", (tone, colour) => {
     const { container } = render(<PufferblowBrand tone={tone} />);
-    expect(container.querySelector("circle")).toHaveAttribute("fill", colour);
+    expect(container.querySelector("rect[mask]")).toHaveAttribute("fill", colour);
+  });
+
+  it("is cream by default, for dark surfaces", () => {
+    const { container } = render(<PufferblowBrand />);
+    expect(container.querySelector("rect[mask]")).toHaveAttribute("fill", "#efe6d4");
   });
 
   it("is labelled for assistive tech", () => {
