@@ -7,8 +7,20 @@ import { useAutoGrow } from "../../hooks/useAutoGrow";
 import { applyEdit, fits, handleFormatShortcut } from "../../lib/textEditing";
 import { asSpoiler, fileKind, formatBytes } from "../../lib/files";
 import { findMentionQuery, insertMention, matchMentionables, type Mentionable } from "../../lib/mentions";
+import {
+  completeTypedShortcode,
+  findShortcodeQuery,
+  insertShortcode,
+  matchShortcodes,
+  replaceShortcodes,
+  type ShortcodeSuggestion,
+} from "../../lib/shortcodes";
+import { Emoji } from "../ui/Emoji";
 import { Avatar } from "./Avatar";
 import { TypingIndicator } from "./TypingIndicator";
+
+/** One row of the suggestion list: a person to mention or an emoji to insert. */
+type Suggestion = { kind: "mention"; item: Mentionable } | { kind: "emoji"; item: ShortcodeSuggestion };
 
 interface ComposerProps {
   channelName: string;
@@ -82,17 +94,26 @@ export function Composer({
   /** The `@word` whose list was dismissed with Escape; it stays away until the word changes. */
   const [dismissedMention, setDismissedMention] = useState<string | null>(null);
   const mention = useMemo(() => (mentionables?.length ? findMentionQuery(text, caret) : null), [mentionables, text, caret]);
-  const mentionKey = mention ? `${mention.start}:${mention.query}` : null;
-  const suggestions = useMemo(
-    () => (mention && mentionables && mentionKey !== dismissedMention ? matchMentionables(mentionables, mention.query) : []),
-    [mention, mentionables, mentionKey, dismissedMention],
-  );
+  // Typing `:` and two letters offers emoji the same way (a `@word` wins when the caret is in one).
+  const shortcode = useMemo(() => (mention ? null : findShortcodeQuery(text, caret)), [mention, text, caret]);
+  const mentionKey = mention ? `@${mention.start}:${mention.query}` : shortcode ? `:${shortcode.start}:${shortcode.query}` : null;
+  const suggestions = useMemo<Suggestion[]>(() => {
+    if (mentionKey === null || mentionKey === dismissedMention) return [];
+    if (mention && mentionables) return matchMentionables(mentionables, mention.query).map((item) => ({ kind: "mention", item }));
+    if (shortcode) return matchShortcodes(shortcode.query).map((item) => ({ kind: "emoji", item }));
+    return [];
+  }, [mention, shortcode, mentionables, mentionKey, dismissedMention]);
   const suggesting = suggestions.length > 0;
   useEffect(() => setActiveMention(0), [mentionKey]);
 
-  const pickMention = (choice: Mentionable) => {
-    if (!mention) return;
-    const next = insertMention(text, mention, caret, choice.name);
+  const pickSuggestion = (choice: Suggestion) => {
+    const next =
+      choice.kind === "mention" && mention
+        ? insertMention(text, mention, caret, choice.item.name)
+        : choice.kind === "emoji" && shortcode
+          ? insertShortcode(text, shortcode, caret, choice.item.emoji)
+          : null;
+    if (!next) return;
     if (maxLength !== undefined && next.text.length > maxLength) return;
     setText(next.text);
     setCaret(next.caret);
@@ -216,7 +237,7 @@ export function Composer({
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         const choice = suggestions[activeMention] ?? suggestions[0];
-        if (choice) pickMention(choice);
+        if (choice) pickSuggestion(choice);
         return;
       }
       if (e.key === "Escape") {
@@ -245,7 +266,7 @@ export function Composer({
     setSending(true);
     setError(null);
     try {
-      await onSend({ text: text.trim(), files: files.map((f) => (f.spoiler ? asSpoiler(f.file) : f.file)) });
+      await onSend({ text: replaceShortcodes(text.trim()), files: files.map((f) => (f.spoiler ? asSpoiler(f.file) : f.file)) });
       setText("");
       files.forEach(releasePreview);
       setFiles([]);
@@ -262,32 +283,43 @@ export function Composer({
         <ul
           id="composer-mentions"
           role="listbox"
-          aria-label="People to mention"
+          aria-label={suggestions[0]?.kind === "emoji" ? "Emoji" : "People to mention"}
           className="absolute bottom-full left-0 right-0 z-20 m-0 mb-2 max-h-72 list-none overflow-y-auto rounded-xl border border-border-secondary bg-surface-secondary p-1.5 shadow-popover"
         >
           {suggestions.map((choice, i) => (
             <li
-              key={choice.id}
+              key={choice.kind === "mention" ? choice.item.id : choice.item.name}
               id={`composer-mention-${i}`}
               role="option"
-              aria-label={choice.name}
+              aria-label={choice.kind === "mention" ? choice.item.name : `:${choice.item.name}:`}
               aria-selected={i === activeMention}
               onMouseDown={(e) => {
                 e.preventDefault(); // keep the caret in the field
-                pickMention(choice);
+                pickSuggestion(choice);
               }}
               onMouseEnter={() => setActiveMention(i)}
               className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm ${i === activeMention ? "bg-surface-tertiary text-text" : "text-text-secondary"}`}
             >
-              {choice.everyone ? (
-                <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/20 text-primary">
-                  <AtSign size={14} />
-                </span>
+              {choice.kind === "emoji" ? (
+                <>
+                  <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center text-lg">
+                    <Emoji char={choice.item.emoji} size="1.4em" />
+                  </span>
+                  <span className="min-w-0 truncate font-medium">:{choice.item.name}:</span>
+                </>
               ) : (
-                <Avatar name={choice.name} src={choice.avatarUrl} seed={choice.id} size={24} />
+                <>
+                  {choice.item.everyone ? (
+                    <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/20 text-primary">
+                      <AtSign size={14} />
+                    </span>
+                  ) : (
+                    <Avatar name={choice.item.name} src={choice.item.avatarUrl} seed={choice.item.id} size={24} />
+                  )}
+                  <span className="min-w-0 truncate font-medium">{choice.item.name}</span>
+                  {choice.item.everyone && <span className="ml-auto shrink-0 text-[12px] text-text-muted">Notify everyone who can read this channel</span>}
+                </>
               )}
-              <span className="min-w-0 truncate font-medium">{choice.name}</span>
-              {choice.everyone && <span className="ml-auto shrink-0 text-[12px] text-text-muted">Notify everyone who can read this channel</span>}
             </li>
           ))}
         </ul>
@@ -357,8 +389,17 @@ export function Composer({
             rows={1}
             value={text}
             onChange={(e) => {
-              setText(e.target.value);
-              setCaret(e.target.selectionStart);
+              // The closing colon of `:tada:` turns it into the emoji on the spot.
+              const typed = e.target.selectionStart;
+              const closed = (e.nativeEvent as InputEvent).inputType === "insertText" ? completeTypedShortcode(e.target.value, typed) : null;
+              if (closed && (maxLength === undefined || closed.text.length <= maxLength)) {
+                setText(closed.text);
+                setCaret(closed.caret);
+                requestAnimationFrame(() => textInput.current?.setSelectionRange(closed.caret, closed.caret));
+              } else {
+                setText(e.target.value);
+                setCaret(typed);
+              }
               if (e.target.value.trim()) onTyping?.();
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
@@ -368,7 +409,7 @@ export function Composer({
             placeholder={`Message ${target}`}
             aria-label={`Message ${target}`}
             aria-describedby={showCounter ? "composer-remaining" : undefined}
-            aria-autocomplete={mentionables?.length ? "list" : undefined}
+            aria-autocomplete="list"
             aria-controls={suggesting ? "composer-mentions" : undefined}
             aria-activedescendant={suggesting ? `composer-mention-${activeMention}` : undefined}
             className="max-h-[50vh] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[14.5px] leading-5 text-text outline-none placeholder:text-text-tertiary"

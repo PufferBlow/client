@@ -6,6 +6,7 @@
  */
 
 import { mentionAt } from "./mentions";
+import { shortcodeAt } from "./shortcodes";
 
 export type Inline =
   | { type: "text"; value: string }
@@ -181,6 +182,16 @@ export function parseInline(text: string, options: { links?: boolean } = {}, dep
         pushText();
         out.push({ type: "mention", name });
         i += 1 + name.length;
+        continue;
+      }
+    }
+
+    if (ch === ":") {
+      // `:tada:` reads as the emoji (it is drawn from the text like any other emoji).
+      const code = shortcodeAt(text, i);
+      if (code) {
+        buffer += code.emoji;
+        i += code.length;
         continue;
       }
     }
