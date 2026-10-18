@@ -164,8 +164,12 @@ repo's tests parse every one. What is left:
 - [x] **`notification.created`** refreshes unread counts and the Inbox's notification list.
 - [x] **Reactions on a pending message** show at once and are added once the message has its id
   (channels and DMs). Reply, edit and the menu still wait for the id.
-- [ ] **Manual check against a running instance** with two browsers: send, edit, delete, react, drop the
-  network and watch the resync, retry a failed send. Only unit tests have run so far.
+- [ ] **Manual check against a running instance, through the client UI.** Done at protocol level on
+  2026-10-18 against the live instance with two `ProtocolClient`s (16 of 16 checks): send, edit, react,
+  delete, permission refusals, a dropped connection with automatic reconnect and resync of missed messages,
+  live events resuming, and a send whose ack was lost then retried with the same nonce (one message, not
+  two). Still to do by hand: the same flow in two client-new windows, to see pending and failed rows, Retry
+  and the resync in the UI.
 
 ### Docs and examples
 - [x] `docs/protocol/v1.md` written (in `pufferblow/`).
