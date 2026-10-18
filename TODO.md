@@ -149,7 +149,15 @@ repo's tests parse every one. What is left:
   an `Authorization` header instead of `?auth_token=`; the query form still works for older clients.
 - [ ] **Attachments over the socket.** Files still use the HTTP `send_message` upload path.
 - [ ] **Per-IP and global connection limits**, in addition to the 10 sockets per user.
-- [ ] **Run command handlers off the event loop** once the database layer is thread safe.
+- [x] **Run command handlers off the event loop.** The handlers hand the service and authorizer calls
+  to a worker thread (`asyncio.to_thread`), and so do the between-command credential check and the
+  idempotency-key reads and writes in the dispatcher; `ctx.subscriptions` and the publisher's sequence
+  counters stay on the loop. The database layer already allowed this: every call opens its own session
+  from a `sessionmaker`, the Postgres pool is sized for it, SQLite uses `check_same_thread=False`, the
+  memcache wrapper locks, and the plain `def` HTTP routes already ran in a thread pool.
+  `test_46_handlers_off_the_loop.py` shows a 0.3 s query no longer stalls the loop and that two
+  connections overlap. Left on the loop on purpose: the per-command rate-limit check (an in-process
+  bucket, or one memcache `incr`).
 - [x] **Audit `with self.database_session() as session:` blocks.** The context manager does not commit.
   Ten writers lacked a commit and are fixed (the last three: marking one notification read, saving a
   channel's notification preference, the appearance backfill). `tests/test_41_session_blocks_commit.py`
