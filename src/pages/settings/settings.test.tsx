@@ -212,10 +212,10 @@ describe("SettingsPage", () => {
       const fetchMock = backend({ "PUT /api/v1/users/profile/appearance": { status_code: 200 } });
       const { user } = renderSettings("profile");
 
-      await user.click(await screen.findByRole("button", { name: "Use accent #cfcfcf" }));
+      await user.click(await screen.findByRole("button", { name: "Use accent #c9a3f0" }));
 
       expect(await screen.findByText("Accent colour updated.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ accent_color: "#cfcfcf", shuffle_avatar_seed: false });
+      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ accent_color: "#c9a3f0", shuffle_avatar_seed: false });
     });
 
     it("rejects a malformed custom colour", async () => {

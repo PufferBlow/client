@@ -13,8 +13,9 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Monaco,
     Inconsolata, "Roboto Mono", "Source Code Pro", monospace;
 
-  /* Black and white: near-black ground, white accent. Green (online, success) and red (errors, badges)
-     are the only colours. Values are the Switchyard Mockups Mono sheet's. */
+  /* Black and white for the surfaces and the accent (the Switchyard Mockups Mono sheet's values).
+     Colour is kept where it means something: green for online and success, red for errors and badges,
+     amber for warnings and idle, blue for information. */
   --color-background: #0a0a0a;
   --color-background-secondary: #121212;
   --color-background-tertiary: #161616;
@@ -34,9 +35,9 @@
   --color-accent: #ffffff;
   --color-accent-hover: #e6e6e6;
   --color-success: #9fd487;
-  --color-warning: #cfcfcf;
+  --color-warning: #e3ae4f;
   --color-error: #e2654f;
-  --color-info: #d6d6d6;
+  --color-info: #8cc9d6;
   --color-hover: #1f1f1f;
   --color-active: #2a2a2a;
   --color-focus: #ffffff;

@@ -44,7 +44,7 @@ export function StatCard({ label, value, hint }: { label: string; value: ReactNo
 export function Tag({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "brass" | "green" | "red" }) {
   const tones = {
     neutral: "bg-text/5 text-text-tertiary",
-    brass: "bg-primary/15 text-primary",
+    brass: "bg-warning/15 text-warning",
     green: "bg-success/15 text-success",
     red: "bg-error/15 text-error",
   } as const;

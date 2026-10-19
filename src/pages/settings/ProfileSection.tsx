@@ -18,7 +18,7 @@ const STATUSES: { id: PresenceStatus; label: string }[] = [
   { id: "offline", label: "Invisible" },
 ];
 
-const ACCENTS = ["#ffffff", "#e0e0e0", "#cfcfcf", "#bdbdbd", "#9a9a9a", "#707070", "#9fd487"];
+const ACCENTS = ["#ffffff", "#e3ae4f", "#c9a3f0", "#9fd487", "#f0a061", "#8cc9d6", "#ef8a75", "#a9b3e6"];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function AboutCard({ profile }: { profile: UserProfile }) {
