@@ -54,7 +54,7 @@ describe("resolveEmbed", () => {
 
   it("embeds SoundCloud through its widget", () => {
     expect(src("https://soundcloud.com/artist/track-name")).toBe(
-      "https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack-name&visual=false&color=%23e3ae4f",
+      "https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack-name&visual=false&color=%23ffffff",
     );
   });
 

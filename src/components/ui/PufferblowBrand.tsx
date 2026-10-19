@@ -9,15 +9,17 @@ import { useId } from "react";
  * the brand sheet calls for. The switch happens automatically.
  */
 
-export type BrandTone = "gold" | "ink" | "paper";
+export type BrandTone = "gold" | "ink" | "paper" | "current";
 
 const TONES: Record<BrandTone, string> = {
-  /** Cream, the mark on dark surfaces (default). */
-  paper: "#efe6d4",
-  /** Ink, the mark on light surfaces. */
-  ink: "#1c1408",
-  /** The brand accent. */
-  gold: "#e3ae4f",
+  /** White, the mark on dark surfaces (default). */
+  paper: "#f2f2f2",
+  /** Black, the mark on light surfaces. */
+  ink: "#000000",
+  /** The brand accent (white, in the black-and-white palette). */
+  gold: "#ffffff",
+  /** Whatever colour the surrounding text has, so CSS (hover, selected) can recolour the mark. */
+  current: "currentColor",
 };
 
 const SMALL_BELOW_PX = 32;

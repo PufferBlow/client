@@ -13,39 +13,40 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Monaco,
     Inconsolata, "Roboto Mono", "Source Code Pro", monospace;
 
-  /* Switchyard: warm charcoal ground, parchment text, brass accent */
-  --color-background: #0d0b09;
-  --color-background-secondary: #16120e;
-  --color-background-tertiary: #1a1612;
-  --color-surface: #1a1612;
-  --color-surface-secondary: #231e19;
-  --color-surface-tertiary: #2e2720;
-  --color-text: #efe6d4;
-  --color-text-secondary: #e6dcc8;
-  --color-text-tertiary: #a99e8b;
-  --color-text-muted: #7d7365;
-  --color-border: rgba(239, 230, 212, 0.14);
-  --color-border-secondary: rgba(239, 230, 212, 0.08);
-  --color-primary: #e3ae4f;
-  --color-primary-hover: #efbf63;
-  --color-secondary: #a99e8b;
-  --color-secondary-hover: #efe6d4;
-  --color-accent: #e3ae4f;
-  --color-accent-hover: #efbf63;
+  /* Black and white: near-black ground, white accent. Green (online, success) and red (errors, badges)
+     are the only colours. Values are the Switchyard Mockups Mono sheet's. */
+  --color-background: #0a0a0a;
+  --color-background-secondary: #121212;
+  --color-background-tertiary: #161616;
+  --color-surface: #161616;
+  --color-surface-secondary: #1f1f1f;
+  --color-surface-tertiary: #2a2a2a;
+  --color-text: #f2f2f2;
+  --color-text-secondary: #e0e0e0;
+  --color-text-tertiary: #9a9a9a;
+  --color-text-muted: #707070;
+  --color-border: rgba(242, 242, 242, 0.14);
+  --color-border-secondary: rgba(242, 242, 242, 0.08);
+  --color-primary: #ffffff;
+  --color-primary-hover: #e6e6e6;
+  --color-secondary: #9a9a9a;
+  --color-secondary-hover: #f2f2f2;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e6e6e6;
   --color-success: #9fd487;
-  --color-warning: #e3ae4f;
+  --color-warning: #cfcfcf;
   --color-error: #e2654f;
-  --color-info: #8cc9d6;
-  --color-hover: #231e19;
-  --color-active: #2e2720;
-  --color-focus: #e3ae4f;
-  --color-on-primary: #1c1408;
-  --color-on-secondary: #1c1408;
-  --color-on-accent: #1c1408;
-  --color-on-success: #1c1408;
-  --color-on-warning: #1c1408;
+  --color-info: #d6d6d6;
+  --color-hover: #1f1f1f;
+  --color-active: #2a2a2a;
+  --color-focus: #ffffff;
+  --color-on-primary: #000000;
+  --color-on-secondary: #000000;
+  --color-on-accent: #000000;
+  --color-on-success: #000000;
+  --color-on-warning: #000000;
   --color-on-error: #ffffff;
-  --color-on-info: #1c1408;
+  --color-on-info: #000000;
 
   --color-shadow-base: rgba(0, 0, 0, 0.22);
   --color-shadow-strong: rgba(0, 0, 0, 0.34);

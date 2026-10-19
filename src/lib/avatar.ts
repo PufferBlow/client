@@ -1,12 +1,12 @@
 const GRADIENTS: ReadonlyArray<readonly [string, string]> = [
-  ["#efbf63", "#9a5b2a"],
-  ["#c9a3f0", "#5b3c8f"],
-  ["#9fd487", "#3c6b33"],
-  ["#f0a061", "#8a3d1c"],
-  ["#8cc9d6", "#2f5866"],
-  ["#ef8a75", "#7a2a20"],
-  ["#e6d8b3", "#6b5d3f"],
-  ["#a9b3e6", "#3b4378"],
+  ["#f2f2f2", "#3a3a3a"],
+  ["#cfcfcf", "#3d3d3d"],
+  ["#bdbdbd", "#333333"],
+  ["#d6d6d6", "#353535"],
+  ["#c4c4c4", "#404040"],
+  ["#e0e0e0", "#383838"],
+  ["#dadada", "#3a3a3a"],
+  ["#a9a9a9", "#2e2e2e"],
 ];
 
 function hash(value: string): number {

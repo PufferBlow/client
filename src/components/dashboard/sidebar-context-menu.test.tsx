@@ -461,6 +461,24 @@ describe("server rail context menu", () => {
     expect(screen.getByRole("menu", { name: "Server actions" })).toBeInTheDocument();
   });
 
+  it("draws the Home tile as the puffer: white on dark, and black on white when you hover or are on it", async () => {
+    backend();
+    renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
+    const home = await screen.findByRole("link", { name: "Friends" });
+    expect(home.className).toContain("text-[#f2f2f2]");
+    expect(home.className).toContain("hover:bg-primary");
+    expect(home.className).toContain("hover:text-black");
+    expect(home.querySelector("rect[mask]")).toHaveAttribute("fill", "currentColor"); // follows the tile's text colour
+  });
+
+  it("gives the Home tile the inverted state while you are on it", async () => {
+    backend();
+    renderWithProviders(<ServerRail />, { route: "/dashboard/friends", path: "*" });
+    const home = await screen.findByRole("link", { name: "Friends" });
+    expect(home.className).toContain("bg-primary");
+    expect(home.className).toContain("text-black");
+  });
+
   it("does not hijack the Friends tile", async () => {
     backend();
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });

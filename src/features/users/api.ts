@@ -29,11 +29,13 @@ export const changePassword = (oldPassword: string, newPassword: string) =>
 export async function updateAppearance(options: {
   accentColor?: string;
   avatarKind?: "identicon" | "image";
+  bannerKind?: "default" | "solid" | "image";
   shuffleAvatarSeed?: boolean;
 }): Promise<void> {
   await authed.body("PUT", `${USERS}/profile/appearance`, {
     accent_color: options.accentColor,
     avatar_kind: options.avatarKind,
+    banner_kind: options.bannerKind,
     shuffle_avatar_seed: options.shuffleAvatarSeed ?? false,
   });
 }

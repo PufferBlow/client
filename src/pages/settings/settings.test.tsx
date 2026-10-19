@@ -10,7 +10,7 @@ const me = {
   username: "ada",
   about: "hello",
   status: "online",
-  accent_color: "#e3ae4f",
+  accent_color: "#ffffff",
   avatar_url: null,
   origin_server: "localhost:7575",
 };
@@ -36,6 +36,28 @@ describe("SettingsPage", () => {
     expect(await screen.findByRole("heading", { name: "My account" })).toBeInTheDocument();
     expect(await screen.findByText("@localhost:7575")).toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toHaveValue("ada");
+  });
+
+  it("shows the banner image the server hosts, and the accent colour when there is none", async () => {
+    backend({
+      "POST /api/v1/users/profile": {
+        user_data: { ...me, avatar_url: "/assets/avatars/pb-avatar-happy-brass.svg", banner_url: "/assets/banners/pb-banner-happy-brass.svg" },
+      },
+    });
+    const { container } = renderSettings();
+    await screen.findByLabelText("Username");
+    const avatar = container.querySelector('img[src$="/assets/avatars/pb-avatar-happy-brass.svg"]');
+    expect(avatar).toHaveAttribute("src", "http://localhost:7575/assets/avatars/pb-avatar-happy-brass.svg"); // joined to the instance
+    const banner = [...container.querySelectorAll<HTMLElement>("div.h-24")].find((el) => el.style.background.includes("pb-banner-happy-brass"));
+    expect(banner).toBeDefined();
+  });
+
+  it("falls back to the accent colour for a solid banner", async () => {
+    backend({ "POST /api/v1/users/profile": { user_data: { ...me, banner_url: "", banner_kind: "solid" } } });
+    const { container } = renderSettings();
+    await screen.findByLabelText("Username");
+    const banner = container.querySelector<HTMLElement>("div.h-24");
+    expect(banner?.style.background ?? "").not.toContain("url("); // no image: the accent gradient (jsdom cannot parse it)
   });
 
   it("sends the auth token in the body, the way the backend expects", async () => {
@@ -190,10 +212,10 @@ describe("SettingsPage", () => {
       const fetchMock = backend({ "PUT /api/v1/users/profile/appearance": { status_code: 200 } });
       const { user } = renderSettings("profile");
 
-      await user.click(await screen.findByRole("button", { name: "Use accent #c9a3f0" }));
+      await user.click(await screen.findByRole("button", { name: "Use accent #cfcfcf" }));
 
       expect(await screen.findByText("Accent colour updated.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ accent_color: "#c9a3f0", shuffle_avatar_seed: false });
+      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ accent_color: "#cfcfcf", shuffle_avatar_seed: false });
     });
 
     it("rejects a malformed custom colour", async () => {
@@ -202,15 +224,15 @@ describe("SettingsPage", () => {
 
       await user.type(await screen.findByLabelText("Custom accent colour"), "purple{Enter}");
 
-      expect(await screen.findByText("Use a hex colour like #e3ae4f.")).toBeInTheDocument();
+      expect(await screen.findByText("Use a hex colour like #ffffff.")).toBeInTheDocument();
       expect(requestLog(fetchMock).filter((r) => r.includes("appearance"))).toHaveLength(0);
     });
 
-    it("shuffles the generated avatar", async () => {
+    it("shuffles the default avatar and banner", async () => {
       const fetchMock = backend({ "PUT /api/v1/users/profile/appearance": { status_code: 200 } });
       const { user } = renderSettings("profile");
 
-      await user.click(await screen.findByRole("button", { name: /shuffle generated avatar/i }));
+      await user.click(await screen.findByRole("button", { name: /shuffle default avatar and banner/i }));
 
       expect(await screen.findByText("Avatar updated.")).toBeInTheDocument();
       expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ avatar_kind: "identicon", shuffle_avatar_seed: true });

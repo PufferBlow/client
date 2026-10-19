@@ -105,7 +105,7 @@ export function InstanceUnavailable({ status }: { status: Exclude<InstanceStatus
       aria-describedby="instance-status-body"
       className="absolute inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background px-6 py-10"
     >
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_40%,rgba(227,174,79,0.07),transparent_55%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_40%,rgba(255, 255, 255,0.07),transparent_55%)]" />
       <div className="relative flex w-full max-w-[440px] flex-col items-center text-center">
         {status === "unreachable" ? <Unreachable host={host} /> : <SignedOut host={host} />}
       </div>

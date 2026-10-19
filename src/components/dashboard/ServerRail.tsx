@@ -67,9 +67,11 @@ export function ServerRail() {
           to="/dashboard/friends"
           aria-label="Friends"
           title="Friends"
-          className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
+          className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-[14px]"} ${
+            onHome ? "bg-primary text-black" : "bg-surface-secondary text-[#f2f2f2] hover:bg-primary hover:text-black"
+          }`}
         >
-          <PufferblowBrand size={38} />
+          <PufferblowBrand size={30} tone="current" />
           <CountBadge count={unreadDms} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
         </NavLink>
       </div>

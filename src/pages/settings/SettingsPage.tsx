@@ -6,6 +6,7 @@ import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { useMyProfile } from "../../features/users/hooks";
 import type { UserProfile } from "../../features/users/types";
+import { resolveAssetUrl } from "../../services/authed";
 import { classifyAuthError } from "../../utils/authErrors";
 import { AccountSection } from "./AccountSection";
 import { ProfileSection } from "./ProfileSection";
@@ -20,12 +21,16 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 const isSection = (value: string | undefined): value is SectionId => SECTIONS.some((s) => s.id === value);
 
-/** Banner + avatar preview built from the profile's accent colour. */
+/** Banner + avatar preview: the banner image the server hosts, or the accent colour when there is none. */
 function ProfileHeader({ profile }: { profile: UserProfile }) {
-  const accent = profile.accent_color ?? "#e3ae4f";
+  const accent = profile.accent_color ?? "#9a9a9a";
+  const banner = resolveAssetUrl(profile.banner_url);
   return (
     <div className="overflow-hidden rounded-[14px] border border-border-secondary bg-surface-secondary">
-      <div className="h-24" style={{ background: `radial-gradient(120% 140% at 20% 0%, ${accent} 0%, #1d1712 85%)` }} />
+      <div
+        className="h-24"
+        style={{ background: banner ? `url("${banner}") center / cover` : `radial-gradient(120% 140% at 20% 0%, ${accent} 0%, #1a1a1a 85%)` }}
+      />
       <div className="flex items-end gap-3.5 px-5 pb-4">
         <Avatar
           name={profile.username}

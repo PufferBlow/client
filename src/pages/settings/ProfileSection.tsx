@@ -18,7 +18,7 @@ const STATUSES: { id: PresenceStatus; label: string }[] = [
   { id: "offline", label: "Invisible" },
 ];
 
-const ACCENTS = ["#e3ae4f", "#c9a3f0", "#9fd487", "#f0a061", "#8cc9d6", "#ef8a75", "#a9b3e6"];
+const ACCENTS = ["#ffffff", "#e0e0e0", "#cfcfcf", "#bdbdbd", "#9a9a9a", "#707070", "#9fd487"];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function AboutCard({ profile }: { profile: UserProfile }) {
@@ -97,7 +97,7 @@ function AppearanceCard({ profile }: { profile: UserProfile }) {
 
   const applyAccent = async (color: string) => {
     if (!HEX.test(color)) {
-      accent.fail("Use a hex colour like #e3ae4f.");
+      accent.fail("Use a hex colour like #ffffff.");
       return;
     }
     setCustom(color);
@@ -105,7 +105,7 @@ function AppearanceCard({ profile }: { profile: UserProfile }) {
   };
 
   return (
-    <SettingsCard title="Appearance" description="Your accent colour and generated avatar.">
+    <SettingsCard title="Appearance" description="Your accent colour and your default avatar and banner.">
       <div className="flex flex-col gap-2.5">
         <span className="text-[13px] text-text-tertiary">Accent colour</span>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -143,7 +143,7 @@ function AppearanceCard({ profile }: { profile: UserProfile }) {
             onClick={async () => (await avatar.run(() => updateAppearance({ avatarKind: "identicon", shuffleAvatarSeed: true }))) && refresh()}
           >
             <Shuffle size={15} aria-hidden="true" />
-            Shuffle generated avatar
+            Shuffle default avatar and banner
           </Button>
           <FeedbackLine feedback={avatar.feedback} />
         </div>

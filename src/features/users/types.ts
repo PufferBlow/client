@@ -8,7 +8,12 @@ export interface UserProfile {
   status: PresenceStatus;
   accent_color: string | null;
   avatar_url: string | null;
+  /** The picture the server hosts for this user: their upload, or the default puffer art. */
+  banner_url?: string | null;
+  /** `identicon` is the default art; `image` an upload. */
   avatar_kind?: "identicon" | "image" | null;
+  /** `default` is the default art; `solid` shows the accent colour only; `image` an upload. */
+  banner_kind?: "default" | "solid" | "image" | null;
   origin_server: string;
   last_seen?: string | null;
   /** Role ids held by the user (`"owner"`, `"admin"`, ...). */

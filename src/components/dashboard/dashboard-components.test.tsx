@@ -455,17 +455,17 @@ describe("PufferblowBrand", () => {
   });
 
   it.each([
-    ["paper", "#efe6d4"],
-    ["ink", "#1c1408"],
-    ["gold", "#e3ae4f"],
+    ["paper", "#f2f2f2"],
+    ["ink", "#000000"],
+    ["gold", "#ffffff"],
   ] as const)("paints the %s tone", (tone, colour) => {
     const { container } = render(<PufferblowBrand tone={tone} />);
     expect(container.querySelector("rect[mask]")).toHaveAttribute("fill", colour);
   });
 
-  it("is cream by default, for dark surfaces", () => {
+  it("is white by default, for dark surfaces", () => {
     const { container } = render(<PufferblowBrand />);
-    expect(container.querySelector("rect[mask]")).toHaveAttribute("fill", "#efe6d4");
+    expect(container.querySelector("rect[mask]")).toHaveAttribute("fill", "#f2f2f2");
   });
 
   it("is labelled for assistive tech", () => {

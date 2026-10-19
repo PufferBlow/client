@@ -106,7 +106,7 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
   if (host === "soundcloud.com" && path.length >= 2 && path.every((p) => /^[\w-]+$/.test(p))) {
     const clean = `https://soundcloud.com/${path.join("/")}`;
     const set = path[1] === "sets";
-    const params = new URLSearchParams({ url: clean, visual: "false", color: "#e3ae4f" });
+    const params = new URLSearchParams({ url: clean, visual: "false", color: "#ffffff" });
     return iframe("SoundCloud", "#ff5500", `https://w.soundcloud.com/player/?${params}`, { height: set ? 352 : 166 });
   }
 

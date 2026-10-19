@@ -2,9 +2,9 @@ import type { PresenceStatus } from "../users/types";
 
 export const PRESENCE: Record<PresenceStatus, { label: string; color: string }> = {
   online: { label: "Online", color: "#9fd487" },
-  idle: { label: "Idle", color: "#e3ae4f" },
+  idle: { label: "Idle", color: "#e6e6e6" },
   dnd: { label: "Do not disturb", color: "#e2654f" },
-  afk: { label: "Away", color: "#a99e8b" },
+  afk: { label: "Away", color: "#9a9a9a" },
   offline: { label: "Offline", color: "#5f574b" },
 };
 

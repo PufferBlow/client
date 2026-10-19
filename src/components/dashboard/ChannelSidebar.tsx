@@ -95,8 +95,8 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
       className="relative h-[118px] shrink-0 bg-cover bg-center"
       style={{
         background: banner
-          ? `linear-gradient(transparent 30%, rgba(13,11,9,.85)), url("${banner}") center / cover`
-          : "radial-gradient(120% 100% at 20% 10%, #9a5b2a 0%, #1d1712 75%)",
+          ? `linear-gradient(transparent 30%, rgba(10, 10, 10,.85)), url("${banner}") center / cover`
+          : "radial-gradient(120% 100% at 20% 10%, #3a3a3a 0%, #1a1a1a 75%)",
       }}
     >
       <button
@@ -107,7 +107,7 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
           const rect = e.currentTarget.getBoundingClientRect();
           onMenu({ x: rect.left, y: rect.bottom + 4 });
         }}
-        className="absolute right-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-lg bg-black/30 text-[#e6d8b3] hover:bg-black/50"
+        className="absolute right-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-lg bg-black/30 text-[#dadada] hover:bg-black/50"
       >
         <ChevronDown size={15} aria-hidden="true" />
       </button>
@@ -117,7 +117,7 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
             {server?.server_name ?? " "}
           </h2>
           {server && (
-            <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-[#e6d8b3]">
+            <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-[#dadada]">
               <Globe size={11} aria-hidden="true" />
               {server.server_id}
             </div>

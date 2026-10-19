@@ -13,9 +13,9 @@ export function AuthLayout() {
     <div className="grid h-full w-full gap-2.5 bg-background p-2.5 lg:grid-cols-[minmax(0,1fr)_460px]">
       <aside
         aria-hidden="true"
-        className="relative hidden overflow-hidden rounded-[14px] bg-[radial-gradient(120%_100%_at_20%_10%,#9a5b2a_0%,#1d1712_75%)] lg:block"
+        className="relative hidden overflow-hidden rounded-[14px] bg-[radial-gradient(120%_100%_at_20%_10%,#3a3a3a_0%,#1a1a1a_75%)] lg:block"
       >
-        <div className="absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(239,230,212,0.035)_0_2px,transparent_2px_16px)]" />
+        <div className="absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(242, 242, 242,0.035)_0_2px,transparent_2px_16px)]" />
 
         <BrandLockup size={44} className="absolute left-7 top-7" />
 

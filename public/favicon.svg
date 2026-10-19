@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120">
   <style>
-    .face { fill: #efe6d4; }
-    @media (prefers-color-scheme: light) { .face { fill: #1c1408; } }
+    .face { fill: #f2f2f2; }
+    @media (prefers-color-scheme: light) { .face { fill: #000000; } }
   </style>
   <defs>
     <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
