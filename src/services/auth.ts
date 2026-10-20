@@ -1,6 +1,6 @@
 import { api, ApiError } from "./api";
 import { createLogger } from "../lib/logger";
-import { getApiUrl, getStoredInstance } from "./instance";
+import { getApiUrl, getStoredInstance, setStoredInstance } from "./instance";
 import type { InstanceConfig } from "./types";
 
 /** Flat body returned by `POST /users/signin`, `POST /users/signup` and `POST /auth/refresh`. */
@@ -133,7 +133,13 @@ function storedApiUrl(): string | null {
  * keychain, and is not kept here; a browser, or a system without a keychain, keeps it in web
  * storage. `apiUrl` is the instance the refresh token belongs to (the stored instance by default).
  */
-export async function persistSession(tokens: AuthTokens, remember: boolean, apiUrl = storedApiUrl()): Promise<void> {
+export async function persistSession(
+  tokens: AuthTokens,
+  remember: boolean,
+  apiUrl = storedApiUrl(),
+  /** Runs in the same tick the session is written, so the token and the instance it belongs to change together. */
+  commit?: () => void,
+): Promise<void> {
   const bridge = vault();
   if (bridge && apiUrl && tokens.refresh_token) {
     const epoch = sessionEpoch;
@@ -141,11 +147,13 @@ export async function persistSession(tokens: AuthTokens, remember: boolean, apiU
     if (epoch !== sessionEpoch) return; // signed out meanwhile (which also cleared the vault)
     if (stored) {
       writeSession(tokens, remember, null);
+      commit?.();
       return;
     }
     log.warn("no OS keychain for the session, keeping it in web storage");
   }
   writeSession(tokens, remember, tokens.refresh_token);
+  commit?.();
 }
 
 type AccessTokens = Pick<AuthTokens, "auth_token" | "auth_token_expire_time" | "refresh_token_expire_time">;
@@ -180,8 +188,16 @@ function writeSession(tokens: AccessTokens, remember: boolean, refreshToken: str
  */
 let sessionEpoch = 0;
 
+const clearedListeners = new Set<() => void>();
+
+/** Run `listener` whenever the live session is cleared (sign-out, or a session the instance refused). */
+export function onSessionCleared(listener: () => void): void {
+  clearedListeners.add(listener);
+}
+
 export function clearAuthToken() {
   sessionEpoch += 1;
+  clearedListeners.forEach((listener) => listener());
   const expired = `${AUTH_TOKEN_KEY}=; Path=/; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   document.cookie = expired;
   // A cookie that was stored as Secure is only replaced by a Secure one, so expire that variant too.
@@ -200,7 +216,9 @@ async function startSession(tokens: AuthTokens | null, remember: boolean, instan
   }
   // The new session is the active account from here on (an earlier one was saved before sign-in).
   setActiveAccountId(accountIdFor(username, instance));
-  await persistSession(tokens, remember, getApiUrl(instance));
+  // The instance is only changed together with the session: a sign-in that fails must leave the
+  // live session pointing at the instance its token belongs to.
+  await persistSession(tokens, remember, getApiUrl(instance), () => setStoredInstance(instance));
   return tokens;
 }
 

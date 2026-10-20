@@ -3,6 +3,7 @@ import {
   accountIdFor,
   getActiveAccountId,
   logout,
+  onSessionCleared,
   restoreSession,
   setActiveAccountId,
   snapshotSession,
@@ -32,9 +33,9 @@ export interface Account {
 
 const vault = () => (typeof window === "undefined" ? undefined : window.electron?.session);
 
-export function listAccounts(): Account[] {
+function readList(store: Storage): Account[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "[]");
+    const parsed: unknown = JSON.parse(store.getItem(KEY) ?? "[]");
     return Array.isArray(parsed) ? (parsed as Account[]).filter((a) => a && typeof a.id === "string" && a.instance?.origin) : [];
   } catch {
     log.warn("the saved account list is unreadable, starting over");
@@ -42,13 +43,36 @@ export function listAccounts(): Account[] {
   }
 }
 
+/** Every saved account. A session that was not to be remembered lives in this tab's storage only. */
+export function listAccounts(): Account[] {
+  const tab = readList(sessionStorage);
+  const tabIds = new Set(tab.map((a) => a.id));
+  return [...tab, ...readList(localStorage).filter((a) => !tabIds.has(a.id))].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * A saved session keeps the lifetime its owner chose at sign-in: "stay signed in" ones may be kept
+ * on this device, the others only for as long as this tab.
+ */
 function save(accounts: Account[]): void {
+  const forTab = accounts.filter((a) => a.snapshot?.session.remember === false);
+  const forDevice = accounts.filter((a) => a.snapshot?.session.remember !== false);
   try {
-    localStorage.setItem(KEY, JSON.stringify(accounts));
+    localStorage.setItem(KEY, JSON.stringify(forDevice));
+    sessionStorage.setItem(KEY, JSON.stringify(forTab));
   } catch (error) {
     log.warn("couldn't save the account list", error);
   }
 }
+
+// A session that is cleared (signed out, or refused by its instance) must not linger as a copy that
+// could be switched back to: its account stays listed, but has to sign in again.
+onSessionCleared(() => {
+  const id = getActiveAccountId();
+  if (!id) return;
+  const accounts = listAccounts();
+  if (accounts.some((a) => a.id === id && a.snapshot)) save(accounts.map((a) => (a.id === id ? { ...a, snapshot: null } : a)));
+});
 
 function upsert(account: Account): void {
   const rest = listAccounts().filter((a) => a.id !== account.id);

@@ -4,7 +4,6 @@ import { ArrowRight, AtSign } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { AuthField, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { signup } from "../../services/auth";
-import { setStoredInstance } from "../../services/instance";
 import {
   classifyAuthError,
   PASSWORD_MAX,
@@ -55,7 +54,6 @@ export function SignupPage() {
     setErrors({});
     setLoading(true);
     try {
-      setStoredInstance(target.instance);
       await signup({ username: target.username, password, instance: target.instance, remember });
       navigate(resolvePostAuthRedirect(redirect), { replace: true });
     } catch (err) {

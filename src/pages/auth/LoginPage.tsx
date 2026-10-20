@@ -4,7 +4,6 @@ import { ArrowRight, AtSign } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { AuthField, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { login } from "../../services/auth";
-import { setStoredInstance } from "../../services/instance";
 import { classifyAuthError } from "../../utils/authErrors";
 import { resolveHandle } from "../../utils/authForm";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../../utils/authRedirect";
@@ -42,7 +41,6 @@ export function LoginPage() {
     setErrors({});
     setLoading(true);
     try {
-      setStoredInstance(target.instance);
       await login({ username: target.username, password, instance: target.instance, remember });
       // Adding an account swaps who is signed in, so start clean rather than carry the old one's data.
       if (adding) window.location.assign(resolvePostAuthRedirect(redirect));

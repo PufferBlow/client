@@ -7,7 +7,7 @@ import {
   signOutActiveAccount,
   switchAccount,
 } from "./accounts";
-import { getActiveAccountId, getAuthToken, persistSession, setActiveAccountId, type AuthTokens } from "./auth";
+import { clearAuthToken, getActiveAccountId, getAuthToken, login, persistSession, setActiveAccountId, type AuthTokens } from "./auth";
 import { getStoredInstance, resolveInstance, setStoredInstance } from "./instance";
 
 const one = resolveInstance("one.example");
@@ -21,10 +21,10 @@ const tokens = (token: string): AuthTokens => ({
 });
 
 /** Signs in as `name` on `instance` the way login does, without a network. */
-async function signInAs(name: string, instance: ReturnType<typeof resolveInstance>, token: string) {
+async function signInAs(name: string, instance: ReturnType<typeof resolveInstance>, token: string, remember = true) {
   setStoredInstance(instance);
   setActiveAccountId(`${name}@${instance.raw}`);
-  await persistSession(tokens(token), true);
+  await persistSession(tokens(token), remember);
   await rememberActiveAccount({ username: name, avatar_url: `/storage/${name}.png` });
 }
 
@@ -129,5 +129,45 @@ describe("saved accounts", () => {
     await expect(signOutActiveAccount()).resolves.toBe("signed-out");
     expect(getAuthToken()).toBeNull();
     expect(listAccounts()).toEqual([]);
+  });
+
+  it("keeps a session that was not to be remembered out of device storage", async () => {
+    await signInAs("ada", one, "a1", false);
+    expect(localStorage.getItem("pb_accounts") ?? "[]").not.toContain("refresh-a1");
+    expect(sessionStorage.getItem("pb_accounts")).toContain("refresh-a1");
+    expect(listAccounts()).toHaveLength(1);
+  });
+
+  it("drops the saved copy of a session that is cleared, but keeps the account listed", async () => {
+    await signInAs("ada", one, "a1");
+    expect(listAccounts()[0]!.snapshot).not.toBeNull();
+
+    clearAuthToken(); // e.g. the instance refused the session
+
+    expect(listAccounts()[0]).toMatchObject({ username: "ada", snapshot: null });
+    expect(localStorage.getItem("pb_accounts")).not.toContain("refresh-a1");
+    await expect(switchAccount(`ada@${one.raw}`)).resolves.toBe(false); // has to sign in again
+  });
+
+  it("leaves the live session on its own instance when a sign-in fails", async () => {
+    await signInAs("ada", one, "a1");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error_code: "auth.invalid_credentials" }), { status: 401, headers: { "content-type": "application/json" } })));
+
+    await expect(login({ username: "bo", password: "wrong", instance: two, remember: true })).rejects.toBeDefined();
+
+    expect(getStoredInstance()?.raw).toBe(one.raw); // not two: ada's token must never be sent there
+    expect(getAuthToken()).toBe("a1");
+  });
+
+  it("moves to the new instance together with the new session when a sign-in succeeds", async () => {
+    await signInAs("ada", one, "a1");
+    saveActiveAccount();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(tokens("b1")), { status: 200, headers: { "content-type": "application/json" } })));
+
+    await login({ username: "bo", password: "pw", instance: two, remember: true });
+
+    expect(getStoredInstance()?.raw).toBe(two.raw);
+    expect(getAuthToken()).toBe("b1");
+    expect(getActiveAccountId()).toBe(`bo@${two.raw}`);
   });
 });
