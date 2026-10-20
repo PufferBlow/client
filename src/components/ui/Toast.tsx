@@ -8,8 +8,8 @@ export function ToastRegion({ toast }: { toast: ToastData | null }) {
         <div
           key={toast.id}
           className={[
-            "rounded-xl border px-4 py-2.5 text-sm shadow-popover",
-            toast.tone === "error" ? "border-error/50 bg-surface-secondary text-error" : "border-border-secondary bg-surface-secondary text-text",
+            "rounded-lg bg-surface-tertiary px-4 py-2.5 text-[13.5px] font-semibold shadow-popover",
+            toast.tone === "error" ? "text-error-text shadow-[inset_0_0_0_1px_rgba(226,101,79,0.4),var(--shadow-popover)]" : "text-text",
           ].join(" ")}
         >
           {toast.text}

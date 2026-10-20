@@ -34,15 +34,15 @@ export function Modal({ isOpen, onClose, title, description, children, footer, s
   return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/64 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onMouseDown={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className={`w-full ${sizeClasses[size]} rounded-2xl border border-border-secondary bg-surface p-6 shadow-modal`}>
+      <div className={`w-full ${sizeClasses[size]} rounded-xl bg-surface-tertiary p-6 shadow-modal`}>
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-text">{title}</h2>
-          {description && <p className="mt-1 text-sm text-text-secondary">{description}</p>}
+          <h2 className="pb-title">{title}</h2>
+          {description && <p className="pb-meta mt-1.5 text-[13px]">{description}</p>}
         </div>
         <div className="text-sm text-text">{children}</div>
         {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}

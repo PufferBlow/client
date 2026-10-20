@@ -285,6 +285,11 @@ button[aria-disabled="true"],
   border-radius: 5px;
 }
 .pb-system-line { font: italic 400 13.5px/1.4 var(--pb-font-body); color: var(--pb-text-2); }
+.pb-label-button {
+  font: 700 13px/1 var(--pb-font-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 .pb-button-primary {
   font: 700 13px/1 var(--pb-font-label);
   letter-spacing: 0.1em;

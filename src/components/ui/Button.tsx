@@ -11,32 +11,27 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    "border border-transparent bg-linear-to-b from-primary-hover to-[#e6e6e6] text-on-primary hover:brightness-105",
-  secondary:
-    "border border-border bg-surface text-text hover:bg-surface-secondary",
-  ghost:
-    "border border-transparent bg-transparent text-text-secondary hover:border-border-secondary hover:bg-hover hover:text-text",
-  danger:
-    "border border-error bg-error text-on-error hover:bg-[color-mix(in_srgb,var(--color-error)_85%,black)]",
-  warning:
-    "border border-warning bg-warning text-on-warning hover:bg-[color-mix(in_srgb,var(--color-warning)_85%,black)]",
-  success:
-    "border border-success bg-success text-on-success hover:bg-[color-mix(in_srgb,var(--color-success)_85%,black)]",
+  // Primary is the only white surface on a screen.
+  primary: "bg-primary text-on-primary hover:bg-white active:scale-[0.97]",
+  secondary: "bg-surface-secondary text-text hover:bg-surface-tertiary active:scale-[0.97]",
+  ghost: "border border-border bg-transparent text-text hover:bg-surface-secondary",
+  danger: "bg-error/14 text-error-text hover:bg-error/22 active:scale-[0.97]",
+  warning: "bg-warning/14 text-warning hover:bg-warning/22 active:scale-[0.97]",
+  success: "bg-success/14 text-success hover:bg-success/22 active:scale-[0.97]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm rounded-md",
-  md: "h-10 px-4 text-sm rounded-xl",
-  lg: "h-12 px-5 text-base rounded-xl",
+  sm: "h-8 px-3 rounded-sm",
+  md: "h-10 px-[18px] rounded-md",
+  lg: "h-12 px-6 rounded-md",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", fullWidth, loading, className, children, disabled, ...props }, ref) => {
     const classes = [
-      "inline-flex items-center justify-center gap-2 font-medium tracking-[-0.01em] transition-colors duration-150",
+      "pb-label-button inline-flex items-center justify-center gap-2 border-0 transition-[background-color,transform] duration-(--motion-fast)",
       "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-      "disabled:opacity-50 disabled:cursor-not-allowed",
+      "disabled:cursor-not-allowed disabled:bg-surface disabled:text-text-faint disabled:active:scale-100",
       variantClasses[variant],
       sizeClasses[size],
       fullWidth ? "w-full" : "",

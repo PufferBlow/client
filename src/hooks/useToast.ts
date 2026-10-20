@@ -6,7 +6,7 @@ export interface Toast {
   tone: "info" | "error";
 }
 
-const VISIBLE_MS = 4000;
+const VISIBLE_MS = 5000;
 
 /** One transient notice at a time; a new one replaces the old. */
 export function useToast() {

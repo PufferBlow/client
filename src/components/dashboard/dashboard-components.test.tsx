@@ -287,14 +287,14 @@ describe("MessageItem", () => {
     it("shows the avatar, name and time on the first message of a group", () => {
       render(<MessageItem message={message()} isGroupStart myUserId="me" {...handlers()} />);
       expect(screen.getByText("grace")).toBeInTheDocument();
-      expect(screen.getByText("G")).toBeInTheDocument(); // avatar initial
+      expect(document.querySelector('img[src*="pb-avatar-"]')).toBeInTheDocument(); // the avatar
       expect(screen.getAllByText(timeText)).toHaveLength(1);
     });
 
     it("drops the avatar and name on continuations but keeps the text and a hover time", () => {
       render(<MessageItem message={message()} isGroupStart={false} myUserId="me" {...handlers()} />);
       expect(screen.queryByText("grace")).not.toBeInTheDocument();
-      expect(screen.queryByText("G")).not.toBeInTheDocument();
+      expect(document.querySelector('img[src*="pb-avatar-"]')).not.toBeInTheDocument();
       expect(screen.getByText("hello there")).toBeInTheDocument();
       expect(screen.getAllByText(timeText)).toHaveLength(1);
     });
@@ -381,25 +381,42 @@ describe("MessageItem", () => {
 });
 
 describe("Avatar", () => {
-  it("shows initials when there is no image", () => {
-    render(<Avatar name="Ada Lovelace" />);
-    expect(screen.getByText("AL")).toBeInTheDocument();
+  it("shows the fish for the name when there is no image, the same one every time", () => {
+    const first = render(<Avatar name="Ada Lovelace" />);
+    const fish = first.container.querySelector("img")!.getAttribute("src");
+    expect(fish).toMatch(/pb-avatar-/);
+    first.unmount();
+    const second = render(<Avatar name="Ada Lovelace" />);
+    expect(second.container.querySelector("img")).toHaveAttribute("src", fish);
   });
 
-  it("loads the image from the instance and falls back to initials if it fails", () => {
+  it("loads the image from the instance and falls back to the fish if it fails", () => {
     signIn();
     const { container } = render(<Avatar name="Ada Lovelace" src="/storage/ava" />);
     const img = container.querySelector("img")!;
     expect(img).toHaveAttribute("src", "http://localhost:7575/storage/ava");
 
     fireEvent.error(img);
-    expect(container.querySelector("img")).toBeNull();
-    expect(screen.getByText("AL")).toBeInTheDocument();
+    expect(container.querySelector("img")!.getAttribute("src")).toMatch(/pb-avatar-/);
   });
 
-  it("skips the image when it cannot be resolved (signed out)", () => {
+  it("uses the fish when the image cannot be resolved (signed out)", () => {
     const { container } = render(<Avatar name="Ada" src="/storage/ava" />);
-    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("img")!.getAttribute("src")).toMatch(/pb-avatar-/);
+  });
+
+  it("dims an offline avatar and draws no dot", () => {
+    const { container } = render(<Avatar name="Ada" presence="offline" />);
+    expect(container.querySelector("span")).toBeNull();
+    expect(container.firstElementChild).toHaveStyle({ opacity: "0.55" });
+  });
+
+  it("draws an idle dot hollow and an activity dot in sage", () => {
+    const idle = render(<Avatar name="Ada" presence="idle" ringColor="#161616" />);
+    expect(idle.container.querySelector("span")!.getAttribute("style")).toContain("inset 0 0 0 3px");
+    idle.unmount();
+    const call = render(<Avatar name="Ada" presence="online" activity />);
+    expect(call.container.querySelector("span")).toHaveStyle({ background: "rgb(159, 212, 135)" });
   });
 
   it("draws a presence dot in the status colour", () => {
