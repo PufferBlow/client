@@ -22,6 +22,8 @@ interface AvatarProps {
   muted?: boolean;
   /** Mentioned you and you have not read it: spines bristle out around the avatar. */
   bristle?: boolean;
+  /** The thin ring of the frame this person chose (`Look.ringSmall`). Speaking and muted rings win over it. */
+  frame?: string;
   className?: string;
 }
 
@@ -30,7 +32,7 @@ interface AvatarProps {
  * out of the surface by a 3px ring of its colour; idle is hollow; offline has none and dims the
  * avatar to 55%.
  */
-export function Avatar({ name, src, seed, size = 40, presence, activity, ringColor = "var(--color-surface)", speaking, muted, bristle, className }: AvatarProps) {
+export function Avatar({ name, src, seed, size = 40, presence, activity, ringColor = "var(--color-surface)", speaking, muted, bristle, frame, className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const url = resolveAssetUrl(src);
   const showImage = url !== undefined && url !== failedSrc;
@@ -42,6 +44,7 @@ export function Avatar({ name, src, seed, size = 40, presence, activity, ringCol
   let ring: string | undefined;
   if (speaking) ring = undefined; // the animation draws it
   else if (muted) ring = `0 0 0 2px ${ringColor}, 0 0 0 4px var(--color-text)`;
+  else if (frame && frame !== "none") ring = frame;
 
   return (
     <div

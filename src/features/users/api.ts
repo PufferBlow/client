@@ -22,6 +22,8 @@ const editProfile = (fields: Record<string, string>) => authed.body<unknown>("PU
 
 export const updateUsername = (newUsername: string) => editProfile({ new_username: newUsername });
 export const updateAbout = (about: string) => editProfile({ about });
+/** Pronouns and the custom status go together in one request; an omitted one is left alone and "" clears it. */
+export const updateProfileText = (fields: { pronouns?: string; custom_status?: string }) => editProfile(fields as Record<string, string>);
 export const updateStatus = (status: PresenceStatus) => editProfile({ status });
 export const changePassword = (oldPassword: string, newPassword: string) =>
   editProfile({ old_password: oldPassword, new_password: newPassword });
@@ -31,12 +33,15 @@ export async function updateAppearance(options: {
   avatarKind?: "identicon" | "image";
   bannerKind?: "default" | "solid" | "image";
   shuffleAvatarSeed?: boolean;
+  /** A partial settings object: only the keys sent change, and the instance refuses it whole if any is wrong. */
+  profileSettings?: Record<string, unknown>;
 }): Promise<void> {
   await authed.body("PUT", `${USERS}/profile/appearance`, {
     accent_color: options.accentColor,
     avatar_kind: options.avatarKind,
     banner_kind: options.bannerKind,
     shuffle_avatar_seed: options.shuffleAvatarSeed ?? false,
+    profile_settings: options.profileSettings,
   });
 }
 

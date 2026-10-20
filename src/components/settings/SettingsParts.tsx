@@ -11,8 +11,8 @@ export function SettingsCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[14px] border border-border-secondary bg-surface-secondary p-5">
-      <h2 className="m-0 font-heading text-lg font-semibold">{title}</h2>
+    <section className="rounded-lg bg-surface-secondary p-5">
+      <h2 className="pb-title m-0 text-[22px]">{title}</h2>
       {description && <p className="m-0 mt-1 text-[13px] text-text-tertiary">{description}</p>}
       <div className="mt-4 flex flex-col gap-4">{children}</div>
     </section>

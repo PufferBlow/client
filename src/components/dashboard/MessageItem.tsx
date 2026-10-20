@@ -23,6 +23,7 @@ import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { HostPill } from "../ui/HostPill";
+import { useProfileCard } from "../profile/profileCardContext";
 import { PuffFace } from "../ui/PuffFace";
 import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
@@ -368,7 +369,18 @@ export const MessageItem = memo(function MessageItem({
   const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
   // Someone else answering one of my messages: tinted, like a mention.
   // Someone @-mentioned the viewer by name: the row is picked out the same way as a reply to them.
-  const { me: myName, hosts, home } = useContext(MentionDirectoryContext);
+  const profileCard = useProfileCard();
+  const showCard = (e: MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    profileCard.open(message.authorId, { x: rect.right + 8, y: rect.top });
+  };
+  const { me: myName, hosts, home, looks } = useContext(MentionDirectoryContext);
+  const authorLook = looks?.get(message.authorId);
+  // Barlow is the default; only another name style needs its own font.
+  const nameStyle =
+    authorLook && authorLook.nameFont !== "barlow"
+      ? { font: authorLook.nameStyle.fontSmall, letterSpacing: authorLook.nameStyle.letterSpacing, textTransform: authorLook.nameStyle.textTransform as "none" | "uppercase" }
+      : undefined;
   // Local authors show no host; remote ones always do.
   const authorHost = hosts?.get(message.authorId);
   const remoteHost = authorHost !== undefined && home !== undefined && authorHost !== home ? authorHost : undefined;
@@ -407,7 +419,9 @@ export const MessageItem = memo(function MessageItem({
       {/* Same gutter width for every row so content never shifts horizontally. */}
       <div className="w-10 shrink-0">
         {isGroupStart ? (
-          <Avatar name={message.authorName} src={message.authorAvatarUrl} seed={message.authorId} size={40} />
+          <button type="button" onClick={showCard} aria-label={`View ${message.authorName}'s profile`} className="block cursor-pointer rounded-full border-0 bg-transparent p-0 outline-none focus-visible:outline-2 focus-visible:outline-focus">
+            <Avatar name={message.authorName} src={message.authorAvatarUrl} seed={message.authorId} size={40} frame={authorLook?.frame} />
+          </button>
         ) : (
           <time
             dateTime={message.sentAt}
@@ -420,7 +434,9 @@ export const MessageItem = memo(function MessageItem({
       <div className="min-w-0 flex-1">
         {isGroupStart && (
           <header className="flex flex-wrap items-baseline gap-2">
-            <span className="pb-username">{message.authorName}</span>
+            <button type="button" onClick={showCard} className="pb-username cursor-pointer border-0 bg-transparent p-0 text-left outline-none hover:underline focus-visible:underline" style={nameStyle}>
+              {message.authorName}
+            </button>
             {remoteHost && <HostPill host={remoteHost} />}
             <time dateTime={message.sentAt} className="pb-timestamp">
               {formatTime(message.sentAt)}

@@ -10,6 +10,7 @@ import { useServerInfo } from "../../features/server/hooks";
 import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
+import { lookOf } from "../../features/users/look";
 import { canMentionEveryone } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
@@ -44,6 +45,12 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
       known: new Set((users ?? []).map((u) => u.username.toLowerCase())),
       hosts: new Map((users ?? []).flatMap((u) => (u.origin_server ? [[u.user_id, u.origin_server] as const] : []))),
       home: me?.origin_server,
+      looks: new Map(
+        (users ?? []).map((u) => {
+          const look = lookOf(u);
+          return [u.user_id, { nameFont: look.settings.name_font, nameStyle: look.nameStyle, frame: look.ringSmall }] as const;
+        }),
+      ),
     }),
     [users, me?.username, me?.origin_server],
   );

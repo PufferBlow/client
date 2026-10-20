@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router";
 import { ServerRail } from "../components/dashboard/ServerRail";
 import { UserPanel } from "../components/dashboard/UserPanel";
 import { InstanceUnavailable } from "../components/instance/InstanceUnavailable";
+import { ProfileCardProvider } from "../components/profile/ProfileCardProvider";
 import { useInstanceStatus } from "../features/instance/status";
 import { RealtimeProvider } from "../features/realtime/RealtimeProvider";
 import { VoiceProvider } from "../features/voice/VoiceProvider";
@@ -24,21 +25,27 @@ export function DashboardLayout() {
   return (
     <RealtimeProvider>
       <VoiceProvider>
-        <div className="relative flex h-full min-w-0 flex-1">
-          <div inert={blocked} aria-hidden={blocked || undefined} className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}>
-            {showRail && <ServerRail />}
-            <div className="flex min-h-0 min-w-0 flex-1 gap-2">
-              <Outlet />
-            </div>
-            {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
-            {showRail && (
-              <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
-                <UserPanel />
+        <ProfileCardProvider>
+          <div className="relative flex h-full min-w-0 flex-1">
+            <div
+              inert={blocked}
+              aria-hidden={blocked || undefined}
+              className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}
+            >
+              {showRail && <ServerRail />}
+              <div className="flex min-h-0 min-w-0 flex-1 gap-2">
+                <Outlet />
               </div>
-            )}
+              {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
+              {showRail && (
+                <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
+                  <UserPanel />
+                </div>
+              )}
+            </div>
+            {blocked && <InstanceUnavailable status={status} />}
           </div>
-          {blocked && <InstanceUnavailable status={status} />}
-        </div>
+        </ProfileCardProvider>
       </VoiceProvider>
     </RealtimeProvider>
   );

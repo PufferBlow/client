@@ -191,10 +191,10 @@ describe("SettingsPage", () => {
       expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ about: "hello world", auth_token: "tok" }]);
     });
 
-    it("limits the about text to 500 characters", async () => {
+    it("limits the about text to 190 characters, as the instance does", async () => {
       backend();
       renderSettings("profile");
-      expect(await screen.findByLabelText(/^About/)).toHaveAttribute("maxlength", "500");
+      expect(await screen.findByLabelText(/^About/)).toHaveAttribute("maxlength", "190");
     });
 
     it("marks the current status and changes it with one click", async () => {

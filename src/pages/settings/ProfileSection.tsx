@@ -8,8 +8,9 @@ import { PRESENCE } from "../../features/members/presence";
 import { updateAbout, updateAppearance, updateStatus } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
 import type { PresenceStatus, UserProfile } from "../../features/users/types";
+import { CustomizeProfile } from "./CustomizeProfile";
 
-const ABOUT_MAX = 500;
+const ABOUT_MAX = 190;
 
 const STATUSES: { id: PresenceStatus; label: string }[] = [
   { id: "online", label: "Online" },
@@ -158,6 +159,7 @@ export function ProfileSection({ profile }: { profile: UserProfile }) {
     <>
       <AboutCard profile={profile} />
       <StatusCard profile={profile} />
+      <CustomizeProfile key={JSON.stringify([profile.profile_settings, profile.pronouns, profile.custom_status])} profile={profile} />
       <AppearanceCard profile={profile} />
     </>
   );

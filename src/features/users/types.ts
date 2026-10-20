@@ -1,3 +1,5 @@
+import type { ProfileSettings, SectionName } from "./look";
+
 export type PresenceStatus = "online" | "idle" | "afk" | "dnd" | "offline";
 
 /** The `user_profile` payload fields the client uses (the backend returns more). */
@@ -14,8 +16,15 @@ export interface UserProfile {
   avatar_kind?: "identicon" | "image" | null;
   /** `default` is the default art; `solid` shows the accent colour only; `image` an upload. */
   banner_kind?: "default" | "solid" | "image" | null;
+  /** At most 40 characters. */
+  pronouns?: string | null;
+  /** The line shown under the name on the card; at most 60 characters. */
+  custom_status?: string | null;
+  /** How the person chose to look; always complete from an up-to-date instance. */
+  profile_settings?: (Partial<Omit<ProfileSettings, "sections">> & { sections?: Partial<Record<SectionName, boolean>> }) | null;
   origin_server: string;
   last_seen?: string | null;
+  created_at?: string | null;
   /** Role ids held by the user (`"owner"`, `"admin"`, ...). */
   roles_ids?: string[] | null;
   resolved_roles?: UserRole[];
