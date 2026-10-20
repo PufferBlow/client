@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router";
 import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { useMyProfile } from "../../features/users/hooks";
+import { useRememberAccount } from "../../features/users/useRememberAccount";
 import { useVoice } from "../../features/voice/voiceContext";
+import { AccountSwitcher } from "./AccountSwitcher";
 import { Avatar } from "./Avatar";
 
 const iconButton =
@@ -12,17 +14,18 @@ export function UserPanel() {
   const { data: me } = useMyProfile();
   const voice = useVoice();
   const inCall = voice.status === "connected";
+  useRememberAccount();
 
   return (
     <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 shadow-modal">
       {me ? (
-        <>
+        <AccountSwitcher>
           <Avatar name={me.username} src={me.avatar_url} seed={me.user_id} size={34} presence={me.status} activity={inCall} muted={inCall && (voice.isMuted || voice.isDeafened)} ringColor="var(--color-surface-secondary)" />
           <div className="min-w-0 flex-1 leading-tight">
             <div className="truncate text-sm font-bold">{me.username}</div>
             <div className="pb-meta truncate text-[11px]">{me.origin_server}</div>
           </div>
-        </>
+        </AccountSwitcher>
       ) : (
         <>
           <div className="h-[34px] w-[34px] animate-pulse rounded-full bg-surface-tertiary" />

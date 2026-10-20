@@ -19,6 +19,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get("redirect");
+  const adding = params.has("add");
 
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +44,9 @@ export function LoginPage() {
     try {
       setStoredInstance(target.instance);
       await login({ username: target.username, password, instance: target.instance, remember });
-      navigate(resolvePostAuthRedirect(redirect), { replace: true });
+      // Adding an account swaps who is signed in, so start clean rather than carry the old one's data.
+      if (adding) window.location.assign(resolvePostAuthRedirect(redirect));
+      else navigate(resolvePostAuthRedirect(redirect), { replace: true });
     } catch (err) {
       const info = classifyAuthError(err, "Sign in failed. Please try again.");
       setErrors(info.field === "instance" ? { handle: info.message } : { form: info.message });

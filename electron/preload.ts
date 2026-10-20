@@ -22,8 +22,14 @@ const api = {
    */
   session: {
     available: (): Promise<boolean> => ipcRenderer.invoke("session:available"),
-    store: (apiUrl: string, refreshToken: string, remember: boolean): Promise<boolean> =>
-      ipcRenderer.invoke("session:store", apiUrl, refreshToken, remember),
+    store: (apiUrl: string, refreshToken: string, remember: boolean, account?: string): Promise<boolean> =>
+      ipcRenderer.invoke("session:store", apiUrl, refreshToken, remember, account),
+    /** Make a stored account the one refresh, revoke and clear act on. */
+    activate: (account: string): Promise<boolean> => ipcRenderer.invoke("session:activate", account),
+    /** Give an account stored before accounts had names its real name. */
+    rename: (from: string, to: string): Promise<boolean> => ipcRenderer.invoke("session:rename", from, to),
+    /** Forget one account's refresh token, whichever is active. */
+    forget: (account: string): Promise<void> => ipcRenderer.invoke("session:forget", account),
     refresh: (): Promise<RefreshResult> => ipcRenderer.invoke("session:refresh"),
     revoke: (): Promise<void> => ipcRenderer.invoke("session:revoke"),
     clear: (): Promise<void> => ipcRenderer.invoke("session:clear"),

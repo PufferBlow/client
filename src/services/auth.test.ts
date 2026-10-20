@@ -299,7 +299,7 @@ describe("in the desktop app", () => {
     mockFetch(jsonResponse(tokens()));
     await login({ username: "ada", password: "pw", instance, remember: true });
 
-    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-1", true);
+    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-1", true, "ada@localhost:7575");
     expect(getAuthToken()).toBe("access-1");
     const stored = JSON.parse(localStorage.getItem("pb_session")!);
     expect(stored).toMatchObject({ refreshToken: null, remember: true });
@@ -343,7 +343,7 @@ describe("in the desktop app", () => {
 
     await expect(renewSession()).resolves.toBe("renewed");
 
-    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-2", true);
+    expect(vault.store).toHaveBeenCalledWith("http://localhost:7575", "refresh-2", true, undefined);
     expect(JSON.parse(localStorage.getItem("pb_session")!).refreshToken).toBeNull();
   });
 

@@ -80,9 +80,12 @@ app.whenReady().then(() => {
 
   const vault = createSessionVault();
   ipcMain.handle("session:available", () => vault.available());
-  ipcMain.handle("session:store", (_event, apiUrl: unknown, refreshToken: unknown, remember: unknown) =>
-    vault.store(apiUrl, refreshToken, remember),
+  ipcMain.handle("session:store", (_event, apiUrl: unknown, refreshToken: unknown, remember: unknown, account: unknown) =>
+    vault.store(apiUrl, refreshToken, remember, account ?? undefined),
   );
+  ipcMain.handle("session:activate", (_event, account: unknown) => vault.activate(account));
+  ipcMain.handle("session:rename", (_event, from: unknown, to: unknown) => vault.rename(from, to));
+  ipcMain.handle("session:forget", (_event, account: unknown) => vault.forget(account));
   ipcMain.handle("session:refresh", () => vault.refresh());
   ipcMain.handle("session:revoke", () => vault.revoke());
   ipcMain.handle("session:clear", () => vault.clear());

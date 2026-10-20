@@ -23,8 +23,9 @@ const log = createLogger("auth");
 
 const AUTH_TOKEN_KEY = "auth_token";
 const SESSION_KEY = "pb_session";
+const ACTIVE_ACCOUNT_KEY = "pb_active_account";
 
-interface StoredSession {
+export interface StoredSession {
   /**
    * Null when the desktop app's main process holds it (`electron/sessionVault.ts`): the page then
    * never sees the long-lived credential, only the access tokens the main process hands back.
@@ -33,6 +34,50 @@ interface StoredSession {
   authExpiresAt: string | null;
   refreshExpiresAt: string | null;
   remember: boolean;
+}
+
+/** A person on an instance, the same name wherever it is used: "ada@chat.example:7575". */
+export function accountIdFor(username: string, instance: InstanceConfig): string {
+  return `${username.trim().toLowerCase()}@${instance.raw}`;
+}
+
+/** Which saved account the live session belongs to, or null for one from before accounts. */
+export function getActiveAccountId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_ACCOUNT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveAccountId(id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+    else localStorage.setItem(ACTIVE_ACCOUNT_KEY, id);
+  } catch {
+    log.warn("couldn't remember which account is active");
+  }
+}
+
+/** A saved copy of the live session, so another account can take its place and be switched back to. */
+export interface SessionSnapshot {
+  authToken: string;
+  session: StoredSession;
+}
+
+export function snapshotSession(): SessionSnapshot | null {
+  const session = readSession();
+  const authToken = getAuthToken();
+  return session && authToken ? { authToken, session } : null;
+}
+
+/** Make a saved session the live one. In the desktop app the caller also activates it in the vault. */
+export function restoreSession({ authToken, session }: SessionSnapshot): void {
+  writeSession(
+    { auth_token: authToken, auth_token_expire_time: session.authExpiresAt ?? undefined, refresh_token_expire_time: session.refreshExpiresAt ?? undefined },
+    session.remember,
+    session.refreshToken,
+  );
 }
 
 function readSession(): StoredSession | null {
@@ -92,7 +137,7 @@ export async function persistSession(tokens: AuthTokens, remember: boolean, apiU
   const bridge = vault();
   if (bridge && apiUrl && tokens.refresh_token) {
     const epoch = sessionEpoch;
-    const stored = await bridge.store(apiUrl, tokens.refresh_token, remember).catch(() => false);
+    const stored = await bridge.store(apiUrl, tokens.refresh_token, remember, getActiveAccountId() ?? undefined).catch(() => false);
     if (epoch !== sessionEpoch) return; // signed out meanwhile (which also cleared the vault)
     if (stored) {
       writeSession(tokens, remember, null);
@@ -148,11 +193,13 @@ export function clearAuthToken() {
   else log.info("session cleared");
 }
 
-async function startSession(tokens: AuthTokens | null, remember: boolean, instance: InstanceConfig): Promise<AuthTokens> {
+async function startSession(tokens: AuthTokens | null, remember: boolean, instance: InstanceConfig, username: string): Promise<AuthTokens> {
   if (!tokens?.auth_token) {
     log.error("the instance answered a sign-in without a token");
     throw new Error("The instance returned an unexpected response.");
   }
+  // The new session is the active account from here on (an earlier one was saved before sign-in).
+  setActiveAccountId(accountIdFor(username, instance));
   await persistSession(tokens, remember, getApiUrl(instance));
   return tokens;
 }
@@ -171,7 +218,7 @@ export async function login({ username, password, instance, remember }: Credenti
     tokens = await api.get<AuthTokens>(url, { query: { username, password } });
   }
   log.info(`signed in as ${username}`);
-  return startSession(tokens, remember, instance);
+  return startSession(tokens, remember, instance, username);
 }
 
 export async function signup({ username, password, instance, remember }: Credentials): Promise<AuthTokens> {
@@ -179,7 +226,7 @@ export async function signup({ username, password, instance, remember }: Credent
   const tokens = await api.post<AuthTokens>(`${getApiUrl(instance)}/api/v1/users/signup`, {
     json: { username, password },
   });
-  return startSession(tokens, remember, instance);
+  return startSession(tokens, remember, instance, username);
 }
 
 /**

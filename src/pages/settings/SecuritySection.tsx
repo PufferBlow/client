@@ -6,7 +6,8 @@ import { PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "../../components/ui/Button";
-import { isSessionRemembered, logout } from "../../services/auth";
+import { signOutActiveAccount } from "../../services/accounts";
+import { isSessionRemembered } from "../../services/auth";
 import { resetSessionTokens } from "../../features/users/api";
 
 function ResetTokensCard() {
@@ -55,10 +56,12 @@ function SignOutCard() {
 
   const handleSignOut = async () => {
     setLoading(true);
-    await logout();
+    const next = await signOutActiveAccount();
     // Nothing of this account may survive for whoever signs in next.
     queryClient.clear();
-    navigate("/login", { replace: true });
+    // Another saved account takes over with a fresh start; otherwise it is the login page.
+    if (next === "switched") window.location.assign("/dashboard");
+    else navigate("/login", { replace: true });
   };
 
   return (
