@@ -18,9 +18,10 @@ function Roster({ participants }: { participants: VoiceParticipant[] }) {
   return (
     <ul aria-label="In this call" className="m-0 mb-1 ml-[22px] mt-0.5 list-none space-y-px p-0">
       {participants.map((p) => (
-        <li key={p.userId} className="flex h-7 items-center gap-2 rounded-md pl-2 pr-1.5 text-[13.5px] text-text-tertiary">
-          <span className={`rounded-full ${p.isSpeaking ? "ring-2 ring-success" : ""}`} data-speaking={p.isSpeaking || undefined}>
-            <Avatar name={p.username || "?"} seed={p.userId} size={20} />
+        <li key={p.userId} className="flex h-7 items-center gap-2 rounded-md pl-2 pr-1.5 text-[13px] text-text-body">
+          {/* Speaking is the only animated ring: a sage pulse. Muted or deafened is a still white ring. */}
+          <span className="rounded-full" data-speaking={p.isSpeaking || undefined}>
+            <Avatar name={p.username || "?"} seed={p.userId} size={22} speaking={p.isSpeaking} muted={p.isMuted || p.isDeafened} ringColor="var(--color-surface)" />
           </span>
           <span className="min-w-0 flex-1 truncate">{p.username || "Unknown"}</span>
           {p.isMuted && <MicOff size={12} aria-label="Muted" className="shrink-0 text-text-muted" />}
@@ -61,7 +62,7 @@ export function VoiceChannelRow({ channel, onMenu, moreButton }: VoiceChannelRow
           aria-pressed={connected}
           aria-label={connected ? `${channel.channel_name}, connected${inCall}. Click to leave` : `Join voice channel ${channel.channel_name}${inCall}`}
           onClick={() => void (connected ? voice.leave() : voice.join(id))}
-          className={`flex h-8 w-full items-center gap-2 rounded-lg pl-2.5 text-left text-[14.5px] transition-colors hover:bg-surface-secondary disabled:cursor-wait ${
+          className={`flex h-[34px] w-full items-center gap-2 rounded-sm pl-2.5 text-left text-[14.5px] transition-colors duration-(--motion-fast) hover:bg-surface-secondary disabled:cursor-wait ${
             count > 0 ? "pr-[4.25rem]" : "pr-8"
           } ${connected ? "font-semibold text-success" : "text-text-tertiary"}`}
         >

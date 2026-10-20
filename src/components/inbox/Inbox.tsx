@@ -255,7 +255,7 @@ function MentionsList({ onNavigate }: { onNavigate: () => void }) {
               onClick={() => open(notification)}
               className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border-0 bg-transparent py-1 text-left outline-none focus-visible:outline-2 focus-visible:outline-focus"
             >
-              <Avatar name={name} src={actor?.avatar_url} seed={notification.actorUserId ?? name} size={36} />
+              <Avatar name={name} src={actor?.avatar_url} seed={notification.actorUserId ?? name} size={36} bristle={!notification.read} />
               <span className="min-w-0 flex-1">
                 <span className={`block text-[14px] ${notification.read ? "text-text-secondary" : "font-semibold text-text"}`}>
                   <strong className="font-bold">{name}</strong> {notification.type === "reply" ? "replied to you" : "mentioned you"}{channel ? <> in <span className="text-text">#{channel.channel_name}</span></> : null}

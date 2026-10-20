@@ -52,7 +52,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
                       active ? "bg-surface-tertiary" : "hover:bg-surface-secondary"
                     }`}
                   >
-                    <Avatar name={c.peerUsername} src={c.peerAvatarUrl} seed={c.peerUserId} size={32} presence={c.peerStatus} />
+                    <Avatar name={c.peerUsername} src={c.peerAvatarUrl} seed={c.peerUserId} size={32} presence={c.peerStatus} bristle={unread > 0} />
                     <div className="min-w-0 leading-tight">
                       <div className={`truncate text-sm ${unread > 0 ? "font-bold text-text" : "font-medium"} ${active ? "text-text" : unread > 0 ? "" : "text-text-secondary"}`}>{c.peerUsername}</div>
                       {c.lastMessagePreview && (

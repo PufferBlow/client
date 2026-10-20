@@ -23,6 +23,8 @@ import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
 import { HostPill } from "../ui/HostPill";
+import { PuffFace } from "../ui/PuffFace";
+import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
 import { DEFAULT_REACTIONS } from "../../lib/reactionUsage";
 
@@ -311,6 +313,31 @@ function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: 
   );
 }
 
+/** A reaction under a message. Puff reactions are drawn as their face and pop when you add one. */
+function ReactionChip({ emoji, count, mine, onToggle }: { emoji: string; count: number; mine: boolean; onToggle: (present: boolean) => void }) {
+  const [pop, setPop] = useState(0);
+  const puff = parsePuff(emoji);
+  return (
+    <button
+      type="button"
+      aria-pressed={mine}
+      aria-label={puff ? `${puff.label} reaction, ${count}` : undefined}
+      onClick={() => {
+        if (puff && !mine) setPop((n) => n + 1);
+        onToggle(!mine);
+      }}
+      className={[
+        "flex h-7 items-center gap-1.5 rounded-pill px-2.5 text-[12.5px] font-semibold transition-colors duration-(--motion-fast)",
+        puff ? "pl-1.5" : "",
+        mine ? "bg-text text-on-primary" : "bg-surface-secondary text-text-body shadow-[inset_0_0_0_1px_rgba(242,242,242,0.08)] hover:bg-surface-tertiary",
+      ].join(" ")}
+    >
+      {puff ? <PuffFace reaction={emoji} size={18} pop={pop} /> : <Emoji char={emoji} size={16} />}
+      <span className="text-xs">{count}</span>
+    </button>
+  );
+}
+
 const toolButton = "grid h-7 w-7 place-items-center rounded-md text-text-tertiary hover:bg-active hover:text-text";
 
 export const MessageItem = memo(function MessageItem({
@@ -467,19 +494,13 @@ export const MessageItem = memo(function MessageItem({
             {message.reactions.map((reaction) => {
               const mine = myUserId !== undefined && reaction.userIds.includes(myUserId);
               return (
-                <button
+                <ReactionChip
                   key={reaction.emoji}
-                  type="button"
-                  aria-pressed={mine}
-                  onClick={() => onToggleReaction(message.id, reaction.emoji, !mine)}
-                  className={[
-                    "flex h-7 items-center gap-1.5 rounded-pill px-2.5 text-[12.5px] font-semibold transition-colors duration-(--motion-fast)",
-                    mine ? "bg-text text-on-primary" : "bg-surface-secondary text-text-body shadow-[inset_0_0_0_1px_rgba(242,242,242,0.08)] hover:bg-surface-tertiary",
-                  ].join(" ")}
-                >
-                  <Emoji char={reaction.emoji} size={16} />
-                  <span className="text-xs">{reaction.count}</span>
-                </button>
+                  emoji={reaction.emoji}
+                  count={reaction.count}
+                  mine={mine}
+                  onToggle={(present) => onToggleReaction(message.id, reaction.emoji, present)}
+                />
               );
             })}
           </div>
@@ -488,6 +509,22 @@ export const MessageItem = memo(function MessageItem({
 
       {!editing && (!isLocal || isPending) && (
         <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-md bg-surface-tertiary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
+          {PUFF_FACES.map(({ face, label }) => {
+            const reaction = puffReaction(face);
+            const mine = message.reactions.some((r) => r.emoji === reaction && myUserId !== undefined && r.userIds.includes(myUserId));
+            return (
+              <button
+                key={face}
+                type="button"
+                className={toolButton}
+                aria-label={`${mine ? "Remove" : "Add"} ${label} reaction`}
+                title={label}
+                onClick={() => onToggleReaction(message.id, reaction, !mine)}
+              >
+                <PuffFace reaction={reaction} size={20} />
+              </button>
+            );
+          })}
           {(() => {
             const mine = message.reactions.some((r) => r.emoji === quickReaction && myUserId !== undefined && r.userIds.includes(myUserId));
             return (

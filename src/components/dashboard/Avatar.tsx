@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ACTIVITY_COLOR, PRESENCE } from "../../features/members/presence";
 import type { PresenceStatus } from "../../features/users/types";
-import { defaultAvatarUrl } from "../../lib/identity";
+import { defaultAvatarUrl, identity } from "../../lib/identity";
 import { resolveAssetUrl } from "../../services/authed";
 
 interface AvatarProps {
@@ -20,6 +20,8 @@ interface AvatarProps {
   speaking?: boolean;
   /** Muted or deafened: a still white ring. */
   muted?: boolean;
+  /** Mentioned you and you have not read it: spines bristle out around the avatar. */
+  bristle?: boolean;
   className?: string;
 }
 
@@ -28,7 +30,7 @@ interface AvatarProps {
  * out of the surface by a 3px ring of its colour; idle is hollow; offline has none and dims the
  * avatar to 55%.
  */
-export function Avatar({ name, src, seed, size = 40, presence, activity, ringColor = "var(--color-surface)", speaking, muted, className }: AvatarProps) {
+export function Avatar({ name, src, seed, size = 40, presence, activity, ringColor = "var(--color-surface)", speaking, muted, bristle, className }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string>();
   const url = resolveAssetUrl(src);
   const showImage = url !== undefined && url !== failedSrc;
@@ -47,6 +49,7 @@ export function Avatar({ name, src, seed, size = 40, presence, activity, ringCol
       style={{ width: size, height: size, opacity: dim ? 0.55 : 1, boxShadow: ring, ["--pb-ring-gap" as string]: ringColor }}
       aria-hidden="true"
     >
+      {bristle && <Bristle size={size} colour={identity(seed ?? name).hex} />}
       <img
         src={showImage ? url : defaultAvatarUrl(seed ?? name)}
         alt=""
@@ -68,6 +71,27 @@ export function Avatar({ name, src, seed, size = 40, presence, activity, ringCol
         />
       )}
     </div>
+  );
+}
+
+const SPINE = "M-5 0Q-2 -9 0 -14Q2 -9 5 0Z";
+
+/** Twelve spines in the person's colour that breathe in and out behind the avatar. */
+function Bristle({ size, colour }: { size: number; colour: string }) {
+  const reach = size * 0.55;
+  return (
+    <svg
+      aria-hidden="true"
+      className="pb-anim-bristle pointer-events-none absolute overflow-visible"
+      width={size * 1.5}
+      height={size * 1.5}
+      viewBox="-42 -42 84 84"
+      style={{ left: -size * 0.25, top: -size * 0.25 }}
+    >
+      {Array.from({ length: 12 }, (_, i) => (
+        <path key={i} d={SPINE} fill={colour} transform={`rotate(${i * 30}) translate(0 ${-Math.min(30, reach)})`} />
+      ))}
+    </svg>
   );
 }
 

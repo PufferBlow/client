@@ -287,14 +287,14 @@ describe("MessageItem", () => {
     it("shows the avatar, name and time on the first message of a group", () => {
       render(<MessageItem message={message()} isGroupStart myUserId="me" {...handlers()} />);
       expect(screen.getByText("grace")).toBeInTheDocument();
-      expect(document.querySelector('img[src*="pb-avatar-"]')).toBeInTheDocument(); // the avatar
+      expect(document.querySelector('img.rounded-full[src*="pb-avatar-"]')).toBeInTheDocument(); // the avatar
       expect(screen.getAllByText(timeText)).toHaveLength(1);
     });
 
     it("drops the avatar and name on continuations but keeps the text and a hover time", () => {
       render(<MessageItem message={message()} isGroupStart={false} myUserId="me" {...handlers()} />);
       expect(screen.queryByText("grace")).not.toBeInTheDocument();
-      expect(document.querySelector('img[src*="pb-avatar-"]')).not.toBeInTheDocument();
+      expect(document.querySelector('img.rounded-full[src*="pb-avatar-"]')).not.toBeInTheDocument();
       expect(screen.getByText("hello there")).toBeInTheDocument();
       expect(screen.getAllByText(timeText)).toHaveLength(1);
     });
@@ -488,5 +488,28 @@ describe("PufferblowBrand", () => {
   it("is labelled for assistive tech", () => {
     render(<PufferblowBrand />);
     expect(screen.getByRole("img", { name: "Pufferblow" })).toBeInTheDocument();
+  });
+});
+
+describe("puff reactions in a message", () => {
+  it("draws a puff reaction as its face and sends it back as the reserved string", async () => {
+    const onToggleReaction = vi.fn();
+    const withPuff = { ...message(), reactions: [{ emoji: "puff:happy", count: 2, userIds: ["someone"] }] };
+    render(<MessageItem message={withPuff} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={onToggleReaction} />);
+
+    const chip = screen.getByRole("button", { name: "Happy reaction, 2" });
+    expect(chip.querySelector("[data-puff='happy']")).not.toBeNull();
+    await userEvent.click(chip);
+    expect(onToggleReaction).toHaveBeenCalledWith(withPuff.id, "puff:happy", true);
+    // it puffed: the face has the pop animation and spines
+    expect(chip.querySelectorAll(".pb-anim-spike")).toHaveLength(8);
+  });
+
+  it("offers all six faces on the toolbar", async () => {
+    const onToggleReaction = vi.fn();
+    render(<MessageItem message={message()} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={onToggleReaction} />);
+    expect(screen.getAllByRole("button", { name: /^Add .+ reaction$/ }).length).toBeGreaterThanOrEqual(6);
+    await userEvent.click(screen.getByRole("button", { name: "Add Wink reaction" }));
+    expect(onToggleReaction).toHaveBeenCalledWith(expect.any(String), "puff:wink", true);
   });
 });
