@@ -129,26 +129,48 @@ repo's tests parse every one. What is left:
 - [x] Failing `test_30_command_protocol.py` tests fixed. The reaction mystery was a real bug: the
   reaction and notification helpers in `database_handler.py` never called `session.commit()`, so rows
   were not saved. `delete_message` now works on SQLite, and editing a bot's message is limited to that bot.
-- [ ] **Existing tests fail at baseline here.** Signup returns 503 because `create_server_row` skips SQLite,
-  so no server row exists in the test database (tests 01 to 07, 16, 17, 19, 23 to 25). The new tests stub
-  `get_server`; fix it properly in `conftest.py`. `test_sequence_numbers_are_per_channel` failed once in a
-  full-suite run and passed on every rerun; cause not found.
-- [ ] `import magic` hangs in some shells (libmagic); use `python-magic-bin` on Windows or stub it, and
-  confirm the signature-sniffing fallback in `storage/mime.py`.
-- [ ] **Persist per-channel sequence numbers.** Sequence is in memory and resets with the process `epoch`;
-  clients resync on an epoch change. A persisted sequence (or an outbox) would close the gap between
-  commit and publish after a crash.
-- [ ] **Publish `channel.updated` for role/privilege changes** and call `revalidate_subscriptions` and
-  `grant_subscriptions` from those routes. Today they run on channel create, update, delete and
-  member add/remove only, so gaining or losing `view_private_channels` takes effect on reconnect.
+- [x] **The existing tests failed at baseline here, and now run.** Signup returned 503 because the SQLite test
+  database had no server row (`create_server_row` and `check_server_exists` skipped SQLite). The server table now
+  exists there and `conftest.py` creates the row. Getting the old suites to run uncovered the rest: ids were passed as
+  strings to a UUID column SQLite would not bind (`database/tables/uuid_type.py` makes the column the same on both
+  databases), the SQLite password digest was never compared as one, and tests 01 to 08, 16, 17, 19, 23 to 25 asserted
+  routes and error shapes from before the error contract (they are rewritten, each making its own account because every
+  test has its own database). Full backend suite: 535 passed, 0 failed.
+  Real bugs it found, now fixed: **message ids collided** about one time in 52 for repeated short messages (a UUIDv5 of
+  a slice of the text plus one random letter), so the second insert failed with an internal error; that is also the
+  cause of the `test_sequence_numbers_are_per_channel` flake that was "not found". **A bot could delete its owner's
+  messages** (delete compared the owner's id, which the bot shares). **An avatar or banner could be any file** named
+  `.png`. Asking for a profile of an id that does not exist was a 500 (now 404).
+- [x] `import magic` hangs in some shells. Cause: python-magic on Windows loads Git for Windows' MSYS libmagic, which
+  crashes a native Python (`a3fb600`); `create_mime_detector` now detects that and uses the signature fallback.
+  The fallback is confirmed: it reads PNG, JPEG, GIF, WebP, PDF, audio and video signatures, and since it can call a
+  text file `text/plain`, avatar and banner uploads now also require an image type, so a renamed text file is refused
+  with or without libmagic (`test_08_cdn_uploads.py`).
+- [x] **Persist per-channel sequence numbers.** Each channel's counter starts from a persisted high-water mark and
+  reserves numbers in blocks of 64 (`channel_event_seq`), so a number is never reused after a restart and the
+  database is written once per block. `epoch` still changes per process, so clients resync after a restart. The
+  commit-to-publish crash gap needs no outbox: the message is committed, the history returns it, and a reconnecting
+  client always runs `events.resync`; the database is the log (`test_49_persisted_event_sequence.py`).
+- [x] **Publish `channel.updated` for role/privilege changes** and refresh open sockets from those routes: editing
+  a role or reassigning a user's roles calls `refresh_channel_access`, which revokes and grants private-channel
+  subscriptions (`b698e45`, `test_37_channel_access.py`).
 - [x] **Close the legacy private-channel leak.** Closed by removing the legacy `/ws` loop, the per-channel
   socket and `broadcast_to_eligible_users`; the v1 path checks `view_private_channels`.
-- [ ] **Bots**: reactions (needs a schema change like `sender_bot_id`), creating and revoking bots (owner
-  only API), end-to-end scope tests.
+- [x] **Bots.** The instance owner creates, lists and revokes bots over HTTP (`POST/GET/DELETE /api/v1/bots`; the token
+  is shown once, only a hash is stored, non-owners get 403, administrative scopes are refused). Bots can react:
+  their reactions live in `bot_message_reactions` and appear in summaries under the bot's principal id. End-to-end
+  scope tests over real sockets (`test_48_bots_api.py`): `send_messages` to post, edit, react and delete (only its own
+  messages), `view_private_channels` for private channels, a bot with no scopes can read but not write, a revoked bot is
+  cut off at its next command and cannot reconnect, a bot token is not a login for the rest of the API.
 - [x] **Credentials in the URL.** The socket takes the token as a `bearer.<token>` subprotocol (browsers) or
   an `Authorization` header instead of `?auth_token=`; the query form still works for older clients.
-- [ ] **Attachments over the socket.** Files still use the HTTP `send_message` upload path.
-- [ ] **Per-IP and global connection limits**, in addition to the 10 sockets per user.
+- [x] **Attachments over the socket.** `upload.begin` / `upload.chunk` (base64, in order, 32 KiB) / `upload.abort`, then
+  `message.create` with `upload_ids`. Uploads are staged per principal with size, count, process and time limits,
+  checked for ownership, and stored by the same function as the HTTP route (`services/attachments.py`); they are kept
+  until the message exists, so a refused send can be retried (`test_50_socket_attachments.py`, protocol spec
+  "Sending files"). HTTP stays for very large files and progress.
+- [x] **Per-IP and global connection limits.** 50 sockets per address and 10,000 per process, checked before the token is
+  resolved (`ca7f2fb`, `test_44_socket_limits.py`).
 - [x] **Run command handlers off the event loop.** The handlers hand the service and authorizer calls
   to a worker thread (`asyncio.to_thread`), and so do the between-command credential check and the
   idempotency-key reads and writes in the dispatcher; `ctx.subscriptions` and the publisher's sequence
@@ -188,10 +210,14 @@ repo's tests parse every one. What is left:
 
 ### Docs and examples
 - [x] `docs/protocol/v1.md` written (in `pufferblow/`).
-- [ ] **Write `docs/architecture/commands-and-events.md`** (layers: protocol, dispatcher, services, authorizer,
-  publisher, connection manager).
+- [x] **`docs/architecture/commands-and-events.md`** written (layers, the path of one command, uploads, sequence
+  numbers, where things live).
 - [x] Python SDK: `pypufferblow.realtime.ProtocolClient`, `Client.realtime()`, `websocket(protocol=True)` and
   `BotOptions(use_protocol=True)`, documented in the SDK README and `docs/realtime.rst`.
-- [ ] **Add `examples/bot_client.py`** to `pufferblow/` using `ProtocolClient` and a bot token from an
-  environment variable; never embed credentials.
-- [ ] **Document the observability counters** exposed under `realtime` in `/api/v1/system/instance-health`.
+- [x] **`examples/bot_client.py`** (in `pufferblow/`): connects with `ProtocolClient`, answers `!ping`, takes the instance and
+  bot token from `PUFFERBLOW_INSTANCE` and `PUFFERBLOW_BOT_TOKEN`, never embeds credentials. Not run against a live
+  instance yet.
+- [x] **Observability counters** are documented, one row per counter, in the architecture page and linked from the
+  `instance-health` entry of the API reference.
+- [ ] **client-new does not use the upload commands yet.** It still sends files over HTTP (with a pending row and Retry);
+  moving it to `upload.begin` / `upload.chunk` would give a progress bar per chunk and one transport for everything.
