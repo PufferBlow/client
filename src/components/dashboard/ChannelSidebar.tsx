@@ -19,7 +19,7 @@ const isMenuKey = (e: KeyboardEvent) => e.key === "ContextMenu" || (e.key === "F
 
 function GroupLabel({ children }: { children: string }) {
   return (
-    <div className="flex items-center gap-1 px-1.5 pb-1.5 pt-3.5 font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-text-muted">
+    <div className="pb-section-label flex items-center gap-1.5 px-2.5 pb-1.5 pt-3.5">
       <ChevronDown size={11} aria-hidden="true" />
       {children}
     </div>
@@ -70,8 +70,14 @@ function TextChannelLink({ channel, unread, pings, muted, onMenu }: { channel: C
         }}
         className={({ isActive }) =>
           [
-            "flex h-8 items-center gap-2 rounded-lg pl-2.5 pr-8 text-[14.5px] transition-colors hover:bg-surface-secondary",
-            isActive ? "bg-surface-tertiary font-semibold text-text" : showUnread ? "font-semibold text-text" : muted ? "text-text-muted" : "text-text-tertiary",
+            "flex h-[34px] items-center gap-2 rounded-sm pl-2.5 pr-8 text-[14.5px] transition-colors duration-(--motion-fast) hover:bg-surface-secondary",
+            isActive
+              ? "bg-surface-tertiary font-semibold text-text"
+              : showUnread
+                ? "font-semibold text-text"
+                : muted
+                  ? "text-text-faint"
+                  : "font-medium text-text-tertiary hover:text-text-body",
           ].join(" ")
         }
       >
@@ -113,7 +119,7 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
       </button>
       <div className="absolute inset-x-3.5 bottom-3 flex items-end justify-between">
         <div className="min-w-0">
-          <h2 className="truncate font-display text-xl font-normal leading-tight tracking-normal">
+          <h2 className="pb-panel-header truncate text-xl">
             {server?.server_name ?? " "}
           </h2>
           {server && (
@@ -141,18 +147,18 @@ export function ChannelSidebar() {
   const voiceChannels = (channels ?? []).filter((c) => c.channel_type === "voice");
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden">
+    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-lg bg-surface max-md:hidden">
       <SidebarHeader onMenu={serverMenu.open} />
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pt-1">
         {isPending ? (
           <div className="flex flex-col gap-2 px-2 pt-4" aria-busy="true">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-6 animate-pulse rounded-lg bg-surface-secondary" />
+              <div key={i} className="h-6 animate-pulse rounded-sm bg-surface-secondary" />
             ))}
           </div>
         ) : error ? (
-          <p className="px-3 pt-4 text-[13px] text-error">Couldn&apos;t load channels.</p>
+          <p className="pb-error px-3 pt-4">Couldn&apos;t load channels.</p>
         ) : (
           <>
             {textChannels.length > 0 && (

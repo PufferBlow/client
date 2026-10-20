@@ -39,8 +39,13 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
     return canMentionEveryone(me) ? [{ id: EVERYONE, name: EVERYONE, avatarUrl: null, everyone: true }, ...people] : people;
   }, [users, me]);
   const directory = useMemo<MentionDirectory>(
-    () => ({ me: me?.username, known: new Set((users ?? []).map((u) => u.username.toLowerCase())) }),
-    [users, me?.username],
+    () => ({
+      me: me?.username,
+      known: new Set((users ?? []).map((u) => u.username.toLowerCase())),
+      hosts: new Map((users ?? []).flatMap((u) => (u.origin_server ? [[u.user_id, u.origin_server] as const] : []))),
+      home: me?.origin_server,
+    }),
+    [users, me?.username, me?.origin_server],
   );
   const { data: server } = useServerInfo();
 
@@ -111,10 +116,10 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const Icon = channel.is_private ? Lock : Hash;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[14px] bg-surface" aria-label={`#${channel.channel_name}`}>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label={`#${channel.channel_name}`}>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
         <Icon size={18} className="text-text-tertiary" aria-hidden="true" />
-        <h1 className="m-0 font-heading text-[19px] font-semibold">{channel.channel_name}</h1>
+        <h1 className="m-0 text-[15px] font-bold">{channel.channel_name}</h1>
         <div className="ml-auto flex items-center gap-1">
           <ChannelSearch channelId={channelId} channelName={channel.channel_name} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
           {onToggleMembers && (
@@ -151,7 +156,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
             <div className="mb-3 grid size-14 place-items-center rounded-full bg-surface-secondary">
               <Icon size={26} className="text-text-tertiary" aria-hidden="true" />
             </div>
-            <h2 className="m-0 font-heading text-[24px] font-semibold text-text">Welcome to #{channel.channel_name}</h2>
+            <h2 className="m-0 font-display text-[30px] font-normal text-text">Welcome to #{channel.channel_name}</h2>
             <p className="m-0 mt-1 text-[14px] text-text-muted">This is the start of the #{channel.channel_name} channel.</p>
           </div>
         }

@@ -284,7 +284,7 @@ export function Composer({
           id="composer-mentions"
           role="listbox"
           aria-label={suggestions[0]?.kind === "emoji" ? "Emoji" : "People to mention"}
-          className="absolute bottom-full left-0 right-0 z-20 m-0 mb-2 max-h-72 list-none overflow-y-auto rounded-xl border border-border-secondary bg-surface-secondary p-1.5 shadow-popover"
+          className="absolute bottom-full left-0 right-0 z-20 m-0 mb-2 max-h-72 list-none overflow-y-auto rounded-lg bg-surface-tertiary p-1.5 shadow-popover"
         >
           {suggestions.map((choice, i) => (
             <li
@@ -298,7 +298,7 @@ export function Composer({
                 pickSuggestion(choice);
               }}
               onMouseEnter={() => setActiveMention(i)}
-              className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm ${i === activeMention ? "bg-surface-tertiary text-text" : "text-text-secondary"}`}
+              className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm ${i === activeMention ? "bg-text/10 text-text" : "text-text-body"}`}
             >
               {choice.kind === "emoji" ? (
                 <>
@@ -310,7 +310,7 @@ export function Composer({
               ) : (
                 <>
                   {choice.item.everyone ? (
-                    <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/20 text-primary">
+                    <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-text/15 text-text">
                       <AtSign size={14} />
                     </span>
                   ) : (
@@ -332,10 +332,10 @@ export function Composer({
       )}
       <form
         onSubmit={submit}
-        className="rounded-[14px] bg-surface-secondary text-text-tertiary focus-within:ring-2 focus-within:ring-primary/30"
+        className="rounded-lg bg-surface-secondary text-text-tertiary transition-shadow duration-(--motion-fast) focus-within:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]"
       >
         {replyingTo && (
-          <div className="flex items-center gap-2 rounded-t-[14px] border-b border-border-secondary bg-surface-tertiary/50 py-1.5 pl-3.5 pr-2 text-[13px]">
+          <div className="flex items-center gap-2 rounded-t-lg border-b border-border-secondary bg-surface-tertiary/50 py-1.5 pl-3.5 pr-2 text-[13px]">
             <Reply size={14} aria-hidden="true" className="shrink-0 text-text-muted" />
             <span className="min-w-0 truncate text-text-muted">
               Replying to <span className="font-semibold text-text-secondary">{replyingTo.authorName}</span>
@@ -380,7 +380,7 @@ export function Composer({
             type="button"
             aria-label="Attach files"
             onClick={() => fileInput.current?.click()}
-            className="mb-0.75 grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-surface-tertiary hover:text-text"
+            className="mb-0.75 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-tertiary hover:text-text"
           >
             <Paperclip size={15} />
           </button>
@@ -448,7 +448,7 @@ export function Composer({
             type="submit"
             aria-label="Send message"
             disabled={!canSend}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary text-on-primary transition-opacity disabled:opacity-40"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary text-on-primary transition-[opacity,transform] active:scale-95 disabled:opacity-40"
           >
             <Send size={16} />
           </button>
@@ -462,8 +462,8 @@ export function Composer({
       {dragging &&
         createPortal(
           <div className="pointer-events-none fixed inset-0 z-[80] grid place-items-center bg-background/70 backdrop-blur-[2px]">
-            <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/60 bg-surface-secondary px-12 py-9 text-center shadow-modal">
-              <span className="grid size-14 place-items-center rounded-full bg-primary/15 text-primary">
+            <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-text/40 bg-surface-secondary px-12 py-9 text-center shadow-modal">
+              <span className="grid size-14 place-items-center rounded-full bg-text/15 text-text">
                 <Upload size={26} />
               </span>
               <p className="m-0 text-[17px] font-bold text-text">Drop to attach</p>

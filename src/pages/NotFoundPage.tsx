@@ -36,14 +36,14 @@ function ErrorView({ code, title, message, detail }: ErrorViewProps) {
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           {signedIn ? (
             <Link to="/dashboard">
-              <Button size="lg" className="font-heading uppercase tracking-[0.1em]">
+              <Button size="lg">
                 <Home size={16} aria-hidden="true" />
                 Back to dashboard
               </Button>
             </Link>
           ) : (
             <Link to="/login">
-              <Button size="lg" className="font-heading uppercase tracking-[0.1em]">
+              <Button size="lg">
                 <LogIn size={16} aria-hidden="true" />
                 Sign in
               </Button>

@@ -9,25 +9,26 @@ import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { useToast } from "../../hooks/useToast";
 import { initialsFor } from "../../lib/avatar";
+import { identity } from "../../lib/identity";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useServerMenu } from "./useSidebarMenus";
 
-/** Left-edge pill: tall when selected, a dot when unread, hidden otherwise. */
+/** Left-edge pill: 36px when open, 20px on hover, 8px when unread, hidden otherwise. */
 function Indicator({ selected, unread }: { selected: boolean; unread: boolean }) {
+  const size = selected ? "h-9" : unread ? "h-2 group-hover/tile:h-5" : "h-0 group-hover/tile:h-5";
   return (
     <span
       aria-hidden="true"
-      className="absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r bg-text transition-[height]"
-      style={{ height: selected ? 36 : unread ? 8 : 0 }}
+      className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r bg-text transition-[height] duration-(--motion-base) ease-(--motion-ease-out) ${size}`}
     />
   );
 }
 
 const tileBase =
-  "relative grid h-12 w-12 place-items-center font-heading text-[15px] font-bold text-on-primary transition-[border-radius,filter] hover:rounded-[12px] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+  "relative grid h-12 w-12 place-items-center font-display text-lg text-on-primary transition-[border-radius,filter] hover:rounded-[12px] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 /** Tiles that hold an icon rather than initials set their own text colour. */
 const iconTileBase = tileBase.replace(" text-on-primary", "");
@@ -58,10 +59,12 @@ export function ServerRail() {
   const anyUnread = Object.entries(unread ?? {}).some(([id, n]) => n > 0 && !muted.has(id));
   const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const serverName = server?.server_name ?? "Server";
+  // A space with no picture gets its identity colour, the same on every client.
+  const spaceColour = identity(server?.server_id ?? serverName).hex;
 
   return (
     <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
-      <div className="relative flex w-full justify-center">
+      <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
           to="/dashboard/friends"
@@ -78,7 +81,7 @@ export function ServerRail() {
 
       <div className="h-0.5 w-7 rounded bg-border-secondary" />
 
-      <div className="relative flex w-full justify-center">
+      <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onServer} unread={anyUnread || totalPings > 0} />
         <NavLink
           to="/dashboard/channels"
@@ -95,6 +98,7 @@ export function ServerRail() {
           aria-label={server ? `${serverName} on ${server.server_id}` : "Server"}
           title={serverName}
           className={`${tileBase} ${onServer ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
+          style={server?.avatar_url ? undefined : { background: spaceColour }}
         >
           {server?.avatar_url ? (
             <img src={resolveAssetUrl(server.avatar_url)} alt="" className="h-full w-full rounded-[inherit] object-cover" />
@@ -106,7 +110,7 @@ export function ServerRail() {
       </div>
 
       {isOwner && (
-        <div className="relative mt-auto flex w-full justify-center">
+        <div className="group/tile relative mt-auto flex w-full justify-center">
           <Indicator selected={onControlPanel} unread={false} />
           <NavLink
             to="/control-panel"

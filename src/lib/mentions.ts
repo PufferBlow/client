@@ -34,6 +34,10 @@ export interface MentionDirectory {
   me?: string;
   /** Lower-cased usernames that exist on this server. */
   known: ReadonlySet<string>;
+  /** The instance each person (by user id) belongs to, so remote authors can carry their host. */
+  hosts?: ReadonlyMap<string, string>;
+  /** The viewer's own instance: authors from anywhere else are remote. */
+  home?: string;
 }
 
 export const MentionDirectoryContext = createContext<MentionDirectory>({ known: new Set() });

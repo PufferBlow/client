@@ -76,7 +76,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
         <AtSign size={18} className="text-text-tertiary" aria-hidden="true" />
         <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={26} presence={conversation?.peerStatus} />
-        <h1 className="m-0 font-heading text-[19px] font-semibold">{name}</h1>
+        <h1 className="m-0 text-[15px] font-bold">{name}</h1>
         {peer.includes("@") && <span className="truncate text-[12.5px] text-text-muted">@{peer}</span>}
       </header>
 
@@ -93,7 +93,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         intro={
           <div className="mb-4 mt-2 px-[18px]">
             <div className="mb-3">{avatar}</div>
-            <h2 className="m-0 font-heading text-[24px] font-semibold text-text">{name}</h2>
+            <h2 className="m-0 font-display text-[30px] font-normal text-text">{name}</h2>
             <p className="m-0 mt-1 text-[14px] text-text-muted">
               This is the beginning of your direct message history with <b className="text-text-secondary">{name}</b>.
             </p>

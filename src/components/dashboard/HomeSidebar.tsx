@@ -34,7 +34,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
           Friends
         </NavLink>
       </div>
-      <h2 className="m-0 px-4 pb-1.5 pt-4 font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-text-muted">Direct messages</h2>
+      <h2 className="pb-section-label m-0 px-4 pb-1.5 pt-4">Direct messages</h2>
       <nav aria-label="Direct messages" className="min-h-0 flex-1 overflow-y-auto px-2">
         {!isPending && conversations.length === 0 ? (
           <p className="m-0 px-2 py-1 text-[12.5px] text-text-muted">No conversations yet. Message a friend to start one.</p>

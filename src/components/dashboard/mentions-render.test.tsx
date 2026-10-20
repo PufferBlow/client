@@ -31,27 +31,27 @@ const renderMessage = (text: string, authorId?: string) =>
 describe("mentions in a message", () => {
   it("highlight people who exist and leave other @words as text", () => {
     renderMessage("hey @linus and @nobody");
-    expect(screen.getByText("@linus")).toHaveClass("text-primary");
-    expect(screen.getByText(/@nobody/)).not.toHaveClass("text-primary");
+    expect(screen.getByText("@linus")).toHaveClass("bg-text/10");
+    expect(screen.getByText(/@nobody/)).not.toHaveClass("bg-text/10");
   });
 
   it("highlight @everyone", () => {
     renderMessage("@everyone standup");
-    expect(screen.getByText("@everyone")).toHaveClass("text-primary");
+    expect(screen.getByText("@everyone")).toHaveClass("bg-text");
   });
 
   it("pick out the whole row when you are mentioned", () => {
     const { container } = renderMessage("hi @ada");
-    expect(container.querySelector("article")).toHaveClass("shadow-[inset_2px_0_0_var(--color-primary)]");
+    expect(container.querySelector("article")).toHaveClass("shadow-[inset_3px_0_0_var(--color-text)]");
   });
 
   it("do not pick out the row for a mention of someone else, or your own mention of yourself", () => {
     const other = renderMessage("hi @linus");
-    expect(other.container.querySelector("article")).not.toHaveClass("shadow-[inset_2px_0_0_var(--color-primary)]");
+    expect(other.container.querySelector("article")).not.toHaveClass("shadow-[inset_3px_0_0_var(--color-text)]");
     other.unmount();
 
     const self = renderMessage("note to @ada", "me");
-    expect(self.container.querySelector("article")).not.toHaveClass("shadow-[inset_2px_0_0_var(--color-primary)]");
+    expect(self.container.querySelector("article")).not.toHaveClass("shadow-[inset_3px_0_0_var(--color-text)]");
   });
 });
 

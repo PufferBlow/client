@@ -44,7 +44,7 @@ function PersonRow({ person, subtitle, children }: { person: Friend; subtitle: R
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="m-0 mb-1 font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-text-muted">{children}</h2>;
+  return <h2 className="pb-section-label m-0 mb-1">{children}</h2>;
 }
 
 function AddFriendForm() {
@@ -83,7 +83,7 @@ function AddFriendForm() {
             className="min-w-0 flex-1 bg-transparent text-text outline-none placeholder:text-text-muted"
           />
         </div>
-        <Button type="submit" size="lg" className="h-[46px] font-heading uppercase tracking-[0.08em]" loading={send.isPending} disabled={!handle.trim()}>
+        <Button type="submit" size="lg" className="h-[46px]" loading={send.isPending} disabled={!handle.trim()}>
           Send request
         </Button>
       </div>
@@ -238,7 +238,7 @@ export function FriendsView() {
       <HomeSidebar />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[14px] bg-surface" aria-label="Friends">
         <header className="flex h-[60px] shrink-0 items-center gap-3.5 border-b border-border-secondary px-[18px]">
-          <h1 className="m-0 flex items-center gap-2 font-heading text-xl font-semibold">
+          <h1 className="m-0 flex items-center gap-2 font-display text-2xl font-normal">
             <Users size={19} aria-hidden="true" />
             Friends
           </h1>
@@ -258,7 +258,7 @@ export function FriendsView() {
               </button>
             ))}
           </div>
-          <Button size="sm" className="ml-auto font-heading uppercase tracking-[0.08em]" onClick={() => document.getElementById("add-friend")?.focus()}>
+          <Button size="sm" className="ml-auto" onClick={() => document.getElementById("add-friend")?.focus()}>
             <UserPlus size={15} aria-hidden="true" />
             Add friend
           </Button>

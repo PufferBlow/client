@@ -92,7 +92,7 @@ export function LoginPage() {
           Stay signed in on this device
         </Switch>
 
-        <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1 font-heading uppercase tracking-[0.1em]">
+        <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1">
           {loading ? "Signing in" : "Sign in"}
           {!loading && <ArrowRight size={16} aria-hidden="true" />}
         </Button>

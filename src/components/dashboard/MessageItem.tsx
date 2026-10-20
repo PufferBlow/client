@@ -22,6 +22,7 @@ import { displayName, fileKind, formatBytes, galleryRows, isSpoilerName } from "
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
+import { HostPill } from "../ui/HostPill";
 import { Avatar } from "./Avatar";
 import { DEFAULT_REACTIONS } from "../../lib/reactionUsage";
 
@@ -81,7 +82,7 @@ function AttachmentView({ url, filename, type, size }: Attachment) {
   let body;
   if (fileKind(type) === "audio" && href) {
     body = (
-      <div className="flex w-[min(100%,400px)] flex-col gap-2 rounded-xl border border-border-secondary bg-surface-secondary p-3">
+      <div className="flex w-[min(100%,400px)] flex-col gap-2 rounded-lg bg-surface-secondary p-3">
         <a href={href} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 text-[13px] text-text-secondary hover:text-text">
           <Music size={15} aria-hidden="true" className="shrink-0" />
           <span className="truncate">{name}</span>
@@ -96,7 +97,7 @@ function AttachmentView({ url, filename, type, size }: Attachment) {
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border-secondary bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary hover:text-text"
+        className="inline-flex max-w-full items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary hover:text-text"
       >
         <FileText size={15} aria-hidden="true" className="shrink-0" />
         <span className="truncate">{name}</span>
@@ -340,7 +341,10 @@ export const MessageItem = memo(function MessageItem({
   const embedUrls = useMemo(() => embeddableUrls(blocks), [blocks]);
   // Someone else answering one of my messages: tinted, like a mention.
   // Someone @-mentioned the viewer by name: the row is picked out the same way as a reply to them.
-  const { me: myName } = useContext(MentionDirectoryContext);
+  const { me: myName, hosts, home } = useContext(MentionDirectoryContext);
+  // Local authors show no host; remote ones always do.
+  const authorHost = hosts?.get(message.authorId);
+  const remoteHost = authorHost !== undefined && home !== undefined && authorHost !== home ? authorHost : undefined;
   const mentionsMe = myName !== undefined && message.authorId !== myUserId && mentionsUser(message.text, myName);
   const repliesToMe =
     myUserId !== undefined && message.replyTo !== undefined && !message.replyTo.deleted && message.replyTo.authorId === myUserId && message.authorId !== myUserId;
@@ -370,7 +374,7 @@ export const MessageItem = memo(function MessageItem({
       tabIndex={0}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
-      className={`group relative flex flex-wrap gap-x-3 gap-y-0.5 px-[18px] outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"} ${repliesToMe || mentionsMe ? "bg-primary/[0.06] shadow-[inset_2px_0_0_var(--color-primary)] hover:bg-primary/[0.09]" : ""}`}
+      className={`group relative flex flex-wrap gap-x-[14px] gap-y-0.5 px-4 outline-none hover:bg-text/[0.03] focus-visible:bg-text/[0.05] ${isGroupStart ? "mt-[14px] py-[3px] first:mt-0" : "py-px"} ${repliesToMe || mentionsMe ? "bg-text/[0.035] shadow-[inset_3px_0_0_var(--color-text)] hover:bg-text/[0.06]" : ""}`}
     >
       {message.replyTo && <ReplyLine reply={message.replyTo} onJumpTo={onJumpTo} />}
       {/* Same gutter width for every row so content never shifts horizontally. */}
@@ -389,11 +393,12 @@ export const MessageItem = memo(function MessageItem({
       <div className="min-w-0 flex-1">
         {isGroupStart && (
           <header className="flex flex-wrap items-baseline gap-2">
-            <span className="text-[15px] font-bold">{message.authorName}</span>
-            <time dateTime={message.sentAt} className="text-[11.5px] text-text-muted">
+            <span className="pb-username">{message.authorName}</span>
+            {remoteHost && <HostPill host={remoteHost} />}
+            <time dateTime={message.sentAt} className="pb-timestamp">
               {formatTime(message.sentAt)}
             </time>
-            {message.editCount > 0 && <span className="text-[11px] text-text-muted">(edited)</span>}
+            {message.editCount > 0 && <span className="pb-timestamp">(edited)</span>}
           </header>
         )}
 
@@ -409,7 +414,7 @@ export const MessageItem = memo(function MessageItem({
         ) : (
           message.text && (
             <div
-              className={`whitespace-pre-wrap break-words text-[15px] text-text-secondary ${message.status === "pending" ? "opacity-60" : ""}`}
+              className={`whitespace-pre-wrap break-words text-[15px] leading-normal text-text-body ${message.status === "pending" ? "opacity-60" : ""}`}
               aria-busy={message.status === "pending" || undefined}
             >
               {isEmojiOnly(message.text) ? (
@@ -468,8 +473,8 @@ export const MessageItem = memo(function MessageItem({
                   aria-pressed={mine}
                   onClick={() => onToggleReaction(message.id, reaction.emoji, !mine)}
                   className={[
-                    "flex h-6 items-center gap-1.5 rounded-full border px-2 text-[13px]",
-                    mine ? "border-primary/50 bg-primary/10 text-text" : "border-border-secondary bg-surface-secondary text-text-tertiary hover:text-text",
+                    "flex h-7 items-center gap-1.5 rounded-pill px-2.5 text-[12.5px] font-semibold transition-colors duration-(--motion-fast)",
+                    mine ? "bg-text text-on-primary" : "bg-surface-secondary text-text-body shadow-[inset_0_0_0_1px_rgba(242,242,242,0.08)] hover:bg-surface-tertiary",
                   ].join(" ")}
                 >
                   <Emoji char={reaction.emoji} size={16} />
@@ -482,7 +487,7 @@ export const MessageItem = memo(function MessageItem({
       </div>
 
       {!editing && (!isLocal || isPending) && (
-        <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-lg border border-border-secondary bg-surface-secondary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
+        <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-md bg-surface-tertiary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
           {(() => {
             const mine = message.reactions.some((r) => r.emoji === quickReaction && myUserId !== undefined && r.userIds.includes(myUserId));
             return (

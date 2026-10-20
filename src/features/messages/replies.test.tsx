@@ -140,7 +140,7 @@ describe("a reply in the message list", () => {
 
   it("tints replies to my messages", () => {
     const { container } = render(<MessageItem message={message({ replyTo: preview })} myUserId="u-grace" {...handlers()} />);
-    expect(container.querySelector("article")?.className).toContain("bg-primary/[0.06]");
+    expect(container.querySelector("article")?.className).toContain("bg-text/[0.035]");
   });
 
   it("has a Reply button in the toolbar", async () => {
