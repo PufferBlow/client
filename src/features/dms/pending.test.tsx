@@ -4,11 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flattenMessages, messageKeys, type MessageCache } from "../messages/cache";
 import { userKeys } from "../users/hooks";
+import type * as DirectMessageApi from "./api";
 import { sendDirectMessage, setDirectReaction, uploadAttachment } from "./api";
 import { useSendDirectMessage, useToggleDirectReaction } from "./hooks";
 
 vi.mock("./api", async (original) => ({
-  ...(await original<typeof import("./api")>()),
+  ...(await original<typeof DirectMessageApi>()),
   uploadAttachment: vi.fn(),
   sendDirectMessage: vi.fn(),
   setDirectReaction: vi.fn(),
