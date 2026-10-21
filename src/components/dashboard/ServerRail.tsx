@@ -1,5 +1,6 @@
-import { NavLink, useMatch } from "react-router";
-import { SlidersHorizontal } from "lucide-react";
+import { useMemo } from "react";
+import { NavLink, useMatch, useNavigate } from "react-router";
+import { Plus, SlidersHorizontal } from "lucide-react";
 import { useUnreadCounts } from "../../features/channels/hooks";
 import { useConversations } from "../../features/dms/hooks";
 import { useDmUnread } from "../../features/dms/unread";
@@ -8,9 +9,12 @@ import { useServerInfo } from "../../features/server/hooks";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { useToast } from "../../hooks/useToast";
-import { initialsFor } from "../../lib/avatar";
-import { identity } from "../../lib/identity";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
+import { SpaceIcon } from "../ui/SpaceIcon";
+import { listAccounts, switchAccount } from "../../services/accounts";
+import { getActiveAccountId } from "../../services/auth";
+import { getStoredInstance } from "../../services/instance";
+import { useQueryClient } from "@tanstack/react-query";
 import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
@@ -34,10 +38,16 @@ const tileBase =
 const iconTileBase = tileBase.replace(" text-on-primary", "");
 
 /**
- * A Pufferblow "server" is the instance you are signed in to, so the rail shows that one
- * instance. Joining other instances needs a separate account on each and isn't supported yet.
+ * A Pufferblow "space" is an instance you have joined: the one you are in, and every other instance
+ * you hold an account on. Only the one you are in is connected, so the others show no live counts;
+ * choosing one signs you in as that account and starts the app over for it.
  */
 export function ServerRail() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const activeId = getActiveAccountId();
+  const others = useMemo(() => listAccounts().filter((a) => a.id !== activeId), [activeId]);
+  const here = getStoredInstance();
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
   const onHome = onFriends || onDms;
@@ -59,8 +69,6 @@ export function ServerRail() {
   const anyUnread = Object.entries(unread ?? {}).some(([id, n]) => n > 0 && !muted.has(id));
   const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const serverName = server?.server_name ?? "Server";
-  // A space with no picture gets its identity colour, the same on every client.
-  const spaceColour = identity(server?.server_id ?? serverName).hex;
 
   return (
     <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
@@ -98,15 +106,51 @@ export function ServerRail() {
           aria-label={server ? `${serverName} on ${server.server_id}` : "Server"}
           title={serverName}
           className={`${tileBase} ${onServer ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
-          style={server?.avatar_url ? undefined : { background: spaceColour }}
         >
-          {server?.avatar_url ? (
-            <img src={resolveAssetUrl(server.avatar_url)} alt="" className="h-full w-full rounded-[inherit] object-cover" />
-          ) : (
-            initialsFor(serverName)
-          )}
+          <SpaceIcon
+            id={here?.raw ?? server?.server_id ?? serverName}
+            name={serverName}
+            src={server?.avatar_url ? resolveAssetUrl(server.avatar_url) : null}
+            size={48}
+            radius="inherit"
+            className="absolute inset-0"
+          />
           <CountBadge count={totalPings} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
         </NavLink>
+      </div>
+
+      {others.map((account) => (
+        <div key={account.id} className="group/tile relative flex w-full justify-center">
+          <Indicator selected={false} unread={false} />
+          <button
+            type="button"
+            aria-label={`Switch to ${account.username} on ${account.instance.raw}`}
+            title={`${account.instance.raw} · ${account.username}${account.snapshot ? "" : " (signed out)"}`}
+            onClick={async () => {
+              if (!(await switchAccount(account.id))) {
+                navigate("/accounts");
+                return;
+              }
+              queryClient.clear();
+              window.location.assign("/dashboard");
+            }}
+            className={`${tileBase} rounded-[14px] ${account.snapshot ? "" : "opacity-55"}`}
+          >
+            <SpaceIcon id={account.instance.raw} name={account.instance.raw} src={null} size={48} radius="inherit" className="absolute inset-0" />
+          </button>
+        </div>
+      ))}
+
+      <div className="group/tile relative flex w-full justify-center">
+        <button
+          type="button"
+          aria-label="Add an instance"
+          title="Add an instance"
+          onClick={() => navigate("/login?add=1")}
+          className={`${iconTileBase} rounded-full bg-surface-secondary text-text-tertiary hover:rounded-[14px] hover:bg-surface-tertiary hover:text-text`}
+        >
+          <Plus size={20} aria-hidden="true" />
+        </button>
       </div>
 
       {isOwner && (
