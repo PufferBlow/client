@@ -2,6 +2,7 @@ import { createLogger } from "../lib/logger";
 import {
   accountIdFor,
   getActiveAccountId,
+  getAuthToken,
   logout,
   onSessionCleared,
   restoreSession,
@@ -128,9 +129,9 @@ export async function switchAccount(id: string): Promise<boolean> {
   return true;
 }
 
-/** Forget a saved account, never the live one (that is signing out). */
+/** Forget a saved account, never the live one (that is signing out). With nobody signed in, any can go. */
 export async function removeAccount(id: string): Promise<void> {
-  if (id === getActiveAccountId()) return;
+  if (id === getActiveAccountId() && getAuthToken() !== null) return;
   save(listAccounts().filter((a) => a.id !== id));
   await vault()?.forget(id).catch(() => undefined);
 }

@@ -81,3 +81,20 @@ describe("unknown URLs", () => {
     expect(await visit("/nope")).toBe("/nope");
   });
 });
+
+describe("launching with saved accounts", () => {
+  it("offers the account picker when nobody is signed in but accounts are saved", async () => {
+    localStorage.setItem(
+      "pb_accounts",
+      JSON.stringify([{ id: "ada@one.example", username: "ada", avatarUrl: null, instance: { raw: "one.example", host: "one.example", port: 443, protocol: "https", origin: "https://one.example" }, snapshot: null }]),
+    );
+    expect(await visit("/")).toBe("/accounts");
+    expect(leafPath()).toBe("accounts");
+  });
+
+  it("stays on the front page when nothing is saved, and goes to the dashboard when signed in", async () => {
+    expect(await visit("/")).toBe("/");
+    signIn();
+    expect(await visit("/")).toBe("/dashboard");
+  });
+});

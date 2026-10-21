@@ -1,9 +1,11 @@
 import { createBrowserRouter, Navigate, redirect } from "react-router";
+import { listAccounts } from "./services/accounts";
 import { getAuthToken } from "./services/auth";
 import { buildAuthRedirectPath } from "./utils/authRedirect";
 import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import { DashboardLayout } from "./layouts/DashboardLayout";
+import { AccountPickerPage } from "./pages/auth/AccountPickerPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { SignupPage } from "./pages/auth/SignupPage";
 import { HomePage } from "./pages/HomePage";
@@ -25,6 +27,7 @@ export const router = createBrowserRouter([
         loader: rootLoader,
         element: <HomePage />,
       },
+      { path: "accounts", element: <AccountPickerPage /> },
       {
         path: "login",
         element: <AuthLayout />,
@@ -77,5 +80,7 @@ function rootLoader() {
     }
     return redirect("/dashboard");
   }
+  // Nobody is signed in, but accounts are saved on this device: choose one.
+  if (listAccounts().length > 0) return redirect("/accounts");
   return null;
 }
