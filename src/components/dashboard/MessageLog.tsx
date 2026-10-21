@@ -47,6 +47,8 @@ interface MessageLogProps {
   permissions?: MessagePermissions;
   /** Offered in the menu when the permissions allow it. */
   onReport?: (id: string) => void;
+  /** Pin and unpin from the menu: the ids pinned now, and what to do. Omit where pins do not exist (DMs). */
+  pins?: { ids: ReadonlySet<string>; toggle: (id: string, pin: boolean) => void };
   showToast: (text: string, tone?: "info" | "error") => void;
 }
 
@@ -77,6 +79,7 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
     onReply,
     permissions = CHANNEL_PERMISSIONS,
     onReport,
+    pins,
     showToast,
   },
   ref,
@@ -218,6 +221,7 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
               requestDelete: () => requestDelete(menuMessage.id),
               report: () => onReport?.(menuMessage.id),
               quickReactions: topReactions,
+              pin: pins && menuMessage.status === undefined ? { pinned: pins.ids.has(menuMessage.id), toggle: () => pins.toggle(menuMessage.id, !pins.ids.has(menuMessage.id)) } : undefined,
             },
             onReport ? permissions : { ...permissions, canReport: () => false },
           )}

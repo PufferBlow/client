@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Hash, Lock, Users } from "lucide-react";
+import { usePinMessage, usePins } from "../../features/channels/pins";
 import { useMarkChannelRead } from "../../features/channels/hooks";
 import { useChannelPings, useMuteChannel, useMutedChannels } from "../../features/notifications/hooks";
 import type { Channel } from "../../features/channels/types";
@@ -11,13 +12,14 @@ import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { lookOf } from "../../features/users/look";
-import { canMentionEveryone, shownRole } from "../../features/users/roles";
+import { canMentionEveryone, isServerOwner, shownRole } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
 import { HealthBanner } from "../instance/HealthBanner";
 import { ToastRegion } from "../ui/Toast";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelSearch } from "./ChannelSearch";
+import { PinnedMessages } from "./PinnedMessages";
 import { Composer } from "./Composer";
 import { ReportMessageDialog } from "./MessageDialogs";
 import { MessageLog, type MessageLogHandle } from "./MessageLog";
@@ -128,6 +130,20 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const Icon = channel.is_private ? Lock : Hash;
   const muted = useMutedChannels().has(channelId);
   const { mutate: setMuted } = useMuteChannel();
+  // Moderators pin; everyone sees what is pinned. The list is read once it is first opened, and the
+  // menu's "Pin" needs to know what is pinned already, so the channel's pins are read for moderators.
+  const canPin = isServerOwner(me) || (me?.resolved_privileges ?? []).includes("moderate_content");
+  const { data: pinned } = usePins(channelId, canPin);
+  const { pin, unpin } = usePinMessage(channelId);
+  const pinnedIds = useMemo(() => new Set((pinned?.pins ?? []).map((p) => p.message.id)), [pinned]);
+  const togglePin = useCallback(
+    (id: string, pinIt: boolean) =>
+      (pinIt ? pin : unpin).mutate(id, {
+        onSuccess: () => showToast(pinIt ? "Message pinned." : "Message unpinned."),
+        onError: (err) => showToast(classifyAuthError(err, pinIt ? "Couldn't pin the message." : "Couldn't unpin the message.").message, "error"),
+      }),
+    [pin, unpin, showToast],
+  );
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label={`#${channel.channel_name}`}>
@@ -146,6 +162,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
           >
             {muted ? <BellOff size={17} aria-hidden="true" /> : <Bell size={17} aria-hidden="true" />}
           </button>
+          <PinnedMessages channelId={channelId} canUnpin={canPin} onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
           <ChannelSearch channelId={channelId} channelName={channel.channel_name} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
           {onToggleMembers && (
             <button
@@ -193,6 +210,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         onDiscard={discard}
         onReply={handleReply}
         onReport={handleReport}
+        pins={canPin ? { ids: pinnedIds, toggle: togglePin } : undefined}
         showToast={showToast}
       />
       </MentionDirectoryContext.Provider>

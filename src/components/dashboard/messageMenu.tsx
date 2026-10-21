@@ -1,4 +1,4 @@
-import { Copy, Fingerprint, Flag, Pencil, Reply, SmilePlus, Trash2 } from "lucide-react";
+import { Copy, Fingerprint, Flag, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2 } from "lucide-react";
 import { Emoji } from "../ui/Emoji";
 import type { MenuEntry } from "../ui/ContextMenu";
 import { canDeleteMessage, canEditMessage, canReportMessage } from "../../features/messages/permissions";
@@ -16,6 +16,8 @@ export interface MessageMenuActions {
   report: () => void;
   /** The quick reactions offered at the top (the viewer's most used). */
   quickReactions: string[];
+  /** Pin or unpin: only offered when given (the viewer may moderate and the channel supports pins). */
+  pin?: { pinned: boolean; toggle: () => void };
 }
 
 /** Who may do what to a message. Channels use the role-based rules; DMs pass their own. */
@@ -33,7 +35,7 @@ export const CHANNEL_PERMISSIONS: MessagePermissions = {
 
 /**
  * The actions offered for one message. Only things the app and backend support are listed;
- * pin, forward, mark-unread and permalinks are intentionally absent until they exist.
+ * forward, mark-unread and permalinks are intentionally absent until they exist.
  */
 export function messageMenuEntries(
   message: Message,
@@ -71,6 +73,15 @@ export function messageMenuEntries(
 
   if (hasText) entries.push({ kind: "item", id: "copy-text", label: "Copy text", icon: <Copy size={15} />, onSelect: actions.copyText });
   entries.push({ kind: "item", id: "copy-id", label: "Copy message ID", icon: <Fingerprint size={15} />, onSelect: actions.copyId });
+  if (actions.pin) {
+    entries.push({
+      kind: "item",
+      id: "pin",
+      label: actions.pin.pinned ? "Unpin message" : "Pin message",
+      icon: actions.pin.pinned ? <PinOff size={15} /> : <Pin size={15} />,
+      onSelect: actions.pin.toggle,
+    });
+  }
 
   if (permissions.canEdit(message, viewer)) {
     entries.push({ kind: "item", id: "edit", label: "Edit message", icon: <Pencil size={15} />, onSelect: actions.edit });
