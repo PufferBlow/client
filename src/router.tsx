@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, redirect } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 import { listAccounts } from "./services/accounts";
 import { getAuthToken } from "./services/auth";
 import { buildAuthRedirectPath } from "./utils/authRedirect";
@@ -12,6 +12,7 @@ import { HomePage } from "./pages/HomePage";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFoundPage";
 import { ServerView } from "./pages/dashboard/ServerView";
 import { FriendsView } from "./pages/dashboard/FriendsView";
+import { HubPage } from "./pages/dashboard/HubPage";
 import { DirectMessageView } from "./pages/dashboard/DirectMessageView";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { ControlPanelPage } from "./pages/control-panel/ControlPanelPage";
@@ -43,7 +44,7 @@ export const router = createBrowserRouter([
         loader: requireAuth,
         element: <DashboardLayout />,
         children: [
-          { index: true, element: <Navigate to="/dashboard/channels" replace /> },
+          { index: true, element: <HubPage /> },
           { path: "channels/:channelId?", element: <ServerView /> },
           { path: "friends", element: <FriendsView /> },
           { path: "dms/:conversationId", element: <DirectMessageView /> },

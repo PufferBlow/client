@@ -48,9 +48,10 @@ export function ServerRail() {
   const activeId = getActiveAccountId();
   const others = useMemo(() => listAccounts().filter((a) => a.id !== activeId), [activeId]);
   const here = getStoredInstance();
+  const onHub = useMatch({ path: "/dashboard", end: true }) !== null;
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
-  const onHome = onFriends || onDms;
+  const onHome = onHub || onFriends || onDms;
   const onServer = useMatch("/dashboard/channels/*") !== null;
   const onControlPanel = useMatch("/control-panel/*") !== null;
   const { data: server } = useServerInfo();
@@ -75,9 +76,10 @@ export function ServerRail() {
       <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
-          to="/dashboard/friends"
-          aria-label="Friends"
-          title="Friends"
+          to="/dashboard"
+          end
+          aria-label="Home"
+          title="Home"
           className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-[14px]"} ${
             onHome ? "bg-primary text-black" : "bg-surface-secondary text-[#f2f2f2] hover:bg-primary hover:text-black"
           }`}

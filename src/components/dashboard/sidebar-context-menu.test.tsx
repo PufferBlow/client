@@ -464,7 +464,7 @@ describe("server rail context menu", () => {
   it("draws the Home tile as the puffer: white on dark, and black on white when you hover or are on it", async () => {
     backend();
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
-    const home = await screen.findByRole("link", { name: "Friends" });
+    const home = await screen.findByRole("link", { name: "Home" });
     expect(home.className).toContain("text-[#f2f2f2]");
     expect(home.className).toContain("hover:bg-primary");
     expect(home.className).toContain("hover:text-black");
@@ -473,16 +473,16 @@ describe("server rail context menu", () => {
 
   it("gives the Home tile the inverted state while you are on it", async () => {
     backend();
-    renderWithProviders(<ServerRail />, { route: "/dashboard/friends", path: "*" });
-    const home = await screen.findByRole("link", { name: "Friends" });
+    renderWithProviders(<ServerRail />, { route: "/dashboard", path: "*" });
+    const home = await screen.findByRole("link", { name: "Home" });
     expect(home.className).toContain("bg-primary");
     expect(home.className).toContain("text-black");
   });
 
-  it("does not hijack the Friends tile", async () => {
+  it("does not hijack the Home tile", async () => {
     backend();
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
-    const friends = await screen.findByRole("link", { name: "Friends" });
+    const friends = await screen.findByRole("link", { name: "Home" });
     expect(fireEvent.contextMenu(friends)).toBe(true);
     expect(menu()).not.toBeInTheDocument();
   });
