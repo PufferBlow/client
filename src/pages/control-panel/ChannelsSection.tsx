@@ -6,10 +6,12 @@ import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
+import { useCategories } from "../../features/channels/categories";
 import { useChannels } from "../../features/channels/hooks";
 import type { Channel } from "../../features/channels/types";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelDialogs, type ChannelDialog } from "../../components/channels/ChannelDialogs";
+import { CategoriesPanel } from "./CategoriesPanel";
 
 const TYPE_LABEL: Record<Channel["channel_type"], string> = { text: "Text", voice: "Voice", mixed: "Text + voice" };
 
@@ -23,6 +25,7 @@ const iconButton =
 
 export function ChannelsSection() {
   const { data, isPending, error, refetch } = useChannels();
+  const { data: categories = [] } = useCategories();
   const [dialog, setDialog] = useState<ChannelDialog>(null);
   const message = (err: unknown) => classifyAuthError(err, "Something went wrong. Try again.").message;
 
@@ -36,8 +39,11 @@ export function ChannelsSection() {
     </Button>
   );
 
+  const categoryName = (id: string | null | undefined) => categories.find((c) => c.category_id === id)?.name;
+
   return (
-    <>
+    <div className="flex flex-col gap-3">
+      <CategoriesPanel channels={data} />
       {data.length === 0 ? (
         <EmptyState title="No channels yet" description="Channels you create will show up here." action={newButton} />
       ) : (
@@ -47,6 +53,7 @@ export function ChannelsSection() {
               <tr>
                 <th scope="col" className={tableClasses.head}>Name</th>
                 <th scope="col" className={tableClasses.head}>Type</th>
+                <th scope="col" className={tableClasses.head}>Category</th>
                 <th scope="col" className={tableClasses.head}>Access</th>
                 <th scope="col" className={tableClasses.head}>Created</th>
                 <th scope="col" className={tableClasses.head}><span className="sr-only">Actions</span></th>
@@ -64,6 +71,7 @@ export function ChannelsSection() {
                       </span>
                     </td>
                     <td className={tableClasses.cell}>{TYPE_LABEL[channel.channel_type]}</td>
+                    <td className={`${tableClasses.cell} text-text-tertiary`}>{categoryName(channel.category_id) ?? "–"}</td>
                     <td className={tableClasses.cell}>{channel.is_private ? <Tag tone="brass">Private</Tag> : <Tag>Everyone</Tag>}</td>
                     <td className={`${tableClasses.cell} text-text-tertiary`}>{formatDate(channel.created_at)}</td>
                     <td className={`${tableClasses.cell} text-right`}>
@@ -85,6 +93,6 @@ export function ChannelsSection() {
       )}
 
       <ChannelDialogs dialog={dialog} onClose={() => setDialog(null)} />
-    </>
+    </div>
   );
 }
