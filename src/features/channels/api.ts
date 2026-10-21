@@ -22,13 +22,27 @@ export interface NewChannel {
   channel_name: string;
   channel_type: ChannelType;
   is_private: boolean;
+  /** Set after creation (the create route has no field for them), so a new channel can start with them. */
+  topic?: string;
+  category_id?: string | null;
 }
 
-/** The type can't change after creation, so an edit only carries name and privacy. */
-export type ChannelChanges = Partial<Pick<NewChannel, "channel_name" | "is_private">>;
+/**
+ * The type can't change after creation, so an edit carries name, privacy, topic, category and
+ * position. `topic: ""` clears the topic; `category_id: null` takes the channel out of its category.
+ */
+export type ChannelChanges = Partial<Pick<NewChannel, "channel_name" | "is_private" | "topic">> & { category_id?: string | null; position?: number };
 
 export async function createChannel(channel: NewChannel): Promise<Channel> {
-  const { channel_data } = await authed.body<{ channel_data: Channel }>("POST", `${CHANNELS}/create/`, { ...channel });
+  const { topic, category_id, ...creation } = channel;
+  const { channel_data } = await authed.body<{ channel_data: Channel }>("POST", `${CHANNELS}/create/`, { ...creation });
+  // A topic and a category are an update away, since the create route does not take them.
+  if (topic?.trim() || category_id) {
+    const changes: ChannelChanges = {};
+    if (topic?.trim()) changes.topic = topic.trim();
+    if (category_id) changes.category_id = category_id;
+    return updateChannel(channel_data.channel_id, changes);
+  }
   return channel_data;
 }
 

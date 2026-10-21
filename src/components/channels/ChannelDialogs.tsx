@@ -62,9 +62,18 @@ function ActiveDialog({ dialog, onClose, onDeleted, onDone }: Props & { dialog: 
         busy={update.isPending}
         error={update.error ? message(update.error) : undefined}
         onClose={onClose}
-        onSubmit={({ channel_name, is_private }) =>
+        onSubmit={({ channel_name, is_private, topic, category_id }) =>
           update.mutate(
-            { id: channel.channel_id, changes: { channel_name, is_private } },
+            {
+              id: channel.channel_id,
+              // Only what changed: an instance that has no topics or categories never hears about them.
+              changes: {
+                channel_name,
+                is_private,
+                ...((topic ?? "") !== (channel.topic ?? "") ? { topic: topic ?? "" } : {}),
+                ...((category_id ?? null) !== (channel.category_id ?? null) ? { category_id: category_id ?? null } : {}),
+              },
+            },
             {
               onSuccess: () => {
                 onClose();

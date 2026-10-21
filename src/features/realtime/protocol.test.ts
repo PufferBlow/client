@@ -142,6 +142,13 @@ describe("toRealtimeEvent", () => {
     expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", access: "granted" } })).toMatchObject({ change: "granted" });
   });
 
+  it("recognises a pin or an unpin, and a topic change as an ordinary update", () => {
+    const base = event("event_channel_updated");
+    expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", pin: { message_id: "m1", pinned: true } } })).toEqual({ kind: "pins", channelId: "c1" });
+    expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", pin: { message_id: "m1", pinned: false } } })).toEqual({ kind: "pins", channelId: "c1" });
+    expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", topic: "Patch talk", category_id: "cat" } })).toEqual({ kind: "channel", channelId: "c1", change: "updated" });
+  });
+
   it("maps unknown presence statuses to offline and ignores unknown events", () => {
     const presence = event("event_presence_changed");
     expect(toRealtimeEvent({ ...presence, data: { user_id: "u", status: "mystery" } })).toMatchObject({ status: "offline" });

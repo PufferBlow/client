@@ -16,6 +16,8 @@ export type RealtimeEvent =
    * was created or shared with this connection, which the server has already subscribed.
    */
   | { kind: "channel"; channelId: string; change: "updated" | "deleted" | "revoked" | "created" | "granted" }
+  /** A message was pinned or unpinned in a channel. */
+  | { kind: "pins"; channelId: string }
   | { kind: "notification" }
   /** Someone started typing; `scope` is the channel id, or the conversation id for a DM. */
   | { kind: "typing"; scope: string; userId: string; expiresInMs: number };
@@ -63,6 +65,7 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
       if (data.deleted === true) return { kind: "channel", channelId, change: "deleted" };
       if (data.access === "revoked") return { kind: "channel", channelId, change: "revoked" };
       if (data.access === "granted") return { kind: "channel", channelId, change: "granted" };
+      if (data.pin && typeof data.pin === "object") return { kind: "pins", channelId };
       return { kind: "channel", channelId, change: "updated" };
 
     case "notification.created":

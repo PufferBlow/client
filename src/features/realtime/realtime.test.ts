@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
+import { categoryKeys } from "../channels/categories";
+import { pinKeys } from "../channels/pins";
 import { channelKeys } from "../channels/hooks";
 import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
@@ -139,8 +141,16 @@ describe("applyEvent", () => {
     for (const change of ["created", "granted"] as const) {
       applyEvent(client, { kind: "channel", channelId: "c2", change }, { activeChannelId: undefined });
     }
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledTimes(4); // the channel list and the categories, for each
     expect(invalidate).toHaveBeenCalledWith({ queryKey: channelKeys.list });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: categoryKeys.list });
+  });
+
+  it("refreshes only that channel's pins when something is pinned or unpinned", () => {
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    applyEvent(client, { kind: "pins", channelId: "c2" }, { activeChannelId: undefined });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: pinKeys.channel("c2") });
   });
 });
 

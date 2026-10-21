@@ -1,6 +1,7 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import { NavLink } from "react-router";
 import { BellOff, ChevronDown, Globe, Hash, Lock, MoreHorizontal } from "lucide-react";
+import { groupChannels, useCategories } from "../../features/channels/categories";
 import { useChannels, useUnreadCounts } from "../../features/channels/hooks";
 import { hasText, type Channel } from "../../features/channels/types";
 import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
@@ -143,8 +144,33 @@ export function ChannelSidebar() {
   const channelMenu = useChannelMenu(show);
   const serverMenu = useServerMenu(show);
 
-  const textChannels = (channels ?? []).filter(hasText);
-  const voiceChannels = (channels ?? []).filter((c) => c.channel_type === "voice");
+  const { data: categories = [] } = useCategories();
+  // Channels in a category are shown with it, text and voice together; the rest keep the two plain groups.
+  const groups = groupChannels(channels ?? [], categories);
+  const categorised = groups.filter((g) => g.category !== null);
+  const loose = groups.find((g) => g.category === null)?.channels ?? [];
+  const textChannels = loose.filter(hasText);
+  const voiceChannels = loose.filter((c) => c.channel_type === "voice");
+  const nothing = (channels ?? []).length === 0;
+
+  const renderChannel = (channel: Channel) =>
+    channel.channel_type === "voice" ? (
+      <VoiceChannelRow
+        key={channel.channel_id}
+        channel={channel}
+        onMenu={channelMenu.open}
+        moreButton={<MoreButton label={`Channel actions for ${channel.channel_name}`} onOpen={(point) => channelMenu.open(channel.channel_id, point)} />}
+      />
+    ) : (
+      <TextChannelLink
+        key={channel.channel_id}
+        channel={channel}
+        unread={unread[channel.channel_id] ?? 0}
+        pings={pings[channel.channel_id] ?? 0}
+        muted={muted.has(channel.channel_id)}
+        onMenu={channelMenu.open}
+      />
+    );
 
   return (
     <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-lg bg-surface max-md:hidden">
@@ -161,21 +187,16 @@ export function ChannelSidebar() {
           <p className="pb-error px-3 pt-4">Couldn&apos;t load channels.</p>
         ) : (
           <>
+            {categorised.map(({ category, channels: inside }) => (
+              <section key={category!.category_id} aria-label={category!.name}>
+                <GroupLabel>{category!.name}</GroupLabel>
+                <div className="flex flex-col gap-px">{inside.map(renderChannel)}</div>
+              </section>
+            ))}
             {textChannels.length > 0 && (
               <section>
                 <GroupLabel>Channels</GroupLabel>
-                <div className="flex flex-col gap-px">
-                  {textChannels.map((channel) => (
-                    <TextChannelLink
-                      key={channel.channel_id}
-                      channel={channel}
-                      unread={unread[channel.channel_id] ?? 0}
-                      pings={pings[channel.channel_id] ?? 0}
-                      muted={muted.has(channel.channel_id)}
-                      onMenu={channelMenu.open}
-                    />
-                  ))}
-                </div>
+                <div className="flex flex-col gap-px">{textChannels.map(renderChannel)}</div>
               </section>
             )}
             {voiceChannels.length > 0 && (
@@ -193,7 +214,7 @@ export function ChannelSidebar() {
                 </div>
               </section>
             )}
-            {textChannels.length === 0 && voiceChannels.length === 0 && (
+            {nothing && (
               <p className="px-3 pt-4 text-[13px] text-text-muted">No channels yet.</p>
             )}
           </>

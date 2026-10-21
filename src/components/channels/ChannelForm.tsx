@@ -3,6 +3,8 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import type { NewChannel } from "../../features/channels/api";
+import { useCategories } from "../../features/channels/categories";
+import { TOPIC_MAX } from "../../features/channels/types";
 import type { Channel, ChannelType } from "../../features/channels/types";
 
 const TYPES: { value: ChannelType; label: string }[] = [
@@ -27,7 +29,10 @@ export function ChannelForm({ channel, template, busy, error, onSubmit, onClose 
   const [name, setName] = useState(channel?.channel_name ?? template?.name ?? "");
   const [type, setType] = useState<ChannelType>(channel?.channel_type ?? template?.type ?? "text");
   const [isPrivate, setIsPrivate] = useState(channel?.is_private ?? template?.isPrivate ?? false);
+  const [topic, setTopic] = useState(channel?.topic ?? "");
+  const [categoryId, setCategoryId] = useState(channel?.category_id ?? "");
   const [touched, setTouched] = useState(false);
+  const { data: categories = [] } = useCategories();
 
   const trimmed = name.trim();
   const nameError = touched && !trimmed ? "Give the channel a name." : undefined;
@@ -36,7 +41,7 @@ export function ChannelForm({ channel, template, busy, error, onSubmit, onClose 
     event.preventDefault();
     setTouched(true);
     if (!trimmed) return;
-    onSubmit({ channel_name: trimmed, channel_type: type, is_private: isPrivate });
+    onSubmit({ channel_name: trimmed, channel_type: type, is_private: isPrivate, topic: topic.trim(), category_id: categoryId || null });
   };
 
   return (
@@ -51,6 +56,35 @@ export function ChannelForm({ channel, template, busy, error, onSubmit, onClose 
           <span className="text-[13px] text-text-secondary">Name</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} error={nameError} autoFocus aria-label="Channel name" placeholder="general" />
         </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="flex justify-between text-[13px] text-text-secondary">
+            Topic
+            <span className="text-text-muted">
+              {topic.length}/{TOPIC_MAX}
+            </span>
+          </span>
+          <Input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={TOPIC_MAX} aria-label="Channel topic" placeholder="What is this channel for?" />
+        </label>
+
+        {categories.length > 0 && (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-text-secondary">Category</span>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              aria-label="Channel category"
+              className="h-11 rounded-md border-0 bg-surface-secondary px-3 text-[14.5px] text-text outline-none focus-visible:shadow-[0_0_0_2px_var(--color-surface-tertiary),0_0_0_4px_var(--color-text)]"
+            >
+              <option value="">No category</option>
+              {categories.map((c) => (
+                <option key={c.category_id} value={c.category_id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {channel ? (
           <p className="m-0 text-[13px] text-text-tertiary">

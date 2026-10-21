@@ -1,5 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { categoryKeys } from "../channels/categories";
 import { channelKeys } from "../channels/hooks";
+import { pinKeys } from "../channels/pins";
 import { dmKeys } from "../dms/keys";
 import { markDmRead, noteIncomingDm } from "../dms/unread";
 import { notificationKeys } from "../notifications/hooks";
@@ -83,6 +85,11 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
     case "channel":
       if (event.change === "deleted" || event.change === "revoked") queryClient.removeQueries({ queryKey: messageKeys.channel(event.channelId) });
       void queryClient.invalidateQueries({ queryKey: channelKeys.list });
+      void queryClient.invalidateQueries({ queryKey: categoryKeys.list });
+      return;
+
+    case "pins":
+      void queryClient.invalidateQueries({ queryKey: pinKeys.channel(event.channelId) });
       return;
 
     case "notification":
