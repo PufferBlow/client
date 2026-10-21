@@ -14,7 +14,7 @@ function highlight(text: string, query: string): ReactNode {
   const pattern = new RegExp(`(${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
   return text.split(pattern).map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} className="rounded bg-primary/25 px-0.5 text-text">
+      <mark key={i} className="rounded bg-text/20 px-0.5 text-text">
         {part}
       </mark>
     ) : (
@@ -70,7 +70,7 @@ export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchP
 
   return (
     <div ref={root} className="relative">
-      <div role="search" className="flex h-8 w-[240px] max-w-full items-center gap-2 rounded-lg border border-border bg-background pl-2.5 pr-1 focus-within:border-primary/55">
+      <div role="search" className="flex h-8 w-[190px] max-w-full items-center gap-2 rounded-pill bg-surface-secondary pl-3 pr-1 transition-[width,box-shadow] duration-(--motion-base) focus-within:w-[260px] focus-within:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]">
         <Search size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
         <input
           type="search"
@@ -99,7 +99,7 @@ export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchP
           role="region"
           aria-label="Search results"
           aria-live="polite"
-          className="absolute right-0 top-[calc(100%+8px)] z-30 max-h-[380px] w-[min(440px,calc(100vw-48px))] overflow-y-auto rounded-xl border border-border bg-surface-secondary p-1.5 shadow-popover"
+          className="absolute right-0 top-[calc(100%+8px)] z-30 max-h-[380px] w-[min(440px,calc(100vw-48px))] overflow-y-auto rounded-lg bg-surface-tertiary p-1.5 shadow-popover"
         >
           {!ready ? (
             <p className="m-0 px-3 py-4 text-center text-[13px] text-text-muted">Type at least {MIN_SEARCH_LENGTH} characters.</p>

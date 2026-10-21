@@ -7,6 +7,7 @@ import { signIn } from "../../test/helpers";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { Avatar, CountBadge } from "./Avatar";
 import { Composer } from "./Composer";
+import { MentionDirectoryContext } from "../../lib/mentions";
 import { MessageItem } from "./MessageItem";
 
 const message = (overrides: Partial<Message> = {}): Message => ({
@@ -511,5 +512,21 @@ describe("puff reactions in a message", () => {
     expect(screen.getAllByRole("button", { name: /^Add .+ reaction$/ }).length).toBeGreaterThanOrEqual(6);
     await userEvent.click(screen.getByRole("button", { name: "Add Wink reaction" }));
     expect(onToggleReaction).toHaveBeenCalledWith(expect.any(String), "puff:wink", true);
+  });
+});
+
+describe("role pill beside an author", () => {
+  it("shows the author's role in its colour, and nothing for an ordinary member", () => {
+    const withRole = (
+      <MentionDirectoryContext.Provider value={{ known: new Set(), roles: new Map([["u-other", { name: "Admin", colour: "#a99cf2" }]]) }}>
+        <MessageItem message={message()} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={vi.fn()} />
+      </MentionDirectoryContext.Provider>
+    );
+    const first = render(withRole);
+    expect(screen.getByText("Admin").getAttribute("style")).toContain("--role-colour: #a99cf2");
+    first.unmount();
+
+    render(<MessageItem message={message()} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={vi.fn()} />);
+    expect(screen.queryByText("Admin")).not.toBeInTheDocument();
   });
 });

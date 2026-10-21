@@ -38,6 +38,8 @@ export interface MentionDirectory {
   hosts?: ReadonlyMap<string, string>;
   /** The viewer's own instance: authors from anywhere else are remote. */
   home?: string;
+  /** The role to print beside each person's name (by user id); ordinary members have none. */
+  roles?: ReadonlyMap<string, { name: string; colour: string }>;
   /** How each person (by user id) chose to look: their frame and name style follow them into chat. */
   looks?: ReadonlyMap<string, { nameFont: string; nameStyle: { fontSmall: string; letterSpacing: string; textTransform: string }; frame: string }>;
 }

@@ -25,6 +25,7 @@ import { resolveAssetUrl } from "../../services/authed";
 import { HostPill } from "../ui/HostPill";
 import { useProfileCard } from "../profile/profileCardContext";
 import { PuffFace } from "../ui/PuffFace";
+import { RoleTag } from "../ui/RoleTag";
 import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
 import { DEFAULT_REACTIONS } from "../../lib/reactionUsage";
@@ -374,7 +375,8 @@ export const MessageItem = memo(function MessageItem({
     const rect = e.currentTarget.getBoundingClientRect();
     profileCard.open(message.authorId, { x: rect.right + 8, y: rect.top });
   };
-  const { me: myName, hosts, home, looks } = useContext(MentionDirectoryContext);
+  const { me: myName, hosts, home, looks, roles } = useContext(MentionDirectoryContext);
+  const authorRole = roles?.get(message.authorId);
   const authorLook = looks?.get(message.authorId);
   // Barlow is the default; only another name style needs its own font.
   const nameStyle =
@@ -437,6 +439,7 @@ export const MessageItem = memo(function MessageItem({
             <button type="button" onClick={showCard} className="pb-username cursor-pointer border-0 bg-transparent p-0 text-left outline-none hover:underline focus-visible:underline" style={nameStyle}>
               {message.authorName}
             </button>
+            {authorRole && <RoleTag name={authorRole.name} colour={authorRole.colour} />}
             {remoteHost && <HostPill host={remoteHost} />}
             <time dateTime={message.sentAt} className="pb-timestamp">
               {formatTime(message.sentAt)}

@@ -46,6 +46,39 @@ describe("chat header", () => {
   });
 });
 
+describe("chat header: topic and mute", () => {
+  it("shows the channel's topic when it has one, and nothing when it has none", async () => {
+    backend({ "POST /api/v1/channels/list/": { channels: [{ ...channels[0], topic: "Patch talk and build sessions" }] } });
+    renderWithProviders(<ServerView />, { route: "/dashboard/channels/c1", path: "/dashboard/channels/:channelId?" });
+    expect(await screen.findByText("Patch talk and build sessions")).toBeInTheDocument();
+  });
+
+  it("has no topic line without a topic", async () => {
+    await open();
+    const header = screen.getByRole("heading", { name: "general" }).closest("header")!;
+    expect(header.querySelector("p")).toBeNull();
+  });
+
+  it("mutes and unmutes the channel from the bell", async () => {
+    const fetchMock = backend({
+      "GET /api/v1/notifications/preferences": { preferences: [] },
+      "PUT /api/v1/notifications/preferences/c1": { status_code: 200 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ServerView />, { route: "/dashboard/channels/c1", path: "/dashboard/channels/:channelId?" });
+    await screen.findByRole("heading", { name: "general" });
+
+    await user.click(screen.getByRole("button", { name: "Mute channel" }));
+    expect(await screen.findByRole("button", { name: "Unmute channel" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Unmute channel" }));
+    expect(await screen.findByRole("button", { name: "Mute channel" })).toBeInTheDocument();
+    const sent = fetchMock.mock.calls
+      .filter(([input, init]) => init?.method === "PUT" && new URL(String(input)).pathname === "/api/v1/notifications/preferences/c1")
+      .map(([, init]) => JSON.parse(String(init!.body)));
+    expect(sent).toEqual([{ muted: true }, { muted: false }]);
+  });
+});
+
 describe("member list toggle", () => {
   it("is closed by default on a narrow window and opens and closes from the header", async () => {
     const { user } = await open();

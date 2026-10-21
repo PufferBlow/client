@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Hash, Lock, Users } from "lucide-react";
+import { Bell, BellOff, Hash, Lock, Users } from "lucide-react";
 import { useMarkChannelRead } from "../../features/channels/hooks";
-import { useChannelPings } from "../../features/notifications/hooks";
+import { useChannelPings, useMuteChannel, useMutedChannels } from "../../features/notifications/hooks";
 import type { Channel } from "../../features/channels/types";
 import type { Message } from "../../features/messages/types";
 import { toReplyPreview } from "../../features/messages/replies";
@@ -11,7 +11,7 @@ import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { lookOf } from "../../features/users/look";
-import { canMentionEveryone } from "../../features/users/roles";
+import { canMentionEveryone, shownRole } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
 import { ToastRegion } from "../ui/Toast";
@@ -45,6 +45,10 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
       known: new Set((users ?? []).map((u) => u.username.toLowerCase())),
       hosts: new Map((users ?? []).flatMap((u) => (u.origin_server ? [[u.user_id, u.origin_server] as const] : []))),
       home: me?.origin_server,
+      roles: new Map((users ?? []).flatMap((u) => {
+        const role = shownRole(u);
+        return role ? [[u.user_id, role] as const] : [];
+      })),
       looks: new Map(
         (users ?? []).map((u) => {
           const look = lookOf(u);
@@ -121,13 +125,26 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   }, [channelId, pingsHere]);
 
   const Icon = channel.is_private ? Lock : Hash;
+  const muted = useMutedChannels().has(channelId);
+  const { mutate: setMuted } = useMuteChannel();
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label={`#${channel.channel_name}`}>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
         <Icon size={18} className="text-text-tertiary" aria-hidden="true" />
-        <h1 className="m-0 text-[15px] font-bold">{channel.channel_name}</h1>
+        <h1 className="m-0 font-heading text-[19px] font-semibold">{channel.channel_name}</h1>
+        {channel.topic && <p className="m-0 min-w-0 flex-1 truncate text-[13px] text-text-tertiary">{channel.topic}</p>}
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={muted ? "Unmute channel" : "Mute channel"}
+            aria-pressed={muted}
+            title={muted ? "Muted. Unmute to get notifications again" : "Mute this channel"}
+            onClick={() => setMuted({ channelId, muted: !muted })}
+            className={`grid h-8 w-8 place-items-center rounded-md transition-colors duration-(--motion-fast) hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus ${muted ? "text-text" : "text-text-tertiary"}`}
+          >
+            {muted ? <BellOff size={17} aria-hidden="true" /> : <Bell size={17} aria-hidden="true" />}
+          </button>
           <ChannelSearch channelId={channelId} channelName={channel.channel_name} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
           {onToggleMembers && (
             <button
