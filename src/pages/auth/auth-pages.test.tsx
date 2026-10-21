@@ -7,6 +7,11 @@ import { renderWithProviders } from "../../test/render";
 import { LoginPage } from "./LoginPage";
 import { SignupPage } from "./SignupPage";
 
+// The handle probe has its own tests (login-art.test.tsx). Here it would fire a request once typing
+// pauses for long enough, which on a slow machine lands in the middle of a test and eats the
+// response the test queued for the sign-in.
+vi.mock("../../features/instance/useHandleInstance", () => ({ useHandleInstance: () => ({ instance: null, preview: null, probe: "idle" }) }));
+
 const tokens = {
   auth_token: "access-1",
   refresh_token: "refresh-1",
