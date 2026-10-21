@@ -24,12 +24,13 @@ export const AuthField = forwardRef<HTMLInputElement, FieldProps>(
           <label htmlFor={inputId}>{label}</label>
           {labelAside}
         </div>
+        {/* A raised field; focus is a 2px white ring offset by 2, an error a 1px inset line in the danger colour. */}
         <div
           className={[
-            "flex h-12 items-center gap-2.5 rounded-xl border bg-surface-secondary pl-3.5 pr-2 text-[15px] text-text-tertiary transition-shadow",
+            "flex h-11 items-center gap-2.5 rounded-md bg-surface-secondary pl-3.5 pr-2 text-[15px] text-text-tertiary transition-shadow duration-(--motion-fast)",
             error
-              ? "border-error/70 focus-within:ring-4 focus-within:ring-error/15"
-              : "border-border-secondary focus-within:border-primary/55 focus-within:ring-4 focus-within:ring-primary/10",
+              ? "shadow-[inset_0_0_0_1px_var(--color-error)] focus-within:shadow-[inset_0_0_0_1px_var(--color-error),0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]"
+              : "focus-within:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]",
           ].join(" ")}
         >
           {icon}
@@ -44,12 +45,12 @@ export const AuthField = forwardRef<HTMLInputElement, FieldProps>(
           {trailing}
         </div>
         {error ? (
-          <p id={`${inputId}-error`} className="flex items-center gap-1.5 text-xs text-error">
+          <p id={`${inputId}-error`} className="pb-error flex items-center gap-1.5">
             <AlertCircle size={12} aria-hidden="true" />
             {error}
           </p>
         ) : hint ? (
-          <p id={`${inputId}-hint`} className="text-xs text-text-muted">
+          <p id={`${inputId}-hint`} className="pb-meta">
             {hint}
           </p>
         ) : null}
@@ -76,7 +77,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>((p
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="grid h-8 w-8 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-hover hover:text-text"
+          className="grid h-8 w-8 place-items-center rounded-sm text-text-tertiary transition-colors hover:bg-hover hover:text-text"
         >
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
@@ -85,6 +86,16 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>((p
   );
 });
 PasswordField.displayName = "PasswordField";
+
+/** The small badge inside a field that says whether the instance in the handle answered. */
+export function FoundBadge({ state }: { state: "checking" | "found" | "missing" }) {
+  if (state === "checking") return <span className="pb-meta px-2 text-xs">Checking…</span>;
+  return state === "found" ? (
+    <span className="inline-flex items-center gap-1 rounded-sm bg-success/14 px-2 py-[5px] text-xs font-semibold text-success">Found</span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-sm bg-error/14 px-2 py-[5px] text-xs font-semibold text-error-text">Not found</span>
+  );
+}
 
 interface SwitchProps {
   checked: boolean;
@@ -101,16 +112,11 @@ export function Switch({ checked, onChange, children }: SwitchProps) {
       onClick={() => onChange(!checked)}
       className="flex items-center gap-2.5 text-left text-sm text-text-tertiary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
     >
-      <span
-        className={[
-          "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-          checked ? "bg-primary" : "bg-surface-tertiary",
-        ].join(" ")}
-      >
+      <span className={["relative h-5 w-9 shrink-0 rounded-full transition-colors", checked ? "bg-primary" : "bg-surface-tertiary"].join(" ")}>
         <span
           className={[
-            "absolute top-0.5 h-4 w-4 rounded-full bg-on-primary transition-[left]",
-            checked ? "left-[18px]" : "left-0.5 bg-text-muted",
+            "absolute top-0.5 h-4 w-4 rounded-full transition-[left,transform] duration-(--motion-base) ease-(--motion-ease-out)",
+            checked ? "left-[18px] bg-on-primary" : "left-0.5 bg-text-muted",
           ].join(" ")}
         />
       </span>
@@ -121,10 +127,7 @@ export function Switch({ checked, onChange, children }: SwitchProps) {
 
 export function Notice({ children }: { children: ReactNode }) {
   return (
-    <div
-      role="alert"
-      className="flex items-start gap-2.5 rounded-xl border border-error/35 bg-error/10 px-3.5 py-3 text-sm text-text"
-    >
+    <div role="alert" className="flex items-start gap-2.5 rounded-md bg-error/10 px-3.5 py-3 text-sm text-text shadow-[inset_0_0_0_1px_rgba(226,101,79,0.35)]">
       <AlertCircle size={16} className="mt-0.5 shrink-0 text-error" aria-hidden="true" />
       <span>{children}</span>
     </div>

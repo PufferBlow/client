@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { useEffect } from "react";
+import { useAuthArt } from "../../layouts/authLayoutContext";
+import { useHandleInstance } from "../../features/instance/useHandleInstance";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowRight, AtSign } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { AuthField, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
+import { AuthField, FoundBadge, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { signup } from "../../services/auth";
 import {
   classifyAuthError,
@@ -28,6 +31,9 @@ export function SignupPage() {
 
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
+  const { instance: pointedAt, preview, probe } = useHandleInstance(handle);
+  const setArt = useAuthArt();
+  useEffect(() => setArt({ instance: pointedAt, info: preview }), [setArt, pointedAt, preview]);
   const [confirm, setConfirm] = useState("");
   const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -92,6 +98,7 @@ export function SignupPage() {
           autoFocus
           error={errors.handle}
           hint="Your name, then the instance you're joining."
+          trailing={probe === "idle" ? undefined : <FoundBadge state={probe} />}
         />
 
         <PasswordField

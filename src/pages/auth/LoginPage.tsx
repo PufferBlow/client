@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { useEffect } from "react";
+import { useAuthArt } from "../../layouts/authLayoutContext";
+import { useHandleInstance } from "../../features/instance/useHandleInstance";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ArrowRight, AtSign } from "lucide-react";
+import { ArrowRight, AtSign, KeyRound } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { AuthField, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
+import { AuthField, FoundBadge, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { login } from "../../services/auth";
 import { classifyAuthError } from "../../utils/authErrors";
 import { resolveHandle } from "../../utils/authForm";
@@ -25,6 +28,11 @@ export function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
+
+  // The art beside the form follows the instance the handle points at.
+  const { instance: pointedAt, preview, probe } = useHandleInstance(handle);
+  const setArt = useAuthArt();
+  useEffect(() => setArt({ instance: pointedAt, info: preview }), [setArt, pointedAt, preview]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -78,6 +86,7 @@ export function LoginPage() {
           spellCheck={false}
           autoFocus
           error={errors.handle}
+          trailing={probe === "idle" ? undefined : <FoundBadge state={probe} />}
         />
 
         <PasswordField
@@ -98,6 +107,17 @@ export function LoginPage() {
           {!loading && <ArrowRight size={16} aria-hidden="true" />}
         </Button>
       </form>
+
+      <div className="flex items-center gap-3 text-xs text-text-muted" aria-hidden="true">
+        <span className="h-px flex-1 bg-border-secondary" />
+        or
+        <span className="h-px flex-1 bg-border-secondary" />
+      </div>
+      {/* Passkeys need the instance to support them; this stays off until it does. */}
+      <Button type="button" variant="secondary" size="lg" fullWidth disabled title="Passkeys are not available on this instance yet">
+        <KeyRound size={16} aria-hidden="true" />
+        Use a passkey
+      </Button>
 
       <p className="mt-auto pt-6 text-center text-[13px] text-text-tertiary">
         New here?{" "}
