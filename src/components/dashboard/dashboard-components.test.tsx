@@ -146,17 +146,22 @@ describe("Composer", () => {
     const user = userEvent.setup();
     render(<Composer channelName="general" onSend={vi.fn()} />);
     const field = screen.getByLabelText("Message #general") as HTMLTextAreaElement;
+    // user-event keeps its own idea of the selection; telling it about ours with a select event makes this deterministic.
+    const select = (from: number, to: number) => {
+      field.setSelectionRange(from, to);
+      fireEvent.select(field);
+    };
 
     await user.type(field, "make this bold");
-    field.setSelectionRange(10, 14);
+    select(10, 14);
     await user.keyboard("{Control>}b{/Control}");
     expect(field).toHaveValue("make this **bold**");
 
-    field.setSelectionRange(12, 16);
+    select(12, 16);
     await user.keyboard("{Control>}b{/Control}");
     expect(field).toHaveValue("make this bold");
 
-    field.setSelectionRange(0, 4);
+    select(0, 4);
     await user.keyboard("{Control>}i{/Control}");
     expect(field).toHaveValue("*make* this bold");
   });
