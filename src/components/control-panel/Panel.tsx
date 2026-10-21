@@ -17,10 +17,10 @@ export function Panel({
   flush?: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-[14px] border border-border-secondary bg-surface-secondary">
+    <section className="overflow-hidden rounded-lg bg-background-secondary">
       <header className="flex items-start justify-between gap-4 px-5 pb-0 pt-5">
         <div className="min-w-0">
-          <h2 className="m-0 font-heading text-lg font-semibold">{title}</h2>
+          <h2 className="pb-title m-0 text-xl">{title}</h2>
           {description && <p className="m-0 mt-1 text-[13px] text-text-tertiary">{description}</p>}
         </div>
         {action}

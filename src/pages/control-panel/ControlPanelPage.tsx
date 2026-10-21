@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
+import { SpaceIcon } from "../../components/ui/SpaceIcon";
+import { RoleTag } from "../../components/ui/RoleTag";
+import { resolveAssetUrl } from "../../services/authed";
+import { getStoredInstance } from "../../services/instance";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { useServerInfo } from "../../features/server/hooks";
@@ -8,9 +12,11 @@ import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelsSection } from "./ChannelsSection";
+import { HealthSection } from "./HealthSection";
+import { PeersSection } from "./PeersSection";
 import { ComingSoon, MembersSection } from "./ListSections";
 import { OverviewSection } from "./OverviewSection";
-import { DEFAULT_SECTION, isSectionId, SECTIONS, type SectionId } from "./sections";
+import { DEFAULT_SECTION, GROUPS, isSectionId, SECTIONS, type SectionId } from "./sections";
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
@@ -20,6 +26,10 @@ function SectionBody({ id }: { id: SectionId }) {
       return <ChannelsSection />;
     case "members":
       return <MembersSection />;
+    case "health":
+      return <HealthSection />;
+    case "peers":
+      return <PeersSection />;
     default: {
       const section = SECTIONS.find((s) => s.id === id);
       return <ComingSoon planned={section && "planned" in section ? section.planned : []} />;
@@ -40,14 +50,14 @@ export function ControlPanelPage() {
 
   if (isPending) {
     return (
-      <main className="flex min-w-0 flex-1 items-center justify-center rounded-[14px] bg-surface">
+      <main className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface">
         <LoadingState message="Checking permissions…" />
       </main>
     );
   }
   if (error) {
     return (
-      <main className="flex min-w-0 flex-1 items-center justify-center rounded-[14px] bg-surface">
+      <main className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface">
         <ErrorState title="Couldn't load your profile" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />
       </main>
     );
@@ -58,46 +68,68 @@ export function ControlPanelPage() {
   const active: SectionId = isSectionId(section) ? section : DEFAULT_SECTION;
   const current = SECTIONS.find((s) => s.id === active)!;
 
+  const host = getStoredInstance()?.raw ?? "";
+  const name = server?.server_name ?? host;
+
   return (
     <>
-      <aside className="flex w-[244px] shrink-0 flex-col gap-1 overflow-y-auto rounded-[14px] bg-surface p-2.5 max-md:hidden">
-        <Link
-          to="/dashboard"
-          className="mb-2 flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] text-text-tertiary no-underline hover:bg-surface-secondary hover:text-text"
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-          Back to app
-        </Link>
-
-        <div className="px-3 pb-2 pt-1">
-          <div className="font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-primary">Control panel</div>
-          <div className="mt-1 truncate font-display text-xl">{server?.server_name ?? " "}</div>
+      <aside className="flex w-[244px] shrink-0 flex-col overflow-hidden rounded-lg bg-background-secondary max-md:hidden">
+        <div className="flex items-center gap-3 px-3.5 pb-1.5 pt-4">
+          <SpaceIcon id={host || name} name={name} src={server?.avatar_url ? resolveAssetUrl(server.avatar_url) : null} size={40} />
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="pb-panel-header truncate leading-tight">{server?.server_name ?? " "}</span>
+            <span className="pb-meta flex items-center gap-1.5 text-xs">
+              <RoleTag name="Owner" colour="#dadada" dot={false} />
+              {server?.version ? `Pufferblow ${server.version}` : host}
+            </span>
+          </div>
         </div>
 
-        <nav aria-label="Control panel sections" className="flex flex-col gap-0.5">
-          {SECTIONS.map(({ id, label, icon: Icon, ...rest }) => (
-            <Link
-              key={id}
-              to={`/control-panel/${id}`}
-              aria-current={active === id ? "page" : undefined}
-              className={[
-                "flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] no-underline",
-                active === id ? "bg-surface-tertiary font-semibold text-text" : "text-text-tertiary hover:bg-surface-secondary hover:text-text",
-              ].join(" ")}
-            >
-              <Icon size={17} aria-hidden="true" />
-              <span className="flex-1">{label}</span>
-              {"planned" in rest && <span className="text-[10px] uppercase tracking-[0.1em] text-text-muted">Soon</span>}
-            </Link>
+        <nav aria-label="Control panel sections" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <Link
+            to="/dashboard"
+            className="mt-1 flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[14px] text-text-tertiary no-underline hover:bg-surface-secondary hover:text-text"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Back to app
+          </Link>
+          {GROUPS.map((group) => (
+            <div key={group.name} role="group" aria-label={group.name}>
+              <div className="pb-section-label px-2.5 pb-1.5 pt-3.5">{group.name}</div>
+              {group.ids.map((id) => {
+                const { label, icon: Icon, ...rest } = SECTIONS.find((s) => s.id === id)!;
+                return (
+                  <Link
+                    key={id}
+                    to={`/control-panel/${id}`}
+                    aria-current={active === id ? "page" : undefined}
+                    className={[
+                      "flex h-[34px] items-center gap-2.5 rounded-sm px-2.5 text-[14.5px] no-underline transition-colors duration-(--motion-fast)",
+                      active === id ? "bg-surface-tertiary font-semibold text-text" : "font-medium text-text-tertiary hover:bg-surface-secondary hover:text-text-body",
+                    ].join(" ")}
+                  >
+                    <Icon size={16} aria-hidden="true" />
+                    <span className="flex-1">{label}</span>
+                    {"planned" in rest && <span className="text-[10px] uppercase tracking-[0.1em] text-text-faint">Soon</span>}
+                  </Link>
+                );
+              })}
+            </div>
           ))}
         </nav>
+
+        <p className="m-2 flex items-start gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 text-xs leading-snug text-text-tertiary">
+          <Lock size={14} aria-hidden="true" className="mt-px shrink-0" />
+          Only the owner of {host || "this instance"} can open this panel.
+        </p>
       </aside>
 
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-[14px] bg-surface px-6 py-8 sm:px-10">
-        <div className="mx-auto flex max-w-[960px] flex-col gap-5">
-          <header>
-            <h1 className="m-0 font-display text-[34px] font-normal leading-tight tracking-normal">{current.label}</h1>
-            <p className="m-0 mt-1 text-[15px] text-text-tertiary">{current.description}</p>
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg bg-surface px-5 py-[22px] sm:px-6">
+        <div className="mx-auto flex max-w-[1040px] flex-col gap-4">
+          <header className="flex flex-col gap-2">
+            <span className="pb-section-label">{GROUPS.find((g) => g.ids.includes(active))?.name}</span>
+            <h1 className="pb-display m-0">{current.label}</h1>
+            <p className="m-0 text-[14px] text-text-tertiary">{current.description}</p>
           </header>
           <SectionBody id={active} />
         </div>

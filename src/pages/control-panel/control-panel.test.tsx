@@ -165,9 +165,11 @@ describe("ControlPanelPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Control panel sections" });
-    for (const label of ["Overview", "Channels", "Members", "Roles & privileges", "Moderation", "Server settings"]) {
+    for (const label of ["Overview", "Health", "Settings", "Members", "Channels", "Roles", "Peers", "Relays", "Blocklist", "Reports", "Audit log"]) {
       expect(within(nav).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
+    // grouped, in the order the design gives
+    expect(within(nav).getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual(["Instance", "Community", "Federation", "Safety"]);
     expect(within(nav).getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getAllByText("Test Server").length).toBeGreaterThanOrEqual(2); // sidebar title and details
   });
@@ -381,7 +383,10 @@ describe("ControlPanelPage", () => {
   describe("planned sections", () => {
     it.each([
       ["roles", "Create and edit roles"],
-      ["moderation", "Time out or ban members"],
+      ["reports", "Review reports from members"],
+      ["blocklist", "Block an instance or an IP address"],
+      ["relays", "Add and remove relays"],
+      ["audit", "Every moderation and settings change"],
       ["settings", "Name, description and welcome message"],
     ])("%s explains what is coming", async (section, planned) => {
       backend();
@@ -395,7 +400,7 @@ describe("ControlPanelPage", () => {
       backend();
       renderPanel();
       const nav = await screen.findByRole("navigation", { name: "Control panel sections" });
-      expect(within(nav).getAllByText("Soon")).toHaveLength(3);
+      expect(within(nav).getAllByText("Soon")).toHaveLength(6); // settings, roles, relays, blocklist, reports, audit log
     });
   });
 });
