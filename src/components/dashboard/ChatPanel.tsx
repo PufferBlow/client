@@ -14,6 +14,7 @@ import { lookOf } from "../../features/users/look";
 import { canMentionEveryone, shownRole } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
+import { HealthBanner } from "../instance/HealthBanner";
 import { ToastRegion } from "../ui/Toast";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelSearch } from "./ChannelSearch";
@@ -196,6 +197,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
       />
       </MentionDirectoryContext.Provider>
 
+      <HealthBanner />
       <Composer
         channelName={channel.channel_name}
         mentionables={mentionables}

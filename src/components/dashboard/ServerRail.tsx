@@ -15,6 +15,7 @@ import { listAccounts, switchAccount } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { getStoredInstance } from "../../services/instance";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePublicHealth } from "../../features/health/hooks";
 import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
@@ -55,6 +56,8 @@ export function ServerRail() {
   const onServer = useMatch("/dashboard/channels/*") !== null;
   const onControlPanel = useMatch("/control-panel/*") !== null;
   const { data: server } = useServerInfo();
+  // Hidden while the instance is well; a dot when it says it is having trouble.
+  const troubled = usePublicHealth().data?.status === "degraded";
   const { data: unread } = useUnreadCounts();
   const { data: me } = useMyProfile();
   const isOwner = isServerOwner(me);
@@ -118,6 +121,9 @@ export function ServerRail() {
             className="absolute inset-0"
           />
           <CountBadge count={totalPings} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
+          {troubled && totalPings === 0 && (
+            <span role="img" aria-label="This instance is having trouble" title={`${serverName} is having trouble`} className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-warning shadow-[0_0_0_3px_var(--color-background)]" />
+          )}
         </NavLink>
       </div>
 
