@@ -206,7 +206,17 @@ describe("VoiceTransport", () => {
 
     expect(FakePeer.last.descriptions).toContainEqual({ type: "rollback" });
     expect(FakePeer.last.remoteDescription).toEqual({ type: "offer", sdp: "server-offer" });
-    expect(FakeSocket.last.sent.at(-1)).toEqual({ type: "answer", answer: { type: "answer", sdp: "local-answer" } });
+    // The server drops our offer when it has one out, so ours goes again after its offer is answered.
+    expect(FakeSocket.last.types().slice(-2)).toEqual(["answer", "offer"]);
+    expect(FakeSocket.last.sent.at(-2)).toEqual({ type: "answer", answer: { type: "answer", sdp: "local-answer" } });
+  });
+
+  it("holds its own ICE candidates until its offer has been sent", async () => {
+    await start();
+    const sent = FakeSocket.last.types();
+    expect(sent.indexOf("offer")).toBeGreaterThan(-1);
+    FakePeer.last.onicecandidate?.({ candidate: { toJSON: () => ({ candidate: "c1" }) } } as unknown as RTCPeerConnectionIceEvent);
+    expect(FakeSocket.last.types().at(-1)).toBe("candidate"); // after the offer: sent straight away
   });
 
   it("reports connected and the roster when the server confirms the join, and pings from then on", async () => {

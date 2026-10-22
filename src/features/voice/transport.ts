@@ -54,6 +54,10 @@ export class VoiceTransport {
   private speakingTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly speakers = new Map<string, HTMLAudioElement>();
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  /** Frames are applied one after another: two offers in a row must not interleave their steps. */
+  private queue: Promise<void> = Promise.resolve();
+  /** Candidates we gathered before our offer went out; the server needs the offer first. */
+  private outgoingCandidates: RTCIceCandidateInit[] | null = [];
   private participants = new Map<string, VoiceParticipant>();
   private muted = false;
   private deafened = false;
@@ -94,7 +98,9 @@ export class VoiceTransport {
     for (const track of this.microphone.getAudioTracks()) peer.addTrack(track, this.microphone);
 
     peer.onicecandidate = (event) => {
-      if (event.candidate) this.send(signal.candidate(event.candidate.toJSON()));
+      if (!event.candidate) return;
+      if (this.outgoingCandidates) this.outgoingCandidates.push(event.candidate.toJSON());
+      else this.send(signal.candidate(event.candidate.toJSON()));
     };
     peer.ontrack = (event) => this.playRemote(event);
     peer.onconnectionstatechange = () => {
@@ -105,7 +111,10 @@ export class VoiceTransport {
 
     const socket = this.deps.createSocket(signalingUrl(this.grant.signalingUrl, this.grant.joinToken));
     this.socket = socket;
-    socket.onmessage = (message: MessageEvent) => void this.handleFrame(parseSignal(message.data));
+    socket.onmessage = (message: MessageEvent) => {
+      const frame = parseSignal(message.data);
+      this.queue = this.queue.then(() => this.handleFrame(frame));
+    };
     socket.onerror = () => undefined; // `onclose` follows and reports it
 
     let opened = false;
@@ -167,6 +176,13 @@ export class VoiceTransport {
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
     this.send(signal.offer(offer));
+    this.flushOutgoingCandidates();
+  }
+
+  private flushOutgoingCandidates(): void {
+    const queued = this.outgoingCandidates ?? [];
+    this.outgoingCandidates = null;
+    for (const candidate of queued) this.send(signal.candidate(candidate));
   }
 
   private async handleFrame(frame: SignalFrame | null): Promise<void> {
@@ -217,13 +233,17 @@ export class VoiceTransport {
 
       case "offer": {
         if (!peer) return;
-        // The server's offer wins over one of ours that has not been answered yet.
-        if (peer.signalingState === "have-local-offer") await peer.setLocalDescription({ type: "rollback" });
+        // The server's offer wins over one of ours that has not been answered yet. The server drops ours
+        // in that case, so once its offer is answered ours is sent again.
+        const preempted = peer.signalingState === "have-local-offer";
+        if (preempted) await peer.setLocalDescription({ type: "rollback" });
         await peer.setRemoteDescription(frame.sdp);
         await this.flushCandidates();
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
         this.send(signal.answer(answer));
+        this.flushOutgoingCandidates();
+        if (preempted) await this.offer();
         return;
       }
 
