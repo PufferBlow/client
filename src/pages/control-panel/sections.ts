@@ -54,8 +54,7 @@ export const SECTIONS = [
     id: "blocklist",
     label: "Blocklist",
     icon: Ban,
-    description: "Instances and addresses that are not welcome.",
-    planned: ["Block an instance or an IP address", "Import a shared blocklist", "Review what was blocked and why"],
+    description: "Instances that are not welcome here.",
   },
   {
     id: "reports",

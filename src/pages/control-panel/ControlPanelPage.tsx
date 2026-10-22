@@ -12,6 +12,7 @@ import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelsSection } from "./ChannelsSection";
+import { BlocklistSection } from "./BlocklistSection";
 import { HealthSection } from "./HealthSection";
 import { PeersSection } from "./PeersSection";
 import { ComingSoon, MembersSection } from "./ListSections";
@@ -30,6 +31,8 @@ function SectionBody({ id }: { id: SectionId }) {
       return <HealthSection />;
     case "peers":
       return <PeersSection />;
+    case "blocklist":
+      return <BlocklistSection />;
     default: {
       const section = SECTIONS.find((s) => s.id === id);
       return <ComingSoon planned={section && "planned" in section ? section.planned : []} />;

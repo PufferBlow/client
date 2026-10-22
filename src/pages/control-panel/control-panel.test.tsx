@@ -384,7 +384,6 @@ describe("ControlPanelPage", () => {
     it.each([
       ["roles", "Create and edit roles"],
       ["reports", "Review reports from members"],
-      ["blocklist", "Block an instance or an IP address"],
       ["relays", "Add and remove relays"],
       ["audit", "Every moderation and settings change"],
       ["settings", "Name, description and welcome message"],
@@ -400,7 +399,7 @@ describe("ControlPanelPage", () => {
       backend();
       renderPanel();
       const nav = await screen.findByRole("navigation", { name: "Control panel sections" });
-      expect(within(nav).getAllByText("Soon")).toHaveLength(6); // settings, roles, relays, blocklist, reports, audit log
+      expect(within(nav).getAllByText("Soon")).toHaveLength(5); // settings, roles, relays, reports, audit log
     });
   });
 });

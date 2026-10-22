@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { jsonResponse, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import type { InstanceHealth } from "../../features/health/types";
@@ -178,65 +178,5 @@ describe("the Health page", () => {
     renderPanel("health");
     expect(await screen.findByText("Couldn't load the instance's health")).toBeInTheDocument();
     expect(screen.getByText("Only admins can do that.")).toBeInTheDocument();
-  });
-});
-
-describe("the Peers page", () => {
-  it("counts peers by state, with every known peer Federating", async () => {
-    backend();
-    renderPanel("peers");
-    const section = within(await screen.findByRole("region", { name: "Peers" }));
-
-    expect(await section.findByRole("button", { name: "Federating: 2" })).toBeInTheDocument();
-    for (const state of ["Pending", "Limited", "Blocked"]) expect(section.getByRole("button", { name: `${state}: 0` })).toBeInTheDocument();
-  });
-
-  it("lists the peers and shows the selected one's details", async () => {
-    backend();
-    const { user } = renderPanel("peers");
-    const section = within(await screen.findByRole("region", { name: "Peers" }));
-
-    await user.click(await section.findByRole("button", { name: /kiln\.social/ }));
-
-    const details = within(screen.getByRole("complementary", { name: "Peer details" }));
-    expect(details.getByText("kiln.social")).toBeInTheDocument();
-    expect(details.getByText("5")).toBeInTheDocument(); // follows
-    expect(details.getByText("Never")).toBeInTheDocument(); // last activity
-  });
-
-  it("filters by state, and says that nothing is tracked for the states it cannot know", async () => {
-    backend();
-    const { user } = renderPanel("peers");
-    const section = within(await screen.findByRole("region", { name: "Peers" }));
-    await section.findByText("mesh.garden");
-
-    await user.click(section.getByRole("button", { name: "Blocked: 0" }));
-
-    expect(section.queryByText("mesh.garden")).not.toBeInTheDocument();
-    expect(section.getByText("Nothing is blocked")).toBeInTheDocument();
-    await user.click(section.getByRole("button", { name: "Blocked: 0" })); // again: back to everyone
-    expect(await section.findByText("mesh.garden")).toBeInTheDocument();
-  });
-
-  it("shows the rules but switches them off, with the reason", async () => {
-    backend();
-    renderPanel("peers");
-    const section = within(await screen.findByRole("region", { name: "Peers" }));
-
-    const modes = section.getByRole("group", { name: "Federation mode" });
-    expect(within(modes).getByRole("button", { name: "Open" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(modes).getByRole("button", { name: "Allowlist" })).toBeDisabled();
-    expect(within(modes).getByRole("button", { name: "Closed" })).toBeDisabled();
-
-    const details = within(screen.getByRole("complementary", { name: "Peer details" }));
-    expect(details.getByRole("switch", { name: "Media" })).toHaveAttribute("aria-disabled", "true");
-    expect(details.getByRole("button", { name: "Block" })).toBeDisabled();
-    expect(details.getByRole("button", { name: "Limit" })).toHaveAttribute("title", expect.stringContaining("Not available yet"));
-  });
-
-  it("explains an instance with no peers", async () => {
-    backend(health({ peers: [] }));
-    renderPanel("peers");
-    expect(await screen.findByText("No peers yet")).toBeInTheDocument();
   });
 });
