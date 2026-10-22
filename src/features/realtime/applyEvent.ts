@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { callSignals } from "../calls/signals";
 import { categoryKeys } from "../channels/categories";
 import { channelKeys } from "../channels/hooks";
 import { pinKeys } from "../channels/pins";
@@ -54,6 +55,10 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       }
       return;
     }
+
+    case "call":
+      callSignals.emit(event.signal);
+      return;
 
     case "message_edited":
       updateMessages(event.channelId, (cache) =>

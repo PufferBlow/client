@@ -1,6 +1,7 @@
 import { messageFromView, normalizeMessage, reactionsFromView, type WireMessage } from "../messages/normalize";
 import type { Message, Reaction } from "../messages/types";
 import { asPresence } from "../members/presence";
+import type { CallSignal } from "../calls/types";
 import type { PresenceStatus } from "../users/types";
 import type { EventFrame } from "./protocol";
 
@@ -19,6 +20,8 @@ export type RealtimeEvent =
   /** A message was pinned or unpinned in a channel. */
   | { kind: "pins"; channelId: string }
   | { kind: "notification" }
+  /** Someone is calling, or something happened on a call we are in (see `CallSignal`). */
+  | { kind: "call"; signal: CallSignal }
   /** Someone started typing; `scope` is the channel id, or the conversation id for a DM. */
   | { kind: "typing"; scope: string; userId: string; expiresInMs: number };
 
@@ -102,6 +105,27 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
 
     case "dm.reaction.updated":
       return { kind: "reactions", channelId: str(data.conversation_id), messageId: str(data.message_id), reactions: reactionsFromView(data.reactions) };
+
+    case "user.dm_call_invite":
+      return str(data.call_id) && str(data.caller_id) ? { kind: "call", signal: { kind: "invite", callId: str(data.call_id), callerId: str(data.caller_id) } } : null;
+
+    case "user.dm_call_accepted":
+    case "user.dm_call_rejected":
+    case "user.dm_call_ended": {
+      const callId = str(data.call_id);
+      const kind = frame.name.slice("user.dm_call_".length) as "accepted" | "rejected" | "ended";
+      return callId ? { kind: "call", signal: { kind, callId } } : null;
+    }
+
+    case "user.dm_call_offer":
+    case "user.dm_call_answer":
+    case "user.dm_call_candidate": {
+      const callId = str(data.call_id);
+      const fromUserId = str(data.from_user_id);
+      const payload = typeof data.payload === "object" && data.payload !== null && !Array.isArray(data.payload) ? (data.payload as Record<string, unknown>) : {};
+      const kind = frame.name.slice("user.dm_call_".length) as "offer" | "answer" | "candidate";
+      return callId && fromUserId ? { kind: "call", signal: { kind, callId, fromUserId, payload } } : null;
+    }
 
     default:
       return null;

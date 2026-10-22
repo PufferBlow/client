@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { AtSign } from "lucide-react";
+import { AtSign, Phone } from "lucide-react";
+import { isCallActive, useCall } from "../../features/calls/callContext";
 import type { Conversation } from "../../features/dms/api";
 import {
   useDeleteDirectMessage,
@@ -12,7 +13,7 @@ import { toReplyPreview } from "../../features/messages/replies";
 import { useServerInfo } from "../../features/server/hooks";
 import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
-import { useMyProfile } from "../../features/users/hooks";
+import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { useToast } from "../../hooks/useToast";
 import { ToastRegion } from "../ui/Toast";
 import { Avatar } from "./Avatar";
@@ -45,6 +46,8 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const remove = useDeleteDirectMessage(conversationId);
   const react = useToggleDirectReaction(conversationId);
   const { toast, show: showToast } = useToast();
+  const call = useCall();
+  const { data: users } = useUsers();
 
   const name = conversation?.peerUsername ?? peer.split("@")[0] ?? peer;
   // In a 1:1 conversation the only other person who can be typing is the peer.
@@ -69,6 +72,9 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
     await send({ ...input, replyTo });
   };
 
+  // A brand-new conversation is not in the list yet, but the person is on this instance's member list.
+  const peerUserId = conversation?.peerUserId ?? (peer.includes("@") ? undefined : users?.find((u) => u.username === peer)?.user_id);
+
   const avatar = <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={80} />;
 
   return (
@@ -78,6 +84,18 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={26} presence={conversation?.peerStatus} />
         <h1 className="m-0 text-[15px] font-bold">{name}</h1>
         {peer.includes("@") && <span className="truncate text-[12.5px] text-text-muted">@{peer}</span>}
+        {peerUserId && (
+          <button
+            type="button"
+            aria-label={`Call ${name}`}
+            title={isCallActive(call) ? "You are already on a call" : `Start an end-to-end encrypted call with ${name}`}
+            disabled={isCallActive(call)}
+            onClick={() => void call.startCall({ userId: peerUserId, name })}
+            className="ml-auto grid size-9 place-items-center rounded-full border-0 bg-transparent text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text disabled:opacity-40"
+          >
+            <Phone size={17} aria-hidden="true" />
+          </button>
+        )}
       </header>
 
       <MessageLog
