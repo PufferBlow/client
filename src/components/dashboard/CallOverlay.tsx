@@ -21,7 +21,7 @@ function Timer({ since }: { since: number | null }) {
 }
 
 /** What protects the call, in a sentence and a mark. Never claims more than the checks established. */
-function Protection({ encryption, onOpenSafety }: { encryption: Encryption; onOpenSafety: () => void }) {
+function Protection({ encryption, route, onOpenSafety }: { encryption: Encryption; route: "direct" | "relay"; onOpenSafety: () => void }) {
   if (encryption.status === "protected") {
     const verified = encryption.trust === "verified";
     const Icon = verified ? ShieldCheck : Lock;
@@ -34,6 +34,7 @@ function Protection({ encryption, onOpenSafety }: { encryption: Encryption; onOp
       >
         <Icon size={13} aria-hidden="true" />
         {verified ? "End-to-end encrypted · verified" : "End-to-end encrypted · not verified"}
+        {route === "relay" && " · via server"}
       </button>
     );
   }
@@ -131,7 +132,7 @@ export function CallOverlay() {
             {person}
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-[12.5px] text-text-tertiary">{status ?? <Timer since={call.connectedAt} />}</span>
-              <Protection encryption={call.encryption} onOpenSafety={() => setSafetyOpen(true)} />
+              <Protection encryption={call.encryption} route={call.route} onOpenSafety={() => setSafetyOpen(true)} />
             </div>
           </div>
           {call.phase === "connected" && (

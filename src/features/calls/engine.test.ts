@@ -74,7 +74,7 @@ class FakePeer {
   }
 }
 
-type Signal = { type: "offer" | "answer" | "candidate"; payload: Record<string, unknown> };
+type Signal = { type: "offer" | "answer" | "candidate" | "relay"; payload: Record<string, unknown> };
 
 interface Side {
   engine: CallEngine;
@@ -86,7 +86,7 @@ interface Side {
   identity: Identity;
 }
 
-const baseState = (): CallState => ({ phase: "connecting", callId: "c1", peerId: null, peerName: "", direction: null, muted: false, error: null, encryption: { status: "pending" }, connectedAt: null });
+const baseState = (): CallState => ({ phase: "connecting", callId: "c1", peerId: null, peerName: "", direction: null, muted: false, error: null, encryption: { status: "pending" }, connectedAt: null, route: "direct" });
 
 async function makeSide(role: "caller" | "callee", userId: string, peerId: string, options: { identity?: Identity; pins?: PinStore } = {}): Promise<Side> {
   const identity = options.identity ?? (await loadIdentity(memoryKeyStore(), userId));
@@ -103,7 +103,7 @@ async function makeSide(role: "caller" | "callee", userId: string, peerId: strin
   side.engine = new CallEngine({
     callId: "c1",
     role,
-    self: { userId },
+    self: { userId, username: userId },
     peer: { userId: peerId },
     iceServers: [],
     identity,
@@ -303,7 +303,7 @@ describe("ICE candidates", () => {
     const engine = new CallEngine({
       callId: "c1",
       role: "callee",
-      self: { userId: "grace" },
+      self: { userId: "grace", username: "grace" },
       peer: { userId: "ada" },
       iceServers: [],
       identity: callee.identity,
@@ -353,7 +353,7 @@ describe("controls and teardown", () => {
       createAudio: () => ({}) as HTMLAudioElement,
     };
     const patches: Partial<CallState>[] = [];
-    const engine = new CallEngine({ callId: "c", role: "caller", self: { userId: "a" }, peer: { userId: "b" }, iceServers: [], identity: caller.identity, pins: memoryPinStore(), send: async () => undefined, onState: (p) => void patches.push(p), deps: denied });
+    const engine = new CallEngine({ callId: "c", role: "caller", self: { userId: "a", username: "a" }, peer: { userId: "b" }, iceServers: [], identity: caller.identity, pins: memoryPinStore(), send: async () => undefined, onState: (p) => void patches.push(p), deps: denied });
     await expect(engine.start()).rejects.toThrow(/Microphone access was blocked/);
     expect(patches.at(-1)).toMatchObject({ phase: "failed" });
   });
@@ -361,8 +361,9 @@ describe("controls and teardown", () => {
   it("fails the call when the audio connection fails, and when it never connects", async () => {
     await startBoth();
     caller.peer().fail();
+    await flush();
     expect(caller.state.phase).toBe("failed");
-    expect(caller.state.error).toMatch(/audio connection failed/i);
+    expect(caller.state.error).toMatch(/cannot encrypt a relayed call/i); // no relay here, so no downgrade
 
     vi.useFakeTimers();
     try {
@@ -371,7 +372,7 @@ describe("controls and teardown", () => {
       await slow.engine.beginOffer();
       await vi.advanceTimersByTimeAsync(20_001);
       expect(slow.state.phase).toBe("failed");
-      expect(slow.state.error).toMatch(/Couldn't connect the audio/);
+      expect(slow.state.error).toMatch(/cannot encrypt a relayed call/i);
     } finally {
       vi.useRealTimers();
     }

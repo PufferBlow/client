@@ -33,6 +33,8 @@ export interface CallState {
   encryption: Encryption;
   /** `Date.now()` when the audio connected, for the call timer. */
   connectedAt: number | null;
+  /** Straight between the two devices, or through the media server (still end-to-end encrypted). */
+  route: "direct" | "relay";
 }
 
 export const IDLE_CALL: CallState = {
@@ -45,6 +47,7 @@ export const IDLE_CALL: CallState = {
   error: null,
   encryption: { status: "pending" },
   connectedAt: null,
+  route: "direct",
 };
 
 /** The call signals that arrive over the realtime connection (`user.dm_call_*`). */
@@ -53,7 +56,7 @@ export type CallSignal =
   | { kind: "accepted"; callId: string }
   | { kind: "rejected"; callId: string }
   | { kind: "ended"; callId: string }
-  | { kind: "offer" | "answer" | "candidate"; callId: string; fromUserId: string; payload: Record<string, unknown> };
+  | { kind: "offer" | "answer" | "candidate" | "relay"; callId: string; fromUserId: string; payload: Record<string, unknown> };
 
 export interface IceServer {
   urls: string | string[];

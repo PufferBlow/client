@@ -119,11 +119,12 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
 
     case "user.dm_call_offer":
     case "user.dm_call_answer":
-    case "user.dm_call_candidate": {
+    case "user.dm_call_candidate":
+    case "user.dm_call_relay": {
       const callId = str(data.call_id);
       const fromUserId = str(data.from_user_id);
       const payload = typeof data.payload === "object" && data.payload !== null && !Array.isArray(data.payload) ? (data.payload as Record<string, unknown>) : {};
-      const kind = frame.name.slice("user.dm_call_".length) as "offer" | "answer" | "candidate";
+      const kind = frame.name.slice("user.dm_call_".length) as "offer" | "answer" | "candidate" | "relay";
       return callId && fromUserId ? { kind: "call", signal: { kind, callId, fromUserId, payload } } : null;
     }
 

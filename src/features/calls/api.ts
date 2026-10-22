@@ -1,5 +1,6 @@
 import { authed } from "../../services/authed";
 import type { PublicJwk } from "./crypto/identity";
+import type { VoiceSessionGrant } from "../voice/types";
 import type { IceServer } from "./types";
 
 const CALLS = "/api/v1/dm-calls";
@@ -25,8 +26,22 @@ export const rejectCall = (callId: string) => authed.body("POST", `${callPath(ca
 export const endCall = (callId: string) => authed.body("POST", `${callPath(callId)}/end`);
 
 /** Pass one offer, answer or ICE candidate to the other person. The instance relays it and reads none of it. */
-export const sendCallSignal = (callId: string, signalType: "offer" | "answer" | "candidate", payload: Record<string, unknown>) =>
+export const sendCallSignal = (callId: string, signalType: "offer" | "answer" | "candidate" | "relay", payload: Record<string, unknown>) =>
   authed.body("POST", `${callPath(callId)}/signal`, { signal_type: signalType, payload });
+
+/** Join the media-server session for this call (used when the two devices cannot connect directly). */
+export async function joinCallRelay(callId: string): Promise<VoiceSessionGrant> {
+  const res = await authed.body<{ session_id: string; join_token: string; signaling_url: string; ice_servers?: IceServer[] }>("POST", `${callPath(callId)}/fallback`, { quality_profile: "balanced" });
+  return {
+    sessionId: res.session_id,
+    channelId: callId,
+    joinToken: res.join_token,
+    signalingUrl: res.signaling_url,
+    iceServers: res.ice_servers ?? [],
+    participantCount: 0,
+    qualityProfile: "balanced",
+  };
+}
 
 /** Make this device's public signing key known to the instance (so other devices of the same person can list it). */
 export async function registerIdentityKey(publicKey: PublicJwk, label: string): Promise<void> {

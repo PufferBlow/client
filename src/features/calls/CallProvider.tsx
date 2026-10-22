@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { getStoredInstance } from "../../services/instance";
 import { useUsers, useMyProfile } from "../users/hooks";
 import { useVoice } from "../voice/voiceContext";
-import { acceptCall, endCall, inviteToCall, registerIdentityKey, rejectCall, sendCallSignal } from "./api";
+import { leaveVoiceSession } from "../voice/api";
+import { browserDeps as browserVoiceDeps } from "../voice/transport";
+import { acceptCall, endCall, inviteToCall, joinCallRelay, registerIdentityKey, rejectCall, sendCallSignal } from "./api";
 import { CallContext, isCallActive, type CallControls } from "./callContext";
 import { loadIdentity, indexedDbKeyStore, memoryKeyStore, type Identity, type KeyStore } from "./crypto/identity";
 import { localPinStore, markVerified as pinVerified, type PinStore } from "./crypto/trust";
-import { browserCallDeps, CallEngine, type CallDeps } from "./engine";
+import { browserCallDeps, CallEngine, type CallDeps, type RelaySetup } from "./engine";
+import { browserFrameEncryption, canEncryptFrames } from "./frameEncryption";
 import { callSignals } from "./signals";
 import { IDLE_CALL, type CallState, type IceServer } from "./types";
 
@@ -26,14 +29,33 @@ interface CallProviderProps {
   deps?: CallDeps;
   keyStore?: KeyStore;
   pinStore?: (accountId: string) => PinStore;
+  /** How a call that cannot connect directly goes through the media server. Defaults to the browser's. */
+  relay?: (callId: string) => RelaySetup;
 }
+
+/** Developer switch: `localStorage.pb_calls_force_relay = "1"` skips the direct attempt, to try the relay. */
+const forceRelay = () => {
+  try {
+    return localStorage.getItem("pb_calls_force_relay") === "1";
+  } catch {
+    return false;
+  }
+};
+
+const browserRelay = (callId: string): RelaySetup => ({
+  grant: () => joinCallRelay(callId),
+  leave: leaveVoiceSession,
+  voiceDeps: { createSocket: browserVoiceDeps.createSocket, createPeer: browserVoiceDeps.createPeer, createAudio: browserVoiceDeps.createAudio, watchSpeaking: browserVoiceDeps.watchSpeaking },
+  encryption: () => (canEncryptFrames() ? browserFrameEncryption() : null),
+  forceRelay: forceRelay(),
+});
 
 /**
  * Owns the one call this client can be on. It rings, answers and ends calls through the instance,
  * and hands the audio to a `CallEngine`, which signs and verifies the negotiation. Starting or
  * answering a call leaves any voice channel first: there is one audio session at a time.
  */
-export function CallProvider({ children, deps = browserCallDeps, keyStore, pinStore = localPinStore }: CallProviderProps) {
+export function CallProvider({ children, deps = browserCallDeps, keyStore, pinStore = localPinStore, relay = browserRelay }: CallProviderProps) {
   const { data: me } = useMyProfile();
   const { data: users } = useUsers();
   const voice = useVoice();
@@ -94,7 +116,7 @@ export function CallProvider({ children, deps = browserCallDeps, keyStore, pinSt
       const next = new CallEngine({
         callId,
         role,
-        self: { userId: me!.user_id },
+        self: { userId: me!.user_id, username: me!.username },
         peer: { userId: peerId },
         iceServers,
         identity: self,
@@ -111,11 +133,12 @@ export function CallProvider({ children, deps = browserCallDeps, keyStore, pinSt
           patch(partial);
         },
         deps,
+        relay: relay(callId),
       });
       engine.current = next;
       return next;
     },
-    [accountId, deps, ensureIdentity, finish, me, patch, pinStore],
+    [accountId, deps, ensureIdentity, finish, me, patch, pinStore, relay],
   );
 
   // ── placing and answering ─────────────────────────────────

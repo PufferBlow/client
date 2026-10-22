@@ -1,3 +1,4 @@
+import type { FrameEncryption } from "../calls/frameEncryption";
 import { parseSignal, signal, type SignalFrame } from "./signaling";
 import { newParticipant, type IceServer, type VoiceParticipant, type VoiceSessionGrant, type VoiceStatus } from "./types";
 
@@ -10,6 +11,8 @@ export interface VoiceDeps {
   createAudio(): HTMLAudioElement;
   /** Calls back with true/false as the stream goes above or below speaking level. Returns a stop function. */
   watchSpeaking(stream: MediaStream, onChange: (speaking: boolean) => void): () => void;
+  /** When set, every audio frame is sealed before it leaves and opened on arrival (end-to-end encrypted calls). */
+  encryption?: FrameEncryption;
 }
 
 export interface VoiceEvents {
@@ -93,16 +96,22 @@ export class VoiceTransport {
       return;
     }
 
-    const peer = this.deps.createPeer({ iceServers: toRtcServers(this.grant.iceServers) });
+    const peer = this.deps.createPeer({ iceServers: toRtcServers(this.grant.iceServers), ...this.deps.encryption?.configuration });
     this.peer = peer;
-    for (const track of this.microphone.getAudioTracks()) peer.addTrack(track, this.microphone);
+    for (const track of this.microphone.getAudioTracks()) {
+      const sender = peer.addTrack(track, this.microphone);
+      this.deps.encryption?.protectSender(sender); // before any media flows
+    }
 
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
       if (this.outgoingCandidates) this.outgoingCandidates.push(event.candidate.toJSON());
       else this.send(signal.candidate(event.candidate.toJSON()));
     };
-    peer.ontrack = (event) => this.playRemote(event);
+    peer.ontrack = (event) => {
+      if (event.track.kind === "audio") this.deps.encryption?.protectReceiver(event.receiver);
+      this.playRemote(event);
+    };
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === "failed") this.fail(new VoiceError("connection", "The audio connection failed."));
     };
