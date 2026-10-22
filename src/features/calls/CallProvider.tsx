@@ -10,6 +10,7 @@ import { loadIdentity, indexedDbKeyStore, memoryKeyStore, type Identity, type Ke
 import { localPinStore, markVerified as pinVerified, type PinStore } from "./crypto/trust";
 import { browserCallDeps, CallEngine, type CallDeps, type RelaySetup } from "./engine";
 import { browserFrameEncryption, canEncryptFrames } from "./frameEncryption";
+import { notifyIncomingCall, startRinging } from "./ring";
 import { callSignals } from "./signals";
 import { IDLE_CALL, type CallState, type IceServer } from "./types";
 
@@ -199,6 +200,19 @@ export function CallProvider({ children, deps = browserCallDeps, keyStore, pinSt
     void (ringing ? rejectCall(current.id) : endCall(current.id)).catch(() => undefined);
     finish(null);
   }, [finish]);
+
+  // An incoming call is heard (and, from a background window, seen) until it is answered or given up on.
+  const ringingFor = state.phase === "incoming" ? state.callId : null;
+  const callerName = state.peerName;
+  useEffect(() => {
+    if (!ringingFor) return;
+    const stopRing = startRinging();
+    const closeNotice = notifyIncomingCall(callerName || "Someone");
+    return () => {
+      stopRing();
+      closeNotice();
+    };
+  }, [ringingFor, callerName]);
 
   // ── what the other side does ──────────────────────────────
 

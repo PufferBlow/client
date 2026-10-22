@@ -144,6 +144,8 @@ export class CallEngine {
 
     if (this.setup.relay?.forceRelay) {
       this.release();
+      // Nothing may be signalled before the callee has accepted, so a caller waits for `beginOffer`.
+      if (this.setup.role === "caller") return;
       try {
         await this.enterRelay();
       } catch (error) {
@@ -188,6 +190,14 @@ export class CallEngine {
     if (this.setup.role !== "caller" || this.closed || this.mode === "relay") return;
     await this.queue;
     if (this.route === "relay" || this.closed) return; // gave up on the direct path while the microphone prompt was open
+    if (this.setup.relay?.forceRelay) {
+      try {
+        await this.enterRelay();
+      } catch (error) {
+        throw this.fail(error instanceof Error ? error.message : "Couldn't set up the call.");
+      }
+      return;
+    }
     await this.makeOffer();
   }
 

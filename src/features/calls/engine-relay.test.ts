@@ -75,13 +75,19 @@ async function side(role: "caller" | "callee", userId: string, peerId: string, e
   return { engine, sent, state, identity };
 }
 
+/** A caller starts, then relays only once the callee has accepted (`beginOffer`). */
+async function begin(s: { engine: CallEngine }) {
+  await s.engine.start();
+  await s.engine.beginOffer();
+}
+
 describe("relay through the media server", () => {
   it("exchanges signed keys and ends up with matching frame keys on both sides, which only they can use", async () => {
     const ae = new FakeEncryption();
     const be = new FakeEncryption();
     const a = await side("caller", "ada", "grace", ae);
     const b = await side("callee", "grace", "ada", be);
-    await a.engine.start();
+    await begin(a);
     await b.engine.start();
     expect(a.sent.map((s) => s.type)).toEqual(["relay"]);
     expect(a.state.current.route).toBe("relay");
@@ -106,7 +112,7 @@ describe("relay through the media server", () => {
   it("is not up until the media server is connected as well as the keys being in place", async () => {
     const a = await side("caller", "ada", "grace", new FakeEncryption());
     const b = await side("callee", "grace", "ada", new FakeEncryption());
-    await a.engine.start();
+    await begin(a);
     await b.engine.start();
     a.engine.handleSignal("relay", b.sent[0]!.payload);
     await flush();
@@ -133,7 +139,7 @@ describe("relay through the media server", () => {
     });
     await grace.start();
     expect(grace.route).toBe("direct");
-    await a.engine.start();
+    await begin(a);
 
     grace.handleSignal("relay", a.sent[0]!.payload);
     await flush();
@@ -145,7 +151,7 @@ describe("relay through the media server", () => {
 
   it("refuses a relay key that is unsigned, or whose key exchange was swapped by the server", async () => {
     const a = await side("caller", "ada", "grace", new FakeEncryption());
-    await a.engine.start();
+    await begin(a);
     const good = a.sent[0]!.payload;
     const fresh = async () => {
       const b = await side("callee", "grace", "ada", new FakeEncryption());
@@ -174,7 +180,7 @@ describe("relay through the media server", () => {
     const a = await side("caller", "ada", "grace", new FakeEncryption());
     const encryption = new FakeEncryption();
     const b = await side("callee", "grace", "ada", encryption, { pins });
-    await a.engine.start();
+    await begin(a);
     await b.engine.start();
 
     b.engine.handleSignal("relay", a.sent[0]!.payload);
@@ -189,7 +195,8 @@ describe("relay through the media server", () => {
 
   it("does not relay at all when the browser cannot encrypt frames", async () => {
     const a = await side("caller", "ada", "grace", null);
-    await expect(a.engine.start()).rejects.toThrow(/cannot encrypt a relayed call/);
+    await a.engine.start();
+    await expect(a.engine.beginOffer()).rejects.toThrow(/cannot encrypt a relayed call/);
     expect(a.sent).toHaveLength(0); // nothing was offered, nothing leaves unprotected
     expect(a.state.current.phase).toBe("failed");
   });
@@ -197,7 +204,7 @@ describe("relay through the media server", () => {
   it("reports a media server that cannot be reached, and releases the encryption", async () => {
     const encryption = new FakeEncryption();
     const a = await side("caller", "ada", "grace", encryption, { relay: { grant: async () => Promise.reject(new Error("no media server")) } });
-    await a.engine.start();
+    await begin(a);
     await flush();
     expect(a.state.current.phase).toBe("failed");
     expect(a.state.current.error).toBe("no media server");
