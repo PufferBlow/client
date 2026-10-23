@@ -11,6 +11,7 @@ import { classifyAuthError } from "../../utils/authErrors";
 import { AccountSection } from "./AccountSection";
 import { ProfileSection } from "./ProfileSection";
 import { SecuritySection } from "./SecuritySection";
+import { lastAppLocation } from "../../features/navigation/lastAppLocation";
 
 const SECTIONS = [
   { id: "account", label: "My account", icon: UserRound },
@@ -66,7 +67,7 @@ export function SettingsPage() {
     <>
       <aside className="flex w-[244px] shrink-0 flex-col gap-1 overflow-y-auto rounded-[14px] bg-surface p-2.5 max-md:hidden">
         <Link
-          to="/dashboard"
+          to={lastAppLocation()}
           className="mb-2 flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] text-text-tertiary hover:bg-surface-secondary hover:text-text"
         >
           <ArrowLeft size={16} aria-hidden="true" />

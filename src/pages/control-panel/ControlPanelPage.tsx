@@ -18,6 +18,7 @@ import { PeersSection } from "./PeersSection";
 import { ComingSoon, MembersSection } from "./ListSections";
 import { OverviewSection } from "./OverviewSection";
 import { DEFAULT_SECTION, GROUPS, isSectionId, SECTIONS, type SectionId } from "./sections";
+import { lastAppLocation } from "../../features/navigation/lastAppLocation";
 
 function SectionBody({ id }: { id: SectionId }) {
   switch (id) {
@@ -90,7 +91,7 @@ export function ControlPanelPage() {
 
         <nav aria-label="Control panel sections" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           <Link
-            to="/dashboard"
+            to={lastAppLocation()}
             className="mt-1 flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[14px] text-text-tertiary no-underline hover:bg-surface-secondary hover:text-text"
           >
             <ArrowLeft size={16} aria-hidden="true" />

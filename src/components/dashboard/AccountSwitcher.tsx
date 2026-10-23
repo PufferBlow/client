@@ -17,10 +17,11 @@ function avatarFor(account: Account): string | null {
 }
 
 /**
- * The account switcher: click your avatar in the user panel. One account per instance, so you
- * switch who you are, not just where. The trigger is whatever it wraps.
+ * The account switcher, opened from its own button in the user panel. One account per instance, so
+ * you switch who you are, not just where. The button shows whatever it wraps; the menu opens above
+ * the nearest positioned ancestor (the user card), not above the button.
  */
-export function AccountSwitcher({ children }: { children: ReactNode }) {
+export function AccountSwitcher({ children, className }: { children: ReactNode; className?: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const root = useRef<HTMLDivElement>(null);
@@ -75,19 +76,20 @@ export function AccountSwitcher({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div ref={root} className="relative flex min-w-0 flex-1 items-center">
+    <div ref={root} className="flex items-center">
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Switch account"
         onClick={toggle}
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left outline-none focus-visible:outline-2 focus-visible:outline-focus"
+        title="Switch account"
+        className={className ?? "flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left outline-none focus-visible:outline-2 focus-visible:outline-focus"}
       >
         {children}
       </button>
       {open && (
-        <div role="menu" aria-label="Accounts" className="absolute bottom-full left-0 z-40 mb-3 flex w-[300px] flex-col gap-1 rounded-lg bg-surface-tertiary p-2.5 shadow-popover">
+        <div role="menu" aria-label="Accounts" className="absolute bottom-full left-0 z-40 mb-2 flex w-[300px] flex-col gap-1 rounded-lg bg-surface-tertiary p-2.5 shadow-popover">
           <p className="pb-section-label m-0 px-2 pb-1 pt-1">Accounts</p>
           {accounts.map((account) => {
             const active = account.id === activeId;

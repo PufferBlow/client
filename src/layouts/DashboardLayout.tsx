@@ -8,6 +8,7 @@ import { useInstanceStatus } from "../features/instance/status";
 import { CallProvider } from "../features/calls/CallProvider";
 import { RealtimeProvider } from "../features/realtime/RealtimeProvider";
 import { VoiceProvider } from "../features/voice/VoiceProvider";
+import { useRememberAppLocation } from "../features/navigation/lastAppLocation";
 import { useSessionKeeper } from "../hooks/useSessionKeeper";
 
 /** Full-page screens (settings, control panel) take the whole window; the server rail is for the chat views. */
@@ -22,6 +23,7 @@ const isHubHome = (pathname: string) => /^\/dashboard\/?$/.test(pathname);
  */
 export function DashboardLayout() {
   useSessionKeeper();
+  useRememberAppLocation();
   const { pathname } = useLocation();
   const showRail = !isFullPage(pathname);
   // The hub home is a landing page: no sidebar for the card to float over.

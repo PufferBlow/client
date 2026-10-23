@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
-import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
+import { ArrowLeftRight, Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { useMyProfile } from "../../features/users/hooks";
+import { useProfileCard } from "../profile/profileCardContext";
 import { useRememberAccount } from "../../features/users/useRememberAccount";
 import { useVoice } from "../../features/voice/voiceContext";
 import { AccountSwitcher } from "./AccountSwitcher";
@@ -15,17 +16,26 @@ export function UserPanel() {
   const voice = useVoice();
   const inCall = voice.status === "connected";
   useRememberAccount();
+  const profileCard = useProfileCard();
 
   return (
-    <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 shadow-modal">
+    <div className="pointer-events-auto relative flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 shadow-modal">
       {me ? (
-        <AccountSwitcher>
+        <button
+          type="button"
+          aria-label="Your profile"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            profileCard.open(me.user_id, { x: rect.left, y: window.innerHeight });
+          }}
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md border-0 bg-transparent p-0 text-left outline-none focus-visible:outline-2 focus-visible:outline-focus"
+        >
           <Avatar name={me.username} src={me.avatar_url} seed={me.user_id} size={34} presence={me.status} activity={inCall} muted={voice.isMuted || voice.isDeafened} ringColor="var(--color-surface-secondary)" />
           <div className="min-w-0 flex-1 leading-tight">
             <div className="truncate text-sm font-bold">{me.username}</div>
             <div className="pb-meta truncate text-[11px]">{me.origin_server}</div>
           </div>
-        </AccountSwitcher>
+        </button>
       ) : (
         <>
           <div className="h-[34px] w-[34px] animate-pulse rounded-full bg-surface-tertiary" />
@@ -52,6 +62,9 @@ export function UserPanel() {
       >
         {voice.isDeafened ? <HeadphoneOff size={16} /> : <Headphones size={16} />}
       </button>
+      <AccountSwitcher className={iconButton}>
+        <ArrowLeftRight size={16} aria-hidden="true" />
+      </AccountSwitcher>
       <button type="button" className={iconButton} aria-label="Settings" onClick={() => navigate("/settings")}>
         <Settings size={16} />
       </button>
