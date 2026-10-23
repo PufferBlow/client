@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { saveActiveAccount } from "../../services/accounts";
 import { NavLink, useMatch, useNavigate } from "react-router";
 import { Plus, SlidersHorizontal } from "lucide-react";
 import { useUnreadCounts } from "../../features/channels/hooks";
@@ -155,7 +156,10 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           type="button"
           aria-label="Add an instance"
           title="Add an instance"
-          onClick={() => navigate("/login?add=1")}
+          onClick={() => {
+            saveActiveAccount(); // keep this account on the device while another is added
+            navigate("/login?add=1");
+          }}
           className={`${iconTileBase} rounded-full bg-surface-secondary text-text-tertiary hover:rounded-[14px] hover:bg-surface-tertiary hover:text-text`}
         >
           <Plus size={20} aria-hidden="true" />

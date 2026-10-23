@@ -28,6 +28,7 @@ export function SignupPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get("redirect");
+  const adding = params.has("add");
 
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
@@ -61,7 +62,9 @@ export function SignupPage() {
     setLoading(true);
     try {
       await signup({ username: target.username, password, instance: target.instance, remember });
-      navigate(resolvePostAuthRedirect(redirect), { replace: true });
+      // Adding an account swaps who is signed in, so start clean rather than carry the old one's data.
+      if (adding) window.location.assign(resolvePostAuthRedirect(redirect));
+      else navigate(resolvePostAuthRedirect(redirect), { replace: true });
     } catch (err) {
       const info = classifyAuthError(err, "Sign up failed. Please try again.");
       if (info.field === "username" || info.field === "instance") setErrors({ handle: info.message });
@@ -131,7 +134,7 @@ export function SignupPage() {
 
       <p className="mt-auto pt-6 text-center text-[13px] text-text-tertiary">
         Already have an account?{" "}
-        <Link to={buildSiblingAuthLink("/login", redirect)} className="font-semibold text-primary hover:underline">
+        <Link to={buildSiblingAuthLink("/login", redirect, adding)} className="font-semibold text-primary hover:underline">
           Sign in
         </Link>
       </p>

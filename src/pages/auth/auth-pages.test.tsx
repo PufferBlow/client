@@ -24,6 +24,14 @@ const field = (name: RegExp | string) => screen.getByLabelText(name);
 describe("LoginPage", () => {
   const renderLogin = (route = "/login") => renderWithProviders(<LoginPage />, { route });
 
+  it("reads as adding an instance, not signing in again, when opened from the add button", () => {
+    renderLogin("/login?add=1");
+    expect(screen.getByRole("heading", { name: "Join another instance" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add instance" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: "Create an account" })).toHaveAttribute("href", "/signup?add=1");
+  });
+
   it("requires a handle and a password before calling the server", async () => {
     const fetchMock = mockFetch();
     const { user } = renderLogin();

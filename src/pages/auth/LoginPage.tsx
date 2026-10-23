@@ -9,6 +9,7 @@ import { AuthField, FoundBadge, Notice, PasswordField, Switch } from "../../comp
 import { login } from "../../services/auth";
 import { classifyAuthError } from "../../utils/authErrors";
 import { resolveHandle } from "../../utils/authForm";
+import { lastAppLocation } from "../../features/navigation/lastAppLocation";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../../utils/authRedirect";
 
 interface FormErrors {
@@ -65,11 +66,16 @@ export function LoginPage() {
     <div className="mx-auto flex w-full max-w-[380px] flex-1 flex-col gap-[18px]">
       <div>
         <div className="font-heading text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-          Welcome back
+          {adding ? "Add an instance" : "Welcome back"}
         </div>
         <h1 className="mt-2 font-display text-[34px] font-normal leading-[1.1] tracking-normal sm:text-[38px]">
-          Sign in to your instance
+          {adding ? "Join another instance" : "Sign in to your instance"}
         </h1>
+        {adding && (
+          <p className="m-0 mt-3 text-[14px] leading-relaxed text-text-tertiary">
+            Enter your handle on the other instance. You stay signed in here, and can switch between accounts from the user card.
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]" noValidate>
@@ -103,7 +109,7 @@ export function LoginPage() {
         </Switch>
 
         <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1">
-          {loading ? "Signing in" : "Sign in"}
+          {loading ? (adding ? "Adding" : "Signing in") : adding ? "Add instance" : "Sign in"}
           {!loading && <ArrowRight size={16} aria-hidden="true" />}
         </Button>
       </form>
@@ -120,8 +126,16 @@ export function LoginPage() {
       </Button>
 
       <p className="mt-auto pt-6 text-center text-[13px] text-text-tertiary">
+        {adding && (
+          <>
+            <Link to={lastAppLocation()} className="font-semibold text-text-secondary hover:underline">
+              Cancel
+            </Link>
+            {" · "}
+          </>
+        )}
         New here?{" "}
-        <Link to={buildSiblingAuthLink("/signup", redirect)} className="font-semibold text-primary hover:underline">
+        <Link to={buildSiblingAuthLink("/signup", redirect, adding)} className="font-semibold text-primary hover:underline">
           Create an account
         </Link>
       </p>

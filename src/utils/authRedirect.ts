@@ -32,7 +32,10 @@ export function buildAuthRedirectPath(pathname: string, search = "", hash = ""):
 }
 
 /** Link between /login and /signup that keeps the pending redirect. */
-export function buildSiblingAuthLink(authPath: "/login" | "/signup", target: string | null | undefined): string {
+export function buildSiblingAuthLink(authPath: "/login" | "/signup", target: string | null | undefined, adding = false): string {
   const normalized = normalizeRedirectPath(target);
-  return normalized ? `${authPath}?${new URLSearchParams({ redirect: normalized })}` : authPath;
+  const query = new URLSearchParams();
+  if (adding) query.set("add", "1");
+  if (normalized) query.set("redirect", normalized);
+  return query.size ? `${authPath}?${query}` : authPath;
 }
