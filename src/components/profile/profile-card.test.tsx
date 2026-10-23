@@ -182,3 +182,13 @@ describe("what follows a person into lists", () => {
 });
 
 void jsonResponse;
+
+describe("ProfileCard, per the Design Language", () => {
+  it("is 280 wide with a divider and a more button that copies the handle", async () => {
+    const { user } = renderWithProviders(<ProfileCard profile={person() as never} size="compact" onMessage={vi.fn()} />);
+    expect(screen.getByRole("article").className).toContain("w-[280px]");
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Copy handle" }));
+    expect(await navigator.clipboard.readText()).toBe("bo@localhost:7575");
+  });
+});

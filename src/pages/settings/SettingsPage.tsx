@@ -97,7 +97,7 @@ export function SettingsPage() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-[14px] bg-surface px-6 py-8 sm:px-10">
-        <div className="mx-auto flex max-w-[640px] flex-col gap-5">
+        <div className={`mx-auto flex w-full flex-col gap-5 ${active === "profile" ? "max-w-[1480px]" : "max-w-[640px]"}`}>
           <h1 className="m-0 font-display text-[34px] font-normal leading-tight tracking-normal">
             {SECTIONS.find((s) => s.id === active)?.label}
           </h1>
@@ -112,7 +112,7 @@ export function SettingsPage() {
             />
           ) : (
             <>
-              <ProfileHeader profile={profile} />
+              {active !== "profile" && <ProfileHeader profile={profile} />}
               {active === "account" && <AccountSection profile={profile} />}
               {active === "profile" && <ProfileSection profile={profile} />}
               {active === "security" && <SecuritySection />}

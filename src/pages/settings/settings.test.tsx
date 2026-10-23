@@ -178,16 +178,16 @@ describe("SettingsPage", () => {
   });
 
   describe("profile", () => {
-    it("saves the about text as its own request", async () => {
+    it("saves the about text from the card editor as its own request", async () => {
       const fetchMock = backend({ "PUT /api/v1/users/profile": { status_code: 200 } });
       const { user } = renderSettings("profile");
       const about = await screen.findByLabelText(/^About/);
       expect(about).toHaveValue("hello");
 
       await user.type(about, " world");
-      await user.click(screen.getByRole("button", { name: "Save about" }));
+      await user.click(screen.getByRole("button", { name: "Save profile" }));
 
-      expect(await screen.findByText("About updated.")).toBeInTheDocument();
+      expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
       expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ about: "hello world", auth_token: "tok" }]);
     });
 
@@ -197,14 +197,15 @@ describe("SettingsPage", () => {
       expect(await screen.findByLabelText(/^About/)).toHaveAttribute("maxlength", "190");
     });
 
-    it("marks the current status and changes it with one click", async () => {
+    it("marks the current status and saves a change with the profile", async () => {
       const fetchMock = backend({ "PUT /api/v1/users/profile": { status_code: 200, status: "dnd" } });
       const { user } = renderSettings("profile");
 
-      expect(await screen.findByRole("radio", { name: "Online" })).toBeChecked();
-      await user.click(screen.getByRole("radio", { name: "Do not disturb" }));
+      expect(await screen.findByRole("button", { name: "Online" })).toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByRole("button", { name: "Do not disturb" }));
+      await user.click(screen.getByRole("button", { name: "Save profile" }));
 
-      expect(await screen.findByText("Status updated.")).toBeInTheDocument();
+      expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
       expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ status: "dnd", auth_token: "tok" }]);
     });
 

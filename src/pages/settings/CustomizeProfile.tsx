@@ -5,7 +5,8 @@ import { ProfileCard } from "../../components/profile/ProfileCard";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "../../components/ui/Button";
-import { updateAppearance, updateProfileText } from "../../features/users/api";
+import { PRESENCE } from "../../features/members/presence";
+import { updateAbout, updateAppearance, updateProfileText, updateStatus } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
 import {
   BANNER_CHOICES,
@@ -22,8 +23,17 @@ import {
   type ProfileSettings,
   type SectionName,
 } from "../../features/users/look";
-import type { UserProfile } from "../../features/users/types";
+import type { PresenceStatus, UserProfile } from "../../features/users/types";
 import { bannerCss, EXPRESSIONS, fishUrl, TONES, TONE_HEX } from "../../lib/identity";
+
+const ABOUT_MAX = 190;
+
+const STATUSES: ReadonlyArray<{ id: PresenceStatus; label: string }> = [
+  { id: "online", label: "Online" },
+  { id: "idle", label: "Idle" },
+  { id: "dnd", label: "Do not disturb" },
+  { id: "offline", label: "Invisible" },
+];
 
 /** Sections the client can fill in today. (The others need data about games that no instance sends yet.) */
 const SECTIONS: ReadonlyArray<{ id: SectionName; label: string }> = [
@@ -87,15 +97,19 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
   const [draft, setDraft] = useState<ProfileSettings>(saved);
   const [pronouns, setPronouns] = useState(profile.pronouns ?? "");
   const [customStatus, setCustomStatus] = useState(profile.custom_status ?? "");
+  const [about, setAbout] = useState(profile.about ?? "");
+  const [status, setStatus] = useState<PresenceStatus>(profile.status);
   const { run, loading, feedback } = useSave("Profile saved.");
 
   const set = <K extends keyof ProfileSettings>(key: K, value: ProfileSettings[K]) => setDraft((d) => ({ ...d, [key]: value }));
   const patch = settingsPatch(saved, draft);
   const textChanged = pronouns.trim() !== (profile.pronouns ?? "") || customStatus.trim() !== (profile.custom_status ?? "");
-  const changed = Object.keys(patch).length > 0 || textChanged;
+  const aboutChanged = about.trim() !== (profile.about ?? "");
+  const statusChanged = status !== profile.status;
+  const changed = Object.keys(patch).length > 0 || textChanged || aboutChanged || statusChanged;
 
   // The preview wears what is being chosen. An uploaded picture is left alone.
-  const preview = { ...profile, pronouns: pronouns.trim() || null, custom_status: customStatus.trim() || null };
+  const preview = { ...profile, pronouns: pronouns.trim() || null, custom_status: customStatus.trim() || null, about: about.trim() || null, status };
   const look = lookOf(preview, draft);
   const avatarSrc = profile.avatar_kind === "image" ? undefined : fishUrl(look.expression, look.tone);
 
@@ -107,6 +121,8 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
           ...(customStatus.trim() !== (profile.custom_status ?? "") ? { custom_status: customStatus.trim() } : {}),
         });
       }
+      if (aboutChanged) await updateAbout(about.trim());
+      if (statusChanged) await updateStatus(status);
       if (Object.keys(patch).length > 0) await updateAppearance({ profileSettings: patch });
     });
     if (ok) await Promise.all([queryClient.invalidateQueries({ queryKey: userKeys.profile }), queryClient.invalidateQueries({ queryKey: userKeys.list })]);
@@ -116,16 +132,18 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
     setDraft({ ...DEFAULT_SETTINGS, sections: { ...DEFAULT_SETTINGS.sections } });
     setPronouns("");
     setCustomStatus("");
+    setAbout(profile.about ?? "");
+    setStatus(profile.status);
   };
 
   const showSecondColour = draft.card_theme === "duo" || draft.banner_pattern === "duo";
 
   return (
-    <section aria-label="Customize your profile" className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <section aria-label="Customize your profile" className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="flex flex-col gap-6 rounded-lg bg-surface-secondary p-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div>
-            <h2 className="pb-title m-0 text-[22px]">Your card</h2>
+            <h2 className="pb-title m-0 text-[22px]">Edit profile</h2>
             <p className="pb-meta m-0 mt-1 text-[13px]">The one place you get to paint. Everyone sees it, on any instance.</p>
           </div>
           <div className="flex gap-1.5">
@@ -139,15 +157,30 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
           </div>
         </div>
 
+        <div className="grid items-start gap-x-8 gap-y-6 2xl:grid-cols-2">
         <Group label="Identity">
           <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
             <input aria-label="Custom status" className={inputClass} value={customStatus} maxLength={LIMITS.custom_status} placeholder="Custom status" onChange={(e) => setCustomStatus(e.target.value)} />
             <input aria-label="Pronouns" className={inputClass} value={pronouns} maxLength={LIMITS.pronouns} placeholder="Pronouns" onChange={(e) => setPronouns(e.target.value)} />
           </div>
+          <div className="relative">
+            <textarea
+              aria-label="About me"
+              value={about}
+              maxLength={ABOUT_MAX}
+              rows={4}
+              placeholder="About me"
+              onChange={(e) => setAbout(e.target.value)}
+              className="block w-full resize-none rounded-md border-0 bg-surface-tertiary px-3 pb-6 pt-2.5 text-[14.5px] leading-[1.45] text-text outline-none placeholder:text-text-muted focus:shadow-[0_0_0_2px_var(--color-surface-secondary),0_0_0_4px_var(--color-text)]"
+            />
+            <span aria-hidden="true" className="absolute bottom-2 right-2.5 font-mono text-[11px] text-text-muted">
+              {about.length}/{ABOUT_MAX}
+            </span>
+          </div>
         </Group>
 
         {profile.avatar_kind !== "image" && (
-          <Group label="Face">
+          <Group label="Avatar">
             <div className="flex flex-wrap gap-2">
               {EXPRESSIONS.map((expression) => (
                 <button
@@ -166,7 +199,18 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
           </Group>
         )}
 
-        <Group label="Frame">
+        <Group label="Presence">
+          <div className="flex flex-wrap gap-1.5">
+            {STATUSES.map((st) => (
+              <Chip key={st.id} selected={status === st.id} onClick={() => setStatus(st.id)}>
+                <span aria-hidden="true" className="size-2 rounded-full" style={{ background: PRESENCE[st.id].color }} />
+                {st.label}
+              </Chip>
+            ))}
+          </div>
+        </Group>
+
+        <Group label="Avatar frame">
           <div className="flex flex-wrap gap-1.5">
             {FRAMES.map((f) => (
               <Chip key={f.id} selected={draft.frame === f.id} onClick={() => set("frame", f.id)}>
@@ -250,6 +294,8 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
             ))}
           </div>
         </Group>
+
+        </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <Button onClick={save} loading={loading} disabled={!changed}>

@@ -1,92 +1,16 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Shuffle } from "lucide-react";
-import { FeedbackLine, SettingsCard, TextArea } from "../../components/settings/SettingsParts";
+import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "../../components/ui/Button";
-import { PRESENCE } from "../../features/members/presence";
-import { updateAbout, updateAppearance, updateStatus } from "../../features/users/api";
+import { updateAppearance } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
-import type { PresenceStatus, UserProfile } from "../../features/users/types";
+import type { UserProfile } from "../../features/users/types";
 import { CustomizeProfile } from "./CustomizeProfile";
-
-const ABOUT_MAX = 190;
-
-const STATUSES: { id: PresenceStatus; label: string }[] = [
-  { id: "online", label: "Online" },
-  { id: "idle", label: "Idle" },
-  { id: "dnd", label: "Do not disturb" },
-  { id: "offline", label: "Invisible" },
-];
 
 const ACCENTS = ["#ffffff", "#e3ae4f", "#c9a3f0", "#9fd487", "#f0a061", "#8cc9d6", "#ef8a75", "#a9b3e6"];
 const HEX = /^#[0-9a-fA-F]{6}$/;
-
-function AboutCard({ profile }: { profile: UserProfile }) {
-  const queryClient = useQueryClient();
-  const [about, setAbout] = useState(profile.about ?? "");
-  const { run, loading, feedback } = useSave("About updated.");
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const ok = await run(() => updateAbout(about.trim()));
-    if (ok) await queryClient.invalidateQueries({ queryKey: userKeys.profile });
-  };
-
-  return (
-    <SettingsCard title="About me" description="Shown on your profile to people on any instance.">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <TextArea label="About" value={about} onChange={setAbout} maxLength={ABOUT_MAX} placeholder="Tell people a little about yourself." />
-        <div className="flex items-center gap-4">
-          <Button type="submit" loading={loading} disabled={about.trim() === (profile.about ?? "")}>
-            Save about
-          </Button>
-          <FeedbackLine feedback={feedback} />
-        </div>
-      </form>
-    </SettingsCard>
-  );
-}
-
-function StatusCard({ profile }: { profile: UserProfile }) {
-  const queryClient = useQueryClient();
-  const { run, loading, feedback } = useSave("Status updated.");
-
-  const select = async (status: PresenceStatus) => {
-    const ok = await run(() => updateStatus(status));
-    if (ok) await queryClient.invalidateQueries({ queryKey: userKeys.profile });
-  };
-
-  return (
-    <SettingsCard title="Status" description="How you appear to other people.">
-      <div role="radiogroup" aria-label="Status" className="grid gap-2 sm:grid-cols-2">
-        {STATUSES.map(({ id, label }) => {
-          const selected = profile.status === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              disabled={loading}
-              onClick={() => select(id)}
-              className={[
-                "flex h-11 items-center gap-2.5 rounded-xl border px-3.5 text-left text-sm transition-colors",
-                selected
-                  ? "border-primary/60 bg-primary/10 font-semibold text-text"
-                  : "border-border-secondary bg-background text-text-tertiary hover:text-text",
-              ].join(" ")}
-            >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: PRESENCE[id].color }} />
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      <FeedbackLine feedback={feedback} />
-    </SettingsCard>
-  );
-}
 
 function AppearanceCard({ profile }: { profile: UserProfile }) {
   const queryClient = useQueryClient();
@@ -157,9 +81,7 @@ function AppearanceCard({ profile }: { profile: UserProfile }) {
 export function ProfileSection({ profile }: { profile: UserProfile }) {
   return (
     <>
-      <AboutCard profile={profile} />
-      <StatusCard profile={profile} />
-      <CustomizeProfile key={JSON.stringify([profile.profile_settings, profile.pronouns, profile.custom_status])} profile={profile} />
+      <CustomizeProfile key={JSON.stringify([profile.profile_settings, profile.pronouns, profile.custom_status, profile.about, profile.status])} profile={profile} />
       <AppearanceCard profile={profile} />
     </>
   );

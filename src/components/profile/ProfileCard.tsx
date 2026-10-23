@@ -1,4 +1,7 @@
-import { Globe, Home, MessageCircle, Pencil, Shield } from "lucide-react";
+import { useState } from "react";
+import { Copy, Fingerprint, Globe, Home, MessageCircle, MoreHorizontal, Pencil, Shield } from "lucide-react";
+import { ContextMenu, type MenuEntry } from "../ui/ContextMenu";
+import { copyToClipboard } from "../../lib/clipboard";
 import { PRESENCE } from "../../features/members/presence";
 import { lookOf, type Look, type ProfileSettings } from "../../features/users/look";
 import type { UserProfile } from "../../features/users/types";
@@ -7,6 +10,7 @@ import { resolveAssetUrl } from "../../services/authed";
 
 type CardProfile = Pick<
   UserProfile,
+  | "user_id"
   | "username"
   | "origin_server"
   | "about"
@@ -78,8 +82,10 @@ const sectionLabel = "text-[10px] font-bold uppercase leading-none tracking-[0.1
 export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessage, onEdit }: ProfileCardProps) {
   const look = lookOf(profile, draft);
   const large = size === "large";
-  const avatarSize = large ? 100 : 80;
+  const avatarSize = large ? 96 : 80;
   const image = avatarSrc ?? resolveAssetUrl(profile.avatar_url) ?? defaultAvatarUrl(look.handle);
+  // The Design Language sets a card's name at 22px; the editor's large card keeps the font's own size.
+  const nameFont = large ? look.nameStyle.font : look.nameStyle.font.replace(/\d+px/, "22px");
   const presence = PRESENCE[profile.status] ?? PRESENCE.offline;
   const roles = profile.roles_ids ?? [];
   const isOwner = roles.includes("owner");
@@ -91,11 +97,11 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
   return (
     <article
       aria-label={`${profile.username}'s profile`}
-      className={`overflow-hidden rounded-[20px] shadow-[0_18px_48px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(242,242,242,0.06)] ${large ? "w-[340px] max-w-full" : "w-[300px]"}`}
+      className={`overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.5)] ${large ? "w-[340px] max-w-full" : "w-[280px]"}`}
       style={{ background: look.cardBackground }}
     >
-      <div className="relative" style={{ height: large ? 136 : 100, background: bannerBackground(profile, look) }} />
-      <div className="flex flex-col gap-3.5 px-[18px] pb-[18px]">
+      <div className="relative" style={{ height: large ? 120 : 96, background: bannerBackground(profile, look) }} />
+      <div className="flex flex-col gap-2.5 px-4 pb-4">
         <div className="flex items-end justify-between gap-2.5" style={{ marginTop: -avatarSize / 2 }}>
           <div className="group/avatar relative shrink-0" style={{ width: avatarSize, height: avatarSize, color: look.hex }}>
             <FrameDecoration frame={look.settings.frame} />
@@ -113,14 +119,21 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
             {presence.dot !== "none" && (
               <span
                 aria-label={presence.label}
-                className="absolute right-1.5 bottom-1.5 size-5 rounded-full"
+                className="absolute right-1 bottom-1 size-4 rounded-full"
                 style={{
                   background: presence.dot === "hollow" ? look.cardTop : presence.color,
-                  boxShadow: `${presence.dot === "hollow" ? `inset 0 0 0 3px ${presence.color}, ` : ""}0 0 0 5px ${look.cardTop}`,
+                  boxShadow: `${presence.dot === "hollow" ? `inset 0 0 0 2.5px ${presence.color}, ` : ""}0 0 0 4px ${look.cardTop}`,
                 }}
               />
             )}
           </div>
+          {large && profile.custom_status && (
+            <div className="relative mr-auto mt-14 min-w-0 max-w-[190px] self-start rounded-[14px] bg-[#161616] px-3 py-2 text-[13px] leading-snug text-text-body shadow-[0_6px_18px_rgba(0,0,0,0.35)] [overflow-wrap:anywhere]">
+              <span aria-hidden="true" className="absolute -left-[7px] bottom-1 size-2.5 rounded-full bg-[#161616]" />
+              <span aria-hidden="true" className="absolute -left-3.5 -bottom-[3px] size-[5px] rounded-full bg-[#161616]" />
+              {profile.custom_status}
+            </div>
+          )}
           {showBadges && (
             <div className="mb-1.5 flex gap-1 rounded-md bg-black/35 p-[5px]">
               {isOwner && (
@@ -141,7 +154,7 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
           <div className="flex flex-wrap items-baseline gap-2">
             <h2
               className="m-0 break-words text-text"
-              style={{ font: large ? look.nameStyle.font : look.nameStyle.fontSmall, letterSpacing: look.nameStyle.letterSpacing, textTransform: look.nameStyle.textTransform, overflowWrap: "anywhere" }}
+              style={{ font: nameFont, letterSpacing: look.nameStyle.letterSpacing, textTransform: look.nameStyle.textTransform, overflowWrap: "anywhere" }}
             >
               {profile.username}
             </h2>
@@ -152,12 +165,14 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
           </span>
         </div>
 
-        {profile.custom_status && (
-          <div className="flex max-w-full items-center gap-2 self-start rounded-[12px_12px_12px_4px] bg-black/35 px-3 py-2 text-[13.5px] text-text-body">
-            <img src={image} alt="" width={16} height={16} className="size-4 shrink-0 rounded-full" />
+        {!large && profile.custom_status && (
+          <span className="inline-flex max-w-full items-center gap-1.5 self-start rounded-pill bg-text/10 px-2.5 py-1 text-[12.5px] font-semibold text-text-body">
+            <img src={image} alt="" width={14} height={14} className="size-3.5 shrink-0 rounded-full" />
             <span className="min-w-0 break-words">{profile.custom_status}</span>
-          </div>
+          </span>
         )}
+
+        <div aria-hidden="true" className="h-px bg-text/10" />
 
         <div className={sectionBox}>
           <span className={sectionLabel}>About me</span>
@@ -187,7 +202,7 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
               <button
                 type="button"
                 onClick={onMessage}
-                className="pb-label-button flex h-[38px] flex-1 items-center justify-center gap-2 rounded-md border-0 text-[12.5px] text-on-primary transition-transform active:scale-[0.97]"
+                className="pb-label-button flex h-[34px] flex-1 items-center justify-center gap-2 rounded-[9px] border-0 text-[12px] text-on-primary transition-transform active:scale-[0.97]"
                 style={{ background: look.buttonColour }}
               >
                 <MessageCircle size={14} aria-hidden="true" />
@@ -198,16 +213,44 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
               <button
                 type="button"
                 onClick={onEdit}
-                className="pb-label-button flex h-[38px] flex-1 items-center justify-center gap-2 rounded-md border-0 text-[12.5px] text-on-primary transition-transform active:scale-[0.97]"
+                className="pb-label-button flex h-[34px] flex-1 items-center justify-center gap-2 rounded-[9px] border-0 text-[12px] text-on-primary transition-transform active:scale-[0.97]"
                 style={{ background: look.buttonColour }}
               >
                 <Pencil size={14} aria-hidden="true" />
                 Edit profile
               </button>
             )}
+            <MoreActions profile={profile} />
           </div>
         )}
       </div>
     </article>
+  );
+}
+
+/** The card's "more" button: what can be done with this person's handle and ID without leaving the card. */
+function MoreActions({ profile }: { profile: CardProfile }) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const handle = `${profile.username}@${profile.origin_server}`;
+  const entries: MenuEntry[] = [
+    { kind: "item", id: "copy-handle", label: "Copy handle", icon: <Copy size={15} />, onSelect: () => void copyToClipboard(handle) },
+    ...(profile.user_id ? [{ kind: "item" as const, id: "copy-id", label: "Copy user ID", icon: <Fingerprint size={15} />, onSelect: () => void copyToClipboard(profile.user_id) }] : []),
+  ];
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="More"
+        aria-haspopup="menu"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setAt({ x: rect.left, y: rect.bottom + 4 });
+        }}
+        className="grid size-[34px] shrink-0 place-items-center rounded-[9px] border-0 bg-surface-tertiary text-text-body transition-colors hover:text-text"
+      >
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </button>
+      {at && <ContextMenu x={at.x} y={at.y} entries={entries} label={`Actions for ${profile.username}`} onClose={() => setAt(null)} />}
+    </>
   );
 }
