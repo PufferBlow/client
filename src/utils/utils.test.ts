@@ -5,6 +5,20 @@ import { classifyAuthError, parseHandle, PASSWORD_MAX, PASSWORD_MIN, USERNAME_PA
 import { resolveHandle } from "./authForm";
 import { buildAuthRedirectPath, buildSiblingAuthLink, resolvePostAuthRedirect } from "./authRedirect";
 
+describe("resolvePostAuthRedirect, hostile targets", () => {
+  const backslash = String.fromCharCode(92);
+  const tab = String.fromCharCode(9);
+  it.each([
+    ["a protocol-relative URL", "//evil.test"],
+    ["a backslash that browsers read as a slash", `/${backslash}evil.test`],
+    ["a tab the URL parser strips", `/${tab}/evil.test`],
+    ["an absolute URL", "https://evil.test"],
+    ["a script URL", "javascript:alert(1)"],
+  ])("never leaves the app for %s", (_name, input) => {
+    expect(resolvePostAuthRedirect(input)).toBe("/dashboard");
+  });
+});
+
 describe("resolvePostAuthRedirect", () => {
   it.each([
     ["/dashboard/channels/abc", "/dashboard/channels/abc"],
