@@ -63,3 +63,14 @@ describe("who may use @everyone", () => {
     expect(canMentionEveryone(undefined)).toBe(false);
   });
 });
+
+describe("an author's picture in a message", () => {
+  it("is their current one from the directory, not the one the message was sent with", () => {
+    const { container } = render(
+      <MentionDirectoryContext.Provider value={{ ...directory, avatars: new Map([["u1", "http://x.test/pb-avatar-wink-sky.svg"]]) }}>
+        <MessageItem message={{ ...message("hi", "u1"), authorAvatarUrl: "/assets/avatars/old.svg" }} myUserId="me" onEdit={vi.fn()} onToggleReaction={vi.fn()} />
+      </MentionDirectoryContext.Provider>,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("pb-avatar-wink-sky.svg");
+  });
+});

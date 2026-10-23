@@ -129,7 +129,7 @@ export function ControlPanelPage() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg bg-surface px-5 py-[22px] sm:px-6">
-        <div className="mx-auto flex max-w-[1040px] flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
           <header className="flex flex-col gap-2">
             <span className="pb-section-label">{GROUPS.find((g) => g.ids.includes(active))?.name}</span>
             <h1 className="pb-display m-0">{current.label}</h1>

@@ -52,6 +52,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         const role = shownRole(u);
         return role ? [[u.user_id, role] as const] : [];
       })),
+      avatars: new Map((users ?? []).map((u) => [u.user_id, u.avatar_url ?? null] as const)),
       looks: new Map(
         (users ?? []).map((u) => {
           const look = lookOf(u);

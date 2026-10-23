@@ -125,7 +125,12 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
       if (statusChanged) await updateStatus(status);
       if (Object.keys(patch).length > 0) await updateAppearance({ profileSettings: patch });
     });
-    if (ok) await Promise.all([queryClient.invalidateQueries({ queryKey: userKeys.profile }), queryClient.invalidateQueries({ queryKey: userKeys.list })]);
+    if (!ok) return;
+    // Everything that shows this person follows at once; the refetch below brings the server's own copy (the avatar picture).
+    const applied = { ...preview, profile_settings: { ...(profile.profile_settings ?? {}), ...patch } } as UserProfile;
+    queryClient.setQueryData<UserProfile>(userKeys.profile, (old) => (old ? { ...old, ...applied } : old));
+    queryClient.setQueryData<UserProfile[]>(userKeys.list, (old) => old?.map((u) => (u.user_id === profile.user_id ? { ...u, ...applied } : u)));
+    await Promise.all([queryClient.invalidateQueries({ queryKey: userKeys.profile }), queryClient.invalidateQueries({ queryKey: userKeys.list })]);
   };
 
   const reset = () => {

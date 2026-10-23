@@ -40,6 +40,8 @@ export interface MentionDirectory {
   home?: string;
   /** The role to print beside each person's name (by user id); ordinary members have none. */
   roles?: ReadonlyMap<string, { name: string; colour: string }>;
+  /** Each person's current picture (by user id): messages carry the one from when they were sent. */
+  avatars?: ReadonlyMap<string, string | null>;
   /** How each person (by user id) chose to look: their frame and name style follow them into chat. */
   looks?: ReadonlyMap<string, { nameFont: string; nameStyle: { fontSmall: string; letterSpacing: string; textTransform: string }; frame: string }>;
 }

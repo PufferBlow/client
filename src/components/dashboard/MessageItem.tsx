@@ -473,9 +473,10 @@ export const MessageItem = memo(function MessageItem({
     const rect = e.currentTarget.getBoundingClientRect();
     profileCard.open(message.authorId, { x: rect.right + 8, y: rect.top });
   };
-  const { me: myName, hosts, home, looks, roles } = useContext(MentionDirectoryContext);
+  const { me: myName, hosts, home, looks, roles, avatars } = useContext(MentionDirectoryContext);
   const authorRole = roles?.get(message.authorId);
   const authorLook = looks?.get(message.authorId);
+  const authorAvatar = avatars?.has(message.authorId) ? avatars.get(message.authorId) : message.authorAvatarUrl;
   // Barlow is the default; only another name style needs its own font.
   const nameStyle =
     authorLook && authorLook.nameFont !== "barlow"
@@ -520,7 +521,7 @@ export const MessageItem = memo(function MessageItem({
       <div className="w-10 shrink-0">
         {isGroupStart ? (
           <button type="button" onClick={showCard} aria-label={`View ${message.authorName}'s profile`} className="block cursor-pointer rounded-full border-0 bg-transparent p-0 outline-none focus-visible:outline-2 focus-visible:outline-focus">
-            <Avatar name={message.authorName} src={message.authorAvatarUrl} seed={message.authorId} size={40} frame={authorLook?.frame} />
+            <Avatar name={message.authorName} src={authorAvatar} seed={message.authorId} size={40} frame={authorLook?.frame} />
           </button>
         ) : (
           <time
