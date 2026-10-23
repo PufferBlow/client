@@ -537,18 +537,20 @@ describe("puff reactions in a message", () => {
   });
 });
 
-describe("role pill beside an author", () => {
-  it("shows the author's role in its colour, and nothing for an ordinary member", () => {
+describe("role badge beside an author", () => {
+  it("shows the badge of the author's role, and nothing for an ordinary member", () => {
     const withRole = (
-      <MentionDirectoryContext.Provider value={{ known: new Set(), roles: new Map([["u-other", { name: "Admin", colour: "#a99cf2" }]]) }}>
+      <MentionDirectoryContext.Provider value={{ known: new Set(), roles: new Map([["u-other", { name: "Admin", badge: { tier: "staff", tone: "coral", glyph: "key" } }]]) }}>
         <MessageItem message={message()} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={vi.fn()} />
       </MentionDirectoryContext.Provider>
     );
     const first = render(withRole);
-    expect(screen.getByText("Admin").getAttribute("style")).toContain("--role-colour: #a99cf2");
+    const badge = screen.getByRole("img", { name: "Admin" });
+    expect(badge).toHaveAttribute("data-tier", "staff");
+    expect(badge).toHaveAttribute("width", "16");
     first.unmount();
 
     render(<MessageItem message={message()} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={vi.fn()} />);
-    expect(screen.queryByText("Admin")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Admin" })).not.toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import type { RoleBadgeData } from "../../lib/roleBadges";
 import type { ProfileSettings, SectionName } from "./look";
 
 export type PresenceStatus = "online" | "idle" | "afk" | "dnd" | "offline";
@@ -35,4 +36,6 @@ export interface UserRole {
   role_id: string;
   role_name: string;
   is_system?: boolean;
+  /** The mark shown after the name of someone who holds the role. Instances before role badges send none. */
+  badge?: RoleBadgeData | null;
 }

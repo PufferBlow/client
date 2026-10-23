@@ -39,7 +39,7 @@ export function useRoleAdmin() {
   return {
     create: useMutation({ mutationFn: api.createRole, onSuccess: refresh }),
     update: useMutation({
-      mutationFn: ({ roleId, ...role }: { roleId: string; role_name: string; privileges_ids: string[] }) => api.updateRole(roleId, role),
+      mutationFn: ({ roleId, ...role }: { roleId: string } & api.RoleChange) => api.updateRole(roleId, role),
       onSuccess: refresh,
     }),
     remove: useMutation({ mutationFn: api.deleteRole, onSuccess: refresh }),

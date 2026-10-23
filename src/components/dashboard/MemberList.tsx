@@ -6,6 +6,8 @@ import { lookOf } from "../../features/users/look";
 import type { UserProfile } from "../../features/users/types";
 import { useProfileCard } from "../profile/profileCardContext";
 import { HostPill } from "../ui/HostPill";
+import { RoleBadge } from "../ui/RoleBadge";
+import { shownBadge } from "../../features/users/roles";
 import { Avatar } from "./Avatar";
 
 const byName = (a: UserProfile, b: UserProfile) => a.username.localeCompare(b.username);
@@ -16,6 +18,7 @@ function MemberRow({ member, home }: { member: UserProfile; home?: string }) {
   const look = lookOf(member);
   const offline = member.status === "offline";
   const customFont = look.settings.name_font !== "barlow";
+  const badge = shownBadge(member);
 
   return (
     <li>
@@ -37,6 +40,7 @@ function MemberRow({ member, home }: { member: UserProfile; home?: string }) {
             >
               {member.username}
             </span>
+            {badge && <RoleBadge badge={badge.badge} size={20} label={badge.name} />}
             {/* Local people show no host; remote ones always do. */}
             {home && member.origin_server && member.origin_server !== home && <HostPill host={member.origin_server} />}
           </div>

@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Copy, Fingerprint, Globe, Home, MessageCircle, MoreHorizontal, Pencil, Shield } from "lucide-react";
+import { Copy, Fingerprint, Globe, Home, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
 import { ContextMenu, type MenuEntry } from "../ui/ContextMenu";
+import { RoleTag } from "../ui/RoleTag";
+import { rolesOf } from "../../features/users/roles";
 import { copyToClipboard } from "../../lib/clipboard";
 import { PRESENCE } from "../../features/members/presence";
 import { lookOf, type Look, type ProfileSettings } from "../../features/users/look";
@@ -24,6 +26,7 @@ type CardProfile = Pick<
   | "accent_color"
   | "profile_settings"
   | "roles_ids"
+  | "resolved_roles"
   | "created_at"
 >;
 
@@ -72,6 +75,8 @@ function bannerBackground(profile: CardProfile, look: Look): string {
 }
 
 const sectionBox = "flex flex-col gap-1.5 rounded-lg bg-black/35 p-3";
+/** Role tags on a card before the rest fold into a +N. */
+const MAX_TAGS = 5;
 const sectionLabel = "text-[10px] font-bold uppercase leading-none tracking-[0.14em] text-text-tertiary font-heading";
 
 /**
@@ -87,11 +92,8 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
   // The Design Language sets a card's name at 22px; the editor's large card keeps the font's own size.
   const nameFont = large ? look.nameStyle.font : look.nameStyle.font.replace(/\d+px/, "22px");
   const presence = PRESENCE[profile.status] ?? PRESENCE.offline;
-  const roles = profile.roles_ids ?? [];
-  const isOwner = roles.includes("owner");
-  const isAdmin = roles.includes("admin");
   const { sections } = look.settings;
-  const showBadges = sections.badges && (isOwner || isAdmin);
+  const roles = sections.badges ? rolesOf(profile) : [];
   const memberSince = profile.created_at ? new Date(profile.created_at) : null;
 
   return (
@@ -134,20 +136,6 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
               {profile.custom_status}
             </div>
           )}
-          {showBadges && (
-            <div className="mb-1.5 flex gap-1 rounded-md bg-black/35 p-[5px]">
-              {isOwner && (
-                <span title="Instance owner" className="grid size-6 place-items-center rounded-[7px] bg-text text-on-primary">
-                  <Shield size={13} aria-hidden="true" />
-                </span>
-              )}
-              {isAdmin && !isOwner && (
-                <span title="Admin" className="grid size-6 place-items-center rounded-[7px] bg-text-tertiary text-on-primary">
-                  <Shield size={13} aria-hidden="true" />
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-1">
@@ -164,6 +152,21 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
             {profile.username}@{profile.origin_server}
           </span>
         </div>
+
+        {roles.length > 0 && (
+          <ul aria-label="Roles" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+            {roles.slice(0, MAX_TAGS).map((role) => (
+              <li key={role.id}>
+                <RoleTag name={role.name} colour={role.colour} badge={role.badge} />
+              </li>
+            ))}
+            {roles.length > MAX_TAGS && (
+              <li className="inline-flex h-6 items-center rounded-[7px] bg-text/10 px-2 font-heading text-[10.5px] font-bold tracking-[0.12em] text-text-body" title={roles.slice(MAX_TAGS).map((r) => r.name).join(", ")}>
+                +{roles.length - MAX_TAGS}
+              </li>
+            )}
+          </ul>
+        )}
 
         {!large && profile.custom_status && (
           <span className="inline-flex max-w-full items-center gap-1.5 self-start rounded-pill bg-text/10 px-2.5 py-1 text-[12.5px] font-semibold text-text-body">

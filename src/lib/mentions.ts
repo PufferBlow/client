@@ -1,3 +1,4 @@
+import type { RoleBadgeData } from "./roleBadges";
 import { createContext } from "react";
 
 /**
@@ -38,8 +39,8 @@ export interface MentionDirectory {
   hosts?: ReadonlyMap<string, string>;
   /** The viewer's own instance: authors from anywhere else are remote. */
   home?: string;
-  /** The role to print beside each person's name (by user id); ordinary members have none. */
-  roles?: ReadonlyMap<string, { name: string; colour: string }>;
+  /** The badge to draw beside each person's name (by user id): that of their highest role that has one. */
+  roles?: ReadonlyMap<string, { name: string; badge: RoleBadgeData }>;
   /** Each person's current picture (by user id): messages carry the one from when they were sent. */
   avatars?: ReadonlyMap<string, string | null>;
   /** How each person (by user id) chose to look: their frame and name style follow them into chat. */

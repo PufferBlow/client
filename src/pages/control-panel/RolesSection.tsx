@@ -7,9 +7,12 @@ import { Button } from "../../components/ui/Button";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { Input } from "../../components/ui/Input";
 import { LoadingState } from "../../components/ui/LoadingState";
+import { RoleBadge } from "../../components/ui/RoleBadge";
 import type { Privilege, Role } from "../../features/admin/api";
 import { usePrivileges, useRoleAdmin, useRoles } from "../../features/admin/hooks";
 import { classifyAuthError } from "../../utils/authErrors";
+import { sameBadge, type RoleBadgeData } from "../../lib/roleBadges";
+import { RoleBadgeEditor } from "./RoleBadgeEditor";
 
 const NEW = "__new__";
 
@@ -28,10 +31,12 @@ function RoleEditor({ role, privileges, onDone }: { role: Role | null; privilege
   const removal = useSave("Role deleted.");
   const [name, setName] = useState(role?.role_name ?? "");
   const [picked, setPicked] = useState<Set<string>>(() => new Set(role?.privileges_ids ?? []));
+  const [badge, setBadge] = useState<RoleBadgeData | null>(role?.badge ?? null);
   const readOnly = role?.is_system === true;
   const groups = useMemo(() => groupByCategory(privileges), [privileges]);
 
-  const same = role && name.trim() === role.role_name && picked.size === role.privileges_ids.length && role.privileges_ids.every((id) => picked.has(id));
+  const same =
+    role && name.trim() === role.role_name && picked.size === role.privileges_ids.length && role.privileges_ids.every((id) => picked.has(id)) && sameBadge(badge, role.badge);
   const toggle = (id: string) =>
     setPicked((current) => {
       const next = new Set(current);
@@ -41,7 +46,11 @@ function RoleEditor({ role, privileges, onDone }: { role: Role | null; privilege
     });
 
   const save = async () => {
-    const body = { role_name: name.trim(), privileges_ids: [...picked] };
+    const body = {
+      role_name: name.trim(),
+      privileges_ids: [...picked],
+      ...(badge ? { badge } : role?.badge ? { remove_badge: true } : {}),
+    };
     let createdId: string | null = null;
     const ok = await run(async () => {
       if (role) await admin.update.mutateAsync({ roleId: role.role_id, ...body });
@@ -58,6 +67,28 @@ function RoleEditor({ role, privileges, onDone }: { role: Role | null; privilege
       </label>
 
       {readOnly && <p className="m-0 text-[13px] text-text-tertiary">This role is built in, so it cannot be changed or deleted. It grants what is ticked below.</p>}
+
+      <section aria-label="Role badge" className="flex flex-col gap-3">
+        <h3 className="pb-section-label m-0">Badge</h3>
+        {readOnly ? (
+          role?.badge ? (
+            <div className="flex items-center gap-3">
+              <RoleBadge badge={role.badge} size={64} label={`${role.role_name} badge`} />
+              <span className="pb-meta text-[13px]">Built-in badges cannot be changed.</span>
+            </div>
+          ) : (
+            <span className="pb-meta text-[13px]">This role has no badge.</span>
+          )
+        ) : (
+          <RoleBadgeEditor
+            roleName={name}
+            badge={badge}
+            onChange={setBadge}
+            privileges={picked}
+            onPreset={(preset) => setName((current) => (current.trim() === "" ? preset.name : current))}
+          />
+        )}
+      </section>
 
       <div className="flex flex-col gap-4">
         {groups.map(([category, items]) => (
@@ -154,6 +185,7 @@ export function RolesSection() {
                   editing === role.role_id ? "bg-text text-on-primary" : "bg-surface-secondary text-text-body hover:bg-surface-tertiary"
                 }`}
               >
+                {role.badge ? <RoleBadge badge={role.badge} size={32} /> : <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center"><span className="size-2 rounded-full bg-text-muted" /></span>}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{role.role_name}</span>
                   <span className={`block text-xs ${editing === role.role_id ? "text-on-primary/70" : "text-text-muted"}`}>

@@ -69,7 +69,7 @@ describe("ProfileCard", () => {
 
   it("shows only the sections that are on, and no buttons unless it was given actions", () => {
     const { rerender } = renderWithProviders(<ProfileCard profile={person({ roles_ids: ["owner"] }) as never} />);
-    expect(screen.getByTitle("Instance owner")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Roles" })).getByText("Owner")).toBeInTheDocument();
     expect(screen.queryByText("Also on")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
 
@@ -79,9 +79,37 @@ describe("ProfileCard", () => {
         onMessage={vi.fn()}
       />,
     );
-    expect(screen.queryByTitle("Instance owner")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Roles" })).not.toBeInTheDocument();
     expect(screen.getByText("Also on")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Message/ })).toBeInTheDocument();
+  });
+
+  it("shows every role as a tag, staff first, with its badge, and folds the rest into +N", () => {
+    const roles = ["owner", "coach", "artist", "veteran", "helper", "streamer", "guest"];
+    const badge = (tier: string, glyph: string) => ({ tier, tone: "violet", glyph });
+    const resolved = [
+      { role_id: "coach", role_name: "Coach", badge: badge("community", "target") },
+      { role_id: "artist", role_name: "Artist", badge: badge("community", "brush") },
+      { role_id: "veteran", role_name: "Veteran", badge: badge("community", "flame") },
+      { role_id: "helper", role_name: "Helper", badge: badge("community", "lifebuoy") },
+      { role_id: "streamer", role_name: "Streamer", badge: badge("community", "broadcast") },
+      { role_id: "guest", role_name: "Guest", badge: badge("system", "globe") },
+    ];
+    renderWithProviders(<ProfileCard profile={person({ roles_ids: roles, resolved_roles: resolved }) as never} />);
+    const list = screen.getByRole("list", { name: "Roles" });
+    const tags = within(list).getAllByRole("listitem");
+    expect(tags).toHaveLength(6); // five tags and the +2
+    expect(tags[0]).toHaveTextContent("Owner");
+    expect(tags[0]!.querySelector("svg")).toHaveAttribute("data-tier", "staff");
+    expect(tags[1]).toHaveTextContent("Coach");
+    expect(tags[5]).toHaveTextContent("+2");
+  });
+
+  it("keeps a dot for a role without a badge", () => {
+    renderWithProviders(<ProfileCard profile={person({ roles_ids: ["plain"], resolved_roles: [{ role_id: "plain", role_name: "Plain", badge: null }] }) as never} />);
+    const tag = within(screen.getByRole("list", { name: "Roles" })).getByText("Plain");
+    expect(tag.querySelector("svg")).toBeNull();
+    expect(tag.querySelector("span")).not.toBeNull();
   });
 
   it("is honest when there is no about text", () => {

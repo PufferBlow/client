@@ -30,7 +30,7 @@ import { ProgressBar } from "../ui/ProgressBar";
 import { HostPill } from "../ui/HostPill";
 import { useProfileCard } from "../profile/profileCardContext";
 import { PuffFace } from "../ui/PuffFace";
-import { RoleTag } from "../ui/RoleTag";
+import { RoleBadge } from "../ui/RoleBadge";
 import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
 
@@ -546,7 +546,7 @@ export const MessageItem = memo(function MessageItem({
             <button type="button" onClick={showCard} className="pb-username cursor-pointer border-0 bg-transparent p-0 text-left outline-none hover:underline focus-visible:underline" style={nameStyle}>
               {message.authorName}
             </button>
-            {authorRole && <RoleTag name={authorRole.name} colour={authorRole.colour} />}
+            {authorRole && <RoleBadge badge={authorRole.badge} size={16} label={authorRole.name} />}
             {remoteHost && <HostPill host={remoteHost} />}
             <time dateTime={message.sentAt} className="pb-timestamp">
               {formatTime(message.sentAt)}

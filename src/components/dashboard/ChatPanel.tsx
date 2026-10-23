@@ -12,7 +12,7 @@ import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { lookOf } from "../../features/users/look";
-import { canMentionEveryone, isServerOwner, shownRole } from "../../features/users/roles";
+import { canMentionEveryone, isServerOwner, shownBadge } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";
 import { HealthBanner } from "../instance/HealthBanner";
@@ -49,8 +49,8 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
       hosts: new Map((users ?? []).flatMap((u) => (u.origin_server ? [[u.user_id, u.origin_server] as const] : []))),
       home: me?.origin_server,
       roles: new Map((users ?? []).flatMap((u) => {
-        const role = shownRole(u);
-        return role ? [[u.user_id, role] as const] : [];
+        const role = shownBadge(u);
+        return role ? [[u.user_id, { name: role.name, badge: role.badge }] as const] : [];
       })),
       avatars: new Map((users ?? []).map((u) => [u.user_id, u.avatar_url ?? null] as const)),
       looks: new Map(

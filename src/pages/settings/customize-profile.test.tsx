@@ -46,7 +46,7 @@ describe("customising your profile", () => {
     expect(card.getByRole("heading", { name: "ada" })).toBeInTheDocument();
     expect(card.getByText("ada@localhost:7575")).toBeInTheDocument();
     expect(card.getByText("Hello there.")).toBeInTheDocument();
-    expect(card.getByTitle("Instance owner")).toBeInTheDocument(); // the badges section is on by default
+    expect(within(card.getByRole("list", { name: "Roles" })).getByText("Owner")).toBeInTheDocument(); // the badges section is on by default
   });
 
   it("changes the card as you choose, before anything is saved", async () => {

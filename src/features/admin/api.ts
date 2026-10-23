@@ -1,4 +1,6 @@
-import { authed } from "../../services/authed";
+import { api } from "../../services/api";
+import { authed, requireSession } from "../../services/authed";
+import type { RoleBadgeData } from "../../lib/roleBadges";
 import type { AuditEntry } from "./moderation";
 
 const SYSTEM = "/api/v1/system";
@@ -13,6 +15,8 @@ export interface Role {
   /** Built in: owner, admin, moderator and member cannot be edited or deleted. */
   is_system: boolean;
   user_count: number;
+  /** The mark after the name of whoever holds the role; instances before role badges send none. */
+  badge?: RoleBadgeData | null;
 }
 
 export interface Privilege {
@@ -31,9 +35,28 @@ export async function listPrivileges(): Promise<Privilege[]> {
   return privileges ?? [];
 }
 
-export const createRole = (role: { role_name: string; privileges_ids: string[] }) => authed.body<{ role: Role }>("POST", `${SYSTEM}/roles`, role);
-export const updateRole = (roleId: string, role: { role_name: string; privileges_ids: string[] }) =>
-  authed.body<{ role: Role }>("PUT", `${SYSTEM}/roles/${encodeURIComponent(roleId)}`, role);
+export interface RoleChange {
+  role_name: string;
+  privileges_ids: string[];
+  /** Set or change the badge. */
+  badge?: RoleBadgeData;
+  /** Take the badge off. */
+  remove_badge?: boolean;
+}
+
+export const createRole = (role: RoleChange) => authed.body<{ role: Role }>("POST", `${SYSTEM}/roles`, role as unknown as Record<string, unknown>);
+export const updateRole = (roleId: string, role: RoleChange) =>
+  authed.body<{ role: Role }>("PUT", `${SYSTEM}/roles/${encodeURIComponent(roleId)}`, role as unknown as Record<string, unknown>);
+
+/** Uploads the picture for an image badge (a 128 × 128 PNG); the badge then points at the address returned. */
+export async function uploadBadgeImage(file: File, onProgress?: (loaded: number, total: number) => void): Promise<string> {
+  const { origin, token } = requireSession();
+  const form = new FormData();
+  form.append("auth_token", token);
+  form.append("file", file, file.name);
+  const { url } = await api.request<{ url: string }>("POST", `${origin}${SYSTEM}/role-badge-images`, { form, onUploadProgress: onProgress });
+  return url;
+}
 export const deleteRole = (roleId: string) => authed.query<unknown>("DELETE", `${SYSTEM}/roles/${encodeURIComponent(roleId)}`);
 /** Replaces everything the person holds; an empty list gives them the default role. */
 export const setUserRoles = (userId: string, rolesIds: string[]) =>
