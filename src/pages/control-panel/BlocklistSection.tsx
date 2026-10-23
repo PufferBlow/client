@@ -55,7 +55,7 @@ export function BlocklistSection() {
   };
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
       <section aria-label="Blocked instances" className="flex min-w-0 flex-col gap-4 rounded-lg bg-background-secondary p-4">
         <form onSubmit={blockOne} aria-label="Block an instance" className="flex items-start gap-2">
           <Input aria-label="Instance to block" placeholder="Block an instance, like noise.example" value={host} onChange={(e) => setHost(e.target.value)} className="h-10" />

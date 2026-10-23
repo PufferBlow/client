@@ -95,7 +95,7 @@ export function PeersSection() {
   if (error || !data) return <ErrorState title="Couldn't load peers" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
       <section aria-label="Peers" className="flex min-w-0 flex-col gap-4 rounded-lg bg-background-secondary p-4">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {PEER_STATUSES.map((status) => (

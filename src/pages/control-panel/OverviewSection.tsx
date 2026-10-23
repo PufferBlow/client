@@ -48,7 +48,7 @@ export function OverviewSection() {
   const onlineCount = info.online_members ?? users.data?.filter((u) => isOnline(u.status)).length ?? null;
 
   return (
-    <>
+    <div className="flex flex-1 flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Members" value={formatCount(memberCount)} hint="Accounts on this server" />
         <StatCard label="Online now" value={formatCount(onlineCount)} />
@@ -56,8 +56,8 @@ export function OverviewSection() {
         <StatCard label="Version" value={<span className="font-sans text-2xl">{info.version || "–"}</span>} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Panel title="Server details" description="What members see when they join.">
+      <div className="grid flex-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Panel title="Server details" description="What members see when they join." grow>
           <dl className="m-0">
             <DetailRow label="Name">{info.server_name}</DetailRow>
             <DetailRow label="Address">
@@ -73,7 +73,7 @@ export function OverviewSection() {
           </dl>
         </Panel>
 
-        <Panel title="Jump to" description="The parts of the server you can manage.">
+        <Panel title="Jump to" description="The parts of the server you can manage." grow>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {(
               [
@@ -95,6 +95,6 @@ export function OverviewSection() {
           </ul>
         </Panel>
       </div>
-    </>
+    </div>
   );
 }

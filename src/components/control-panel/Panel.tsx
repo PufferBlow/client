@@ -7,6 +7,7 @@ export function Panel({
   action,
   children,
   flush = false,
+  grow = false,
 }: {
   title: string;
   description?: string;
@@ -15,9 +16,11 @@ export function Panel({
   children: ReactNode;
   /** Drop the body padding, e.g. for a table that should run edge to edge. */
   flush?: boolean;
+  /** Take the height the page has left, so the screen reaches the bottom of the window. */
+  grow?: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg bg-background-secondary">
+    <section className={`overflow-hidden rounded-lg bg-background-secondary ${grow ? "flex flex-1 flex-col" : ""}`}>
       <header className="flex items-start justify-between gap-4 px-5 pb-0 pt-5">
         <div className="min-w-0">
           <h2 className="pb-title m-0 text-xl">{title}</h2>
@@ -25,7 +28,7 @@ export function Panel({
         </div>
         {action}
       </header>
-      <div className={flush ? "mt-4" : "p-5 pt-4"}>{children}</div>
+      <div className={`${flush ? "mt-4" : "p-5 pt-4"} ${grow ? "flex-1" : ""}`}>{children}</div>
     </section>
   );
 }

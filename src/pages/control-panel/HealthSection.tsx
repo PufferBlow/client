@@ -216,7 +216,7 @@ export function HealthSection() {
   const incidents = health.incidents;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-1 flex-col gap-3">
       <Panel
         title={health.instance ?? "This instance"}
         description={`Pufferblow ${health.version} · up ${formatUptime(health.uptime_s)}`}
@@ -269,7 +269,7 @@ export function HealthSection() {
         </Panel>
       </div>
 
-      <Panel title="Incidents">
+      <Panel title="Incidents" grow>
         {incidents.length === 0 ? (
           <EmptyState title="Nothing has gone wrong" description="When the instance's own check finds trouble, it shows up here and clears itself." />
         ) : (

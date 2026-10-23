@@ -11,4 +11,10 @@ export interface ServerInfo {
   is_private: boolean;
   max_message_length: number | null;
   max_total_attachment_size: number | null;
+  welcome_message?: string | null;
+  /** Upload limits, in MB. */
+  max_image_size?: number | null;
+  max_video_size?: number | null;
+  max_sticker_size?: number | null;
+  max_gif_size?: number | null;
 }

@@ -381,25 +381,19 @@ describe("ControlPanelPage", () => {
   });
 
   describe("planned sections", () => {
-    it.each([
-      ["roles", "Create and edit roles"],
-      ["reports", "Review reports from members"],
-      ["relays", "Add and remove relays"],
-      ["audit", "Every moderation and settings change"],
-      ["settings", "Name, description and welcome message"],
-    ])("%s explains what is coming", async (section, planned) => {
+    it("relays explains what is coming", async () => {
       backend();
-      renderPanel(section);
+      renderPanel("relays");
 
       expect(await screen.findByText("Coming soon")).toBeInTheDocument();
-      expect(screen.getByText(planned)).toBeInTheDocument();
+      expect(screen.getByText("Add and remove relays")).toBeInTheDocument();
     });
 
-    it("flags them as 'Soon' in the navigation", async () => {
+    it("flags only relays as 'Soon' in the navigation", async () => {
       backend();
       renderPanel();
       const nav = await screen.findByRole("navigation", { name: "Control panel sections" });
-      expect(within(nav).getAllByText("Soon")).toHaveLength(5); // settings, roles, relays, reports, audit log
+      expect(within(nav).getAllByText("Soon")).toHaveLength(1);
     });
   });
 });

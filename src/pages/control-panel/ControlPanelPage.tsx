@@ -15,7 +15,12 @@ import { ChannelsSection } from "./ChannelsSection";
 import { BlocklistSection } from "./BlocklistSection";
 import { HealthSection } from "./HealthSection";
 import { PeersSection } from "./PeersSection";
-import { ComingSoon, MembersSection } from "./ListSections";
+import { ComingSoon } from "./ListSections";
+import { AuditSection } from "./AuditSection";
+import { MembersSection } from "./MembersSection";
+import { ReportsSection } from "./ReportsSection";
+import { RolesSection } from "./RolesSection";
+import { SettingsSection } from "./SettingsSection";
 import { OverviewSection } from "./OverviewSection";
 import { DEFAULT_SECTION, GROUPS, isSectionId, SECTIONS, type SectionId } from "./sections";
 import { lastAppLocation } from "../../features/navigation/lastAppLocation";
@@ -34,6 +39,14 @@ function SectionBody({ id }: { id: SectionId }) {
       return <PeersSection />;
     case "blocklist":
       return <BlocklistSection />;
+    case "settings":
+      return <SettingsSection />;
+    case "roles":
+      return <RolesSection />;
+    case "reports":
+      return <ReportsSection />;
+    case "audit":
+      return <AuditSection />;
     default: {
       const section = SECTIONS.find((s) => s.id === id);
       return <ComingSoon planned={section && "planned" in section ? section.planned : []} />;
@@ -129,13 +142,15 @@ export function ControlPanelPage() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg bg-surface px-5 py-[22px] sm:px-6">
-        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
+        <div className="mx-auto flex min-h-full w-full max-w-[1680px] flex-col gap-4">
           <header className="flex flex-col gap-2">
             <span className="pb-section-label">{GROUPS.find((g) => g.ids.includes(active))?.name}</span>
             <h1 className="pb-display m-0">{current.label}</h1>
             <p className="m-0 text-[14px] text-text-tertiary">{current.description}</p>
           </header>
-          <SectionBody id={active} />
+          <div className="flex flex-1 flex-col gap-4">
+            <SectionBody id={active} />
+          </div>
         </div>
       </main>
     </>

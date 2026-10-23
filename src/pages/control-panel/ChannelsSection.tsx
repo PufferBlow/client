@@ -42,12 +42,12 @@ export function ChannelsSection() {
   const categoryName = (id: string | null | undefined) => categories.find((c) => c.category_id === id)?.name;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-1 flex-col gap-3">
       <CategoriesPanel channels={data} />
       {data.length === 0 ? (
         <EmptyState title="No channels yet" description="Channels you create will show up here." action={newButton} />
       ) : (
-        <Panel title={`${data.length} ${data.length === 1 ? "channel" : "channels"}`} description="Create, rename or remove channels." action={newButton} flush>
+        <Panel title={`${data.length} ${data.length === 1 ? "channel" : "channels"}`} description="Create, rename or remove channels." action={newButton} flush grow>
           <table className={tableClasses.table}>
             <thead>
               <tr>

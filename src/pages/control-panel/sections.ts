@@ -30,8 +30,7 @@ export const SECTIONS = [
     id: "settings",
     label: "Settings",
     icon: Settings2,
-    description: "Name, branding and limits.",
-    planned: ["Name, description and welcome message", "Avatar and banner", "Message and upload size limits"],
+    description: "Name, privacy, upload limits and the server look.",
   },
   { id: "members", label: "Members", icon: Users, description: "Everyone with an account on this server." },
   { id: "channels", label: "Channels", icon: Hash, description: "Every text, voice and mixed channel on this server." },
@@ -40,7 +39,6 @@ export const SECTIONS = [
     label: "Roles",
     icon: Key,
     description: "Decide who can do what.",
-    planned: ["Create and edit roles", "Assign roles to members", "Review the privileges each role grants"],
   },
   { id: "peers", label: "Peers", icon: Globe, description: "The instances this one federates with, and the rules for each." },
   {
@@ -60,15 +58,13 @@ export const SECTIONS = [
     id: "reports",
     label: "Reports",
     icon: Flag,
-    description: "Keep the community safe.",
-    planned: ["Review reports from members", "Time out or ban members", "Manage blocked IP addresses"],
+    description: "Reports from members, and the addresses that are blocked.",
   },
   {
     id: "audit",
     label: "Audit log",
     icon: Eye,
     description: "Who changed what, and when.",
-    planned: ["Every moderation and settings change", "Filter by person, action and date"],
   },
 ] as const satisfies readonly ControlPanelSection[];
 
