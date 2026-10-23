@@ -163,11 +163,20 @@ describe("voice channels in the sidebar", () => {
     expect(join.parentElement).toHaveTextContent(/^Lounge1$/);
   });
 
-  it("has mute and deafen disabled until you are in a call", async () => {
-    await open();
-    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Deafen" })).toBeDisabled();
+  it("has mute and deafen ready before a call, and a call then starts the way they are set", async () => {
+    const { user } = await open();
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Deafen" })).toBeEnabled();
     expect(screen.queryByText("Voice connected")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mute microphone" }));
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: /Join voice channel Lounge/ }));
+    await act(async () => socket().receive(joinedFrame(["me", "ada"])));
+    expect(await screen.findByText("Voice connected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeInTheDocument();
+    expect(micTracks[0]!.enabled).toBe(false);
   });
 
   it("joins: gets a session from the API, opens the media socket with its token, and shows the call", async () => {
@@ -238,7 +247,7 @@ describe("voice channels in the sidebar", () => {
     expect(socket().closed).toBe(true);
     expect(micTracks[0]!.stopped).toBe(true);
     await waitFor(() => expect(requestLog(fetchMock)).toContain("POST /api/v2/voice/sessions/sess-v1/leave"));
-    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeEnabled();
   });
 
   it("leaves by clicking the connected channel again", async () => {

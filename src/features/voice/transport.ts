@@ -95,6 +95,8 @@ export class VoiceTransport {
       this.stopMicrophone();
       return;
     }
+    // Muted before joining (from the user card): the microphone stays shut from the first frame.
+    for (const track of this.microphone.getAudioTracks()) track.enabled = !this.muted;
 
     const peer = this.deps.createPeer({ iceServers: toRtcServers(this.grant.iceServers), ...this.deps.encryption?.configuration });
     this.peer = peer;
