@@ -32,7 +32,6 @@ import { PuffFace } from "../ui/PuffFace";
 import { RoleTag } from "../ui/RoleTag";
 import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
-import { DEFAULT_REACTIONS } from "../../lib/reactionUsage";
 
 export interface MenuPoint {
   x: number;
@@ -45,8 +44,6 @@ interface MessageItemProps {
   isGroupStart?: boolean;
   myUserId: string | undefined;
   onEdit: (id: string, text: string) => Promise<unknown>;
-  /** The one emoji offered straight on the hover toolbar (the viewer's most used). */
-  quickReaction?: string;
   onToggleReaction: (id: string, emoji: string, present: boolean) => void;
   /** Opens the message menu at a point. Right-click, the context-menu key and the "More" button all land here. */
   onOpenMenu?: (id: string, point: MenuPoint) => void;
@@ -343,6 +340,17 @@ function ReplyLine({ reply, onJumpTo }: { reply: ReplyPreview; onJumpTo?: (id: s
   );
 }
 
+/** The tag on a message that has been changed since it was sent. */
+function EditedTag({ at, className = "" }: { at: string | null | undefined; className?: string }) {
+  const when = at ? new Date(at) : null;
+  const title = when && !Number.isNaN(when.getTime()) ? `Edited ${when.toLocaleString()}` : "Edited";
+  return (
+    <span className={`pb-edited-tag ${className}`} title={title}>
+      Edited
+    </span>
+  );
+}
+
 function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: (text: string) => Promise<unknown>; onCancel: () => void }) {
   const [text, setText] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -355,6 +363,8 @@ function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: 
     el?.focus();
     el?.setSelectionRange(el.value.length, el.value.length);
   }, []);
+
+  const unchanged = !text.trim() || text.trim() === initial;
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") return onCancel();
@@ -380,18 +390,26 @@ function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: 
   };
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-1.5">
+    <form onSubmit={submit} className="flex w-full max-w-[min(100%,720px)] flex-col gap-2 rounded-xl bg-surface-secondary p-2.5 shadow-[inset_0_0_0_1px_rgba(242,242,242,0.08)]">
       <textarea
         ref={field}
-        rows={1}
+        rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         disabled={saving}
         aria-label="Edit message"
-        className="max-h-[40vh] resize-none overflow-y-auto rounded-xl border border-primary/40 bg-background px-3 py-2.25 text-[15px] leading-5 text-text outline-none"
+        className="max-h-[50vh] min-h-[84px] w-full resize-none overflow-y-auto rounded-lg border-0 bg-background px-3 py-2.5 text-[15px] leading-6 text-text outline-none focus-visible:shadow-[0_0_0_1px_rgba(242,242,242,0.35)]"
       />
-      <span className="text-xs text-text-muted">Escape to cancel · Enter to save · Shift+Enter for a new line</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="min-w-0 flex-1 text-xs text-text-muted">Escape to cancel · Enter to save · Shift+Enter for a new line</span>
+        <button type="button" onClick={onCancel} disabled={saving} className="pb-label-button rounded-md border-0 bg-transparent px-2.5 py-2 text-text-tertiary hover:text-text">
+          Cancel
+        </button>
+        <button type="submit" disabled={saving || unchanged} className="pb-label-button rounded-md border-0 bg-text px-3 py-2 text-on-primary disabled:bg-surface-tertiary disabled:text-text-faint">
+          Save
+        </button>
+      </div>
     </form>
   );
 }
@@ -428,7 +446,6 @@ export const MessageItem = memo(function MessageItem({
   isGroupStart = true,
   myUserId,
   onEdit,
-  quickReaction = DEFAULT_REACTIONS[0] ?? "👍",
   onToggleReaction,
   onOpenMenu,
   onOpenPicker,
@@ -470,7 +487,7 @@ export const MessageItem = memo(function MessageItem({
   const mentionsMe = myName !== undefined && message.authorId !== myUserId && mentionsUser(message.text, myName);
   const repliesToMe =
     myUserId !== undefined && message.replyTo !== undefined && !message.replyTo.deleted && message.replyTo.authorId === myUserId && message.authorId !== myUserId;
-  const editedMarker = !isGroupStart && message.editCount > 0 && <span className="ml-1.5 text-[11px] text-text-muted">(edited)</span>;
+  const editedMarker = !isGroupStart && message.editCount > 0 && <EditedTag at={message.editedAt} className="ml-1.5" />;
 
   const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
     if (!onOpenMenu || editing || isLocal) return;
@@ -525,7 +542,7 @@ export const MessageItem = memo(function MessageItem({
             <time dateTime={message.sentAt} className="pb-timestamp">
               {formatTime(message.sentAt)}
             </time>
-            {message.editCount > 0 && <span className="pb-timestamp">(edited)</span>}
+            {message.editCount > 0 && <EditedTag at={message.editedAt} />}
           </header>
         )}
 
@@ -621,19 +638,6 @@ export const MessageItem = memo(function MessageItem({
               </button>
             );
           })}
-          {(() => {
-            const mine = message.reactions.some((r) => r.emoji === quickReaction && myUserId !== undefined && r.userIds.includes(myUserId));
-            return (
-              <button
-                type="button"
-                className={toolButton}
-                aria-label={`${mine ? "Remove" : "Add"} ${quickReaction} reaction`}
-                onClick={() => onToggleReaction(message.id, quickReaction, !mine)}
-              >
-                <Emoji char={quickReaction} size={18} />
-              </button>
-            );
-          })()}
           {onOpenPicker && (
             <button
               type="button"

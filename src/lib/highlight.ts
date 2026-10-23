@@ -15,7 +15,7 @@ function loadHighlighter(): Promise<Highlighter> {
 }
 
 /** Past this a block is shown plain: highlighting it would stall the UI for little benefit. */
-const MAX_HIGHLIGHT_LENGTH = 20_000;
+const MAX_HIGHLIGHT_LENGTH = 200_000;
 
 /**
  * Highlights `code` as `lang` (a name or alias such as js, py, ts, rust, sh, json…). Resolves to

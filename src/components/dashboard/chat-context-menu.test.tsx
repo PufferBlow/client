@@ -223,19 +223,19 @@ describe("message context menu", () => {
 
   describe("reactions", () => {
     it("adds a reaction to the exact message from the menu", async () => {
-      const setReaction = vi.fn().mockResolvedValue([{ emoji: "🎉", count: 1, userIds: ["me"] }]);
+      const setReaction = vi.fn().mockResolvedValue([{ emoji: "puff:happy", count: 1, userIds: ["me"] }]);
       const { user } = await open({}, profile(), messages, { setReaction });
       rightClick("third");
-      await user.click(item("Add 🎉 reaction"));
+      await user.click(item("Add Happy reaction"));
 
-      await waitFor(() => expect(setReaction).toHaveBeenCalledWith("c1", "m3", "🎉", true));
-      expect(await screen.findByRole("button", { name: /🎉\s*1/ })).toBeInTheDocument();
+      await waitFor(() => expect(setReaction).toHaveBeenCalledWith("c1", "m3", "puff:happy", true));
+      expect(await screen.findByRole("button", { name: "Happy reaction, 1" })).toBeInTheDocument();
     });
 
     it("shows a notice when a reaction fails", async () => {
       const { user } = await open({}, profile(), messages, { setReaction: vi.fn().mockRejectedValue(new Error("boom")) });
       rightClick("second");
-      await user.click(item("Add 👍 reaction"));
+      await user.click(item("Add Puffed reaction"));
 
       expect(await screen.findByRole("status")).toHaveTextContent(/./);
     });
@@ -280,7 +280,9 @@ describe("message context menu", () => {
       expect(screen.getByRole("button", { name: /😂\s*2/ })).toBeInTheDocument();
 
       fireEvent.contextMenu(rowOf("party"), { clientX: 5, clientY: 5 });
-      expect(within(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Add 🎉 reaction" })).getByAltText("🎉")).toBeInTheDocument();
+      // The menu offers the puff faces, never plain emoji.
+      expect(within(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Add Happy reaction" })).getByAltText("Happy")).toBeInTheDocument();
+      expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /❤|👍/ })).not.toBeInTheDocument();
       await user.keyboard("{Escape}");
     });
   });
@@ -384,7 +386,7 @@ describe("message context menu", () => {
       await user.keyboard("{ContextMenu}");
 
       expect(menu()).toBeInTheDocument();
-      expect(screen.getByRole("menuitem", { name: "Add 👍 reaction" })).toHaveFocus();
+      expect(screen.getByRole("menuitem", { name: "Add Puffed reaction" })).toHaveFocus();
       await user.keyboard("{Escape}");
       expect(rowOf("third")).toHaveFocus();
     });

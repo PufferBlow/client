@@ -1,5 +1,6 @@
 import { Copy, Fingerprint, Flag, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2 } from "lucide-react";
-import { Emoji } from "../ui/Emoji";
+import { PuffFace } from "../ui/PuffFace";
+import { PUFF_FACES, puffReaction } from "../../lib/puff";
 import type { MenuEntry } from "../ui/ContextMenu";
 import { canDeleteMessage, canEditMessage, canReportMessage } from "../../features/messages/permissions";
 import type { Message } from "../../features/messages/types";
@@ -14,8 +15,6 @@ export interface MessageMenuActions {
   edit: () => void;
   requestDelete: () => void;
   report: () => void;
-  /** The quick reactions offered at the top (the viewer's most used). */
-  quickReactions: string[];
   /** Pin or unpin: only offered when given (the viewer may moderate and the channel supports pins). */
   pin?: { pinned: boolean; toggle: () => void };
 }
@@ -52,13 +51,16 @@ export function messageMenuEntries(
       id: "react",
       label: "Add reaction",
       choices: [
-        ...actions.quickReactions.map((emoji) => ({
-          id: emoji,
-          label: `${mine(emoji) ? "Remove" : "Add"} ${emoji} reaction`,
-          content: <Emoji char={emoji} size={22} />,
-          pressed: mine(emoji),
-          onSelect: () => actions.react(emoji, !mine(emoji)),
-        })),
+        ...PUFF_FACES.map(({ face, label }) => {
+          const reaction = puffReaction(face);
+          return {
+            id: reaction,
+            label: `${mine(reaction) ? "Remove" : "Add"} ${label} reaction`,
+            content: <PuffFace reaction={reaction} size={22} />,
+            pressed: mine(reaction),
+            onSelect: () => actions.react(reaction, !mine(reaction)),
+          };
+        }),
         {
           id: "more-reactions",
           label: "More reactions…",

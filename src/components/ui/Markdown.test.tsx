@@ -59,6 +59,14 @@ describe("Markdown", () => {
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
   });
 
+  it("numbers the lines of a code block, outside the code itself", () => {
+    const { container } = show("```py\na = 1\nb = 2\nc = 3\n```");
+    const gutter = container.querySelector(".pb-code-gutter");
+    expect(gutter).toHaveAttribute("aria-hidden", "true");
+    expect(gutter?.textContent).toBe("1\n2\n3");
+    expect(container.querySelector("code")?.textContent).toBe("a = 1\nb = 2\nc = 3");
+  });
+
   it("highlights code in a named language once the highlighter loads", async () => {
     const { container } = show("```js\nconst answer = 42; // yes\n```");
     // The first load also transforms the grammars under test, which is slow.

@@ -312,7 +312,7 @@ describe("MessageItem", () => {
 
     it("keeps the edited marker on continuations", () => {
       render(<MessageItem message={message({ editCount: 1 })} isGroupStart={false} myUserId="me" {...handlers()} />);
-      expect(screen.getByText("(edited)")).toBeInTheDocument();
+      expect(screen.getByText("Edited")).toHaveClass("pb-edited-tag");
     });
 
     it("keeps tools and reactions on continuations", () => {
@@ -325,7 +325,7 @@ describe("MessageItem", () => {
 
   it("marks edited messages", () => {
     render(<MessageItem message={message({ editCount: 1 })} myUserId="me" {...handlers()} />);
-    expect(screen.getByText("(edited)")).toBeInTheDocument();
+    expect(screen.getByText("Edited")).toHaveClass("pb-edited-tag");
   });
 
   it("shows reactions, highlights yours, and toggles them", async () => {
@@ -348,16 +348,13 @@ describe("MessageItem", () => {
     expect(h.onToggleReaction).toHaveBeenLastCalledWith("m1", "🎉", true); // add
   });
 
-  it("offers one quick reaction on the toolbar: the viewer's most used", async () => {
+  it("offers only the puff faces on the toolbar, no heart or other emoji", async () => {
     const h = handlers();
     const user = userEvent.setup();
-    const { rerender } = render(<MessageItem message={message()} myUserId="me" {...h} />);
-    expect(screen.getByRole("button", { name: "Add 👍 reaction" })).toBeInTheDocument(); // the default
-    expect(screen.queryByRole("button", { name: "Add ❤️ reaction" })).not.toBeInTheDocument();
-
-    rerender(<MessageItem message={message()} myUserId="me" quickReaction="🔥" {...h} />);
-    await user.click(screen.getByRole("button", { name: "Add 🔥 reaction" }));
-    expect(h.onToggleReaction).toHaveBeenCalledWith("m1", "🔥", true);
+    render(<MessageItem message={message()} myUserId="me" {...h} />);
+    expect(screen.queryByRole("button", { name: /❤|👍/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Wink reaction" }));
+    expect(h.onToggleReaction).toHaveBeenCalledWith("m1", "puff:wink", true);
   });
 
   it("renders image attachments inline from the instance and other files as links", () => {

@@ -3,6 +3,8 @@
 @import "@fontsource/barlow/500.css";
 @import "@fontsource/barlow/700.css";
 @import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
 @import "tailwindcss";
 
 @theme {
@@ -106,7 +108,7 @@
   --pb-font-display: var(--font-display);
   --pb-font-label: var(--font-heading);
   --pb-font-body: var(--font-sans);
-  --pb-font-mono: ui-monospace, Menlo, monospace;
+  --pb-font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   --pb-focus: 0 0 0 2px var(--pb-panel), 0 0 0 4px var(--pb-text-1);
 
   --message-font-size: 14px;
@@ -177,6 +179,13 @@ button[aria-disabled="true"],
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
+}
+
+/* No stepper arrows at the ends of a scrollbar: the thumb and the wheel are enough. */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 ::-webkit-scrollbar-track {
@@ -417,4 +426,38 @@ button[aria-disabled="true"],
  */
 [data-message-list]:hover [data-message-id]:not(:hover) [data-message-toolbar] {
   display: none;
+}
+
+/* The text a browser shows in place of an image it could not load, in the design language's label voice. */
+img {
+  font: 600 11px/1.3 var(--font-heading);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* "Edited": an information-blue tag, so a changed message is easy to tell from an unchanged one. */
+.pb-edited-tag {
+  display: inline-flex;
+  align-items: center;
+  font: 700 9.5px/1 var(--pb-font-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 14%, transparent);
+  padding: 3px 6px;
+  border-radius: 5px;
+  vertical-align: 1px;
+}
+
+/* A code block's line numbers: the same metrics as the code beside them, never selected or copied. */
+.pb-code {
+  font: 400 13px/1.6 var(--pb-font-mono);
+  tab-size: 4;
+}
+.pb-code-gutter {
+  color: var(--color-text-faint);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }

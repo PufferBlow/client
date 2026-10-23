@@ -13,6 +13,8 @@ import { useSessionKeeper } from "../hooks/useSessionKeeper";
 /** Full-page screens (settings, control panel) take the whole window; the server rail is for the chat views. */
 const isFullPage = (pathname: string) => /^\/(settings|control-panel)(\/|$)/.test(pathname);
 
+const isHubHome = (pathname: string) => /^\/dashboard\/?$/.test(pathname);
+
 /**
  * App shell: server rail on the left, routed view filling the rest, realtime socket behind it.
  * When the instance can't be used at all, a full-window screen covers it (the shell stays
@@ -20,7 +22,10 @@ const isFullPage = (pathname: string) => /^\/(settings|control-panel)(\/|$)/.tes
  */
 export function DashboardLayout() {
   useSessionKeeper();
-  const showRail = !isFullPage(useLocation().pathname);
+  const { pathname } = useLocation();
+  const showRail = !isFullPage(pathname);
+  // The hub home is a landing page: no sidebar for the card to float over.
+  const showUserPanel = showRail && !isHubHome(pathname);
   const status = useInstanceStatus();
   const blocked = status !== "ok";
 
@@ -40,7 +45,7 @@ export function DashboardLayout() {
                   <Outlet />
                 </div>
                 {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
-                {showRail && (
+                {showUserPanel && (
                   <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
                     <UserPanel />
                   </div>

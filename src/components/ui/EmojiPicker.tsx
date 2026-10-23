@@ -34,8 +34,8 @@ function loadEmojiAssets(): Promise<unknown> {
 
 /**
  * Rules injected into emoji-mart's shadow root, in the app's own look: a rounded search field
- * with a brass focus ring, condensed uppercase category labels, soft rounded hover tiles, and a
- * tab bar along the bottom where the active category is a brass pill.
+ * with a white focus ring, condensed uppercase category labels, soft rounded hover tiles, and a
+ * tab bar along the bottom where the active category is a white pill.
  */
 const PICKER_CSS = `
   :host { height: 392px; width: 100%; display: flex; }
@@ -53,7 +53,8 @@ const PICKER_CSS = `
   .search input[type="search"]:focus {
     background-color: #161616;
     border-color: rgba(255, 255, 255, 0.55);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+    outline: none;
   }
   .search input[type="search"]::placeholder { color: #707070; opacity: 1; }
   .search .loupe { left: 0.85em; color: #707070; }
@@ -64,8 +65,9 @@ const PICKER_CSS = `
 
   .scroll { padding-top: 4px; }
   .sticky {
-    padding: 10px 4px 6px;
-    background-color: rgba(31, 31, 31, 0.92);
+    padding: 12px 4px 6px;
+    background-color: rgba(31, 31, 31, 0.96);
+    backdrop-filter: blur(6px);
     color: #707070;
     font-family: "Barlow Condensed", "Barlow", system-ui, sans-serif;
     font-size: 11.5px;
@@ -74,6 +76,8 @@ const PICKER_CSS = `
     text-transform: uppercase;
   }
   .category button .background { border-radius: 10px; background-color: #2a2a2a; }
+  .skin-tone-button { border-radius: 10px; }
+  .search { padding: 0 0 2px; }
 
   /*
    * The app sets scrollbar-color globally and it inherits into this shadow root; any non-auto
@@ -210,10 +214,10 @@ function createPicker(data: unknown, onEmojiSelect: (emoji: PickedEmoji) => void
   // Match the Switchyard palette. These are the theme's inputs: emoji-mart's [data-theme] rule
   // redefines every --em-* variable from them on its own root, so setting --em-* here is ignored.
   const vars: Record<string, string> = {
-    "--rgb-accent": "227, 174, 79",
-    "--rgb-background": "35, 30, 25",
-    "--rgb-input": "26, 22, 18",
-    "--rgb-color": "239, 230, 212",
+    "--rgb-accent": "255, 255, 255",
+    "--rgb-background": "31, 31, 31",
+    "--rgb-input": "22, 22, 22",
+    "--rgb-color": "242, 242, 242",
     "--color-border": "rgba(242, 242, 242, 0.08)",
     "--color-border-over": "rgba(242, 242, 242, 0.14)",
     // The popover around the picker draws the rounded border and clips to it.

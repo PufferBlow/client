@@ -5,7 +5,7 @@ import { groupMessages } from "../../features/messages/grouping";
 import { useChatScroll } from "../../features/messages/useChatScroll";
 import type { UserProfile } from "../../features/users/types";
 import { copyToClipboard } from "../../lib/clipboard";
-import { recordReaction, useTopReactions } from "../../lib/reactionUsage";
+import { recordReaction } from "../../lib/reactionUsage";
 import { ContextMenu } from "../ui/ContextMenu";
 import { EmojiPickerPopover } from "../ui/EmojiPickerPopover";
 import { ErrorState } from "../ui/ErrorState";
@@ -92,7 +92,6 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const rows = useMemo(() => groupMessages(messages), [messages]);
-  const topReactions = useTopReactions(4);
 
   const byId = (id: string | null) => (id === null ? undefined : messages.find((m) => m.id === id));
   const menuMessage = byId(menu?.id ?? null);
@@ -184,7 +183,6 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
                   isGroupStart={startsGroup}
                   myUserId={me?.user_id}
                   onEdit={onEdit}
-                  quickReaction={topReactions[0]}
                   onToggleReaction={handleReaction}
                   onOpenMenu={handleOpenMenu}
                   onOpenPicker={handleOpenPicker}
@@ -220,7 +218,6 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
               edit: () => setEditingId(menuMessage.id),
               requestDelete: () => requestDelete(menuMessage.id),
               report: () => onReport?.(menuMessage.id),
-              quickReactions: topReactions,
               pin: pins && menuMessage.status === undefined ? { pinned: pins.ids.has(menuMessage.id), toggle: () => pins.toggle(menuMessage.id, !pins.ids.has(menuMessage.id)) } : undefined,
             },
             onReport ? permissions : { ...permissions, canReport: () => false },

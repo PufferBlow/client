@@ -34,15 +34,15 @@ describe("MessageItem delivery state", () => {
 
   it("lets you react to a pending message, but not reply, edit or open the menu", async () => {
     const h = handlers();
-    render(<MessageItem message={message({ status: "pending", nonce: "n1" })} myUserId="me" quickReaction="👍" onReply={vi.fn()} {...h} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Add 👍 reaction" }));
-    expect(h.onToggleReaction).toHaveBeenCalledWith("local_n1", "👍", true);
+    render(<MessageItem message={message({ status: "pending", nonce: "n1" })} myUserId="me" onReply={vi.fn()} {...h} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add Puffed reaction" }));
+    expect(h.onToggleReaction).toHaveBeenCalledWith("local_n1", "puff:default", true);
     expect(screen.queryByRole("button", { name: "Reply" })).not.toBeInTheDocument();
   });
 
   it("offers no reactions on a failed message", () => {
-    render(<MessageItem message={message({ status: "failed", nonce: "n1" })} myUserId="me" quickReaction="👍" {...handlers()} />);
-    expect(screen.queryByRole("button", { name: "Add 👍 reaction" })).not.toBeInTheDocument();
+    render(<MessageItem message={message({ status: "failed", nonce: "n1" })} myUserId="me" {...handlers()} />);
+    expect(screen.queryByRole("button", { name: "Add Puffed reaction" })).not.toBeInTheDocument();
   });
 
   it("says files are still uploading", () => {
