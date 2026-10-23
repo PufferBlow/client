@@ -19,7 +19,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
   const { countFor } = useDmUnread(conversations);
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-[14px] bg-surface max-md:hidden" aria-label="Home">
+    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden mb-[70px] rounded-[14px] bg-surface max-md:hidden" aria-label="Home">
       <div className="flex flex-col gap-0.5 px-2 pt-3">
         <NavLink
           to="/dashboard"

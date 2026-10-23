@@ -173,7 +173,7 @@ export function ChannelSidebar() {
     );
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden rounded-lg bg-surface max-md:hidden">
+    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden mb-[70px] rounded-lg bg-surface max-md:hidden">
       <SidebarHeader onMenu={serverMenu.open} />
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pt-1">
