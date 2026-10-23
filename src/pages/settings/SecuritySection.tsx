@@ -34,6 +34,7 @@ function ResetTokensCard() {
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         <PasswordField
+          onCard
           label="Confirm with your password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

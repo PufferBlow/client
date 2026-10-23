@@ -39,6 +39,7 @@ function UsernameCard({ profile }: { profile: UserProfile }) {
     <SettingsCard title="Username" description={`Your handle on this instance is @${profile.username}@${profile.origin_server}.`}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         <AuthField
+          onCard
           label="Username"
           icon={<AtSign size={16} aria-hidden="true" />}
           value={username}
@@ -87,6 +88,7 @@ function PasswordCard() {
     <SettingsCard title="Password" description="Choose a strong password you don't use anywhere else.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         <PasswordField
+          onCard
           label="Current password"
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
@@ -94,6 +96,7 @@ function PasswordCard() {
           error={errors.current}
         />
         <PasswordField
+          onCard
           label="New password"
           value={next}
           onChange={(e) => setNext(e.target.value)}
@@ -101,6 +104,7 @@ function PasswordCard() {
           error={errors.next}
         />
         <PasswordField
+          onCard
           label="Confirm new password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}

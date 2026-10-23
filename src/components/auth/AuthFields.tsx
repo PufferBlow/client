@@ -10,10 +10,12 @@ interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "classN
   labelAside?: ReactNode;
   /** Rendered inside the input frame, after the value. */
   trailing?: ReactNode;
+  /** For a field that sits on a card (the settings pages): lifted off it, with a faint edge, so it can be seen and found. */
+  onCard?: boolean;
 }
 
 export const AuthField = forwardRef<HTMLInputElement, FieldProps>(
-  ({ label, icon, error, hint, labelAside, trailing, id, ...props }, ref) => {
+  ({ label, icon, error, hint, labelAside, trailing, onCard, id, ...props }, ref) => {
     const autoId = useId();
     const inputId = id ?? autoId;
     const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
@@ -27,10 +29,13 @@ export const AuthField = forwardRef<HTMLInputElement, FieldProps>(
         {/* A raised field; focus is a 2px white ring offset by 2, an error a 1px inset line in the danger colour. */}
         <div
           className={[
-            "flex h-11 items-center gap-2.5 rounded-md bg-surface-secondary pl-3.5 pr-2 text-[15px] text-text-tertiary transition-shadow duration-(--motion-fast)",
+            "flex h-11 items-center gap-2.5 rounded-md pl-3.5 pr-2 text-[15px] text-text-tertiary transition-shadow duration-(--motion-fast)",
+            onCard ? "bg-surface-tertiary" : "bg-surface-secondary",
             error
               ? "shadow-[inset_0_0_0_1px_var(--color-error)] focus-within:shadow-[inset_0_0_0_1px_var(--color-error),0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]"
-              : "focus-within:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]",
+              : onCard
+                ? "shadow-[inset_0_0_0_1px_rgba(242,242,242,0.1)] hover:shadow-[inset_0_0_0_1px_rgba(242,242,242,0.2)] focus-within:shadow-[0_0_0_2px_var(--color-surface-secondary),0_0_0_4px_var(--color-text)]"
+                : "focus-within:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]",
           ].join(" ")}
         >
           {icon}
