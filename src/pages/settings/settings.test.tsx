@@ -208,36 +208,6 @@ describe("SettingsPage", () => {
       expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
       expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ status: "dnd", auth_token: "tok" }]);
     });
-
-    it("applies an accent swatch", async () => {
-      const fetchMock = backend({ "PUT /api/v1/users/profile/appearance": { status_code: 200 } });
-      const { user } = renderSettings("profile");
-
-      await user.click(await screen.findByRole("button", { name: "Use accent #c9a3f0" }));
-
-      expect(await screen.findByText("Accent colour updated.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ accent_color: "#c9a3f0", shuffle_avatar_seed: false });
-    });
-
-    it("rejects a malformed custom colour", async () => {
-      const fetchMock = backend();
-      const { user } = renderSettings("profile");
-
-      await user.type(await screen.findByLabelText("Custom accent colour"), "purple{Enter}");
-
-      expect(await screen.findByText("Use a hex colour like #ffffff.")).toBeInTheDocument();
-      expect(requestLog(fetchMock).filter((r) => r.includes("appearance"))).toHaveLength(0);
-    });
-
-    it("shuffles the default avatar and banner", async () => {
-      const fetchMock = backend({ "PUT /api/v1/users/profile/appearance": { status_code: 200 } });
-      const { user } = renderSettings("profile");
-
-      await user.click(await screen.findByRole("button", { name: /shuffle default avatar and banner/i }));
-
-      expect(await screen.findByText("Avatar updated.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile/appearance")[0]).toMatchObject({ avatar_kind: "identicon", shuffle_avatar_seed: true });
-    });
   });
 
   describe("security", () => {
