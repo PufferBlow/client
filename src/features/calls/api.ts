@@ -47,3 +47,18 @@ export async function joinCallRelay(callId: string): Promise<VoiceSessionGrant> 
 export async function registerIdentityKey(publicKey: PublicJwk, label: string): Promise<void> {
   await authed.body("PUT", "/api/v1/identity-keys", { public_key: publicKey, label });
 }
+
+export interface IdentityKeyEntry {
+  key_id: string;
+  label: string | null;
+  created_at: string;
+}
+
+/** The signing keys registered for a person (each device that has made a call registers one). */
+export async function listIdentityKeys(userId: string): Promise<IdentityKeyEntry[]> {
+  const { keys } = await authed.query<{ keys: IdentityKeyEntry[] }>("GET", `/api/v1/identity-keys/${encodeURIComponent(userId)}`);
+  return keys ?? [];
+}
+
+/** Remove one of your own keys, for a device you no longer have. */
+export const removeIdentityKey = (keyId: string) => authed.query<unknown>("DELETE", `/api/v1/identity-keys/${encodeURIComponent(keyId)}`);

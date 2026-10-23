@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { LogOut } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, LogOut } from "lucide-react";
 import { PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
@@ -9,6 +9,8 @@ import { Button } from "../../components/ui/Button";
 import { signOutActiveAccount } from "../../services/accounts";
 import { isSessionRemembered } from "../../services/auth";
 import { resetSessionTokens } from "../../features/users/api";
+import { useMyProfile } from "../../features/users/hooks";
+import { listIdentityKeys, removeIdentityKey } from "../../features/calls/api";
 
 function ResetTokensCard() {
   const [password, setPassword] = useState("");
@@ -76,9 +78,60 @@ function SignOutCard() {
   );
 }
 
+/** The signing keys of the devices this account has made calls from. Remove one for a device you no longer have. */
+function CallKeysCard() {
+  const queryClient = useQueryClient();
+  const { data: me } = useMyProfile();
+  const userId = me?.user_id;
+  const queryKey = ["identity-keys", userId] as const;
+  const { data: keys, isPending, isError } = useQuery({ queryKey, queryFn: () => listIdentityKeys(userId!), enabled: !!userId });
+  const { run, feedback } = useSave("Key removed.");
+
+  return (
+    <SettingsCard
+      title="Call keys"
+      description="Each device you call from signs its calls with a key that never leaves it. People you call compare these keys to notice a stranger in between."
+    >
+      {isPending ? (
+        <p className="pb-meta m-0 text-[13px]">Loading…</p>
+      ) : isError ? (
+        <p className="pb-error m-0">Couldn&apos;t load your keys.</p>
+      ) : keys.length === 0 ? (
+        <p className="pb-meta m-0 text-[13px]">No device has made a call yet.</p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {keys.map((key) => (
+            <li key={key.key_id} className="flex items-center gap-3 rounded-lg bg-background px-3 py-2.5">
+              <KeyRound size={16} aria-hidden="true" className="shrink-0 text-text-tertiary" />
+              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                <span className="truncate text-sm font-semibold">{key.label || "This device"}</span>
+                <span className="pb-meta truncate text-xs">
+                  {key.key_id.slice(0, 12)} · added {new Date(key.created_at).toLocaleDateString()}
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={`Remove key ${key.label || key.key_id.slice(0, 12)}`}
+                onClick={async () => {
+                  if (await run(() => removeIdentityKey(key.key_id).then(() => undefined))) await queryClient.invalidateQueries({ queryKey });
+                }}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <FeedbackLine feedback={feedback} />
+    </SettingsCard>
+  );
+}
+
 export function SecuritySection() {
   return (
     <>
+      <CallKeysCard />
       <ResetTokensCard />
       <SignOutCard />
     </>

@@ -30,34 +30,16 @@ const bodies = (fetchMock: ReturnType<typeof routeFetch>, method: string, path: 
     .map(([, init]) => JSON.parse(String(init!.body)) as Record<string, unknown>);
 
 describe("SettingsPage", () => {
-  it("loads the profile and shows the handle", async () => {
+  it("loads the account overview with the handle, and no profile card", async () => {
     backend();
     renderSettings();
     expect(await screen.findByRole("heading", { name: "My account" })).toBeInTheDocument();
-    expect(await screen.findByText("@localhost:7575")).toBeInTheDocument();
+    expect(await screen.findByText("ada@localhost:7575")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy handle" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy user id" })).toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toHaveValue("ada");
-  });
-
-  it("shows the banner image the server hosts, and the accent colour when there is none", async () => {
-    backend({
-      "POST /api/v1/users/profile": {
-        user_data: { ...me, avatar_url: "/assets/avatars/pb-avatar-happy-brass.svg", banner_url: "/assets/banners/pb-banner-happy-brass.svg" },
-      },
-    });
-    const { container } = renderSettings();
-    await screen.findByLabelText("Username");
-    const avatar = container.querySelector('img[src$="/assets/avatars/pb-avatar-happy-brass.svg"]');
-    expect(avatar).toHaveAttribute("src", "http://localhost:7575/assets/avatars/pb-avatar-happy-brass.svg"); // joined to the instance
-    const banner = [...container.querySelectorAll<HTMLElement>("div.h-24")].find((el) => el.style.background.includes("pb-banner-happy-brass"));
-    expect(banner).toBeDefined();
-  });
-
-  it("falls back to the accent colour for a solid banner", async () => {
-    backend({ "POST /api/v1/users/profile": { user_data: { ...me, banner_url: "", banner_kind: "solid" } } });
-    const { container } = renderSettings();
-    await screen.findByLabelText("Username");
-    const banner = container.querySelector<HTMLElement>("div.h-24");
-    expect(banner?.style.background ?? "").not.toContain("url("); // no image: the accent gradient (jsdom cannot parse it)
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Accounts on this device" })).toBeInTheDocument();
   });
 
   it("sends the auth token in the body, the way the backend expects", async () => {
@@ -260,5 +242,19 @@ describe("SettingsPage", () => {
       expect(bodies(fetchMock, "POST", "/api/v1/auth/revoke")).toEqual([{ refresh_token: "refresh-1" }]);
       expect(getAuthToken()).toBeNull();
     });
+  });
+});
+
+describe("SettingsPage security: call keys", () => {
+  it("lists the keys of your devices and removes one", async () => {
+    const fetchMock = backend({
+      "GET /api/v1/identity-keys/me": { keys: [{ key_id: "abcdef1234567890", label: "Laptop", created_at: "2026-10-01T10:00:00Z" }] },
+      "DELETE /api/v1/identity-keys/abcdef1234567890": { removed: true },
+    });
+    const { user } = renderSettings("security");
+    expect(await screen.findByText("Laptop")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Remove key Laptop/ }));
+    expect(await screen.findByText("Key removed.")).toBeInTheDocument();
+    expect(requestLog(fetchMock)).toContain("DELETE /api/v1/identity-keys/abcdef1234567890");
   });
 });
