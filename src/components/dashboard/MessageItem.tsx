@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { FileText, Forward, Image as ImageIcon, MoreHorizontal, Music, Pencil, Play, Reply, SmilePlus } from "lucide-react";
+import { Download, FileText, Forward, Image as ImageIcon, MoreHorizontal, Music, Pencil, Play, Reply, SmilePlus, X } from "lucide-react";
 import { Emoji, EmojiText } from "../ui/Emoji";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
@@ -18,10 +18,14 @@ import { isEmojiOnly } from "../../lib/emoji";
 import { embeddableUrls, parseMarkdown, toPlainText } from "../../lib/markdown";
 import { handleFormatShortcut } from "../../lib/textEditing";
 import { MentionDirectoryContext, mentionsUser } from "../../lib/mentions";
-import { displayName, fileKind, formatBytes, galleryRows, isSpoilerName } from "../../lib/files";
+import { displayName, fileKind, formatBytes, galleryRows, isInstanceUrl, isSpoilerName } from "../../lib/files";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import type { Message, ReplyPreview } from "../../features/messages/types";
 import { resolveAssetUrl } from "../../services/authed";
+import { getApiUrl, getStoredInstance } from "../../services/instance";
+import { useUploadProgress } from "../../features/transfers/store";
+import { useDownload } from "../../features/transfers/useDownload";
+import { ProgressBar } from "../ui/ProgressBar";
 import { HostPill } from "../ui/HostPill";
 import { useProfileCard } from "../profile/profileCardContext";
 import { PuffFace } from "../ui/PuffFace";
@@ -77,6 +81,94 @@ const isMedia = (attachment: Attachment) => {
 };
 
 /** A file card for anything that isn't an image or video (those go in the gallery). */
+/** The files of a message that is still sending: how much of them has gone up. */
+function UploadStatus({ id, count }: { id: string; count: number }) {
+  const progress = useUploadProgress(id);
+  const what = count === 1 ? "1 file" : `${count} files`;
+  const known = progress && progress.total > 0;
+  return (
+    <div className="mt-1.5 flex w-[min(100%,320px)] flex-col gap-1" aria-live="polite">
+      <ProgressBar loaded={progress?.loaded ?? 0} total={progress?.total ?? 0} label={`Uploading ${what}`} />
+      <span className="text-[12px] tabular-nums text-text-muted">
+        {known ? `Uploading ${what} · ${Math.round((progress.loaded / progress.total) * 100)}% (${formatBytes(progress.loaded)} of ${formatBytes(progress.total)})` : `Uploading ${what}…`}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A file the message carries. One the signed-in instance hosts downloads inside the app, with its
+ * progress; one hosted by a third party opens in the default browser instead.
+ */
+function FileRow({ href, name, size, kind }: { href: string | undefined; name: string; size: number | undefined; kind: "file" | "audio" }) {
+  const Icon = kind === "audio" ? Music : FileText;
+  const instance = getStoredInstance();
+  const inApp = !!href && isInstanceUrl(href, instance ? getApiUrl(instance) : null);
+  const { state, start, cancel } = useDownload(inApp ? href : undefined, name);
+  const label = (
+    <>
+      <Icon size={15} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">{name}</span>
+      {size !== undefined && <span className="shrink-0 text-[11.5px] text-text-muted">{formatBytes(size)}</span>}
+    </>
+  );
+  const row = "inline-flex max-w-full min-w-0 items-center gap-2 text-[13px] text-text-secondary hover:text-text";
+
+  if (!inApp) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={row}>
+        {label}
+      </a>
+    );
+  }
+
+  const progress = state.status === "downloading" ? state.progress : undefined;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={start}
+          disabled={!!progress}
+          aria-label={`Download ${name}`}
+          className={`${row} border-0 bg-transparent p-0 text-left disabled:cursor-default`}
+        >
+          {label}
+          {!progress && <Download size={14} aria-hidden="true" className="shrink-0 text-text-muted" />}
+        </button>
+        {progress && (
+          <button
+            type="button"
+            onClick={cancel}
+            aria-label={`Cancel download of ${name}`}
+            className="grid size-5 shrink-0 place-items-center rounded-full border-0 bg-surface-tertiary p-0 text-text-secondary hover:text-text"
+          >
+            <X size={12} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {progress && (
+        <>
+          <ProgressBar loaded={progress.loaded} total={progress.total} label={`Downloading ${name}`} />
+          <span className="text-[11.5px] tabular-nums text-text-muted">
+            {progress.total > 0 ? `${formatBytes(progress.loaded)} of ${formatBytes(progress.total)}` : formatBytes(progress.loaded)}
+          </span>
+        </>
+      )}
+      {state.status === "done" && (
+        <span role="status" className="text-[11.5px] text-text-muted">
+          Downloaded
+        </span>
+      )}
+      {state.status === "failed" && (
+        <span role="alert" className="text-[11.5px] text-error-text">
+          {state.message} Select the file to try again.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function AttachmentView({ url, filename, type, size }: Attachment) {
   const href = resolveAssetUrl(url);
   const name = displayName(filename);
@@ -87,26 +179,15 @@ function AttachmentView({ url, filename, type, size }: Attachment) {
   if (fileKind(type) === "audio" && href) {
     body = (
       <div className="flex w-[min(100%,400px)] flex-col gap-2 rounded-lg bg-surface-secondary p-3">
-        <a href={href} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-2 text-[13px] text-text-secondary hover:text-text">
-          <Music size={15} aria-hidden="true" className="shrink-0" />
-          <span className="truncate">{name}</span>
-          {size !== undefined && <span className="shrink-0 text-[11.5px] text-text-muted">{formatBytes(size)}</span>}
-        </a>
+        <FileRow href={href} name={name} size={size} kind="audio" />
         <audio src={href} controls preload="none" className="w-full" />
       </div>
     );
   } else {
     body = (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex max-w-full items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary hover:text-text"
-      >
-        <FileText size={15} aria-hidden="true" className="shrink-0" />
-        <span className="truncate">{name}</span>
-        {size !== undefined && <span className="shrink-0 text-[11.5px] text-text-muted">{formatBytes(size)}</span>}
-      </a>
+      <div className="inline-flex max-w-full rounded-lg bg-surface-secondary px-3 py-2">
+        <FileRow href={href} name={name} size={size} kind="file" />
+      </div>
     );
   }
 
@@ -481,11 +562,7 @@ export const MessageItem = memo(function MessageItem({
           .map((attachment) => (
             <AttachmentView key={attachment.url} {...attachment} />
           ))}
-        {isPending && message.attachments.length > 0 && (
-          <p className="m-0 mt-1 text-[12px] text-text-muted" aria-live="polite">
-            Uploading {message.attachments.length === 1 ? "1 file" : `${message.attachments.length} files`}…
-          </p>
-        )}
+        {isPending && message.attachments.length > 0 && <UploadStatus id={message.id} count={message.attachments.length} />}
 
         {!editing &&
           embedUrls.map((url) => (

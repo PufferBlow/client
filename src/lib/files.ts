@@ -69,15 +69,51 @@ export function galleryRows(count: number): number[] {
   return rows;
 }
 
-/** Downloads a file from `url` as the given name. A cross-origin link ignores `download`, so the bytes are fetched first. */
-export async function downloadFile(url: string, filename: string): Promise<void> {
+/** Whether `url` is hosted by the instance the app is signed in to (`origin`); anything else is a third party's. */
+export function isInstanceUrl(url: string, origin: string | null | undefined): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(url, origin).origin === new URL(origin).origin;
+  } catch {
+    return false;
+  }
+}
+
+export interface DownloadOptions {
+  /** Called as bytes arrive; `total` is 0 when the server did not say how big the file is. */
+  onProgress?: (loaded: number, total: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Downloads a file from `url` as the given name. A cross-origin link ignores `download`, so the bytes
+ * are fetched first, read as a stream so the caller can show how far along it is.
+ */
+export async function downloadFile(url: string, filename: string, { onProgress, signal }: DownloadOptions = {}): Promise<void> {
   log.debug(`downloading ${filename}`, { url });
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     log.warn(`download of ${filename} failed with ${response.status}`, { url });
     throw new Error(`Download failed (${response.status}).`);
   }
-  const blob = await response.blob();
+  const total = Number(response.headers.get("content-length")) || 0;
+  onProgress?.(0, total);
+  let blob: Blob;
+  if (response.body && onProgress) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value as Uint8Array<ArrayBuffer>);
+      loaded += value.byteLength;
+      onProgress(loaded, total);
+    }
+    blob = new Blob(chunks, { type: response.headers.get("content-type") ?? "" });
+  } else {
+    blob = await response.blob();
+  }
   log.info(`downloaded ${filename} (${formatBytes(blob.size)})`);
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");

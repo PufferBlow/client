@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { uploadProgress } from "../transfers/store";
 import { loadMessages, reportMessage, searchMessages, sendMessage } from "./api";
 import { ApiError } from "../../services/api";
 import { CommandError } from "../realtime/commands";
@@ -92,7 +93,7 @@ export function useSendMessage(channelId: string) {
   const update = useMessageCache(channelId);
 
   const post = useCallback(
-    (input: { text: string; files: File[]; nonce: string; replyToMessageId?: string }) =>
+    (input: { text: string; files: File[]; nonce: string; replyToMessageId?: string; onUploadProgress?: (loaded: number, total: number) => void }) =>
       input.files.length || !commands
         ? sendMessage(channelId, input)
         : commands.createMessage({ channelId, content: input.text, nonce: input.nonce, replyToMessageId: input.replyToMessageId }),
@@ -120,7 +121,13 @@ export function useSendMessage(channelId: string) {
   const deliver = useCallback(
     async (localId: string, nonce: string, text: string, replyToMessageId?: string) => {
       try {
-        const message = await post({ text, files: heldFiles(localId), nonce, replyToMessageId });
+        const message = await post({
+          text,
+          files: heldFiles(localId),
+          nonce,
+          replyToMessageId,
+          onUploadProgress: (loaded, total) => uploadProgress.set(localId, { loaded, total }),
+        });
         const cache = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
         const optimistic = flattenMessages(cache).find((m) => m.id === localId)?.reactions ?? [];
         releaseFiles(localId);
@@ -128,6 +135,8 @@ export function useSendMessage(channelId: string) {
         void flushReactions(localId, message);
       } catch (error) {
         update((cache) => failPending(cache, localId, describeFailure(error)));
+      } finally {
+        uploadProgress.clear(localId);
       }
     },
     [post, queryClient, channelId, update, flushReactions],

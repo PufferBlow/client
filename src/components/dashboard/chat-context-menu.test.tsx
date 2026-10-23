@@ -86,7 +86,7 @@ describe("message context menu", () => {
   });
 
   it("leaves the browser menu alone on links", async () => {
-    await open({}, profile(), [msg("m4", "look", { attachments: [{ url: "/storage/x.pdf", filename: "x.pdf", type: "application/pdf" }] })]);
+    await open({}, profile(), [msg("m4", "look", { attachments: [{ url: "https://files.example/x.pdf", filename: "x.pdf", type: "application/pdf" }] })]);
     const allowedByBrowser = fireEvent.contextMenu(screen.getByRole("link", { name: /x\.pdf/ }), { clientX: 5, clientY: 5 });
     expect(allowedByBrowser).toBe(true);
     expect(menu()).not.toBeInTheDocument();

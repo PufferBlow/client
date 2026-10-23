@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, mockFetch, signIn } from "../../test/helpers";
+import { stubXhrOverFetch } from "../../test/xhrOverFetch";
 import { applyEvent } from "../realtime/applyEvent";
 import { CommandError } from "../realtime/commands";
 import { MessageCommandsContext } from "../realtime/commandsContext";
@@ -12,6 +13,8 @@ import type { UserProfile } from "../users/types";
 import { flattenMessages, messageKeys, type MessageCache } from "./cache";
 import { useDeleteMessage, useEditMessage, useSendMessage, useToggleReaction } from "./hooks";
 import type { Message } from "./types";
+
+beforeEach(stubXhrOverFetch);
 
 const server = (overrides: Partial<Message> = {}): Message => ({
   id: "m_server",

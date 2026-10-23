@@ -39,7 +39,7 @@ interface SendMessageResponse {
 /** Sends over HTTP (the route that takes attachments). A retry with the same `nonce` never posts twice. */
 export async function sendMessage(
   channelId: string,
-  input: { text: string; files?: File[]; replyToMessageId?: string; nonce?: string },
+  input: { text: string; files?: File[]; replyToMessageId?: string; nonce?: string; onUploadProgress?: (loaded: number, total: number) => void },
 ): Promise<Message> {
   const { origin, token } = requireSession();
   const form = new FormData();
@@ -52,6 +52,7 @@ export async function sendMessage(
   const { message_data } = await api.post<SendMessageResponse>(`${origin}${channelPath(channelId)}/send_message`, {
     form,
     timeout: 60_000,
+    ...(input.onUploadProgress && input.files?.length ? { onUploadProgress: input.onUploadProgress } : {}),
   });
   return normalizeMessage(message_data, channelId);
 }

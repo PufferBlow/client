@@ -26,6 +26,7 @@ import {
   setDirectReaction,
   uploadAttachment,
 } from "./api";
+import { combinedProgress, uploadProgress } from "../transfers/store";
 import { dmKeys } from "./keys";
 import { conversationFor, mergeOutgoing, rememberOutgoing } from "./outgoing";
 
@@ -114,7 +115,12 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
   const deliver = useCallback(
     async (localId: string, input: SendInput) => {
       try {
-        const attachments = await Promise.all((input.files ?? []).map(uploadAttachment));
+        const files = input.files ?? [];
+        const forFile = combinedProgress(
+          files.map((f) => f.size),
+          (progress) => uploadProgress.set(localId, progress),
+        );
+        const attachments = await Promise.all(files.map((file, i) => uploadAttachment(file, forFile(i))));
         const { messageId, conversationId: sentTo } = await sendDirectMessage({ peer, text: input.text, attachments, replyToMessageId: input.replyTo?.id });
         const me = queryClient.getQueryData<UserProfile>(userKeys.profile);
         // The server won't list this conversation until they answer, so keep it ourselves.
@@ -147,6 +153,8 @@ export function useSendDirectMessage(conversationId: string, peer: string) {
         void queryClient.invalidateQueries({ queryKey: dmKeys.conversations });
       } catch {
         update((cache) => failPending(cache, localId, { message: "The message couldn't be sent.", retryable: true }));
+      } finally {
+        uploadProgress.clear(localId);
       }
     },
     [peer, conversationId, queryClient, update, flushReactions],

@@ -41,9 +41,25 @@ function createWindow() {
     mainWindow?.webContents.send("window-state-changed", false);
   });
 
+  // Links to other sites open in the default browser, never inside the app window.
+  const openInBrowser = (url: string) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  };
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    openInBrowser(details.url);
     return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const current = mainWindow?.webContents.getURL() ?? "";
+    let sameOrigin = false;
+    try {
+      sameOrigin = new URL(url).origin === new URL(current).origin;
+    } catch {
+      // An unparsable address is not the app's own.
+    }
+    if (sameOrigin || url === current) return;
+    event.preventDefault();
+    openInBrowser(url);
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;

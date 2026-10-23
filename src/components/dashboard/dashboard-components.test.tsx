@@ -376,7 +376,27 @@ describe("MessageItem", () => {
     );
 
     expect(screen.getByRole("img", { name: "pic.png" })).toHaveAttribute("src", "http://localhost:7575/storage/abc");
-    expect(screen.getByRole("link", { name: /notes\.pdf/ })).toHaveAttribute("href", "http://localhost:7575/storage/def");
+    expect(screen.getByRole("button", { name: /download notes.pdf/i })).toBeInTheDocument();
+  });
+
+  it("downloads an instance file in the app and opens a third party's file in the browser", () => {
+    render(
+      <MessageItem
+        message={message({
+          attachments: [
+            { url: "/storage/def", filename: "notes.pdf", type: "application/pdf" },
+            { url: "https://files.example/other.pdf", filename: "other.pdf", type: "application/pdf" },
+          ],
+        })}
+        myUserId="me"
+        {...handlers()}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: /notes\.pdf/ })).not.toBeInTheDocument();
+    const outside = screen.getByRole("link", { name: /other\.pdf/ });
+    expect(outside).toHaveAttribute("href", "https://files.example/other.pdf");
+    expect(outside).toHaveAttribute("target", "_blank");
   });
 
   it("keeps whitespace in message text but never renders it as HTML", () => {

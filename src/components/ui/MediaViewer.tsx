@@ -9,7 +9,7 @@ import { useConversations } from "../../features/dms/hooks";
 import { dmKeys } from "../../features/dms/keys";
 import { conversationFor, rememberOutgoing } from "../../features/dms/outgoing";
 import { useMyProfile } from "../../features/users/hooks";
-import { displayName, downloadFile } from "../../lib/files";
+import { displayName, downloadFile, formatBytes } from "../../lib/files";
 import { classifyAuthError } from "../../utils/authErrors";
 import { Avatar } from "../dashboard/Avatar";
 
@@ -63,6 +63,7 @@ export function MediaViewer({ messageId, items, index, onIndexChange, onClose, a
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [forwarding, setForwarding] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [notice, setNotice] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const isImage = item?.kind === "image";
@@ -102,18 +103,25 @@ export function MediaViewer({ messageId, items, index, onIndexChange, onClose, a
   }, [forwarding, onClose, go, items.length, isImage, changeZoom, zoom]);
 
   useEffect(() => {
-    if (!notice) return;
+    if (!notice || downloading) return;
     const timer = setTimeout(() => setNotice(null), 4000);
     return () => clearTimeout(timer);
-  }, [notice]);
+  }, [notice, downloading]);
 
   if (!item) return null;
   const name = displayName(item.filename);
 
   const download = () => {
-    downloadFile(item.href, name).catch((error: unknown) =>
-      setNotice({ text: classifyAuthError(error, "Couldn't download the file.").message, tone: "error" }),
-    );
+    if (downloading) return;
+    setDownloading(true);
+    setNotice({ text: "Downloading…", tone: "info" });
+    downloadFile(item.href, name, {
+      onProgress: (loaded, total) =>
+        setNotice({ text: total > 0 ? `Downloading… ${Math.round((loaded / total) * 100)}%` : `Downloading… ${formatBytes(loaded)}`, tone: "info" }),
+    })
+      .then(() => setNotice({ text: "Downloaded", tone: "info" }))
+      .catch((error: unknown) => setNotice({ text: classifyAuthError(error, "Couldn't download the file.").message, tone: "error" }))
+      .finally(() => setDownloading(false));
   };
 
   const startDrag = (event: ReactPointerEvent<HTMLImageElement>) => {

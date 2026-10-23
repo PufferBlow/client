@@ -71,13 +71,14 @@ export async function loadDirectMessages(peer: string, page: number): Promise<{ 
 }
 
 /** Uploads one file for a DM; the message then refers to it by URL. */
-export async function uploadAttachment(file: File): Promise<Attachment> {
+export async function uploadAttachment(file: File, onUploadProgress?: (loaded: number, total: number) => void): Promise<Attachment> {
   const form = new FormData();
   form.set("file", file);
   form.set("directory", "attachments");
   const uploaded = await authed.query<{ url: string; filename?: string; type?: string; size?: number }>("POST", "/api/v1/storage/upload", {
     form,
     timeout: 60_000,
+    ...(onUploadProgress ? { onUploadProgress } : {}),
   });
   return { url: uploaded.url, filename: uploaded.filename ?? file.name, type: uploaded.type ?? file.type, size: uploaded.size ?? file.size };
 }

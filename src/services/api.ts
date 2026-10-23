@@ -31,6 +31,11 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   timeout?: number;
   signal?: AbortSignal;
+  /**
+   * Called as a multipart body goes up, with the bytes sent so far and the total. `fetch` cannot
+   * report this, so a request that asks for it is made with `XMLHttpRequest` instead.
+   */
+  onUploadProgress?: (loaded: number, total: number) => void;
 }
 
 interface ErrorEnvelope {
@@ -65,12 +70,60 @@ function buildUrl(url: string, query?: Query): string {
   return qs ? `${url}${url.includes("?") ? "&" : "?"}${qs}` : url;
 }
 
+interface Sent {
+  status: number;
+  ok: boolean;
+  payload: unknown;
+}
+
+async function sendWithFetch(method: Method, url: string, headers: Record<string, string>, body: BodyInit | undefined, signal: AbortSignal): Promise<Sent> {
+  const response = await fetch(url, { method, headers, body, signal });
+  const payload: unknown = await response.json().catch(() => null);
+  return { status: response.status, ok: response.ok, payload };
+}
+
+/** The same request through `XMLHttpRequest`, which is the only way a browser reports how much of an upload has gone. */
+function sendWithProgress(
+  method: Method,
+  url: string,
+  headers: Record<string, string>,
+  form: FormData,
+  signal: AbortSignal,
+  onProgress: (loaded: number, total: number) => void,
+): Promise<Sent> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total);
+    };
+    xhr.onload = () => {
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        // not JSON: the error mapping falls back to the status
+      }
+      resolve({ status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300, payload });
+    };
+    xhr.onerror = () => reject(new TypeError("Network error"));
+    xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    xhr.send(form);
+  });
+}
+
 /**
  * Success bodies are the backend's flat JSON; errors are a typed envelope (or legacy `{detail}`).
  * Resolves with the parsed body, throws `ApiError` otherwise.
  */
 async function request<T>(method: Method, url: string, options: RequestOptions = {}): Promise<T> {
-  const { query, json, form, headers: extraHeaders, timeout = DEFAULT_TIMEOUT, signal } = options;
+  const { query, json, form, headers: extraHeaders, timeout = DEFAULT_TIMEOUT, signal, onUploadProgress } = options;
   const id = nextRequestId++;
   const startedAt = performance.now();
   const target = redactText(buildUrl(url, query));
@@ -93,11 +146,14 @@ async function request<T>(method: Method, url: string, options: RequestOptions =
   log.debug(`#${id} → ${method} ${target} (${bodyKind})`);
 
   try {
-    const response = await fetch(buildUrl(url, query), { method, headers, body, signal: controller.signal });
-    const payload: unknown = await response.json().catch(() => null);
+    const sent =
+      form && onUploadProgress
+        ? await sendWithProgress(method, buildUrl(url, query), headers, form, controller.signal, onUploadProgress)
+        : await sendWithFetch(method, buildUrl(url, query), headers, body, controller.signal);
+    const { status, ok, payload } = sent;
 
-    if (!response.ok) throw toApiError(response.status, payload);
-    log.debug(`#${id} ← ${response.status} ${method} ${target} in ${elapsed()}`);
+    if (!ok) throw toApiError(status, payload);
+    log.debug(`#${id} ← ${status} ${method} ${target} in ${elapsed()}`);
     return payload as T;
   } catch (error) {
     if (error instanceof ApiError) {
