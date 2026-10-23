@@ -40,7 +40,7 @@ export function DashboardLayout() {
                 aria-hidden={blocked || undefined}
                 className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}
               >
-                {showRail && <ServerRail />}
+                {showRail && <ServerRail clearUserPanel={showUserPanel} />}
                 <div className="flex min-h-0 min-w-0 flex-1 gap-2">
                   <Outlet />
                 </div>

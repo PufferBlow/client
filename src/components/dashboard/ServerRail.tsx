@@ -43,7 +43,8 @@ const iconTileBase = tileBase.replace(" text-on-primary", "");
  * you hold an account on. Only the one you are in is connected, so the others show no live counts;
  * choosing one signs you in as that account and starts the app over for it.
  */
-export function ServerRail() {
+/** `clearUserPanel`: leave room at the bottom for the user card floating over the rail. */
+export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean } = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const activeId = getActiveAccountId();
@@ -75,7 +76,7 @@ export function ServerRail() {
   const serverName = server?.server_name ?? "Server";
 
   return (
-    <nav aria-label="Servers" className="flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pb-[76px] pt-1.5">
+    <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[76px]" : "pb-2"}`}>
       <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
