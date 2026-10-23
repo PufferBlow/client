@@ -1,3 +1,5 @@
+import { useCustomEmoji } from "../../features/catalog/customEmojiContext";
+import type { CatalogItem } from "../../features/catalog/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, AtSign, Eye, EyeOff, File as FileIcon, Music, Paperclip, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
@@ -36,6 +38,8 @@ interface ComposerProps {
   /** People (and `@everyone`, if the viewer may use it) offered when typing `@`. Omit for no suggestions. */
   mentionables?: Mentionable[];
   onSend: (input: { text: string; files: File[] }) => Promise<unknown>;
+  /** Sends a sticker as a message of its own. Without this the picker has no Stickers tab. */
+  onSendSticker?: (item: CatalogItem) => Promise<unknown>;
   /** Called as the user types, so the others can be told (the caller throttles). */
   onTyping?: () => void;
   /** Names of the people typing here, shown under the field. */
@@ -72,6 +76,7 @@ export function Composer({
   onCancelReply,
   mentionables,
   onSend,
+  onSendSticker,
   onTyping,
   typingNames = [],
 }: ComposerProps) {
@@ -84,6 +89,7 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
   const textInput = useRef<HTMLTextAreaElement>(null);
   const [picker, setPicker] = useState<{ x: number; y: number } | null>(null);
+  const customEmoji = useCustomEmoji();
   /** The popover closes itself on any press outside it, including on this button, so remember it was open to make the button a toggle. */
   const pickerWasOpen = useRef(false);
   useAutoGrow(textInput, text);
@@ -205,6 +211,15 @@ export function Composer({
     addFiles(pasted);
   };
 
+  const sendSticker = async (item: CatalogItem) => {
+    setPicker(null);
+    try {
+      await onSendSticker?.(item);
+    } catch {
+      // The sticker did not go: nothing was written in the field to lose, and the person can pick it again.
+    }
+  };
+
   /** Put an emoji where the caret is (or replace the selection), then hand focus back to the field. */
   const insertEmoji = (emoji: string) => {
     setPicker(null);
@@ -266,7 +281,7 @@ export function Composer({
     setSending(true);
     setError(null);
     try {
-      await onSend({ text: replaceShortcodes(text.trim()), files: files.map((f) => (f.spoiler ? asSpoiler(f.file) : f.file)) });
+      await onSend({ text: replaceShortcodes(text.trim(), new Set(customEmoji.byAlias.keys())), files: files.map((f) => (f.spoiler ? asSpoiler(f.file) : f.file)) });
       setText("");
       files.forEach(releasePreview);
       setFiles([]);
@@ -458,7 +473,16 @@ export function Composer({
       <div className="absolute left-2 right-2 top-full h-3.5">
         <TypingIndicator names={typingNames} />
       </div>
-      {picker && <EmojiPickerPopover x={picker.x} y={picker.y} onSelect={insertEmoji} onClose={() => setPicker(null)} />}
+      {picker && (
+        <EmojiPickerPopover
+          x={picker.x}
+          y={picker.y}
+          onSelect={insertEmoji}
+          onCustom={(item) => insertEmoji(`:${item.alias}: `)}
+          onSticker={onSendSticker ? (item) => void sendSticker(item) : undefined}
+          onClose={() => setPicker(null)}
+        />
+      )}
       {dragging &&
         createPortal(
           <div className="pointer-events-none fixed inset-0 z-[80] grid place-items-center bg-background/70 backdrop-blur-[2px]">

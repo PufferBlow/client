@@ -83,13 +83,15 @@ describe("friends: roster, instances and who is active", () => {
     const { user } = render();
     await within(main()).findByText("grace");
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Instance" }), "kiln.social");
+    await user.click(screen.getByRole("combobox", { name: "Instance" }));
+    await user.click(screen.getByRole("option", { name: "kiln.social" }));
 
     expect(within(main()).getByText("linus")).toBeInTheDocument();
     expect(within(main()).queryByText("grace")).not.toBeInTheDocument();
     expect(within(main()).queryByText("pell")).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Instance" }), "localhost:7575");
+    await user.click(screen.getByRole("combobox", { name: "Instance" }));
+    await user.click(screen.getByRole("option", { name: "localhost:7575" }));
     expect(within(main()).getByText("grace")).toBeInTheDocument();
     expect(within(main()).queryByText("linus")).not.toBeInTheDocument();
   });

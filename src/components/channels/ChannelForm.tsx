@@ -1,3 +1,4 @@
+import { Select } from "../ui/Select";
 import { useState, type FormEvent } from "react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -70,19 +71,13 @@ export function ChannelForm({ channel, template, busy, error, onSubmit, onClose 
         {categories.length > 0 && (
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] text-text-secondary">Category</span>
-            <select
+            <Select
+              label="Channel category"
+              className="h-11! w-full text-[14.5px]!"
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              aria-label="Channel category"
-              className="h-11 rounded-md border-0 bg-surface-secondary px-3 text-[14.5px] text-text outline-none focus-visible:shadow-[0_0_0_2px_var(--color-surface-tertiary),0_0_0_4px_var(--color-text)]"
-            >
-              <option value="">No category</option>
-              {categories.map((c) => (
-                <option key={c.category_id} value={c.category_id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={setCategoryId}
+              options={[{ value: "", label: "No category" }, ...categories.map((c) => ({ value: c.category_id, label: c.name }))]}
+            />
           </label>
         )}
 

@@ -71,7 +71,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   );
   const typing = useTypingNotifier({ channelId });
 
-  const { send, retry, discard } = useSendMessage(channelId);
+  const { send, sendSticker, retry, discard } = useSendMessage(channelId);
   const edit = useEditMessage(channelId);
   const remove = useDeleteMessage(channelId);
   const react = useToggleReaction(channelId);
@@ -225,6 +225,10 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
         replyingTo={replyTarget ? { id: replyTarget.id, authorName: replyTarget.authorName } : undefined}
         onCancelReply={cancelReply}
         onSend={handleSend}
+        onSendSticker={async (item) => {
+          await sendSticker(item.sticker_id, replyTarget ? toReplyPreview(replyTarget) : undefined);
+          setReply(null);
+        }}
         onTyping={typing.notify}
         typingNames={typingNames}
       />

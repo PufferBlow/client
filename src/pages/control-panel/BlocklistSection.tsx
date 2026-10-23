@@ -23,7 +23,7 @@ export function BlocklistSection() {
   const [problem, setProblem] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  if (isPending) return <LoadingState message="Loading the blocklist…" />;
+  if (isPending) return <LoadingState message="Loading the blocklist…" shape="table" />;
   if (error || !data) return <ErrorState title="Couldn't load the blocklist" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
 
   const blocked = data.peers.filter((p) => p.status === "blocked");

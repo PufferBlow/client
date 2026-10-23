@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Users } from "lucide-react";
 import { Switch } from "../../components/auth/AuthFields";
 import { Panel } from "../../components/control-panel/Panel";
+import { ExtensionList } from "../../components/settings/ExtensionList";
+import { PictureUploader } from "../../components/settings/PictureUploader";
 import { Group, Swatches } from "../../components/settings/Pickers";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
@@ -12,8 +15,8 @@ import { LoadingState } from "../../components/ui/LoadingState";
 import { SpaceIcon } from "../../components/ui/SpaceIcon";
 import { useServerSettingsAdmin } from "../../features/admin/hooks";
 import type { ServerSettingsChange } from "../../features/admin/api";
-import { useServerInfo } from "../../features/server/hooks";
-import { parseExtensions } from "../../features/admin/extensions";
+import { uploadPicture, type PictureKind } from "../../features/pictures/upload";
+import { serverKeys, useServerInfo } from "../../features/server/hooks";
 import { serverIdentityId, serverPictures } from "../../features/server/look";
 import type { ServerInfo } from "../../features/server/types";
 import { ICON_STYLE_CHOICES, SERVER_BANNER_CHOICES, serverLookOf, type ServerLookChoice } from "../../lib/serverLook";
@@ -149,15 +152,44 @@ function AppearancePanel({ info, draft, onDraft }: { info: ServerInfo; draft: Dr
   const set = (change: ServerLookChoice) => onDraft({ look: { ...draft.look, ...change } });
   const changed = !sameLook(draft.look, saved);
   const nothingChosen = Object.values(draft.look).every((v) => v == null);
+  const queryClient = useQueryClient();
+  // A picture is a file, so it goes up on its own and the server's card follows at once.
+  const sendPicture = (kind: PictureKind) => async (file: File, onProgress: (loaded: number, total: number) => void) => {
+    const url = await uploadPicture("server", kind, file, onProgress);
+    if (url) {
+      const fields = kind === "avatar" ? { avatar_url: url, avatar_kind: "image" } : { banner_url: url, banner_kind: "image" };
+      queryClient.setQueryData<ServerInfo>(serverKeys.info, (old) => (old ? { ...old, ...fields } : old));
+    }
+  };
+  const revertPicture = (kind: PictureKind) => () =>
+    admin.appearance.mutateAsync(kind === "avatar" ? { avatar_kind: "identicon" } : { banner_kind: "default" }).then(() => undefined);
 
   return (
     <Panel title="Look" description="The icon and banner of the server, drawn the same way in the sidebar, the hub and the invitation. Every choice is from a short list.">
       <div className="flex flex-col gap-6">
-        {(picture.avatar || picture.banner) && (
-          <p className="m-0 text-[13px] text-text-tertiary">
-            {picture.avatar && picture.banner ? "Your own icon and banner are shown." : picture.avatar ? "Your own icon is shown." : "Your own banner is shown."} The choices below are used wherever there is no picture.
-          </p>
-        )}
+        <div className="grid gap-6 xl:grid-cols-2">
+          <PictureUploader
+            label="Icon"
+            kind="avatar"
+            current={picture.avatar}
+            custom={picture.avatar !== null}
+            upload={sendPicture("avatar")}
+            revert={revertPicture("avatar")}
+            maxMb={info.max_image_size}
+            hint="It replaces the icon style below in the rail and the sidebar."
+          />
+          <PictureUploader
+            label="Banner"
+            kind="banner"
+            current={picture.banner}
+            custom={picture.banner !== null}
+            upload={sendPicture("banner")}
+            revert={revertPicture("banner")}
+            maxMb={info.max_image_size}
+            hint="It replaces the pattern below behind the server name."
+          />
+        </div>
+        <p className="m-0 text-[13px] text-text-tertiary">Your own pictures can move: an animated GIF or WebP plays as it is. The choices below are used wherever there is no picture.</p>
 
         <Group label="Icon style">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -231,7 +263,7 @@ function AppearancePanel({ info, draft, onDraft }: { info: ServerInfo; draft: Dr
           </Button>
           <FeedbackLine feedback={feedback} />
         </div>
-        <p className="m-0 text-xs text-text-muted">The default is what the server&rsquo;s address gives it, the same on every client. Uploading your own picture is not available in this client yet.</p>
+        <p className="m-0 text-xs text-text-muted">The default is what the server&rsquo;s address gives it, the same on every client.</p>
       </div>
     </Panel>
   );
@@ -297,51 +329,39 @@ function LimitsPanel({ info }: { info: ServerInfo }) {
   );
 }
 
-const FILE_TYPES: ReadonlyArray<{ key: "allowed_image_types" | "allowed_video_types" | "allowed_file_types" | "allowed_sticker_types" | "allowed_gif_types"; label: string }> = [
-  { key: "allowed_image_types", label: "Images" },
-  { key: "allowed_video_types", label: "Videos" },
-  { key: "allowed_file_types", label: "Documents and other files" },
-  { key: "allowed_sticker_types", label: "Stickers" },
-  { key: "allowed_gif_types", label: "GIFs" },
+type FileTypeKey = "allowed_image_types" | "allowed_video_types" | "allowed_file_types" | "allowed_sticker_types" | "allowed_gif_types";
+
+const FILE_TYPES: ReadonlyArray<{ key: FileTypeKey; label: string; hint: string; common: readonly string[] }> = [
+  { key: "allowed_image_types", label: "Images", hint: "Pictures in chat, and the icons and banners people upload.", common: ["png", "jpg", "jpeg", "gif", "webp", "avif"] },
+  { key: "allowed_video_types", label: "Videos", hint: "Clips people attach to a message.", common: ["mp4", "webm", "mov"] },
+  { key: "allowed_file_types", label: "Documents and other files", hint: "Everything else people may attach.", common: ["pdf", "txt", "zip", "docx", "csv"] },
+  { key: "allowed_sticker_types", label: "Stickers", hint: "Stickers and custom emoji. Animated ones need gif or webp.", common: ["png", "gif", "webp"] },
+  { key: "allowed_gif_types", label: "GIFs", hint: "Animated pictures sent from the GIF tab.", common: ["gif", "webp"] },
 ];
+
+const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 function FileTypesPanel({ info }: { info: ServerInfo }) {
   const admin = useServerSettingsAdmin();
   const { run, loading, feedback } = useSave("File types saved.");
-  const initial = (key: (typeof FILE_TYPES)[number]["key"]) => (info[key] ?? []).join(", ");
-  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(FILE_TYPES.map((t) => [t.key, initial(t.key)])));
+  const initial = (key: FileTypeKey): string[] => [...(info[key] ?? [])];
+  const [values, setValues] = useState<Record<FileTypeKey, string[]>>(() => Object.fromEntries(FILE_TYPES.map((t) => [t.key, initial(t.key)])) as Record<FileTypeKey, string[]>);
 
-  const change: Record<string, string[]> = {};
-  let invalid = false;
-  for (const { key } of FILE_TYPES) {
-    const text = values[key] ?? "";
-    if (text === initial(key)) continue;
-    const parsed = parseExtensions(text);
-    if (parsed === null) invalid = true;
-    else change[key] = parsed;
-  }
-  const changed = Object.keys(change).length > 0 && !invalid;
+  const change: Partial<Record<FileTypeKey, string[]>> = {};
+  for (const { key } of FILE_TYPES) if (!sameList(values[key], initial(key))) change[key] = values[key];
+  const changed = Object.keys(change).length > 0;
 
   return (
-    <Panel title="File types" description="Which kinds of file people may upload, as extensions separated by commas.">
+    <Panel title="File types" description="Which kinds of file people may upload. Add a type with Enter or a comma, or take one of the common ones.">
       <form
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-6"
         onSubmit={(e) => {
           e.preventDefault();
           void run(() => admin.update.mutateAsync(change as ServerSettingsChange).then(() => undefined));
         }}
       >
-        {FILE_TYPES.map(({ key, label }) => (
-          <Field key={key} label={label}>
-            <Input
-              aria-label={label}
-              spellCheck={false}
-              placeholder="jpg, png, webp"
-              value={values[key] ?? ""}
-              error={parseExtensions(values[key] ?? "") === null ? "Use letters and digits only, like jpg or mp4." : undefined}
-              onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
-            />
-          </Field>
+        {FILE_TYPES.map(({ key, label, hint, common }) => (
+          <ExtensionList key={key} label={label} hint={hint} suggestions={common} value={values[key]} onChange={(list) => setValues((v) => ({ ...v, [key]: list }))} />
         ))}
         <div className="flex items-center gap-4">
           <Button type="submit" loading={loading} disabled={!changed}>
@@ -385,7 +405,7 @@ function Editor({ info }: { info: ServerInfo }) {
 
 export function SettingsSection() {
   const { data, isPending, error, refetch } = useServerInfo();
-  if (isPending) return <LoadingState message="Loading the settings…" />;
+  if (isPending) return <LoadingState message="Loading the settings…" shape="form" />;
   if (error || !data) return <ErrorState title="Couldn't load the settings" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
   // Keyed by what the server holds, so what it kept (a trimmed name, a refused value) is shown as it is.
   const held = JSON.stringify([

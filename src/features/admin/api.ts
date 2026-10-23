@@ -72,7 +72,8 @@ export const resolveReport = (reportId: string, action: string, reason?: string)
 
 // ---- audit log
 
-export async function listAudit(limit = 500): Promise<AuditEntry[]> {
+/** Instances older than this client cap the window at 200, so ask for no more than that. */
+export async function listAudit(limit = 200): Promise<AuditEntry[]> {
   const { activities } = await authed.body<{ activities: AuditEntry[] }>("POST", `${SYSTEM}/recent-activity`, { limit });
   return activities ?? [];
 }

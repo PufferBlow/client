@@ -1,3 +1,4 @@
+import { Select } from "../ui/Select";
 import { useState, type FormEvent } from "react";
 import type { Message } from "../../features/messages/types";
 import { Button } from "../ui/Button";
@@ -82,17 +83,7 @@ export function ReportMessageDialog({ message, busy, error, onSubmit, onClose }:
         <MessagePreview message={message} />
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] text-text-secondary">Reason</span>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="h-10 rounded-xl border border-border bg-surface-secondary px-3 text-sm text-text outline-none focus:border-primary/60"
-          >
-            {REPORT_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+          <Select label="Reason" className="h-10! w-full text-sm!" value={category} onChange={setCategory} options={REPORT_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))} />
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] text-text-secondary">Details (optional)</span>

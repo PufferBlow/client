@@ -38,20 +38,28 @@ export function shortcodeAt(text: string, at: number): { length: number; emoji: 
   return emoji ? { length: end + 1 - at, emoji } : null;
 }
 
-/** `text` with every `:name:` written out as its emoji. Code (inline and fenced) is left alone. */
-export function replaceShortcodes(text: string): string {
+/**
+ * `text` with every `:name:` written out as its emoji. Code (inline and fenced) is left alone, and so
+ * is any name in `keep` (the instance's own custom emoji, which are typed the same way).
+ */
+export function replaceShortcodes(text: string, keep?: ReadonlySet<string>): string {
   if (!text.includes(":")) return text;
   return text
     .split(/(```[\s\S]*?```|`[^`\n]*`)/)
-    .map((part, index) => (index % 2 === 1 ? part : replaceOutsideCode(part)))
+    .map((part, index) => (index % 2 === 1 ? part : replaceOutsideCode(part, keep)))
     .join("");
 }
 
-function replaceOutsideCode(text: string): string {
+function replaceOutsideCode(text: string, keep?: ReadonlySet<string>): string {
   let out = "";
   let i = 0;
   while (i < text.length) {
     const found = text[i] === ":" ? shortcodeAt(text, i) : null;
+    if (found && keep?.has(text.slice(i + 1, i + found.length - 1).toLowerCase())) {
+      out += text.slice(i, i + found.length);
+      i += found.length;
+      continue;
+    }
     if (found) {
       out += found.emoji;
       i += found.length;

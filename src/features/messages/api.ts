@@ -39,13 +39,14 @@ interface SendMessageResponse {
 /** Sends over HTTP (the route that takes attachments). A retry with the same `nonce` never posts twice. */
 export async function sendMessage(
   channelId: string,
-  input: { text: string; files?: File[]; replyToMessageId?: string; nonce?: string; onUploadProgress?: (loaded: number, total: number) => void },
+  input: { text: string; files?: File[]; stickerIds?: string[]; replyToMessageId?: string; nonce?: string; onUploadProgress?: (loaded: number, total: number) => void },
 ): Promise<Message> {
   const { origin, token } = requireSession();
   const form = new FormData();
   form.set("auth_token", token);
   form.set("message", input.text);
   for (const file of input.files ?? []) form.append("attachments", file);
+  if (input.stickerIds?.length) form.set("sticker_ids", input.stickerIds.join(","));
   if (input.replyToMessageId) form.set("reply_to_message_id", input.replyToMessageId);
   if (input.nonce) form.set("nonce", input.nonce);
 

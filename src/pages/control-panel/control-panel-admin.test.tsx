@@ -237,7 +237,7 @@ describe("settings", () => {
       expect(parseExtensions("jp g!")).toBeNull();
     });
 
-    it("saves a changed list and refuses a bad one", async () => {
+    it("shows each list as chips and saves what was added or removed", async () => {
       const user = userEvent.setup();
       const fetchMock = backend({
         "GET /api/v1/system/server-info": { server_info: { ...serverInfo.server_info, allowed_image_types: ["png", "jpg"] } },
@@ -245,17 +245,31 @@ describe("settings", () => {
       });
       renderPanel("settings");
 
-      const images = await screen.findByLabelText("Images");
-      expect(images).toHaveValue("png, jpg");
-      await user.clear(images);
-      await user.type(images, "png, .WebP");
+      const images = await screen.findByRole("group", { name: "Images" });
+      expect(within(images).getByText(".png")).toBeInTheDocument();
+      expect(within(images).getByText(".jpg")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save file types" })).toBeDisabled();
+
+      await user.click(within(images).getByRole("button", { name: "Remove jpg from Images" }));
+      await user.type(within(images).getByLabelText("Add a type to Images"), "WebP, .gif ");
+      expect(within(images).getByText(".webp")).toBeInTheDocument();
+      expect(within(images).getByText(".gif")).toBeInTheDocument();
+      await user.click(within(images).getByRole("button", { name: "Add avif to Images" }));
+
       await user.click(screen.getByRole("button", { name: "Save file types" }));
       await screen.findByText("File types saved.");
-      expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", allowed_image_types: ["png", "webp"] });
+      expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", allowed_image_types: ["png", "webp", "gif", "avif"] });
+    });
 
-      await user.clear(images);
-      await user.type(images, "p!ng");
-      expect(await screen.findByText("Use letters and digits only, like jpg or mp4.")).toBeInTheDocument();
+    it("refuses something that is not an extension", async () => {
+      const user = userEvent.setup();
+      backend({ "GET /api/v1/system/server-info": { server_info: { ...serverInfo.server_info, allowed_image_types: ["png"] } } });
+      renderPanel("settings");
+
+      const images = await screen.findByRole("group", { name: "Images" });
+      await user.type(within(images).getByLabelText("Add a type to Images"), "p!ng{Enter}");
+      expect(await within(images).findByText("Use letters and digits only, like jpg or mp4.")).toBeInTheDocument();
+      expect(within(images).queryByText(".p!ng")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Save file types" })).toBeDisabled();
     });
   });
@@ -476,17 +490,20 @@ describe("audit log", () => {
     renderPanel("audit");
     await screen.findByText("2 entries");
 
-    await user.selectOptions(screen.getByLabelText("Person"), "mod");
+    await user.click(screen.getByRole("combobox", { name: "Person" }));
+    await user.click(screen.getByRole("option", { name: "mod" }));
     expect(screen.getByText("1 entry")).toBeInTheDocument();
     expect(screen.queryByText("Role Helper created")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    await user.selectOptions(screen.getByLabelText("Action"), "role_created");
+    await user.click(screen.getByRole("combobox", { name: "Action" }));
+    await user.click(screen.getByRole("option", { name: /Role created/i }));
     expect(screen.getByText("1 entry")).toBeInTheDocument();
     expect(screen.queryByText("User grace banned")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    await user.type(screen.getByLabelText("From"), "2030-01-03");
+    await user.click(screen.getByRole("button", { name: "From" }));
+    await user.click(screen.getByRole("gridcell", { name: "January 3, 2030" }));
     expect(screen.getByText("1 entry")).toBeInTheDocument();
     expect(screen.getByText("User grace banned")).toBeInTheDocument();
   });
@@ -496,7 +513,8 @@ describe("audit log", () => {
     backend({ "POST /api/v1/system/recent-activity": audit(entries) });
     renderPanel("audit");
     await screen.findByText("2 entries");
-    await user.type(screen.getByLabelText("To"), "2029-12-31");
+    await user.click(screen.getByRole("button", { name: "To" }));
+    await user.click(screen.getByRole("gridcell", { name: "January 1, 2030" }));
     expect(await screen.findByText("Nothing matches")).toBeInTheDocument();
   });
 });

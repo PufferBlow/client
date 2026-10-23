@@ -1,3 +1,4 @@
+import { Select } from "../../components/ui/Select";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { AlertCircle, AtSign, Check, LayoutGrid, List, MessageCircle, UserMinus, UserPlus, Users, Volume2, X } from "lucide-react";
@@ -369,19 +370,7 @@ export function FriendsView() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {hosts.length > 1 && (
-              <select
-                aria-label="Instance"
-                value={instance}
-                onChange={(e) => setInstance(e.target.value)}
-                className="h-9 rounded-pill border border-border bg-transparent px-3.5 text-[13.5px] text-text-tertiary outline-none focus-visible:shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]"
-              >
-                <option value="">All instances</option>
-                {hosts.map((h) => (
-                  <option key={h} value={h}>
-                    {h}
-                  </option>
-                ))}
-              </select>
+              <Select label="Instance" className="rounded-pill! bg-transparent! px-3.5! text-[13.5px]! text-text-tertiary! shadow-[inset_0_0_0_1px_var(--color-border)]" value={instance} onChange={setInstance} options={[{ value: "", label: "All instances" }, ...hosts.map((h) => ({ value: h, label: h }))]} />
             )}
             <div role="group" aria-label="View" className="flex gap-0.5 rounded-lg bg-background p-1">
               {([["list", List, "List view"], ["roster", LayoutGrid, "Roster view"]] as const).map(([id, Icon, label]) => (

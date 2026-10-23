@@ -72,7 +72,7 @@ export function SettingsPage() {
           </h1>
 
           {isPending ? (
-            <LoadingState message="Loading your profile…" />
+            <LoadingState message="Loading your profile…" shape="form" />
           ) : error ? (
             <ErrorState
               title="Couldn't load your profile"

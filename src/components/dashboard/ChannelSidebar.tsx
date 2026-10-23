@@ -1,3 +1,4 @@
+import { Skeleton } from "../ui/Skeleton";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useServerAppearance } from "../../features/server/look";
 import { NavLink } from "react-router";
@@ -176,9 +177,10 @@ export function ChannelSidebar() {
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pt-1">
         {isPending ? (
-          <div className="flex flex-col gap-2 px-2 pt-4" aria-busy="true">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-6 animate-pulse rounded-sm bg-surface-secondary" />
+          <div role="status" className="flex flex-col gap-2 px-2 pt-4" aria-busy="true">
+            <span className="sr-only">Loading channels…</span>
+            {["w-2/3", "w-1/2", "w-3/4", "w-3/5", "w-1/2"].map((width, i) => (
+              <Skeleton key={i} className={`h-6 ${width}`} />
             ))}
           </div>
         ) : error ? (

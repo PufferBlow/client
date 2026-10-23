@@ -2,15 +2,14 @@ import { useMemo, useState } from "react";
 import { Panel } from "../../components/control-panel/Panel";
 import { tableClasses } from "../../components/control-panel/tableClasses";
 import { Button } from "../../components/ui/Button";
+import { DatePicker } from "../../components/ui/DatePicker";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { LoadingState } from "../../components/ui/LoadingState";
+import { Select } from "../../components/ui/Select";
 import { useAudit } from "../../features/admin/hooks";
 import { actionLabel, type AuditEntry } from "../../features/admin/moderation";
 import { classifyAuthError } from "../../utils/authErrors";
-
-const select =
-  "h-9 min-w-0 rounded-md border-0 bg-surface-secondary px-3 text-[13px] text-text outline-none focus:shadow-[0_0_0_2px_var(--color-background-secondary),0_0_0_4px_var(--color-text)]";
 
 /** The start of a day in local time, from the `YYYY-MM-DD` a date input gives. */
 const startOf = (day: string) => new Date(`${day}T00:00:00`).getTime();
@@ -35,8 +34,11 @@ export function AuditSection() {
   const people = useMemo(() => [...new Map((data ?? []).flatMap((e) => (e.user ? [[e.user.id, e.user.username] as const] : []))).entries()].sort((a, b) => a[1].localeCompare(b[1])), [data]);
   const actions = useMemo(() => [...new Set((data ?? []).map((e) => e.type))].sort(), [data]);
 
-  if (isPending) return <LoadingState message="Loading the audit log…" />;
+  if (isPending) return <LoadingState message="Loading the audit log…" shape="table" />;
   if (error || !data) return <ErrorState title="Couldn't load the audit log" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
+
+  const newest = data.reduce((latest, e) => Math.max(latest, Date.parse(e.timestamp) || 0), 0);
+  const newestDay = newest ? new Date(newest).toLocaleDateString("en-CA") : undefined; // YYYY-MM-DD, in local time
 
   const shown = data
     .filter((e) => (!person || e.user?.id === person) && (!action || e.type === action))
@@ -47,7 +49,7 @@ export function AuditSection() {
   return (
     <Panel
       title={`${shown.length} ${shown.length === 1 ? "entry" : "entries"}`}
-      description="Newest first. The log keeps the most recent 500 entries."
+      description="Newest first. The log keeps the most recent 200 entries."
       grow
       flush
       action={
@@ -68,30 +70,16 @@ export function AuditSection() {
       }
     >
       <div className="flex flex-wrap items-center gap-2 px-5 pb-4">
-        <select aria-label="Person" className={select} value={person} onChange={(e) => setPerson(e.target.value)}>
-          <option value="">Everyone</option>
-          {people.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Action" className={select} value={action} onChange={(e) => setAction(e.target.value)}>
-          <option value="">Any action</option>
-          {actions.map((type) => (
-            <option key={type} value={type}>
-              {actionLabel(type)}
-            </option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 text-[13px] text-text-tertiary">
+        <Select label="Person" className="w-44" value={person} onChange={setPerson} options={[{ value: "", label: "Everyone" }, ...people.map(([id, name]) => ({ value: id, label: name }))]} />
+        <Select label="Action" className="w-52" value={action} onChange={setAction} options={[{ value: "", label: "Any action" }, ...actions.map((type) => ({ value: type, label: actionLabel(type) }))]} />
+        <span className="flex items-center gap-2 text-[13px] text-text-tertiary">
           From
-          <input aria-label="From" type="date" className={select} value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-text-tertiary">
+          <DatePicker label="From" initialMonth={newestDay} value={from} max={to || undefined} onChange={setFrom} />
+        </span>
+        <span className="flex items-center gap-2 text-[13px] text-text-tertiary">
           To
-          <input aria-label="To" type="date" className={select} value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
-        </label>
+          <DatePicker label="To" initialMonth={newestDay} value={to} min={from || undefined} onChange={setTo} />
+        </span>
       </div>
 
       {shown.length === 0 ? (

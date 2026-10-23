@@ -41,7 +41,7 @@ export function BlockedIpsSection() {
         </form>
         <FeedbackLine feedback={add.feedback} />
         {isPending ? (
-          <LoadingState message="Loading blocked addresses…" />
+          <LoadingState message="Loading blocked addresses…" shape="table" />
         ) : error || !data ? (
           <ErrorState title="Couldn't load blocked addresses" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />
         ) : data.length === 0 ? (

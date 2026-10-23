@@ -142,6 +142,15 @@ export function useSendMessage(channelId: string) {
     [post, queryClient, channelId, update, flushReactions],
   );
 
+  /** A sticker is a message of its own: sent over HTTP (the route that resolves it), then shown as it arrives. */
+  const sendSticker = useCallback(
+    async (stickerId: string, replyTo?: ReplyPreview): Promise<void> => {
+      const message = await sendMessage(channelId, { text: "", stickerIds: [stickerId], replyToMessageId: replyTo?.id, nonce: crypto.randomUUID() });
+      update((cache) => upsertMessage(cache, message));
+    },
+    [channelId, update],
+  );
+
   const send = useCallback(
     async ({ text, files = [], replyTo }: SendInput): Promise<void> => {
       const cached = queryClient.getQueryData<MessageCache>(messageKeys.channel(channelId));
@@ -199,7 +208,7 @@ export function useSendMessage(channelId: string) {
     [update],
   );
 
-  return { send, retry, discard };
+  return { send, sendSticker, retry, discard };
 }
 
 /** Edit, delete and reactions only exist as socket commands; without a connection they fail with a plain message. */

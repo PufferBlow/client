@@ -345,7 +345,8 @@ describe("message context menu", () => {
       await user.click(item("Report message"));
 
       const dialog = (await screen.findByText("Report message", { selector: "h2" })).parentElement!.parentElement!;
-      await user.selectOptions(within(dialog).getByLabelText("Reason"), "harassment");
+      await user.click(within(dialog).getByRole("combobox", { name: "Reason" }));
+      await user.click(await screen.findByRole("option", { name: "Harassment" }));
       await user.type(within(dialog).getByLabelText(/details/i), "  rude  ");
       await user.click(within(dialog).getByRole("button", { name: "Send report" }));
 

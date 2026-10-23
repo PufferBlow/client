@@ -101,6 +101,14 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
   // A message that disappears (deleted elsewhere, history refetched) takes its menu and dialog with it.
   if (menu && !menuMessage) setMenu(null);
   if (picker && !pickerMessage) setPicker(null);
+
+  /** Toggles the reaction on the message the picker was opened for, then closes it. */
+  const react = (key: string) => {
+    if (!pickerMessage) return;
+    const present = pickerMessage.reactions.some((r) => r.emoji === key && me !== undefined && r.userIds.includes(me.user_id));
+    handleReaction(pickerMessage.id, key, !present);
+    setPicker(null);
+  };
   if (deleteId && !deleteTarget) setDeleteId(null);
 
   // Stable callbacks let memoised rows skip re-rendering when something else changes.
@@ -154,7 +162,7 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div ref={scrollerRef} onScroll={scroll.onScroll} data-message-list className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2.5">
           {isPending ? (
-            <LoadingState message="Loading messages…" />
+            <LoadingState message="Loading messages…" shape="messages" />
           ) : error ? (
             <ErrorState title="Couldn't load messages" message={classifyAuthError(error, "Try again.").message} onRetry={onRetryLoad} />
           ) : messages.length === 0 ? (
@@ -230,11 +238,10 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
           x={picker.x}
           y={picker.y}
           onClose={() => setPicker(null)}
-          onSelect={(emoji) => {
-            const present = pickerMessage.reactions.some((r) => r.emoji === emoji && me !== undefined && r.userIds.includes(me.user_id));
-            handleReaction(pickerMessage.id, emoji, !present);
-            setPicker(null);
-          }}
+          onSelect={(emoji) => react(emoji)}
+          // A custom emoji or a sticker reacts as `sticker:<id>`, the key the instance keeps for it.
+          onCustom={(item) => react(`sticker:${item.sticker_id}`)}
+          onSticker={(item) => react(`sticker:${item.sticker_id}`)}
         />
       )}
 

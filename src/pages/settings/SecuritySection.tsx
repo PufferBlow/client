@@ -1,3 +1,4 @@
+import { LoadingState } from "../../components/ui/LoadingState";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -94,7 +95,7 @@ function CallKeysCard() {
       description="Each device you call from signs its calls with a key that never leaves it. People you call compare these keys to notice a stranger in between."
     >
       {isPending ? (
-        <p className="pb-meta m-0 text-[13px]">Loading…</p>
+        <LoadingState message="Loading…" />
       ) : isError ? (
         <p className="pb-error m-0">Couldn&apos;t load your keys.</p>
       ) : keys.length === 0 ? (

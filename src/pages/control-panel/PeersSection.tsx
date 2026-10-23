@@ -91,7 +91,7 @@ export function PeersSection() {
     void run(admin.add.mutateAsync({ host, status: "federating" }).then(() => setNewHost("")));
   };
 
-  if (isPending) return <LoadingState message="Loading peers…" />;
+  if (isPending) return <LoadingState message="Loading peers…" shape="table" />;
   if (error || !data) return <ErrorState title="Couldn't load peers" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
 
   return (

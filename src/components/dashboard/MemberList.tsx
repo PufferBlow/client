@@ -1,3 +1,4 @@
+import { SkeletonRow } from "../ui/Skeleton";
 import { useMemo } from "react";
 import { isOnline, PRESENCE } from "../../features/members/presence";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
@@ -75,9 +76,10 @@ export function MemberList() {
   return (
     <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-lg bg-surface px-2.5 py-3">
       {isPending ? (
-        <div className="flex flex-col gap-2 pt-2" aria-busy="true">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-9 animate-pulse rounded-sm bg-surface-secondary" />
+        <div role="status" className="flex flex-col pt-2" aria-busy="true">
+          <span className="sr-only">Loading members…</span>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <SkeletonRow key={i} index={i} avatar={32} />
           ))}
         </div>
       ) : error ? (

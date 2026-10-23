@@ -10,7 +10,8 @@ import {
   type MouseEvent,
 } from "react";
 import { Download, FileText, Forward, Image as ImageIcon, MoreHorizontal, Music, Pencil, Play, Reply, SmilePlus, X } from "lucide-react";
-import { Emoji, EmojiText } from "../ui/Emoji";
+import { CustomEmoji, Emoji, EmojiText } from "../ui/Emoji";
+import { useCustomEmoji } from "../../features/catalog/customEmojiContext";
 import { LinkEmbed } from "../ui/Embed";
 import { Markdown } from "../ui/Markdown";
 import { MediaViewer, type ViewerItem } from "../ui/MediaViewer";
@@ -171,6 +172,10 @@ function AttachmentView({ url, filename, type, size }: Attachment) {
   const name = displayName(filename);
   const spoiler = isSpoilerName(filename);
   const [revealed, setRevealed] = useState(false);
+
+  if (type === "sticker" && href) {
+    return <img src={href} alt={displayName(filename)} draggable={false} className="mt-2 block size-36 max-w-full object-contain" />;
+  }
 
   let body;
   if (fileKind(type) === "audio" && href) {
@@ -418,11 +423,14 @@ function EditForm({ initial, onSubmit, onCancel }: { initial: string; onSubmit: 
 function ReactionChip({ emoji, count, mine, onToggle }: { emoji: string; count: number; mine: boolean; onToggle: (present: boolean) => void }) {
   const [pop, setPop] = useState(0);
   const puff = parsePuff(emoji);
+  const { byId } = useCustomEmoji();
+  // A custom emoji (or a sticker) used to react is stored as `sticker:<id>`.
+  const custom = emoji.startsWith("sticker:") ? byId.get(emoji.slice("sticker:".length)) : undefined;
   return (
     <button
       type="button"
       aria-pressed={mine}
-      aria-label={puff ? `${puff.label} reaction, ${count}` : undefined}
+      aria-label={puff ? `${puff.label} reaction, ${count}` : custom ? `${custom.alias ? `:${custom.alias}:` : custom.display_name} reaction, ${count}` : undefined}
       onClick={() => {
         if (puff && !mine) setPop((n) => n + 1);
         onToggle(!mine);
@@ -433,7 +441,7 @@ function ReactionChip({ emoji, count, mine, onToggle }: { emoji: string; count: 
         mine ? "bg-text text-on-primary" : "bg-surface-secondary text-text-body shadow-[inset_0_0_0_1px_rgba(242,242,242,0.08)] hover:bg-surface-tertiary",
       ].join(" ")}
     >
-      {puff ? <PuffFace reaction={emoji} size={18} pop={pop} /> : <Emoji char={emoji} size={16} />}
+      {puff ? <PuffFace reaction={emoji} size={18} pop={pop} /> : custom ? <CustomEmoji item={custom} size={18} /> : emoji.startsWith("sticker:") ? <span aria-hidden="true">?</span> : <Emoji char={emoji} size={16} />}
       <span className="text-xs">{count}</span>
     </button>
   );

@@ -209,7 +209,7 @@ function Gauge({ name, percent }: { name: string; percent: number }) {
 export function HealthSection() {
   const { data: health, isPending, error, refetch } = useInstanceHealth();
 
-  if (isPending) return <LoadingState message="Checking the instance…" />;
+  if (isPending) return <LoadingState message="Checking the instance…" shape="cards" />;
   if (error) return <ErrorState title="Couldn't load the instance's health" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
 
   const p95s = health.latency.series.map((p) => p.p95);

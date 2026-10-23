@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Flame } from "lucide-react";
 import { ProfileCard } from "../../components/profile/ProfileCard";
+import { PictureUploader } from "../../components/settings/PictureUploader";
 import { Chip, Group, Swatches } from "../../components/settings/Pickers";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "../../components/ui/Button";
 import { PRESENCE } from "../../features/members/presence";
+import { uploadPicture, type PictureKind } from "../../features/pictures/upload";
 import { updateAbout, updateAppearance, updateProfileText, updateStatus } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
 import {
@@ -26,6 +28,7 @@ import {
 } from "../../features/users/look";
 import type { PresenceStatus, UserProfile } from "../../features/users/types";
 import { bannerCss, EXPRESSIONS, fishUrl } from "../../lib/identity";
+import { resolveAssetUrl } from "../../services/authed";
 
 const ABOUT_MAX = 190;
 
@@ -91,6 +94,23 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
     await Promise.all([queryClient.invalidateQueries({ queryKey: userKeys.profile }), queryClient.invalidateQueries({ queryKey: userKeys.list })]);
   };
 
+  // A picture goes up the moment it is chosen (it is a file, not a setting), and everything that shows this person follows.
+  const sendPicture = (kind: PictureKind) => async (file: File, onProgress: (loaded: number, total: number) => void) => {
+    const url = await uploadPicture("profile", kind, file, onProgress);
+    // The reply has the new address, so it is shown from here; refetching now could bring back a copy the instance has cached.
+    const fields = kind === "avatar" ? { avatar_url: url, avatar_kind: "image" as const } : { banner_url: url, banner_kind: "image" as const };
+    if (url) {
+      queryClient.setQueryData<UserProfile>(userKeys.profile, (old) => (old ? { ...old, ...fields } : old));
+      queryClient.setQueryData<UserProfile[]>(userKeys.list, (old) => old?.map((u) => (u.user_id === profile.user_id ? { ...u, ...fields } : u)));
+    }
+  };
+  const revertPicture = (kind: PictureKind) => async () => {
+    await updateAppearance(kind === "avatar" ? { avatarKind: "identicon" } : { bannerKind: "default" });
+    const back = kind === "avatar" ? { avatar_kind: "identicon" as const } : { banner_kind: "default" as const };
+    queryClient.setQueryData<UserProfile>(userKeys.profile, (old) => (old ? { ...old, ...back } : old));
+    queryClient.setQueryData<UserProfile[]>(userKeys.list, (old) => old?.map((u) => (u.user_id === profile.user_id ? { ...u, ...back } : u)));
+  };
+
   const reset = () => {
     setDraft({ ...DEFAULT_SETTINGS, sections: { ...DEFAULT_SETTINGS.sections } });
     setPronouns("");
@@ -141,6 +161,16 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
             </span>
           </div>
         </Group>
+
+        <PictureUploader
+          label="Avatar"
+          kind="avatar"
+          current={resolveAssetUrl(profile.avatar_url)}
+          custom={profile.avatar_kind === "image"}
+          upload={sendPicture("avatar")}
+          revert={revertPicture("avatar")}
+          hint="It shows beside everything you say."
+        />
 
         {profile.avatar_kind !== "image" && (
           <Group label="Avatar">
@@ -203,6 +233,16 @@ export function CustomizeProfile({ profile }: { profile: UserProfile }) {
             ))}
           </div>
         </Group>
+
+        <PictureUploader
+          label="Banner"
+          kind="banner"
+          current={resolveAssetUrl(profile.banner_url)}
+          custom={profile.banner_kind === "image"}
+          upload={sendPicture("banner")}
+          revert={revertPicture("banner")}
+          hint="It fills the top of your card."
+        />
 
         {profile.banner_kind !== "image" && (
           <Group label="Banner">

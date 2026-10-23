@@ -8,6 +8,7 @@ import {
   Key,
   LayoutDashboard,
   Network,
+  Smile,
   ShieldBan,
   Settings2,
   Users,
@@ -35,6 +36,7 @@ export const SECTIONS = [
   },
   { id: "members", label: "Members", icon: Users, description: "Everyone with an account on this server." },
   { id: "channels", label: "Channels", icon: Hash, description: "Every text, voice and mixed channel on this server." },
+  { id: "emoji", label: "Emoji & stickers", icon: Smile, description: "Custom emoji and stickers people can use on this server." },
   {
     id: "roles",
     label: "Roles",
@@ -80,7 +82,7 @@ export type SectionId = (typeof SECTIONS)[number]["id"];
 /** How the navigation groups the sections, in order. */
 export const GROUPS: ReadonlyArray<{ name: string; ids: readonly SectionId[] }> = [
   { name: "Instance", ids: ["overview", "health", "settings"] },
-  { name: "Community", ids: ["members", "channels", "roles"] },
+  { name: "Community", ids: ["members", "channels", "roles", "emoji"] },
   { name: "Federation", ids: ["peers", "relays", "blocklist"] },
   { name: "Safety", ids: ["reports", "blocked-ips", "audit"] },
 ];

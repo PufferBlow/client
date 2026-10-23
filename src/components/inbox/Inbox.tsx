@@ -1,3 +1,4 @@
+import { LoadingState } from "../ui/LoadingState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Bell, BellOff, Check, CheckCheck, Hash, Inbox as InboxIcon } from "lucide-react";
@@ -175,7 +176,7 @@ function UnreadsList({ onNavigate }: { onNavigate: () => void }) {
   const markRead = useMarkChannelRead();
   const mute = useMuteChannel();
 
-  if (isPending) return <p className="m-0 px-3 py-8 text-center text-sm text-text-muted">Loading…</p>;
+  if (isPending) return <LoadingState message="Loading…" className="px-3 py-3" />;
 
   const rows = (channels ?? [])
     .map((channel) => ({ channel, count: unread?.[channel.channel_id] ?? 0 }))
@@ -230,7 +231,7 @@ function MentionsList({ onNavigate }: { onNavigate: () => void }) {
   const { data: channels } = useChannels();
   const markRead = useMarkNotificationRead();
 
-  if (isPending) return <p className="m-0 px-3 py-8 text-center text-sm text-text-muted">Loading…</p>;
+  if (isPending) return <LoadingState message="Loading…" className="px-3 py-3" />;
   if (error) return <Empty icon={<BellOff size={28} />}>Couldn't load your mentions.</Empty>;
 
   const mentions = (data ?? []).filter((n) => PING_TYPES.has(n.type));

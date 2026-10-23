@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import { jsonResponse, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
+import { stubXhrOverFetch } from "../../test/xhrOverFetch";
 import { SettingsPage } from "./SettingsPage";
 
 const me = {
@@ -20,7 +21,10 @@ const me = {
   profile_settings: null,
 };
 
-beforeEach(() => signIn("tok"));
+beforeEach(() => {
+  signIn("tok");
+  stubXhrOverFetch();
+});
 
 const backend = (extra: Record<string, unknown> = {}, profile: Record<string, unknown> = {}) =>
   routeFetch({ "POST /api/v1/users/profile": { user_data: { ...me, ...profile } }, ...extra });
@@ -152,5 +156,36 @@ describe("customising your profile", () => {
     const choices = await editor();
     expect(choices.queryByRole("group", { name: "Face" })).not.toBeInTheDocument();
     expect(choices.queryByRole("group", { name: "Banner" })).not.toBeInTheDocument();
+  });
+
+  describe("uploading pictures", () => {
+    it("shows an uploaded avatar at once, even while the instance still answers with the old profile", async () => {
+      // The profile route keeps returning the old profile, as an instance does while its cache is stale.
+      const fetchMock = backend({ "POST /api/v1/users/profile/avatar": { status_code: 201, avatar_url: "/storage/new-avatar" } });
+      const { user } = renderProfile();
+      const choices = await editor();
+
+      await user.upload(choices.getByLabelText("Avatar file"), new File([new Uint8Array(512)], "me.gif", { type: "image/gif" }));
+
+      expect(await choices.findByRole("img", { name: "Your avatar" })).toHaveAttribute("src", expect.stringContaining("/storage/new-avatar"));
+      expect(fetchMock.mock.calls.some(([input, init]) => init?.method === "POST" && new URL(String(input)).pathname === "/api/v1/users/profile/avatar")).toBe(true);
+      expect(choices.getByRole("button", { name: "Use the default" })).toBeInTheDocument();
+    });
+
+    it("shows an uploaded banner at once and can go back to the default", async () => {
+      const fetchMock = backend({
+        "POST /api/v1/users/profile/banner": { status_code: 201, banner_url: "/storage/new-banner" },
+        "PUT /api/v1/users/profile/appearance": { status_code: 200 },
+      });
+      const { user } = renderProfile();
+      const choices = await editor();
+
+      await user.upload(choices.getByLabelText("Banner file"), new File([new Uint8Array(512)], "wide.png", { type: "image/png" }));
+      expect(await choices.findByRole("img", { name: "Your banner" })).toBeInTheDocument();
+
+      await user.click(choices.getByRole("button", { name: "Use the default" }));
+      await waitFor(() => expect(bodiesOf(fetchMock, "PUT", "/api/v1/users/profile/appearance")).toEqual([expect.objectContaining({ banner_kind: "default" })]));
+      await waitFor(() => expect(choices.queryByRole("img", { name: "Your banner" })).not.toBeInTheDocument());
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { LoadingState } from "./LoadingState";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Download, Forward, Hash, Loader2, Send, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -347,7 +348,7 @@ function ForwardDialog({ messageId, onClose, onForwarded }: { messageId: string;
 
         <h3 className="m-0 px-2.5 pb-1 text-[11.5px] font-bold uppercase tracking-[0.08em] text-text-muted">Direct messages</h3>
         {isPending ? (
-          <p className="m-0 py-3 text-sm text-text-secondary">Loading conversations…</p>
+          <LoadingState message="Loading conversations…" />
         ) : error ? (
           <p role="alert" className="m-0 py-3 text-sm text-error">
             Couldn't load your conversations.

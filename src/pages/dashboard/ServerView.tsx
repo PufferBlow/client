@@ -51,7 +51,7 @@ export function ServerView() {
 
   let main: ReactNode;
   if (isPending) {
-    main = <MainPane><LoadingState message="Loading channels…" /></MainPane>;
+    main = <MainPane><LoadingState message="Loading channels…" shape="messages" /></MainPane>;
   } else if (error) {
     main = (
       <MainPane>

@@ -1,3 +1,4 @@
+import { CustomEmojiProvider } from "../features/catalog/CustomEmojiProvider";
 import { Outlet, useLocation } from "react-router";
 import { CallOverlay } from "../components/dashboard/CallOverlay";
 import { ServerRail } from "../components/dashboard/ServerRail";
@@ -35,6 +36,7 @@ export function DashboardLayout() {
     <RealtimeProvider>
       <VoiceProvider>
         <CallProvider>
+          <CustomEmojiProvider>
           <ProfileCardProvider>
             <div className="relative flex h-full min-w-0 flex-1">
               <div
@@ -57,6 +59,7 @@ export function DashboardLayout() {
               <CallOverlay />
             </div>
           </ProfileCardProvider>
+          </CustomEmojiProvider>
         </CallProvider>
       </VoiceProvider>
     </RealtimeProvider>

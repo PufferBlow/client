@@ -32,7 +32,7 @@ export function OverviewSection() {
   const channels = useChannels();
   const users = useUsers();
 
-  if (server.isPending) return <LoadingState message="Loading server details…" />;
+  if (server.isPending) return <LoadingState message="Loading server details…" shape="cards" />;
   if (server.error) {
     return (
       <ErrorState

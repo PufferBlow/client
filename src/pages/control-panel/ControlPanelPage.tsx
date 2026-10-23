@@ -13,6 +13,7 @@ import { isServerOwner } from "../../features/users/roles";
 import { classifyAuthError } from "../../utils/authErrors";
 import { ChannelsSection } from "./ChannelsSection";
 import { BlocklistSection } from "./BlocklistSection";
+import { EmojiSection } from "./EmojiSection";
 import { HealthSection } from "./HealthSection";
 import { PeersSection } from "./PeersSection";
 import { ComingSoon } from "./ListSections";
@@ -44,6 +45,8 @@ function SectionBody({ id }: { id: SectionId }) {
       return <SettingsSection />;
     case "roles":
       return <RolesSection />;
+    case "emoji":
+      return <EmojiSection />;
     case "reports":
       return <ReportsSection />;
     case "blocked-ips":
@@ -72,7 +75,7 @@ export function ControlPanelPage() {
   if (isPending) {
     return (
       <main className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface">
-        <LoadingState message="Checking permissions…" />
+        <LoadingState message="Checking permissions…" shape="cards" />
       </main>
     );
   }

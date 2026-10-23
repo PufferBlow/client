@@ -1,3 +1,4 @@
+import { LoadingState } from "../ui/LoadingState";
 import { useEffect, useRef, useState } from "react";
 import { Pin, PinOff } from "lucide-react";
 import { usePins } from "../../features/channels/pins";
@@ -69,7 +70,7 @@ export function PinnedMessages({
           <h2 className="pb-section-label m-0 px-4 pb-2 pt-3.5 text-text-tertiary">Pinned messages{count > 0 ? ` — ${count}` : ""}</h2>
           <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
             {isPending && wanted ? (
-              <p className="pb-meta m-0 px-3 py-4 text-center text-[13px]">Loading…</p>
+              <LoadingState message="Loading…" className="px-2 py-2" />
             ) : unsupported ? (
               <p className="pb-meta m-0 px-3 py-4 text-center text-[13px]">This instance does not support pins yet.</p>
             ) : error ? (
