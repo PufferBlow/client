@@ -100,14 +100,21 @@ export const unblockIp = (ip: string) => authed.body<unknown>("POST", "/api/v1/b
 export interface ServerSettingsChange {
   server_name?: string;
   server_description?: string;
+  welcome_message?: string;
   is_private?: boolean;
   max_message_length?: number;
   max_image_size?: number;
   max_video_size?: number;
   max_sticker_size?: number;
   max_gif_size?: number;
+  /** File extensions without the dot, lower case. */
+  allowed_image_types?: string[];
+  allowed_video_types?: string[];
+  allowed_file_types?: string[];
+  allowed_sticker_types?: string[];
+  allowed_gif_types?: string[];
 }
 export const updateServerSettings = (change: ServerSettingsChange) => authed.body<unknown>("PUT", `${SYSTEM}/server-info`, change as Record<string, unknown>);
 
-export const updateServerAppearance = (change: { avatar_kind?: "identicon"; banner_kind?: "default" | "solid"; accent_color?: string; shuffle_avatar_seed?: boolean }) =>
+export const updateServerAppearance = (change: { avatar_kind?: "identicon"; banner_kind?: "default" | "solid"; accent_color?: string; shuffle_avatar_seed?: boolean; look?: Record<string, string | null> }) =>
   authed.body<unknown>("PUT", `${SYSTEM}/server-appearance`, change as Record<string, unknown>);

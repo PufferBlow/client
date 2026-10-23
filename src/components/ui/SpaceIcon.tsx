@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { identity, patternUrl, TONE_HEX } from "../../lib/identity";
+import { identity, patternUrl, TONE_HEX, type Tone } from "../../lib/identity";
 import { spaceIconStyle, spaceInitials, type SpaceIconStyle } from "../../lib/spaceIcon";
 
 const LAYOUT: Record<SpaceIconStyle, { place: string; pad: string; fs: number; deco: string | null; letters: 1 | 2 | 0 }> = {
@@ -15,6 +15,8 @@ export interface SpaceIconProps {
   name: string;
   /** A picture, if the space has one; it replaces the default icon. */
   src?: string | null;
+  /** What its owner chose for the default icon; whatever is left out comes from the id. */
+  look?: { iconStyle?: SpaceIconStyle | null; tone?: Tone | null };
   size?: number;
   /** Corner radius; spaces are rounded squares (30% of the size) unless it is told otherwise. */
   radius?: number | string;
@@ -23,12 +25,12 @@ export interface SpaceIconProps {
 }
 
 /** A space: a rounded square in its identity colour, with one of four default styles, or its own picture. */
-export function SpaceIcon({ id, name, src, size = 48, radius, className, style }: SpaceIconProps) {
+export function SpaceIcon({ id, name, src, look: chosen, size = 48, radius, className, style }: SpaceIconProps) {
   const box: CSSProperties = { width: size, height: size, borderRadius: radius ?? "30%", ...style };
   if (src) {
     return <img src={src} alt="" draggable={false} className={`shrink-0 object-cover ${className ?? ""}`} style={box} />;
   }
-  const look = LAYOUT[spaceIconStyle(id)];
+  const look = LAYOUT[chosen?.iconStyle ?? spaceIconStyle(id)];
   const text = spaceInitials(name);
   const label = look.letters === 2 ? text : look.letters === 1 ? text.slice(0, 1) : "";
   const deco = look.deco ? `url(${patternUrl(look.deco as "crop" | "ring" | "school")}) center/100% ${look.deco === "crop" ? "100%" : "auto"} no-repeat` : "none";
@@ -38,7 +40,7 @@ export function SpaceIcon({ id, name, src, size = 48, radius, className, style }
       className={`relative grid shrink-0 overflow-hidden font-display leading-none text-on-primary ${className ?? ""}`}
       style={{
         ...box,
-        background: TONE_HEX[identity(id).tone],
+        background: TONE_HEX[chosen?.tone ?? identity(id).tone],
         containerType: "size",
         placeItems: look.place,
         padding: look.pad,

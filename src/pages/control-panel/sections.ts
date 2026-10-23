@@ -8,6 +8,7 @@ import {
   Key,
   LayoutDashboard,
   Network,
+  ShieldBan,
   Settings2,
   Users,
   type LucideIcon,
@@ -55,10 +56,16 @@ export const SECTIONS = [
     description: "Instances that are not welcome here.",
   },
   {
+    id: "blocked-ips",
+    label: "Blocked IPs",
+    icon: ShieldBan,
+    description: "Addresses that are turned away before they reach the server.",
+  },
+  {
     id: "reports",
     label: "Reports",
     icon: Flag,
-    description: "Reports from members, and the addresses that are blocked.",
+    description: "What members have reported, and what was done about it.",
   },
   {
     id: "audit",
@@ -75,7 +82,7 @@ export const GROUPS: ReadonlyArray<{ name: string; ids: readonly SectionId[] }> 
   { name: "Instance", ids: ["overview", "health", "settings"] },
   { name: "Community", ids: ["members", "channels", "roles"] },
   { name: "Federation", ids: ["peers", "relays", "blocklist"] },
-  { name: "Safety", ids: ["reports", "audit"] },
+  { name: "Safety", ids: ["reports", "blocked-ips", "audit"] },
 ];
 
 export const DEFAULT_SECTION: SectionId = "overview";

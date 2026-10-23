@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Flame } from "lucide-react";
 import { ProfileCard } from "../../components/profile/ProfileCard";
+import { Chip, Group, Swatches } from "../../components/settings/Pickers";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "../../components/ui/Button";
@@ -24,7 +25,7 @@ import {
   type SectionName,
 } from "../../features/users/look";
 import type { PresenceStatus, UserProfile } from "../../features/users/types";
-import { bannerCss, EXPRESSIONS, fishUrl, TONES, TONE_HEX } from "../../lib/identity";
+import { bannerCss, EXPRESSIONS, fishUrl } from "../../lib/identity";
 
 const ABOUT_MAX = 190;
 
@@ -40,49 +41,6 @@ const SECTIONS: ReadonlyArray<{ id: SectionName; label: string }> = [
   { id: "badges", label: "Badges" },
   { id: "accounts", label: "Home instance" },
 ];
-
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-col gap-2.5">
-      <span className="pb-section-label text-text-tertiary">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={`pb-label-button inline-flex h-8 items-center gap-1.5 rounded-sm border-0 px-3 text-[11.5px] transition-colors duration-(--motion-fast) ${
-        selected ? "bg-text text-on-primary" : "bg-surface-tertiary text-text-body hover:bg-active"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Swatches({ label, value, onChange }: { label: string; value: string | null; onChange: (tone: (typeof TONES)[number]) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2.5">
-      {TONES.map((tone) => (
-        <button
-          key={tone}
-          type="button"
-          aria-label={`${label}: ${tone}`}
-          aria-pressed={value === tone}
-          title={tone}
-          onClick={() => onChange(tone)}
-          className="size-[30px] cursor-pointer rounded-full border-0 transition-shadow aria-pressed:shadow-[0_0_0_3px_var(--color-surface-secondary),0_0_0_5px_var(--color-text)]"
-          style={{ background: TONE_HEX[tone] }}
-        />
-      ))}
-    </div>
-  );
-}
 
 const inputClass =
   "h-10 min-w-0 rounded-md border-0 bg-surface-tertiary px-3 text-[14.5px] text-text outline-none placeholder:text-text-muted focus:shadow-[0_0_0_2px_var(--color-surface-secondary),0_0_0_4px_var(--color-text)]";

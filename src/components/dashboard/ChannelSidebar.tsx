@@ -1,4 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from "react";
+import { useServerAppearance } from "../../features/server/look";
 import { NavLink } from "react-router";
 import { BellOff, ChevronDown, Globe, Hash, Lock, MoreHorizontal } from "lucide-react";
 import { groupChannels, useCategories } from "../../features/channels/categories";
@@ -7,7 +8,6 @@ import { hasText, type Channel } from "../../features/channels/types";
 import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
 import { useServerInfo } from "../../features/server/hooks";
 import { useToast } from "../../hooks/useToast";
-import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useChannelMenu, useServerMenu, type MenuPoint } from "./useSidebarMenus";
@@ -95,15 +95,13 @@ function TextChannelLink({ channel, unread, pings, muted, onMenu }: { channel: C
 
 function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
   const { data: server } = useServerInfo();
-  const banner = resolveAssetUrl(server?.banner_url);
+  const { banner, look } = useServerAppearance();
 
   return (
     <div
       className="relative h-[118px] shrink-0 bg-cover bg-center"
       style={{
-        background: banner
-          ? `linear-gradient(transparent 30%, rgba(10, 10, 10,.85)), url("${banner}") center / cover`
-          : "radial-gradient(120% 100% at 20% 10%, #3a3a3a 0%, #1a1a1a 75%)",
+        background: `linear-gradient(transparent 30%, rgba(10, 10, 10,.85)), ${banner ? `url("${banner}") center / cover` : look.banner("85% 30%")}`,
       }}
     >
       <button

@@ -7,6 +7,7 @@ import { useConversations } from "../../features/dms/hooks";
 import { useDmUnread } from "../../features/dms/unread";
 import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
 import { useServerInfo } from "../../features/server/hooks";
+import { useServerAppearance } from "../../features/server/look";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { useToast } from "../../hooks/useToast";
@@ -14,10 +15,8 @@ import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { SpaceIcon } from "../ui/SpaceIcon";
 import { listAccounts, switchAccount } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
-import { getStoredInstance } from "../../services/instance";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePublicHealth } from "../../features/health/hooks";
-import { resolveAssetUrl } from "../../services/authed";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useServerMenu } from "./useSidebarMenus";
@@ -50,7 +49,6 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const queryClient = useQueryClient();
   const activeId = getActiveAccountId();
   const others = useMemo(() => listAccounts().filter((a) => a.id !== activeId), [activeId]);
-  const here = getStoredInstance();
   const onHub = useMatch({ path: "/dashboard", end: true }) !== null;
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
@@ -58,6 +56,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const onServer = useMatch("/dashboard/channels/*") !== null;
   const onControlPanel = useMatch("/control-panel/*") !== null;
   const { data: server } = useServerInfo();
+  const appearance = useServerAppearance();
   // Hidden while the instance is well; a dot when it says it is having trouble.
   const troubled = usePublicHealth().data?.status === "degraded";
   const { data: unread } = useUnreadCounts();
@@ -115,9 +114,10 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           className={`${tileBase} ${onServer ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
         >
           <SpaceIcon
-            id={here?.raw ?? server?.server_id ?? serverName}
+            id={appearance.id}
             name={serverName}
-            src={server?.avatar_url ? resolveAssetUrl(server.avatar_url) : null}
+            src={appearance.avatar}
+            look={{ iconStyle: appearance.look.iconStyle, tone: appearance.look.tone }}
             size={48}
             radius="inherit"
             className="absolute inset-0"

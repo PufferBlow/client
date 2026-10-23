@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { parseExtensions } from "../../features/admin/extensions";
 import { actionLabel, durationLabel, moderationStates, type AuditEntry } from "../../features/admin/moderation";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
@@ -156,13 +157,107 @@ describe("settings", () => {
     expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", max_message_length: 4000 });
   });
 
-  it("shuffles the server icon", async () => {
+  it("saves the welcome message with the rest of General", async () => {
     const user = userEvent.setup();
-    const fetchMock = backend({ "PUT /api/v1/system/server-appearance": { status_code: 200 } });
+    const fetchMock = backend({ "PUT /api/v1/system/server-info": { status_code: 200 } });
     renderPanel("settings");
-    await user.click(await screen.findByRole("button", { name: /Shuffle icon and banner/ }));
-    await screen.findByText("New icon and banner picked.");
-    expect(bodyOf(fetchMock, "PUT /api/v1/system/server-appearance")).toMatchObject({ avatar_kind: "identicon", shuffle_avatar_seed: true });
+
+    await user.type(await screen.findByLabelText("Welcome message"), "Mind the spines");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved.");
+    expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", welcome_message: "Mind the spines" });
+  });
+
+  it("shows the server card as the choices are made", async () => {
+    const user = userEvent.setup();
+    backend();
+    renderPanel("settings");
+
+    const card = await screen.findByRole("article", { name: "Preview of the server" });
+    await user.clear(screen.getByLabelText("Server name"));
+    await user.type(screen.getByLabelText("Server name"), "Reef");
+    await user.type(screen.getByLabelText("Welcome message"), "Come in");
+    expect(within(card).getByRole("heading", { name: "Reef" })).toBeInTheDocument();
+    expect(within(card).getByText("Come in")).toBeInTheDocument();
+  });
+
+  describe("look", () => {
+    it("saves what was chosen from the short lists and nothing else", async () => {
+      const user = userEvent.setup();
+      const fetchMock = backend({ "PUT /api/v1/system/server-appearance": { status_code: 200 } });
+      renderPanel("settings");
+
+      expect(await screen.findByRole("button", { name: "Save look" })).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: "Icon style: Bubble" }));
+      await user.click(screen.getByRole("button", { name: "Colour: violet" }));
+      await user.click(screen.getByRole("button", { name: "Banner: Halftone" }));
+      expect(screen.getByRole("button", { name: "Icon style: Bubble" })).toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByRole("button", { name: "Save look" }));
+
+      await screen.findByText("Look saved.");
+      expect(bodyOf(fetchMock, "PUT /api/v1/system/server-appearance")).toEqual({
+        auth_token: "tok",
+        look: { icon_style: "bubble", tone: "violet", tone2: null, banner_pattern: "halftone" },
+      });
+    });
+
+    it("offers a second colour only for the two-colour banner", async () => {
+      const user = userEvent.setup();
+      backend();
+      renderPanel("settings");
+
+      await screen.findByRole("button", { name: "Save look" });
+      expect(screen.queryByRole("button", { name: "Second colour: sky" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Banner: Two colours" }));
+      expect(screen.getByRole("button", { name: "Second colour: sky" })).toBeInTheDocument();
+    });
+
+    it("goes back to the default the address gives", async () => {
+      const user = userEvent.setup();
+      const fetchMock = backend({
+        "GET /api/v1/system/server-info": { server_info: { ...serverInfo.server_info, look: { icon_style: "school", tone: "sage", tone2: null, banner_pattern: null } } },
+        "PUT /api/v1/system/server-appearance": { status_code: 200 },
+      });
+      renderPanel("settings");
+
+      await user.click(await screen.findByRole("button", { name: "Use the default" }));
+      await user.click(screen.getByRole("button", { name: "Save look" }));
+      await screen.findByText("Look saved.");
+      expect(bodyOf(fetchMock, "PUT /api/v1/system/server-appearance")).toEqual({
+        auth_token: "tok",
+        look: { icon_style: null, tone: null, tone2: null, banner_pattern: null },
+      });
+    });
+  });
+
+  describe("file types", () => {
+    it("parses extensions the way people type them", () => {
+      expect(parseExtensions("jpg, .PNG webp;gif,jpg")).toEqual(["jpg", "png", "webp", "gif"]);
+      expect(parseExtensions("")).toEqual([]);
+      expect(parseExtensions("jp g!")).toBeNull();
+    });
+
+    it("saves a changed list and refuses a bad one", async () => {
+      const user = userEvent.setup();
+      const fetchMock = backend({
+        "GET /api/v1/system/server-info": { server_info: { ...serverInfo.server_info, allowed_image_types: ["png", "jpg"] } },
+        "PUT /api/v1/system/server-info": { status_code: 200 },
+      });
+      renderPanel("settings");
+
+      const images = await screen.findByLabelText("Images");
+      expect(images).toHaveValue("png, jpg");
+      await user.clear(images);
+      await user.type(images, "png, .WebP");
+      await user.click(screen.getByRole("button", { name: "Save file types" }));
+      await screen.findByText("File types saved.");
+      expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", allowed_image_types: ["png", "webp"] });
+
+      await user.clear(images);
+      await user.type(images, "p!ng");
+      expect(await screen.findByText("Use letters and digits only, like jpg or mp4.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save file types" })).toBeDisabled();
+    });
   });
 });
 
@@ -282,7 +377,6 @@ describe("reports", () => {
   };
   const reportRoutes = (extra: Record<string, unknown> = {}) => ({
     "POST /api/v1/moderation/reports": { reports: [report, { ...report, id: "r2", status: "resolved", category: "Spam" }] },
-    "POST /api/v1/blocked-ips/list": { blocked_ips: [{ ip: "203.0.113.7", reason: "scraping", blocked_at: "2030-01-01T00:00:00Z", attempts: 4 }] },
     ...extra,
   });
 
@@ -321,14 +415,36 @@ describe("reports", () => {
     expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument();
   });
 
-  it("blocks and unblocks IP addresses", async () => {
-    const user = userEvent.setup();
-    const fetchMock = backend(reportRoutes({ "POST /api/v1/blocked-ips/block": jsonResponse({}, 201), "POST /api/v1/blocked-ips/unblock": { status_code: 200 } }));
+  it("keeps blocked IP addresses on their own page", async () => {
+    backend(reportRoutes());
     renderPanel("reports");
+    await screen.findByText("Harassment");
+    expect(screen.queryByLabelText("IP address")).not.toBeInTheDocument();
+  });
+});
 
+describe("blocked IP addresses", () => {
+  const blockedRoutes = (extra: Record<string, unknown> = {}) => ({
+    "POST /api/v1/blocked-ips/list": { blocked_ips: [{ ip: "203.0.113.7", reason: "scraping", blocked_at: "2030-01-01T00:00:00Z", attempts: 4 }] },
+    ...extra,
+  });
+
+  it("is a page of its own in the navigation", async () => {
+    backend(blockedRoutes());
+    renderPanel("blocked-ips");
+    const nav = await screen.findByRole("navigation", { name: "Control panel sections" });
+    expect(within(nav).getByRole("link", { name: /Blocked IPs/ })).toBeInTheDocument();
     expect(await screen.findByText("203.0.113.7")).toBeInTheDocument();
+  });
+
+  it("blocks and unblocks addresses", async () => {
+    const user = userEvent.setup();
+    const fetchMock = backend(blockedRoutes({ "POST /api/v1/blocked-ips/block": jsonResponse({}, 201), "POST /api/v1/blocked-ips/unblock": { status_code: 200 } }));
+    renderPanel("blocked-ips");
+
+    await screen.findByText("203.0.113.7");
     await user.type(screen.getByLabelText("IP address"), "198.51.100.2");
-    await user.type(screen.getAllByLabelText("Reason")[0]!, "abuse");
+    await user.type(screen.getByLabelText("Reason"), "abuse");
     await user.click(screen.getByRole("button", { name: "Block" }));
     await waitFor(() => expect(bodyOf(fetchMock, "POST /api/v1/blocked-ips/block")).toEqual({ auth_token: "tok", ip: "198.51.100.2", reason: "abuse" }));
 

@@ -3,11 +3,11 @@ import { Link, Navigate, useParams } from "react-router";
 import { ArrowLeft, Lock } from "lucide-react";
 import { SpaceIcon } from "../../components/ui/SpaceIcon";
 import { RoleTag } from "../../components/ui/RoleTag";
-import { resolveAssetUrl } from "../../services/authed";
 import { getStoredInstance } from "../../services/instance";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { useServerInfo } from "../../features/server/hooks";
+import { useServerAppearance } from "../../features/server/look";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { classifyAuthError } from "../../utils/authErrors";
@@ -17,6 +17,7 @@ import { HealthSection } from "./HealthSection";
 import { PeersSection } from "./PeersSection";
 import { ComingSoon } from "./ListSections";
 import { AuditSection } from "./AuditSection";
+import { BlockedIpsSection } from "./BlockedIpsSection";
 import { MembersSection } from "./MembersSection";
 import { ReportsSection } from "./ReportsSection";
 import { RolesSection } from "./RolesSection";
@@ -45,6 +46,8 @@ function SectionBody({ id }: { id: SectionId }) {
       return <RolesSection />;
     case "reports":
       return <ReportsSection />;
+    case "blocked-ips":
+      return <BlockedIpsSection />;
     case "audit":
       return <AuditSection />;
     default: {
@@ -59,6 +62,7 @@ export function ControlPanelPage() {
   const { section } = useParams();
   const { data: me, isPending, error, refetch } = useMyProfile();
   const { data: server } = useServerInfo();
+  const appearance = useServerAppearance();
 
   useEffect(() => {
     // Admin screens aren't somewhere to resume on the next launch.
@@ -92,7 +96,7 @@ export function ControlPanelPage() {
     <>
       <aside className="flex w-[244px] shrink-0 flex-col overflow-hidden rounded-lg bg-background-secondary max-md:hidden">
         <div className="flex items-center gap-3 px-3.5 pb-1.5 pt-4">
-          <SpaceIcon id={host || name} name={name} src={server?.avatar_url ? resolveAssetUrl(server.avatar_url) : null} size={40} />
+          <SpaceIcon id={appearance.id} name={name} src={appearance.avatar} look={{ iconStyle: appearance.look.iconStyle, tone: appearance.look.tone }} size={40} />
           <div className="flex min-w-0 flex-col gap-1.5">
             <span className="pb-panel-header truncate leading-tight">{server?.server_name ?? " "}</span>
             <span className="pb-meta flex items-center gap-1.5 text-xs">

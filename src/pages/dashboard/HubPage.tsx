@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useServerAppearance } from "../../features/server/look";
 import { Link, useNavigate } from "react-router";
 import { Calendar, Flame, Gamepad2, Globe, Grid2x2, Hash, Search, Users, Volume2, type LucideIcon } from "lucide-react";
 import { Avatar } from "../../components/dashboard/Avatar";
@@ -10,11 +11,10 @@ import { useChannelPings, useMutedChannels } from "../../features/notifications/
 import { useServerInfo } from "../../features/server/hooks";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { useVoiceParticipants } from "../../features/voice/hooks";
-import { bannerCss, defaultBannerCss, identity } from "../../lib/identity";
+import { defaultBannerCss } from "../../lib/identity";
 import { listAccounts } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { getStoredInstance } from "../../services/instance";
-import { resolveAssetUrl } from "../../services/authed";
 import type { Channel } from "../../features/channels/types";
 
 const count = (n: number | null | undefined) => (n === null || n === undefined ? null : n.toLocaleString());
@@ -92,7 +92,8 @@ export function HubPage() {
   const online = count(server?.online_members);
   const members = count(server?.members_count);
   const host = here?.raw ?? "";
-  const banner = server?.banner_url ? `url("${resolveAssetUrl(server.banner_url)}") center / cover` : host ? defaultBannerCss(host, "80% 60%") : bannerCss(identity("pufferblow").hex, "ripple");
+  const appearance = useServerAppearance();
+  const banner = appearance.banner ? `url("${appearance.banner}") center / cover` : appearance.look.banner("80% 60%");
 
   const totalUnread = Object.entries(unread).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
@@ -214,7 +215,7 @@ export function HubPage() {
           <span className="pb-meta text-[13px]">{accounts.length + (activeId ? 0 : 1) > 1 ? `${accounts.length} instances` : "1 instance"}</span>
         </div>
         <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-6">
-          {[...(here ? [{ id: here.raw, name: server?.server_name ?? here.raw, host: here.raw, banner: server?.banner_url ? `url("${resolveAssetUrl(server.banner_url)}") center / cover` : defaultBannerCss(here.raw), picture: server?.avatar_url ? resolveAssetUrl(server.avatar_url) : null, unread: totalPings || totalUnread, here: true }] : []), ...accounts.filter((a) => a.id !== activeId).map((a) => ({ id: a.instance.raw, name: a.instance.raw, host: a.instance.raw, banner: defaultBannerCss(a.instance.raw), picture: null as string | null, unread: 0, here: false }))].map((space) => (
+          {[...(here ? [{ id: here.raw, name: server?.server_name ?? here.raw, host: here.raw, banner, picture: appearance.avatar, look: { iconStyle: appearance.look.iconStyle, tone: appearance.look.tone }, unread: totalPings || totalUnread, here: true }] : []), ...accounts.filter((a) => a.id !== activeId).map((a) => ({ id: a.instance.raw, name: a.instance.raw, host: a.instance.raw, banner: defaultBannerCss(a.instance.raw), picture: null as string | null, look: undefined, unread: 0, here: false }))].map((space) => (
             <li key={space.id}>
               <button
                 type="button"
@@ -224,7 +225,7 @@ export function HubPage() {
                 style={{ background: space.banner }}
               >
                 <span className="absolute left-1/2 top-[36%] -translate-x-1/2 -translate-y-1/2 shadow-[0_0_0_4px_rgba(10,10,10,0.35)]" style={{ borderRadius: 20 }}>
-                  <SpaceIcon id={space.id} name={space.name} src={space.picture} size={64} radius={20} />
+                  <SpaceIcon id={space.id} name={space.name} src={space.picture} look={space.look} size={64} radius={20} />
                 </span>
                 {space.unread > 0 && (
                   <span className="absolute right-2.5 top-2.5 grid h-[22px] min-w-6 place-items-center rounded-[11px] bg-error px-[7px] text-[11px] font-bold leading-none text-white">{space.unread > 99 ? "99+" : space.unread}</span>
