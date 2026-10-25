@@ -1,6 +1,6 @@
 # TODO
 
-Bugs and known limits for `client-new`. Items marked **backend** need a change in `pufferblow/`.
+Bugs and known limits for `client`. Items marked **backend** need a change in `pufferblow/`.
 
 ## Needs verification first
 
@@ -32,7 +32,7 @@ Bugs and known limits for `client-new`. Items marked **backend** need a change i
 - [x] **backend — tokens in URLs.** The server accepts `Authorization: Bearer <token>` on HTTP and
   websocket upgrades, and `Sec-WebSocket-Protocol: pufferblow.v1, bearer.<token>` for browsers
   (`core/header_auth.py`; the token is copied into the `auth_token` parameter on a copy of the request
-  scope, so the access log never sees it). client-new sends the header for query-token routes and the
+  scope, so the access log never sees it). client sends the header for query-token routes and the
   subprotocol for the socket; pypufferblow's `ProtocolClient` and websocket use the subprotocol. An
   instance from before this change answers that `auth_token` is missing and gets the URL form.
 - [ ] **Tokens in URLs, what is left.** The server still accepts `?auth_token=`, so a client can still
@@ -120,8 +120,8 @@ Open:
 
 ## Command/event protocol
 
-Wired end to end: backend (`pufferblow`), `client-new` and `pypufferblow`. The spec is
-`pufferblow/docs/protocol/v1.md`; the shared fixtures are copied into `client-new`
+Wired end to end: backend (`pufferblow`), `client` and `pypufferblow`. The spec is
+`pufferblow/docs/protocol/v1.md`; the shared fixtures are copied into `client`
 (`src/features/realtime/__fixtures__/`) and `pypufferblow` (`tests/fixtures/protocol_v1/`), and each
 repo's tests parse every one. What is left:
 
@@ -190,7 +190,7 @@ repo's tests parse every one. What is left:
   and bots default to the protocol. HTTP stays for sending with files, history, search and read markers.
   Direct messages still use HTTP for edit, delete and reactions (no DM commands yet).
 
-### Frontend (`client-new/src/features/realtime/`)
+### Frontend (`client/src/features/realtime/`)
 - [x] Protocol client (`protocol.ts`, `commands.ts`, `session.ts`), shared fixtures, events with de-duplication
   and per-channel sequence tracking (`tracker.ts`), resync on a gap, a restart or a reconnect, sending with a
   nonce and an optimistic pending row, Retry that reuses the nonce, edit/delete/reactions as commands, pending
@@ -205,7 +205,7 @@ repo's tests parse every one. What is left:
   2026-10-18 against the live instance with two `ProtocolClient`s (16 of 16 checks): send, edit, react,
   delete, permission refusals, a dropped connection with automatic reconnect and resync of missed messages,
   live events resuming, and a send whose ack was lost then retried with the same nonce (one message, not
-  two). Still to do by hand: the same flow in two client-new windows, to see pending and failed rows, Retry
+  two). Still to do by hand: the same flow in two client windows, to see pending and failed rows, Retry
   and the resync in the UI.
 
 ### Docs and examples
@@ -219,5 +219,5 @@ repo's tests parse every one. What is left:
   instance yet.
 - [x] **Observability counters** are documented, one row per counter, in the architecture page and linked from the
   `instance-health` entry of the API reference.
-- [ ] **client-new does not use the upload commands yet.** It still sends files over HTTP (with a pending row and Retry);
+- [ ] **client does not use the upload commands yet.** It still sends files over HTTP (with a pending row and Retry);
   moving it to `upload.begin` / `upload.chunk` would give a progress bar per chunk and one transport for everything.

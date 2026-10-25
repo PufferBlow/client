@@ -22,7 +22,7 @@ npm run e2e:voice -- dm-relay            # one scenario
 - Node, Go (to build `media-sfu`), and Python with Pufferblow's dependencies importable (`E2E_PYTHON`,
   default `python`; for a Poetry setup use `E2E_PYTHON="poetry run python"` is not supported, point it at the
   virtualenv's interpreter).
-- The repositories side by side: `client-new/`, `pufferblow/` and `media-sfu/` under one folder.
+- The repositories side by side: `client/`, `pufferblow/` and `media-sfu/` under one folder.
 - A Chromium (`npx playwright-core install chromium`, or `E2E_CHROMIUM=/path/to/chrome`).
 
 Everything runs in the OS temp folder (`pufferblow-voice-e2e-*`): a fresh sqlite database, its own
