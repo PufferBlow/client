@@ -4,6 +4,8 @@ export interface Attachment {
   /** MIME type (or "sticker"). */
   type: string;
   size?: number;
+  /** What the file shows (alt text), when the sender wrote one. */
+  description?: string;
 }
 
 /** What a reply shows of the message it answers. */

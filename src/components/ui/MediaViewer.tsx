@@ -20,6 +20,8 @@ export interface ViewerItem {
   filename: string;
   type: string;
   kind: "image" | "video";
+  /** What it shows, when the sender wrote it (read out in place of the file name). */
+  description?: string;
 }
 
 interface MediaViewerProps {
@@ -196,7 +198,8 @@ export function MediaViewer({ messageId, items, index, onIndexChange, onClose, a
           <img
             key={item.href}
             src={item.href}
-            alt={name}
+            alt={item.description || name}
+            title={item.description}
             draggable={false}
             onDoubleClick={() => changeZoom(zoom === MIN_ZOOM ? 2 : MIN_ZOOM)}
             onPointerDown={startDrag}
@@ -207,7 +210,7 @@ export function MediaViewer({ messageId, items, index, onIndexChange, onClose, a
             className="max-h-full max-w-full select-none object-contain transition-transform duration-100"
           />
         ) : (
-          <video key={item.href} src={item.href} controls autoPlay aria-label={name} className="max-h-full max-w-full rounded-lg bg-black" />
+          <video key={item.href} src={item.href} controls autoPlay aria-label={item.description || name} title={item.description} className="max-h-full max-w-full rounded-lg bg-black" />
         )}
 
         {items.length > 1 && (

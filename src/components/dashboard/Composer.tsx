@@ -2,12 +2,13 @@ import { useCustomEmoji } from "../../features/catalog/customEmojiContext";
 import type { CatalogItem } from "../../features/catalog/api";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, AtSign, Eye, EyeOff, File as FileIcon, Music, Paperclip, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, AtSign, Eye, EyeOff, File as FileIcon, Music, Paperclip, Pencil, Reply, Send, Smile, Trash2, Upload, X } from "lucide-react";
 import { EmojiPickerPopover } from "../ui/EmojiPickerPopover";
 import { classifyAuthError } from "../../utils/authErrors";
 import { useAutoGrow } from "../../hooks/useAutoGrow";
 import { applyEdit, fits, handleFormatShortcut } from "../../lib/textEditing";
-import { asSpoiler, fileKind, formatBytes } from "../../lib/files";
+import { SPOILER_PREFIX, descriptionOf, displayName, fileKind, formatBytes, renamed, withDescription } from "../../lib/files";
+import { AttachmentEditor, type AttachmentDetails } from "./AttachmentEditor";
 import { findMentionQuery, insertMention, matchMentionables, type Mentionable } from "../../lib/mentions";
 import {
   completeTypedShortcode,
@@ -54,13 +55,21 @@ interface PendingFile {
   id: number;
   file: File;
   spoiler: boolean;
+  /** The name it is sent under (without the spoiler marker) and what it shows, both editable before sending. */
+  name: string;
+  description: string;
   previewUrl: string | null;
+}
+
+/** The file as it will be sent: renamed, marked as a spoiler and described as chosen. */
+function toSend(pending: PendingFile): File {
+  return withDescription(renamed(pending.file, (pending.spoiler ? SPOILER_PREFIX : "") + pending.name), pending.description);
 }
 
 function toPending(file: File, id: number): PendingFile {
   const kind = fileKind(file.type);
   const canPreview = (kind === "image" || kind === "video") && typeof URL.createObjectURL === "function";
-  return { id, file, spoiler: false, previewUrl: canPreview ? URL.createObjectURL(file) : null };
+  return { id, file, spoiler: false, name: displayName(file.name), description: descriptionOf(file), previewUrl: canPreview ? URL.createObjectURL(file) : null };
 }
 
 const releasePreview = (pending: PendingFile) => {
@@ -148,6 +157,8 @@ export function Composer({
       if (gone) releasePreview(gone);
       return prev.filter((f) => f.id !== id);
     });
+
+  const editFile = (id: number, details: AttachmentDetails) => setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...details } : f)));
 
   const toggleSpoiler = (id: number) => setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, spoiler: !f.spoiler } : f)));
 
@@ -281,7 +292,7 @@ export function Composer({
     setSending(true);
     setError(null);
     try {
-      await onSend({ text: replaceShortcodes(text.trim(), new Set(customEmoji.byAlias.keys())), files: files.map((f) => (f.spoiler ? asSpoiler(f.file) : f.file)) });
+      await onSend({ text: replaceShortcodes(text.trim(), new Set(customEmoji.byAlias.keys())), files: files.map(toSend) });
       setText("");
       files.forEach(releasePreview);
       setFiles([]);
@@ -377,6 +388,7 @@ export function Composer({
                   pending={pending}
                   onRemove={() => removeFile(pending.id)}
                   onToggleSpoiler={() => toggleSpoiler(pending.id)}
+                  onEdit={(details) => editFile(pending.id, details)}
                 />
               ))}
             </ul>
@@ -501,8 +513,20 @@ export function Composer({
 }
 
 /** One file waiting to be sent: a preview (or icon), its name and size, and spoiler/remove actions. */
-function AttachmentPreview({ pending, onRemove, onToggleSpoiler }: { pending: PendingFile; onRemove: () => void; onToggleSpoiler: () => void }) {
-  const { file, spoiler, previewUrl } = pending;
+function AttachmentPreview({
+  pending,
+  onRemove,
+  onToggleSpoiler,
+  onEdit,
+}: {
+  pending: PendingFile;
+  onRemove: () => void;
+  onToggleSpoiler: () => void;
+  onEdit: (details: AttachmentDetails) => void;
+}) {
+  const { file, spoiler, previewUrl, name, description } = pending;
+  const editButton = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
   const kind = fileKind(file.type);
   const hide = spoiler ? "scale-110 blur-xl" : "";
   const action = "grid h-7 w-7 place-items-center text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text";
@@ -523,14 +547,25 @@ function AttachmentPreview({ pending, onRemove, onToggleSpoiler }: { pending: Pe
           <span className="absolute rounded-full bg-black/75 px-2.5 py-0.5 text-[10.5px] font-bold tracking-[0.12em] text-white">SPOILER</span>
         )}
       </div>
-      <p className="m-0 mt-1.5 truncate text-[12.5px] text-text-secondary" title={file.name}>
-        {file.name}
+      <p className="m-0 mt-1.5 truncate text-[12.5px] text-text-secondary" title={name}>
+        {name}
       </p>
       <p className="m-0 text-[11px] text-text-muted">{formatBytes(file.size)}</p>
       <div className="absolute -right-2 -top-2 flex overflow-hidden rounded-lg border border-border-secondary bg-surface-secondary shadow-popover">
         <button
+          ref={editButton}
           type="button"
-          aria-label={spoiler ? `Unmark ${file.name} as spoiler` : `Mark ${file.name} as spoiler`}
+          aria-label={`Edit ${name}`}
+          aria-expanded={editing}
+          title="Edit name and description"
+          onClick={() => setEditing((open) => !open)}
+          className={`${action} ${description ? "text-primary" : ""}`}
+        >
+          <Pencil size={14} />
+        </button>
+        <button
+          type="button"
+          aria-label={spoiler ? `Unmark ${name} as spoiler` : `Mark ${name} as spoiler`}
           aria-pressed={spoiler}
           title={spoiler ? "Remove spoiler" : "Mark as spoiler"}
           onClick={onToggleSpoiler}
@@ -538,10 +573,11 @@ function AttachmentPreview({ pending, onRemove, onToggleSpoiler }: { pending: Pe
         >
           {spoiler ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
-        <button type="button" aria-label={`Remove ${file.name}`} title="Remove" onClick={onRemove} className={`${action} hover:text-error`}>
+        <button type="button" aria-label={`Remove ${name}`} title="Remove" onClick={onRemove} className={`${action} hover:text-error`}>
           <Trash2 size={14} />
         </button>
       </div>
+      {editing && <AttachmentEditor anchor={editButton} originalName={displayName(file.name)} value={{ name, description }} onSave={onEdit} onClose={() => setEditing(false)} />}
     </li>
   );
 }

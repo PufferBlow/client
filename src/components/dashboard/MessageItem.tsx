@@ -167,14 +167,14 @@ function FileRow({ href, name, size, kind }: { href: string | undefined; name: s
   );
 }
 
-function AttachmentView({ url, filename, type, size }: Attachment) {
+function AttachmentView({ url, filename, type, size, description }: Attachment) {
   const href = resolveAssetUrl(url);
   const name = displayName(filename);
   const spoiler = isSpoilerName(filename);
   const [revealed, setRevealed] = useState(false);
 
   if (type === "sticker" && href) {
-    return <img src={href} alt={displayName(filename)} draggable={false} className="mt-2 block size-36 max-w-full object-contain" />;
+    return <img src={href} alt={description || displayName(filename)} draggable={false} className="mt-2 block size-36 max-w-full object-contain" />;
   }
 
   let body;
@@ -189,6 +189,14 @@ function AttachmentView({ url, filename, type, size }: Attachment) {
     body = (
       <div className="inline-flex max-w-full rounded-lg bg-surface-secondary px-3 py-2">
         <FileRow href={href} name={name} size={size} kind="file" />
+      </div>
+    );
+  }
+  if (description) {
+    body = (
+      <div className="flex max-w-full flex-col gap-1">
+        {body}
+        <p className="m-0 max-w-[min(100%,400px)] text-[12.5px] text-text-muted [overflow-wrap:anywhere]">{description}</p>
       </div>
     );
   }
@@ -223,10 +231,10 @@ function MediaTile({ item, single, rowSize, onOpen }: { item: ViewerItem; single
   const fill = single ? "block max-h-80 max-w-full" : "block h-full w-full object-cover";
   const media =
     item.kind === "image" ? (
-      <img src={item.href} alt={name} loading="lazy" draggable={false} className={fill} />
+      <img src={item.href} alt={item.description || name} title={item.description} loading="lazy" draggable={false} className={fill} />
     ) : (
       <>
-        <video src={item.href} preload="metadata" muted aria-label={name} className={`${fill} bg-black`} />
+        <video src={item.href} preload="metadata" muted aria-label={item.description || name} title={item.description} className={`${fill} bg-black`} />
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-black/60 text-white">
             <Play size={20} fill="currentColor" />
@@ -265,7 +273,7 @@ function MediaGallery({ message }: { message: Message }) {
   const items: ViewerItem[] = message.attachments.flatMap((a) => {
     const href = resolveAssetUrl(a.url);
     const kind = fileKind(a.type);
-    return href && (kind === "image" || kind === "video") ? [{ href, filename: a.filename, type: a.type, kind }] : [];
+    return href && (kind === "image" || kind === "video") ? [{ href, filename: a.filename, type: a.type, kind, ...(a.description ? { description: a.description } : {}) }] : [];
   });
   const [only] = items;
   if (!only) return null;

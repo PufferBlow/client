@@ -1,3 +1,4 @@
+import { descriptionOf } from "../../lib/files";
 import type { Attachment, Reaction } from "./types";
 
 /**
@@ -24,6 +25,7 @@ export function holdFiles(localId: string, files: File[]): Attachment[] {
     filename: file.name,
     type: file.type || "application/octet-stream",
     size: file.size,
+    ...(descriptionOf(file) ? { description: descriptionOf(file) } : {}),
   }));
   pendingFiles.set(localId, { files, previews });
   return previews;

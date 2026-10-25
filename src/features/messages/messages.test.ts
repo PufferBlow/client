@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bearerOf, calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
+import { withDescription } from "../../lib/files";
 import { loadMessages, PAGE_SIZE, sendMessage } from "./api";
 import { flattenMessages, patchMessage, removeMessage, setReactions, upsertMessage, type MessageCache } from "./cache";
 import { isWireMessage, normalizeMessage, normalizeReactions, type WireMessage } from "./normalize";
@@ -222,6 +223,20 @@ describe("sendMessage", () => {
     expect(form.get("message")).toBe("hello");
     expect((form.getAll("attachments")[0] as File).name).toBe("pic.png");
     expect(sent).toMatchObject({ id: "new", text: "hello", channelId: "c1" });
+  });
+
+  it("sends each file's description as a list in the same order, and nothing when there are none", async () => {
+    signIn("tok");
+    const fetchMock = mockFetch(jsonResponse({ message_data: wire("new") }));
+    const described = withDescription(new File(["x"], "a.png", { type: "image/png" }), "  A chart ");
+    const plain = new File(["y"], "b.png", { type: "image/png" });
+
+    await sendMessage("c1", { text: "", files: [described, plain] });
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1]!.body as FormData).get("attachment_descriptions")))).toEqual(["A chart", ""]);
+
+    const second = mockFetch(jsonResponse({ message_data: wire("new2") }));
+    await sendMessage("c1", { text: "", files: [plain] });
+    expect((second.mock.calls[0]![1]!.body as FormData).has("attachment_descriptions")).toBe(false);
   });
 
   it("works without attachments", async () => {

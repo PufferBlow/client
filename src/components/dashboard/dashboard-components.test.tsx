@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Message } from "../../features/messages/types";
 import { ApiError } from "../../services/api";
@@ -7,6 +7,7 @@ import { signIn } from "../../test/helpers";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { Avatar, CountBadge } from "./Avatar";
 import { Composer } from "./Composer";
+import { descriptionOf } from "../../lib/files";
 import { MentionDirectoryContext } from "../../lib/mentions";
 import { MessageItem } from "./MessageItem";
 
@@ -88,6 +89,49 @@ describe("Composer", () => {
 
     const sent = (onSend.mock.calls[0]?.[0] as { files: File[] }).files;
     expect(sent.map((f) => [f.name, f.type])).toEqual([["SPOILER_plot.png", "image/png"]]);
+  });
+
+  it("renames a file and describes it from the edit button, then sends both", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const { container } = render(<Composer channelName="general" onSend={onSend} />);
+
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(["x"], "plot.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: "Edit plot.png" }));
+    const panel = within(screen.getByRole("dialog", { name: "Edit attachment" }));
+    const name = panel.getByLabelText("File name");
+    expect(name).toHaveValue("plot.png");
+    await user.clear(name);
+    await user.type(name, "growth.png");
+    await user.type(panel.getByLabelText("Description"), "Signups doubling in March");
+    expect(panel.getByText("25/1000")).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("dialog", { name: "Edit attachment" })).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled(); // saving the form must not send the message around it
+    expect(screen.getByText("growth.png")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Mark growth.png as spoiler" }));
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    const [file] = (onSend.mock.calls[0]?.[0] as { files: File[] }).files;
+    expect(file!.name).toBe("SPOILER_growth.png");
+    expect(descriptionOf(file!)).toBe("Signups doubling in March");
+  });
+
+  it("keeps the old name when the edited name is emptied, and Cancel changes nothing", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Composer channelName="general" onSend={vi.fn()} />);
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(["x"], "plot.png", { type: "image/png" }));
+
+    await user.click(screen.getByRole("button", { name: "Edit plot.png" }));
+    await user.clear(screen.getByLabelText("File name"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("plot.png")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit plot.png" }));
+    await user.type(screen.getByLabelText("File name"), "-x");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("plot.png")).toBeInTheDocument();
   });
 
   it("attaches pasted files instead of pasting them as text", async () => {
@@ -202,6 +246,16 @@ describe("MessageItem", () => {
     render(<MessageItem message={message()} myUserId="me" {...handlers()} />);
     expect(screen.getByText("grace")).toBeInTheDocument();
     expect(screen.getByText("hello there")).toBeInTheDocument();
+  });
+
+  it("uses an attachment's description as its alt text, and captions a file with it", () => {
+    const attachments = [
+      { url: "https://cdn.example/a.png", filename: "chart.png", type: "image/png", description: "Signups doubling in March" },
+      { url: "https://cdn.example/r.pdf", filename: "report.pdf", type: "application/pdf", size: 2048, description: "The Q1 report" },
+    ];
+    render(<MessageItem message={message({ text: "", attachments })} myUserId="me" {...handlers()} />);
+    expect(screen.getByRole("img", { name: "Signups doubling in March" })).toHaveAttribute("title", "Signups doubling in March");
+    expect(screen.getByText("The Q1 report")).toBeInTheDocument();
   });
 
   it("blurs a spoiler attachment until it is revealed", async () => {

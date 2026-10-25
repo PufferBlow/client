@@ -1,3 +1,4 @@
+import { descriptionOf } from "../../lib/files";
 import { api } from "../../services/api";
 import { authed, requireSession } from "../../services/authed";
 import { normalizeMessage, type WireMessage } from "./normalize";
@@ -46,6 +47,8 @@ export async function sendMessage(
   form.set("auth_token", token);
   form.set("message", input.text);
   for (const file of input.files ?? []) form.append("attachments", file);
+  const described = (input.files ?? []).map(descriptionOf);
+  if (described.some(Boolean)) form.set("attachment_descriptions", JSON.stringify(described));
   if (input.stickerIds?.length) form.set("sticker_ids", input.stickerIds.join(","));
   if (input.replyToMessageId) form.set("reply_to_message_id", input.replyToMessageId);
   if (input.nonce) form.set("nonce", input.nonce);

@@ -17,7 +17,33 @@ export const displayName = (name: string) => (isSpoilerName(name) ? name.slice(S
 /** The same file, renamed so it is shown as a spoiler. */
 export function asSpoiler(file: File): File {
   if (isSpoilerName(file.name)) return file;
-  return new File([file], SPOILER_PREFIX + file.name, { type: file.type, lastModified: file.lastModified });
+  return renamed(file, SPOILER_PREFIX + file.name);
+}
+
+/** The longest description the server keeps. */
+export const MAX_DESCRIPTION = 1000;
+
+const descriptions = new WeakMap<File, string>();
+
+/**
+ * The same file with a description (alt text) that travels with it to the send call, so the message
+ * pipeline does not need a second list kept in step with its files.
+ */
+export function withDescription(file: File, description: string): File {
+  const text = description.trim().slice(0, MAX_DESCRIPTION);
+  if (text) descriptions.set(file, text);
+  else descriptions.delete(file);
+  return file;
+}
+
+export const descriptionOf = (file: File): string => descriptions.get(file) ?? "";
+
+/** The same bytes under another name (a file picked from disk has a name it cannot change itself). */
+export function renamed(file: File, name: string): File {
+  if (name === file.name) return file;
+  const copy = new File([file], name, { type: file.type, lastModified: file.lastModified });
+  const text = descriptions.get(file);
+  return text ? withDescription(copy, text) : copy;
 }
 
 export type FileKind = "image" | "video" | "audio" | "file";
