@@ -4,7 +4,7 @@ import { useAuthArt } from "../../layouts/authLayoutContext";
 import { useHandleInstance } from "../../features/instance/useHandleInstance";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowRight, AtSign, KeyRound } from "lucide-react";
-import { Button } from "../../components/ui/Button";
+import { Button } from "@pufferblow/spines";
 import { AuthField, FoundBadge, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { login } from "../../services/auth";
 import { classifyAuthError } from "../../utils/authErrors";

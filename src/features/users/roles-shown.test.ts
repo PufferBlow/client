@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { identity } from "../../lib/identity";
-import type { RoleBadgeData } from "../../lib/roleBadges";
+import { identity, type RoleBadgeData } from "@pufferblow/spines";
 import { rolesOf, shownBadge } from "./roles";
 
 const community = (glyph: string): RoleBadgeData => ({ tier: "community", tone: "violet", glyph });

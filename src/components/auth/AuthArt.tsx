@@ -1,9 +1,8 @@
 import { Flame } from "lucide-react";
 import { previewAssetUrl } from "../../features/instance/preview";
 import type { ServerInfo } from "../../features/server/types";
-import { bannerCss, defaultBannerCss, fishUrl, identity } from "../../lib/identity";
+import { bannerCss, BrandLockup, defaultBannerCss, fishUrl, identity } from "@pufferblow/spines";
 import type { InstanceConfig } from "../../services/types";
-import { BrandLockup } from "../ui/PufferblowBrand";
 
 const count = (n: number | null | undefined) => (n === null || n === undefined ? null : n.toLocaleString());
 

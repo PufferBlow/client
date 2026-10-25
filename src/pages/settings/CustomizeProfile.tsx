@@ -6,28 +6,12 @@ import { PictureUploader } from "../../components/settings/PictureUploader";
 import { Chip, Group, Swatches } from "../../components/settings/Pickers";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
-import { Button } from "../../components/ui/Button";
+import { BANNER_CHOICES, bannerCss, Button, CARD_THEMES, DEFAULT_SETTINGS, EXPRESSIONS, fishUrl, FRAMES, LIMITS, lookOf, MOTIONS, NAME_FONTS, type ProfileSettings, randomSettings, type SectionName, settingsOf, settingsPatch } from "@pufferblow/spines";
 import { PRESENCE } from "../../features/members/presence";
 import { uploadPicture, type PictureKind } from "../../features/pictures/upload";
 import { updateAbout, updateAppearance, updateProfileText, updateStatus } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
-import {
-  BANNER_CHOICES,
-  CARD_THEMES,
-  DEFAULT_SETTINGS,
-  FRAMES,
-  LIMITS,
-  MOTIONS,
-  NAME_FONTS,
-  lookOf,
-  randomSettings,
-  settingsOf,
-  settingsPatch,
-  type ProfileSettings,
-  type SectionName,
-} from "../../features/users/look";
 import type { PresenceStatus, UserProfile } from "../../features/users/types";
-import { bannerCss, EXPRESSIONS, fishUrl } from "../../lib/identity";
 import { resolveAssetUrl } from "../../services/authed";
 
 const ABOUT_MAX = 190;

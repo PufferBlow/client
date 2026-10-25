@@ -1,8 +1,6 @@
 import { Select } from "../ui/Select";
 import { useState, type FormEvent } from "react";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { Modal } from "../ui/Modal";
+import { Button, Input, Modal } from "@pufferblow/spines";
 import type { NewChannel } from "../../features/channels/api";
 import { useCategories } from "../../features/channels/categories";
 import { TOPIC_MAX } from "../../features/channels/types";

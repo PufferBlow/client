@@ -1,11 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
-import { Button } from "../../components/ui/Button";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { Input } from "../../components/ui/Input";
-import { LoadingState } from "../../components/ui/LoadingState";
-import { SpaceIcon } from "../../components/ui/SpaceIcon";
+import { Button, defaultBannerCss, EmptyState, ErrorState, Input, LoadingState, SpaceIcon } from "@pufferblow/spines";
 import {
   FEDERATION_MODES,
   PEER_STATUSES,
@@ -17,7 +12,6 @@ import {
   usePeers,
 } from "../../features/federation/peers";
 import { ago } from "../../features/health/format";
-import { defaultBannerCss } from "../../lib/identity";
 import { classifyAuthError } from "../../utils/authErrors";
 
 const STATUS_LABEL: Record<PeerStatus, string> = { federating: "Federating", pending: "Pending", limited: "Limited", blocked: "Blocked" };

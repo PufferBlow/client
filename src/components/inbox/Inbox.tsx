@@ -1,4 +1,4 @@
-import { LoadingState } from "../ui/LoadingState";
+import { LoadingState } from "@pufferblow/spines";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Bell, BellOff, Check, CheckCheck, ChevronDown, ChevronRight, Hash, Inbox as InboxIcon, Paperclip } from "lucide-react";

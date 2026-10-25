@@ -1,9 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Panel } from "../../components/control-panel/Panel";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { HostPill } from "../../components/ui/HostPill";
-import { LoadingState } from "../../components/ui/LoadingState";
+import { EmptyState, ErrorState, HostPill, LoadingState } from "@pufferblow/spines";
 import { useInstanceHealth } from "../../features/health/hooks";
 import {
   ago,

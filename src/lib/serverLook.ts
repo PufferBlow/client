@@ -1,5 +1,4 @@
-import { bannerCss, identity, TONE_HEX, type Tone } from "./identity";
-import { spaceIconStyle, type SpaceIconStyle } from "./spaceIcon";
+import { bannerCss, identity, spaceIconStyle, type SpaceIconStyle, type Tone, TONE_HEX } from "@pufferblow/spines";
 
 /** How the owner chose the server to look. Every part may be null: "the one derived from the server's id". */
 export interface ServerLookChoice {

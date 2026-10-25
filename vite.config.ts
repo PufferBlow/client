@@ -9,10 +9,17 @@ export default defineConfig({
     alias: {
       "@": resolve(__dirname, "./src"),
     },
+    // @pufferblow/spines is a path dependency (a link to ../spines), and the folder it points at has its own
+    // node_modules. Without this its components would load a second copy of React and these libraries, and hooks
+    // would fail ("invalid hook call").
+    dedupe: ["react", "react-dom", "lucide-react"],
   },
   server: {
     port: 5173,
     strictPort: true,
+    // The dev server only serves files under the project by default. The spines package lives next to it
+    // (its art, fonts' neighbours and components are read from there), so that folder is allowed too.
+    fs: { allow: [resolve(__dirname), resolve(__dirname, "../spines")] },
   },
   test: {
     environment: "jsdom",

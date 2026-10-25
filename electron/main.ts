@@ -7,6 +7,10 @@ declare const __dirname: string;
 
 let mainWindow: BrowserWindow | null = null;
 
+/** What Windows groups the taskbar button and its menu under. The installed app has the same (`build.appId`). */
+const APP_ID = "space.pufferblow.client";
+app.setAppUserModelId(APP_ID);
+
 /** The Pufferblow mark, for the window and taskbar. Dev runs from `public/`; a build has it in `dist/`. */
 const windowIcon = join(__dirname, process.env.VITE_DEV_SERVER_URL ? "../public/icon.png" : "../dist/icon.png");
 
@@ -28,6 +32,18 @@ function createWindow() {
     },
     show: false,
   });
+
+  // A run from the source tree is electron.exe, so Windows would head the taskbar menu with "Electron" and its icon.
+  // Saying what this window is fixes that; an installed build is already named and iconed by the installer.
+  if (process.platform === "win32" && !app.isPackaged) {
+    mainWindow.setAppDetails({
+      appId: APP_ID,
+      appIconPath: join(__dirname, "../build/icon.ico"),
+      appIconIndex: 0,
+      relaunchCommand: `"${process.execPath}" "${app.getAppPath()}"`,
+      relaunchDisplayName: "Pufferblow",
+    });
+  }
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();

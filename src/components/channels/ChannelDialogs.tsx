@@ -1,8 +1,7 @@
 import { useChannelAdmin } from "../../features/channels/hooks";
 import type { Channel, ChannelType } from "../../features/channels/types";
 import { classifyAuthError } from "../../utils/authErrors";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import { Button, Modal } from "@pufferblow/spines";
 import { ChannelForm } from "./ChannelForm";
 
 export type ChannelDialog =

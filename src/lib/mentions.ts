@@ -1,4 +1,4 @@
-import type { RoleBadgeData } from "./roleBadges";
+import { type RoleBadgeData } from "@pufferblow/spines";
 import { createContext } from "react";
 
 /**

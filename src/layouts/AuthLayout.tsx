@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { AuthArt } from "../components/auth/AuthArt";
-import { BrandLockup } from "../components/ui/PufferblowBrand";
+import { BrandLockup } from "@pufferblow/spines";
 import type { AuthArtState, AuthLayoutContext } from "./authLayoutContext";
 
 export function AuthLayout() {

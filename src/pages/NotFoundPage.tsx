@@ -1,7 +1,6 @@
 import { Link, isRouteErrorResponse, useLocation, useRouteError } from "react-router";
 import { Home, LogIn } from "lucide-react";
-import { Button } from "../components/ui/Button";
-import { PufferblowBrand } from "../components/ui/PufferblowBrand";
+import { Button, PufferblowBrand } from "@pufferblow/spines";
 import { getAuthToken } from "../services/auth";
 
 interface ErrorViewProps {

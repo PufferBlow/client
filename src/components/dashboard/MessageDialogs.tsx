@@ -1,8 +1,7 @@
 import { Select } from "../ui/Select";
 import { useState, type FormEvent } from "react";
 import type { Message } from "../../features/messages/types";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import { Button, Modal } from "@pufferblow/spines";
 
 const preview = (message: Message) => (message.text.trim() || (message.attachments.length > 0 ? "[attachment]" : "")).slice(0, 140);
 

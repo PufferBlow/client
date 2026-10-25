@@ -12,7 +12,7 @@ import { useServerInfo } from "../../features/server/hooks";
 import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
-import { lookOf } from "../../features/users/look";
+import { lookOf } from "@pufferblow/spines";
 import { canMentionEveryone, isServerOwner, shownBadge } from "../../features/users/roles";
 import { EVERYONE, MentionDirectoryContext, type Mentionable, type MentionDirectory } from "../../lib/mentions";
 import { useToast } from "../../hooks/useToast";

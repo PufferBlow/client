@@ -1,13 +1,10 @@
-import { SkeletonRow } from "../ui/Skeleton";
+import { HostPill, lookOf, RoleBadge, SkeletonRow } from "@pufferblow/spines";
 import { useMemo } from "react";
 import { groupByRole } from "../../features/members/groups";
 import { PRESENCE } from "../../features/members/presence";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
-import { lookOf } from "../../features/users/look";
 import type { UserProfile } from "../../features/users/types";
 import { useProfileCard } from "../profile/profileCardContext";
-import { HostPill } from "../ui/HostPill";
-import { RoleBadge } from "../ui/RoleBadge";
 import { shownBadge } from "../../features/users/roles";
 import { Avatar } from "./Avatar";
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { kindOf, type CatalogItem, type CatalogKind } from "../../features/catalog/api";
 import { catalogSrc, useCatalog } from "../../features/catalog/hooks";
-import { Skeleton } from "./Skeleton";
+import { Skeleton } from "@pufferblow/spines";
 
 const nameOf = (item: CatalogItem) => item.alias ? `:${item.alias}:` : item.display_name;
 

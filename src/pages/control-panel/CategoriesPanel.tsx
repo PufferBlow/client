@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Panel } from "../../components/control-panel/Panel";
-import { Button } from "../../components/ui/Button";
+import { Button } from "@pufferblow/spines";
 import { useCategories, useCategoryAdmin, type Category } from "../../features/channels/categories";
 import type { Channel } from "../../features/channels/types";
 import { classifyAuthError } from "../../utils/authErrors";

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { Message } from "../../features/messages/types";
 import { ApiError } from "../../services/api";
 import { signIn } from "../../test/helpers";
-import { PufferblowBrand } from "../ui/PufferblowBrand";
+import { PufferblowBrand } from "@pufferblow/spines";
 import { Avatar, CountBadge } from "./Avatar";
 import { Composer } from "./Composer";
 import { descriptionOf } from "../../lib/files";

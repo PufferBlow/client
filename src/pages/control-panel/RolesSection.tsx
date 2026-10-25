@@ -3,15 +3,10 @@ import { Plus, Trash2 } from "lucide-react";
 import { Panel, Tag } from "../../components/control-panel/Panel";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
-import { Button } from "../../components/ui/Button";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { Input } from "../../components/ui/Input";
-import { LoadingState } from "../../components/ui/LoadingState";
-import { RoleBadge } from "../../components/ui/RoleBadge";
+import { Button, ErrorState, Input, LoadingState, RoleBadge, type RoleBadgeData, sameBadge } from "@pufferblow/spines";
 import type { Privilege, Role } from "../../features/admin/api";
 import { usePrivileges, useRoleAdmin, useRoles } from "../../features/admin/hooks";
 import { classifyAuthError } from "../../utils/authErrors";
-import { sameBadge, type RoleBadgeData } from "../../lib/roleBadges";
 import { RoleBadgeEditor } from "./RoleBadgeEditor";
 
 const NEW = "__new__";

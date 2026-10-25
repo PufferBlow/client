@@ -1,6 +1,6 @@
 import { api } from "../../services/api";
 import { authed, requireSession } from "../../services/authed";
-import type { RoleBadgeData } from "../../lib/roleBadges";
+import { type RoleBadgeData } from "@pufferblow/spines";
 import type { AuditEntry } from "./moderation";
 
 const SYSTEM = "/api/v1/system";

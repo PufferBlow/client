@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, KeyRound, Loader2, LogIn, RotateCw, WifiOff } from "lucide-react";
-import { Button } from "../ui/Button";
-import { PufferblowBrand } from "../ui/PufferblowBrand";
+import { Button, PufferblowBrand } from "@pufferblow/spines";
 import { api, ApiError } from "../../services/api";
 import { clearAuthToken } from "../../services/auth";
 import { getApiUrl, getStoredInstance } from "../../services/instance";

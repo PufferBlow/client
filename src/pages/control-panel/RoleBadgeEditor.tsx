@@ -2,25 +2,9 @@ import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { Chip, Group } from "../../components/settings/Pickers";
 import { FeedbackLine, type Feedback } from "../../components/settings/SettingsParts";
-import { ProgressBar } from "../../components/ui/ProgressBar";
-import { RoleBadge } from "../../components/ui/RoleBadge";
-import { RoleTag } from "../../components/ui/RoleTag";
+import { BADGE_GLYPHS, BADGE_PALETTE, BADGE_TONES, badgeColour, type BadgePreset, type BadgeTier, canModerate, GLYPH_NAMES, IMAGE_GLYPH, NEW_BADGE, ProgressBar, ROLE_PRESETS, RoleBadge, type RoleBadgeData, RoleTag } from "@pufferblow/spines";
 import { uploadBadgeImage } from "../../features/admin/api";
 import { classifyAuthError } from "../../utils/authErrors";
-import {
-  BADGE_GLYPHS,
-  BADGE_PALETTE,
-  BADGE_TONES,
-  GLYPH_NAMES,
-  IMAGE_GLYPH,
-  NEW_BADGE,
-  ROLE_PRESETS,
-  badgeColour,
-  canModerate,
-  type BadgePreset,
-  type BadgeTier,
-  type RoleBadgeData,
-} from "../../lib/roleBadges";
 
 const TIER_HELP: Record<"community" | "staff", string> = {
   community: "Rounded square. Works for any role without moderation permissions.",

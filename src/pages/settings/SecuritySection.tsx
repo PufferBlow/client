@@ -1,4 +1,4 @@
-import { LoadingState } from "../../components/ui/LoadingState";
+import { Button, LoadingState } from "@pufferblow/spines";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,7 +6,6 @@ import { KeyRound, LogOut } from "lucide-react";
 import { PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
-import { Button } from "../../components/ui/Button";
 import { signOutActiveAccount } from "../../services/accounts";
 import { isSessionRemembered } from "../../services/auth";
 import { resetSessionTokens } from "../../features/users/api";

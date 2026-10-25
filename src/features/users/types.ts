@@ -1,5 +1,4 @@
-import type { RoleBadgeData } from "../../lib/roleBadges";
-import type { ProfileSettings, SectionName } from "./look";
+import { type ProfileSettings, type RoleBadgeData, type SectionName } from "@pufferblow/spines";
 
 export type PresenceStatus = "online" | "idle" | "afk" | "dnd" | "offline";
 

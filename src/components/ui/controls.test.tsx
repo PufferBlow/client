@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DatePicker } from "./DatePicker";
-import { LoadingState } from "./LoadingState";
+import { LoadingState } from "@pufferblow/spines";
 import { Select } from "./Select";
 
 function Chosen() {

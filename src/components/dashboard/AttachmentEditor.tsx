@@ -1,7 +1,6 @@
 import { useId, useState, type FormEvent, type RefObject } from "react";
-import { Button } from "../ui/Button";
+import { Button, Input } from "@pufferblow/spines";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { Input } from "../ui/Input";
 import { MAX_DESCRIPTION } from "../../lib/files";
 
 const MAX_NAME = 150;

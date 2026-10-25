@@ -5,7 +5,7 @@ import { useNavigate } from "react-router";
 import { AuthField, PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
-import { Button } from "../../components/ui/Button";
+import { Button } from "@pufferblow/spines";
 import { Avatar } from "../../components/dashboard/Avatar";
 import { copyToClipboard } from "../../lib/clipboard";
 import { listAccounts, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";

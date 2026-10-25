@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
 import { Panel } from "../../components/control-panel/Panel";
 import { tableClasses } from "../../components/control-panel/tableClasses";
-import { Button } from "../../components/ui/Button";
+import { Button, EmptyState, ErrorState, LoadingState } from "@pufferblow/spines";
 import { DatePicker } from "../../components/ui/DatePicker";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { LoadingState } from "../../components/ui/LoadingState";
 import { Select } from "../../components/ui/Select";
 import { useAudit } from "../../features/admin/hooks";
 import { actionLabel, type AuditEntry } from "../../features/admin/moderation";

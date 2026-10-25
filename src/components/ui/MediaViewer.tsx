@@ -1,4 +1,4 @@
-import { LoadingState } from "./LoadingState";
+import { LoadingState } from "@pufferblow/spines";
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Download, Forward, Hash, Loader2, Send, X, ZoomIn, ZoomOut } from "lucide-react";

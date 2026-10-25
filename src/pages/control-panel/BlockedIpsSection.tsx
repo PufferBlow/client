@@ -3,10 +3,7 @@ import { Panel } from "../../components/control-panel/Panel";
 import { tableClasses } from "../../components/control-panel/tableClasses";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
-import { Button } from "../../components/ui/Button";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { Input } from "../../components/ui/Input";
-import { LoadingState } from "../../components/ui/LoadingState";
+import { Button, ErrorState, Input, LoadingState } from "@pufferblow/spines";
 import { useBlockedIpAdmin, useBlockedIps } from "../../features/admin/hooks";
 import { classifyAuthError } from "../../utils/authErrors";
 

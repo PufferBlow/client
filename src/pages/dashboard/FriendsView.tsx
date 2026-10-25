@@ -4,11 +4,7 @@ import { Link } from "react-router";
 import { AlertCircle, AtSign, Check, LayoutGrid, List, MessageCircle, UserMinus, UserPlus, Users, Volume2, X } from "lucide-react";
 import { Avatar, CountBadge } from "../../components/dashboard/Avatar";
 import { HomeSidebar } from "../../components/dashboard/HomeSidebar";
-import { Button } from "../../components/ui/Button";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { HostPill } from "../../components/ui/HostPill";
-import { LoadingState } from "../../components/ui/LoadingState";
+import { Button, defaultAvatarUrl, defaultBannerCss, EmptyState, ErrorState, HostPill, LoadingState } from "@pufferblow/spines";
 import {
   useAcceptFriendRequest,
   useBlocks,
@@ -26,7 +22,6 @@ import { peerHandle } from "../../features/dms/api";
 import { useOpenDirectMessage } from "../../features/dms/hooks";
 import { useMyProfile } from "../../features/users/hooks";
 import { useVoiceRoster, type InVoice } from "../../features/voice/useVoiceRoster";
-import { defaultAvatarUrl, defaultBannerCss } from "../../lib/identity";
 import { resolveAssetUrl } from "../../services/authed";
 
 type Tab = "online" | "all" | "pending" | "blocked";

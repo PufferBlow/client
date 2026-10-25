@@ -1,4 +1,4 @@
-import { Skeleton } from "../ui/Skeleton";
+import { Skeleton } from "@pufferblow/spines";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useServerAppearance } from "../../features/server/look";
 import { NavLink, useMatch } from "react-router";

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { TONES, TONE_HEX, type Tone } from "../../lib/identity";
+import { type Tone, TONE_HEX, TONES } from "@pufferblow/spines";
 
 /** The ring that sets a picked swatch apart is cut out of whatever surface it sits on. */
 const RING = "aria-pressed:shadow-[0_0_0_3px_var(--ground,var(--color-surface-secondary)),0_0_0_5px_var(--color-text)]";

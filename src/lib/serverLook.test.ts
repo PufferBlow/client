@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { serverPictures } from "../features/server/look";
-import { identity } from "./identity";
+import { identity, spaceIconStyle } from "@pufferblow/spines";
 import { serverLookOf } from "./serverLook";
-import { spaceIconStyle } from "./spaceIcon";
 
 describe("serverLookOf", () => {
   it("is what the address gives when the owner chose nothing", () => {

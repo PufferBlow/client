@@ -2,8 +2,7 @@ import { useRef, useState, type DragEvent } from "react";
 import { ImagePlus } from "lucide-react";
 import { checkPicture, mayAnimate, PICTURE_ACCEPT, type PictureKind } from "../../features/pictures/upload";
 import { classifyAuthError } from "../../utils/authErrors";
-import { Button } from "../ui/Button";
-import { ProgressBar } from "../ui/ProgressBar";
+import { Button, ProgressBar } from "@pufferblow/spines";
 import { FeedbackLine, type Feedback } from "./SettingsParts";
 
 export interface PictureUploaderProps {

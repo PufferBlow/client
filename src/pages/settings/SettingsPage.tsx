@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { ArrowLeft, Palette, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { LoadingState } from "../../components/ui/LoadingState";
+import { ErrorState, LoadingState } from "@pufferblow/spines";
 import { useMyProfile } from "../../features/users/hooks";
 import { classifyAuthError } from "../../utils/authErrors";
 import { AccountSection } from "./AccountSection";

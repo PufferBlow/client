@@ -1,6 +1,5 @@
 import { Copy, Fingerprint, Flag, Pencil, Pin, PinOff, Reply, SmilePlus, Trash2 } from "lucide-react";
-import { PuffFace } from "../ui/PuffFace";
-import { PUFF_FACES, puffReaction } from "../../lib/puff";
+import { PUFF_FACES, PuffFace, puffReaction } from "@pufferblow/spines";
 import type { MenuEntry } from "../ui/ContextMenu";
 import { canDeleteMessage, canEditMessage, canReportMessage } from "../../features/messages/permissions";
 import type { Message } from "../../features/messages/types";

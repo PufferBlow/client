@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Button } from "../components/ui/Button";
-import { BrandLockup } from "../components/ui/PufferblowBrand";
+import { BrandLockup, Button } from "@pufferblow/spines";
 import { getAuthToken } from "../services/auth";
 
 export function HomePage() {

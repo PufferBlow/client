@@ -1,10 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Button } from "../../components/ui/Button";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { ErrorState } from "../../components/ui/ErrorState";
-import { Input } from "../../components/ui/Input";
-import { LoadingState } from "../../components/ui/LoadingState";
-import { SpaceIcon } from "../../components/ui/SpaceIcon";
+import { Button, EmptyState, ErrorState, Input, LoadingState, SpaceIcon } from "@pufferblow/spines";
 import { type ImportResult, parseHostList, peerHost, usePeerAdmin, usePeers } from "../../features/federation/peers";
 import { classifyAuthError } from "../../utils/authErrors";
 

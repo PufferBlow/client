@@ -1,4 +1,4 @@
-import { LoadingState } from "../ui/LoadingState";
+import { LoadingState } from "@pufferblow/spines";
 import { useEffect, useRef, useState } from "react";
 import { Pin, PinOff } from "lucide-react";
 import { usePins } from "../../features/channels/pins";

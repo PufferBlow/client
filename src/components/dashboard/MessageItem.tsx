@@ -26,12 +26,8 @@ import { resolveAssetUrl } from "../../services/authed";
 import { getApiUrl, getStoredInstance } from "../../services/instance";
 import { useUploadProgress } from "../../features/transfers/store";
 import { useDownload } from "../../features/transfers/useDownload";
-import { ProgressBar } from "../ui/ProgressBar";
-import { HostPill } from "../ui/HostPill";
+import { HostPill, parsePuff, ProgressBar, PUFF_FACES, PuffFace, puffReaction, RoleBadge } from "@pufferblow/spines";
 import { useProfileCard } from "../profile/profileCardContext";
-import { PuffFace } from "../ui/PuffFace";
-import { RoleBadge } from "../ui/RoleBadge";
-import { parsePuff, PUFF_FACES, puffReaction } from "../../lib/puff";
 import { Avatar } from "./Avatar";
 
 export interface MenuPoint {

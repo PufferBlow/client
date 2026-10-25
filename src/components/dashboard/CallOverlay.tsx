@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Lock, Mic, MicOff, Phone, PhoneOff, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useCall } from "../../features/calls/callContext";
 import type { Encryption } from "../../features/calls/types";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import { Button, Modal } from "@pufferblow/spines";
 import { Avatar } from "./Avatar";
 
 const iconButton =

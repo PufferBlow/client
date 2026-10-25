@@ -1,6 +1,6 @@
 import { Outlet } from "react-router";
 import { TitleBar } from "../components/ui/TitleBar";
-import { TitleTooltips } from "../components/ui/TitleTooltips";
+import { TitleTooltips } from "@pufferblow/spines";
 
 export function RootLayout() {
   const isElectron = typeof window !== "undefined" && !!window.electron;

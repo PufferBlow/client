@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ACTIVITY_COLOR, PRESENCE } from "../../features/members/presence";
 import type { PresenceStatus } from "../../features/users/types";
-import { defaultAvatarUrl, identity } from "../../lib/identity";
+import { defaultAvatarUrl, identity } from "@pufferblow/spines";
 import { resolveAssetUrl } from "../../services/authed";
 
 interface AvatarProps {

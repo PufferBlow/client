@@ -4,7 +4,7 @@ import { MemberList } from "../dashboard/MemberList";
 import { MessageItem } from "../dashboard/MessageItem";
 import { ProfileCardProvider } from "./ProfileCardProvider";
 import { ProfileCard } from "./ProfileCard";
-import { DEFAULT_SETTINGS } from "../../features/users/look";
+import { DEFAULT_SETTINGS } from "@pufferblow/spines";
 import type { Message } from "../../features/messages/types";
 import { jsonResponse, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";

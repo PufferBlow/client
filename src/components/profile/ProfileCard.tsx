@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { Copy, Fingerprint, Globe, Home, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
 import { ContextMenu, type MenuEntry } from "../ui/ContextMenu";
-import { RoleTag } from "../ui/RoleTag";
+import { defaultAvatarUrl, type Look, lookOf, type ProfileSettings, RoleTag } from "@pufferblow/spines";
 import { rolesOf } from "../../features/users/roles";
 import { copyToClipboard } from "../../lib/clipboard";
 import { PRESENCE } from "../../features/members/presence";
-import { lookOf, type Look, type ProfileSettings } from "../../features/users/look";
 import type { UserProfile } from "../../features/users/types";
-import { defaultAvatarUrl } from "../../lib/identity";
 import { resolveAssetUrl } from "../../services/authed";
 
 type CardProfile = Pick<

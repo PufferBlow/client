@@ -1,11 +1,8 @@
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { ArrowLeft, Lock } from "lucide-react";
-import { SpaceIcon } from "../../components/ui/SpaceIcon";
-import { RoleTag } from "../../components/ui/RoleTag";
+import { ErrorState, LoadingState, RoleTag, SpaceIcon } from "@pufferblow/spines";
 import { getStoredInstance } from "../../services/instance";
-import { LoadingState } from "../../components/ui/LoadingState";
-import { ErrorState } from "../../components/ui/ErrorState";
 import { useServerInfo } from "../../features/server/hooks";
 import { useServerAppearance } from "../../features/server/look";
 import { useMyProfile } from "../../features/users/hooks";

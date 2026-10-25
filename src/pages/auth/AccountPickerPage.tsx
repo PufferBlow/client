@@ -1,10 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ArrowRight, KeyRound, Lock, Plus, X } from "lucide-react";
-import { Button } from "../../components/ui/Button";
-import { BrandLockup } from "../../components/ui/PufferblowBrand";
+import { BrandLockup, Button, defaultAvatarUrl } from "@pufferblow/spines";
 import { previewAssetUrl } from "../../features/instance/preview";
-import { defaultAvatarUrl } from "../../lib/identity";
 import { listAccounts, removeAccount, switchAccount, type Account } from "../../services/accounts";
 import { login } from "../../services/auth";
 import { classifyAuthError } from "../../utils/authErrors";

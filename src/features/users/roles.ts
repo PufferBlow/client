@@ -1,5 +1,4 @@
-import { identity } from "../../lib/identity";
-import { DEFAULT_BADGES, TIER_ORDER, type RoleBadgeData } from "../../lib/roleBadges";
+import { DEFAULT_BADGES, identity, type RoleBadgeData, TIER_ORDER } from "@pufferblow/spines";
 import type { UserProfile } from "./types";
 
 /** Backend role id for the server owner (`OWNER_ROLE_ID`). */

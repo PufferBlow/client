@@ -2,7 +2,7 @@ import { act, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { downloadFile, isInstanceUrl } from "../../lib/files";
 import { api } from "../../services/api";
-import { ProgressBar } from "../../components/ui/ProgressBar";
+import { ProgressBar } from "@pufferblow/spines";
 import { combinedProgress, uploadProgress, useUploadProgress } from "./store";
 
 afterEach(() => {
