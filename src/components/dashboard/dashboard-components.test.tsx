@@ -118,6 +118,23 @@ describe("Composer", () => {
     expect(descriptionOf(file!)).toBe("Signups doubling in March");
   });
 
+  it("offers only a name for a file that is not a picture or video", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const { container } = render(<Composer channelName="general" onSend={onSend} />);
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(["x"], "notes.txt", { type: "text/plain" }));
+
+    await user.click(screen.getByRole("button", { name: "Edit notes.txt" }));
+    const panel = within(screen.getByRole("dialog", { name: "Rename attachment" }));
+    expect(panel.queryByLabelText("Description")).not.toBeInTheDocument();
+    await user.clear(panel.getByLabelText("File name"));
+    await user.type(panel.getByLabelText("File name"), "readme.txt");
+    await user.click(panel.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    const [file] = (onSend.mock.calls[0]?.[0] as { files: File[] }).files;
+    expect([file!.name, descriptionOf(file!)]).toEqual(["readme.txt", ""]);
+  });
+
   it("keeps the old name when the edited name is emptied, and Cancel changes nothing", async () => {
     const user = userEvent.setup();
     const { container } = render(<Composer channelName="general" onSend={vi.fn()} />);
@@ -248,14 +265,21 @@ describe("MessageItem", () => {
     expect(screen.getByText("hello there")).toBeInTheDocument();
   });
 
-  it("uses an attachment's description as its alt text, and captions a file with it", () => {
-    const attachments = [
-      { url: "https://cdn.example/a.png", filename: "chart.png", type: "image/png", description: "Signups doubling in March" },
-      { url: "https://cdn.example/r.pdf", filename: "report.pdf", type: "application/pdf", size: 2048, description: "The Q1 report" },
-    ];
+  it("uses a picture's description as its alt text", () => {
+    const attachments = [{ url: "https://cdn.example/a.png", filename: "chart.png", type: "image/png", description: "Signups doubling in March" }];
     render(<MessageItem message={message({ text: "", attachments })} myUserId="me" {...handlers()} />);
     expect(screen.getByRole("img", { name: "Signups doubling in March" })).toHaveAttribute("title", "Signups doubling in March");
-    expect(screen.getByText("The Q1 report")).toBeInTheDocument();
+  });
+
+  it("marks only the attachment that is a spoiler, even when two share one stored file", async () => {
+    const same = "https://cdn.example/same.png";
+    const attachments = [
+      { url: same, filename: "SPOILER_image.png", type: "image/png" },
+      { url: same, filename: "image.png", type: "image/png" },
+    ];
+    render(<MessageItem message={message({ text: "", attachments })} myUserId="me" {...handlers()} />);
+    expect(screen.getAllByRole("button", { name: /Spoiler attachment image.png/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Open image.png" })).toHaveLength(1);
   });
 
   it("blurs a spoiler attachment until it is revealed", async () => {

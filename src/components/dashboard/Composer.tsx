@@ -557,7 +557,7 @@ function AttachmentPreview({
           type="button"
           aria-label={`Edit ${name}`}
           aria-expanded={editing}
-          title="Edit name and description"
+          title={kind === "image" || kind === "video" ? "Edit name and description" : "Rename"}
           onClick={() => setEditing((open) => !open)}
           className={`${action} ${description ? "text-primary" : ""}`}
         >
@@ -577,7 +577,7 @@ function AttachmentPreview({
           <Trash2 size={14} />
         </button>
       </div>
-      {editing && <AttachmentEditor anchor={editButton} originalName={displayName(file.name)} value={{ name, description }} onSave={onEdit} onClose={() => setEditing(false)} />}
+      {editing && <AttachmentEditor anchor={editButton} originalName={displayName(file.name)} describable={kind === "image" || kind === "video"} value={{ name, description }} onSave={onEdit} onClose={() => setEditing(false)} />}
     </li>
   );
 }

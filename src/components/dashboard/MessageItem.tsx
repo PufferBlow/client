@@ -167,14 +167,14 @@ function FileRow({ href, name, size, kind }: { href: string | undefined; name: s
   );
 }
 
-function AttachmentView({ url, filename, type, size, description }: Attachment) {
+function AttachmentView({ url, filename, type, size }: Attachment) {
   const href = resolveAssetUrl(url);
   const name = displayName(filename);
   const spoiler = isSpoilerName(filename);
   const [revealed, setRevealed] = useState(false);
 
   if (type === "sticker" && href) {
-    return <img src={href} alt={description || displayName(filename)} draggable={false} className="mt-2 block size-36 max-w-full object-contain" />;
+    return <img src={href} alt={displayName(filename)} draggable={false} className="mt-2 block size-36 max-w-full object-contain" />;
   }
 
   let body;
@@ -189,14 +189,6 @@ function AttachmentView({ url, filename, type, size, description }: Attachment) 
     body = (
       <div className="inline-flex max-w-full rounded-lg bg-surface-secondary px-3 py-2">
         <FileRow href={href} name={name} size={size} kind="file" />
-      </div>
-    );
-  }
-  if (description) {
-    body = (
-      <div className="flex max-w-full flex-col gap-1">
-        {body}
-        <p className="m-0 max-w-[min(100%,400px)] text-[12.5px] text-text-muted [overflow-wrap:anywhere]">{description}</p>
       </div>
     );
   }
@@ -294,7 +286,7 @@ function MediaGallery({ message }: { message: Message }) {
           {rows.map(({ start: first, size }) => (
             <div key={first} className="flex gap-0.5">
               {items.slice(first, first + size).map((item, i) => (
-                <MediaTile key={item.href} item={item} single={false} rowSize={size} onOpen={() => setViewing(first + i)} />
+                <MediaTile key={`${first + i}:${item.href}`} item={item} single={false} rowSize={size} onOpen={() => setViewing(first + i)} />
               ))}
             </div>
           ))}
@@ -600,8 +592,8 @@ export const MessageItem = memo(function MessageItem({
         <MediaGallery message={message} />
         {message.attachments
           .filter((attachment) => !isMedia(attachment))
-          .map((attachment) => (
-            <AttachmentView key={attachment.url} {...attachment} />
+          .map((attachment, index) => (
+            <AttachmentView key={`${index}:${attachment.url}`} {...attachment} />
           ))}
         {isPending && message.attachments.length > 0 && <UploadStatus id={message.id} count={message.attachments.length} />}
 

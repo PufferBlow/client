@@ -224,7 +224,7 @@ export function MediaViewer({ messageId, items, index, onIndexChange, onClose, a
         <nav aria-label="Attachments" className="flex shrink-0 items-center justify-center gap-2 px-5 py-4">
           {items.map((entry, i) => (
             <button
-              key={entry.href}
+              key={`${i}:${entry.href}`}
               type="button"
               aria-label={`Show ${displayName(entry.filename)}`}
               aria-current={i === index || undefined}

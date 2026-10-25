@@ -16,13 +16,15 @@ export interface AttachmentEditorProps {
   anchor: RefObject<HTMLElement | null>;
   /** What the file is called when it was picked, restored when the name is left empty. */
   originalName: string;
+  /** Only pictures and video are described; for any other file the panel is just its name. */
+  describable: boolean;
   value: AttachmentDetails;
   onSave: (next: AttachmentDetails) => void;
   onClose: () => void;
 }
 
 /** The small form behind an attachment's edit button: the name it is sent under and what it shows. */
-export function AttachmentEditor({ anchor, originalName, value, onSave, onClose }: AttachmentEditorProps) {
+export function AttachmentEditor({ anchor, originalName, describable, value, onSave, onClose }: AttachmentEditorProps) {
   const [name, setName] = useState(value.name);
   const [description, setDescription] = useState(value.description);
   const nameId = useId();
@@ -31,12 +33,12 @@ export function AttachmentEditor({ anchor, originalName, value, onSave, onClose 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     event.stopPropagation(); // React bubbles through the portal, and the composer around it is a form too
-    onSave({ name: name.trim() || originalName, description: description.trim() });
+    onSave({ name: name.trim() || originalName, description: describable ? description.trim() : "" });
     onClose();
   };
 
   return (
-    <FloatingPanel anchor={anchor} onClose={onClose} label="Edit attachment" className="w-[300px] max-w-[calc(100vw-16px)]">
+    <FloatingPanel anchor={anchor} onClose={onClose} label={describable ? "Edit attachment" : "Rename attachment"} className="w-[300px] max-w-[calc(100vw-16px)]">
       <form onSubmit={submit} className="flex flex-col gap-3 p-3.5">
         <div className="flex flex-col gap-1.5">
           <label htmlFor={nameId} className="pb-label text-[11px] text-text-tertiary">
@@ -44,6 +46,7 @@ export function AttachmentEditor({ anchor, originalName, value, onSave, onClose 
           </label>
           <Input id={nameId} autoFocus value={name} maxLength={MAX_NAME} onChange={(e) => setName(e.target.value)} className="h-9 text-[13.5px]" />
         </div>
+        {describable && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor={descriptionId} className="pb-label text-[11px] text-text-tertiary">
             Description
@@ -61,6 +64,7 @@ export function AttachmentEditor({ anchor, originalName, value, onSave, onClose 
             {description.length}/{MAX_DESCRIPTION}
           </span>
         </div>
+        )}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" size="sm" onClick={onClose}>
             Cancel
