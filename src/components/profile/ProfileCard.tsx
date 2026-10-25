@@ -105,16 +105,14 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
       <div className="relative" style={{ height: large ? 120 : 96, background: bannerBackground(profile, look) }} />
       <div className="flex flex-col gap-2.5 px-4 pb-4">
         <div className="flex items-end justify-between gap-2.5" style={{ marginTop: -avatarSize / 2 }}>
-          <div className="group/avatar relative shrink-0" style={{ width: avatarSize, height: avatarSize, color: look.hex }}>
+          <div className="relative shrink-0" style={{ width: avatarSize, height: avatarSize, color: look.hex }}>
             <FrameDecoration frame={look.settings.frame} />
             <div className="relative grid place-items-center rounded-full" style={{ width: avatarSize, height: avatarSize, background: look.cardTop, boxShadow: look.ring }}>
               <img
                 src={image}
                 alt=""
                 draggable={false}
-                className={`block rounded-full object-cover transition-transform duration-(--motion-puff) ease-(--motion-ease-puff) motion-reduce:transform-none ${
-                  look.puffsOnHover ? "group-hover/avatar:scale-110" : ""
-                }`}
+                className="block rounded-full object-cover"
                 style={{ width: avatarSize - 12, height: avatarSize - 12 }}
               />
             </div>
