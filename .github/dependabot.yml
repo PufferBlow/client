@@ -1,0 +1,32 @@
+# Dependabot: version updates and security updates.
+# Reference: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Security updates (fixes for a published advisory) are raised by Dependabot itself and are not held back
+# by the schedule or by the pull request limit. Turn on "Dependabot alerts" and "Dependabot security
+# updates" under Settings > Code security; this file shapes the routine version updates and their grouping.
+
+version: 2
+updates:
+  # npm packages (package-lock.json). Checked daily so the fix for a new advisory is proposed quickly.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    groups:
+      # Routine minor and patch updates arrive as one pull request, so security ones stay easy to see.
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
