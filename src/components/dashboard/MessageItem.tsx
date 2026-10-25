@@ -541,7 +541,7 @@ export const MessageItem = memo(function MessageItem({
         ) : (
           <time
             dateTime={message.sentAt}
-            className="block pt-[3px] text-center text-[10.5px] text-text-muted opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+            className="block pt-[3px] text-center text-[10.5px] text-text-muted opacity-0 group-focus-visible:opacity-100 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100"
           >
             {formatTime(message.sentAt)}
           </time>
@@ -637,7 +637,7 @@ export const MessageItem = memo(function MessageItem({
       </div>
 
       {!editing && (!isLocal || isPending) && (
-        <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-md bg-surface-tertiary p-0.5 shadow-popover group-focus-within:flex group-hover:flex pointer-coarse:flex">
+        <div data-message-toolbar className="absolute -top-3 right-4 hidden items-center gap-0.5 rounded-md bg-surface-tertiary p-0.5 shadow-popover group-focus-visible:flex group-has-[:focus-visible]:flex group-hover:flex pointer-coarse:flex">
           {PUFF_FACES.map(({ face, label }) => {
             const reaction = puffReaction(face);
             const mine = message.reactions.some((r) => r.emoji === reaction && myUserId !== undefined && r.userIds.includes(myUserId));
