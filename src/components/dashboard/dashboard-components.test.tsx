@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Message } from "../../features/messages/types";
 import { ApiError } from "../../services/api";
@@ -151,14 +151,18 @@ describe("Composer", () => {
       field.setSelectionRange(from, to);
       fireEvent.select(field);
     };
+    // The composer puts the selection back in the next frame; wait for it so it cannot land after the next select().
+    const nextFrame = () => act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
 
     await user.type(field, "make this bold");
     select(10, 14);
     await user.keyboard("{Control>}b{/Control}");
+    await nextFrame();
     expect(field).toHaveValue("make this **bold**");
 
     select(12, 16);
     await user.keyboard("{Control>}b{/Control}");
+    await nextFrame();
     expect(field).toHaveValue("make this bold");
 
     select(0, 4);
