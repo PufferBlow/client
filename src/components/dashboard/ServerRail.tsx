@@ -49,10 +49,9 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const queryClient = useQueryClient();
   const activeId = getActiveAccountId();
   const others = useMemo(() => listAccounts().filter((a) => a.id !== activeId), [activeId]);
-  const onHub = useMatch({ path: "/dashboard", end: true }) !== null;
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
-  const onHome = onHub || onFriends || onDms;
+  const onHome = onFriends || onDms;
   const onServer = useMatch("/dashboard/channels/*") !== null;
   const onControlPanel = useMatch("/control-panel/*") !== null;
   const { data: server } = useServerInfo();
@@ -80,7 +79,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
       <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
-          to="/dashboard"
+          to="/dashboard/friends"
           end
           aria-label="Home"
           title="Home"

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router";
-import { Home, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { peerHandle, type Conversation } from "../../features/dms/api";
 import { useConversations } from "../../features/dms/hooks";
 import { useDmUnread } from "../../features/dms/unread";
@@ -21,18 +21,6 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
   return (
     <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden mb-[70px] rounded-[14px] bg-surface max-md:hidden" aria-label="Home">
       <div className="flex flex-col gap-0.5 px-2 pt-3">
-        <NavLink
-          to="/dashboard"
-          end
-          className={({ isActive }) =>
-            `flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] font-semibold transition-colors ${
-              isActive ? "bg-surface-tertiary text-text" : "text-text-tertiary hover:bg-surface-secondary hover:text-text"
-            }`
-          }
-        >
-          <Home size={17} aria-hidden="true" />
-          Home
-        </NavLink>
         <NavLink
           to="/dashboard/friends"
           end
