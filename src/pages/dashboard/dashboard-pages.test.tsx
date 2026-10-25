@@ -226,14 +226,15 @@ describe("ServerView", () => {
     expect(screen.queryByRole("button", { name: /load older messages/i })).not.toBeInTheDocument();
   });
 
-  it("groups members by presence and sorts them by name", async () => {
+  it("groups members by role, those online first and each half by name", async () => {
     localStorage.setItem("pb_members_open", "1"); // the panel is closed by default on a window this narrow
     backend();
     renderServer();
 
     const members = await screen.findByRole("complementary", { name: "Members" });
-    expect(await within(members).findByRole("heading", { name: /Online — 2/ })).toBeInTheDocument();
-    expect(within(members).getByRole("heading", { name: /Offline — 1/ })).toBeInTheDocument();
+    // None of them holds a role that says anything, so they are all under Members.
+    expect(await within(members).findByRole("heading", { name: /Members — 3/ })).toBeInTheDocument();
+    expect(within(members).queryByRole("heading", { name: /Online|Offline/ })).not.toBeInTheDocument();
     const names = within(members).getAllByText(/^(ada|grace|linus)$/).map((el) => el.textContent);
     expect(names).toEqual(["ada", "grace", "linus"]);
   });

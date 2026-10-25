@@ -1,6 +1,7 @@
 import { SkeletonRow } from "../ui/Skeleton";
 import { useMemo } from "react";
-import { isOnline, PRESENCE } from "../../features/members/presence";
+import { groupByRole } from "../../features/members/groups";
+import { PRESENCE } from "../../features/members/presence";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { lookOf } from "../../features/users/look";
 import type { UserProfile } from "../../features/users/types";
@@ -9,8 +10,6 @@ import { HostPill } from "../ui/HostPill";
 import { RoleBadge } from "../ui/RoleBadge";
 import { shownBadge } from "../../features/users/roles";
 import { Avatar } from "./Avatar";
-
-const byName = (a: UserProfile, b: UserProfile) => a.username.localeCompare(b.username);
 
 /** One person. Their frame and name style follow them here; their card theme and banner stay on the card. */
 function MemberRow({ member, home }: { member: UserProfile; home?: string }) {
@@ -54,7 +53,7 @@ function MemberRow({ member, home }: { member: UserProfile; home?: string }) {
 function MemberGroup({ label, members, home }: { label: string; members: UserProfile[]; home?: string }) {
   if (members.length === 0) return null;
   return (
-    <section>
+    <section aria-label={label}>
       <h3 className="pb-section-label m-0 px-1.5 pb-1.5 pt-3">
         {label} — {members.length}
       </h3>
@@ -72,10 +71,7 @@ export function MemberList() {
   const { data: users, isPending, error } = useUsers();
   const { data: me } = useMyProfile();
 
-  const { online, offline } = useMemo(() => {
-    const sorted = [...(users ?? [])].sort(byName);
-    return { online: sorted.filter((u) => isOnline(u.status)), offline: sorted.filter((u) => !isOnline(u.status)) };
-  }, [users]);
+  const groups = useMemo(() => groupByRole(users ?? []), [users]);
 
   return (
     <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-lg bg-surface px-2.5 py-3">
@@ -90,8 +86,9 @@ export function MemberList() {
         <p className="pb-error px-2 pt-2">Couldn&apos;t load members.</p>
       ) : (
         <>
-          <MemberGroup label="Online" members={online} home={me?.origin_server} />
-          <MemberGroup label="Offline" members={offline} home={me?.origin_server} />
+          {groups.map((group) => (
+            <MemberGroup key={group.id} label={group.label} members={group.members} home={me?.origin_server} />
+          ))}
         </>
       )}
     </aside>

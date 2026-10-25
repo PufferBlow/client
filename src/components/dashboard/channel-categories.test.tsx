@@ -85,3 +85,41 @@ describe("the channel list", () => {
     expect(await screen.findByRole("link", { name: /general/ })).toBeInTheDocument();
   });
 });
+
+describe("folding a category", () => {
+  beforeEach(() => localStorage.removeItem("pb_collapsed_categories"));
+
+  const withDefaults = () =>
+    backend(
+      [channel("c1", "general", { category_id: "text" }), channel("c2", "memes", { category_id: "text" }), channel("v1", "Lounge", { channel_type: "voice", category_id: "voice" })],
+      [{ ...category("text", "Text Channels", 0), default_for: "text" }, { ...category("voice", "Voice Channels", 1), default_for: "voice" }],
+    );
+
+  it("folds a category from its name and opens it again, remembering it", async () => {
+    withDefaults();
+    const { user, unmount } = renderWithProviders(<ChannelSidebar />, { route: "/dashboard/channels", path: "*" });
+    const header = await screen.findByRole("button", { name: "Text Channels category" });
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: /memes/ })).toBeInTheDocument();
+
+    await user.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: /memes/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Join voice channel Lounge/ })).toBeInTheDocument(); // the other category is untouched
+    unmount();
+
+    renderWithProviders(<ChannelSidebar />, { route: "/dashboard/channels", path: "*" });
+    expect(await screen.findByRole("button", { name: "Text Channels category" })).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByRole("button", { name: "Text Channels category" }));
+    expect(await screen.findByRole("link", { name: /memes/ })).toBeInTheDocument();
+  });
+
+  it("keeps the channel you are in on show while its category is folded", async () => {
+    withDefaults();
+    const { user } = renderWithProviders(<ChannelSidebar />, { route: "/dashboard/channels/c2", path: "/dashboard/channels/:channelId?" });
+    await user.click(await screen.findByRole("button", { name: "Text Channels category" }));
+    expect(screen.getByRole("link", { name: /memes/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /general/ })).not.toBeInTheDocument();
+  });
+});

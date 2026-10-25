@@ -70,6 +70,12 @@ export function rolesOf(profile: WithRoles | null | undefined): RoleOfPerson[] {
     .map(({ id, badge, role }) => ({ id, name: role?.role_name ?? tidy(id), badge, colour: identity(`role:${id}`).hex }));
 }
 
+/** Where a role stands among the others: lower comes first. Staff, then community, then system, then no badge. */
+export const roleOrder = (role: Pick<RoleOfPerson, "id" | "badge">): number => {
+  const rank = RANKED_ROLES.indexOf(role.id);
+  return (role.badge ? TIER_ORDER[role.badge.tier] : 3) * 10 + (rank === -1 ? RANKED_ROLES.length : rank);
+};
+
 export interface ShownBadge {
   id: string;
   name: string;

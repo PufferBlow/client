@@ -10,6 +10,8 @@ export interface Category {
   category_id: string;
   name: string;
   position: number;
+  /** `"text"` or `"voice"` on the category new channels of that type go into. */
+  default_for?: "text" | "voice" | null;
 }
 
 export const categoryKeys = { list: ["channels", "categories"] as const };

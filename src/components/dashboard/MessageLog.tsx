@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
+import { callLogOf } from "../../features/calls/log";
 import type { Message } from "../../features/messages/types";
 import { groupMessages } from "../../features/messages/grouping";
 import { useChatScroll } from "../../features/messages/useChatScroll";
@@ -13,6 +14,7 @@ import { LoadingState } from "../ui/LoadingState";
 import { classifyAuthError } from "../../utils/authErrors";
 import { JumpToPresent } from "./JumpToPresent";
 import { DeleteMessageDialog } from "./MessageDialogs";
+import { CallLogRow } from "./CallLogRow";
 import { MessageItem, type MenuPoint } from "./MessageItem";
 import { CHANNEL_PERMISSIONS, messageMenuEntries, type MessagePermissions } from "./messageMenu";
 
@@ -184,24 +186,29 @@ export const MessageLog = forwardRef<MessageLogHandle, MessageLogProps>(function
               ) : (
                 intro
               )}
-              {rows.map(({ message, startsGroup }) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  isGroupStart={startsGroup}
-                  myUserId={me?.user_id}
-                  onEdit={onEdit}
-                  onToggleReaction={handleReaction}
-                  onOpenMenu={handleOpenMenu}
-                  onOpenPicker={handleOpenPicker}
-                  editing={editingId === message.id}
-                  onEditingChange={handleEditingChange}
-                  onRetry={onRetrySend}
-                  onDiscard={onDiscard}
-                  onReply={onReply}
-                  onJumpTo={jumpTo}
-                />
-              ))}
+              {rows.map(({ message, startsGroup }) => {
+                // A call's line is drawn as what happened, not as something a person said.
+                const call = callLogOf(message.attachments);
+                if (call) return <CallLogRow key={message.id} message={message} log={call} myUserId={me?.user_id} />;
+                return (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    isGroupStart={startsGroup}
+                    myUserId={me?.user_id}
+                    onEdit={onEdit}
+                    onToggleReaction={handleReaction}
+                    onOpenMenu={handleOpenMenu}
+                    onOpenPicker={handleOpenPicker}
+                    editing={editingId === message.id}
+                    onEditingChange={handleEditingChange}
+                    onRetry={onRetrySend}
+                    onDiscard={onDiscard}
+                    onReply={onReply}
+                    onJumpTo={jumpTo}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

@@ -1,3 +1,4 @@
+import { callLogOf } from "../calls/log";
 import type { Attachment, Message, Reaction, ReplyPreview } from "./types";
 
 /**
@@ -77,6 +78,8 @@ export function normalizeMessage(raw: WireMessage, fallbackChannelId = ""): Mess
     editedAt: raw.last_edited_at ?? null,
     ...replyField(raw.reply_to, raw.reply_to_message_id),
     ...forwardedField(raw.forwarded_from_message_id),
+    // A call's line is a notice about the conversation, not something a person wrote.
+    ...(callLogOf(raw.attachments ?? undefined) ? { kind: "system" as const } : {}),
   };
 }
 

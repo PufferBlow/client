@@ -10,6 +10,7 @@ import { useServerAppearance } from "../../features/server/look";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { useToast } from "../../hooks/useToast";
+import { useSortable } from "../../lib/useSortable";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { SpaceIcon } from "../ui/SpaceIcon";
 import { usePublicHealth } from "../../features/health/hooks";
@@ -66,6 +67,8 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const anyUnread = Object.entries(unread ?? {}).some(([id, n]) => n > 0 && !muted.has(id));
   const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const serverName = server?.server_name ?? "Server";
+  // The servers in the person's own order. One instance is joined at a time today, so there is one to place.
+  const { ordered, itemProps } = useSortable(["current"], "pb_server_order");
 
   return (
     <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[76px]" : "pb-2"}`}>
@@ -87,7 +90,9 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
 
       <div className="h-0.5 w-7 rounded bg-border-secondary" />
 
-      <div className="group/tile relative flex w-full justify-center">
+      {ordered.map((id) =>
+        id === "current" ? (
+      <div key="current" {...itemProps("current")} className="group/tile relative flex w-full justify-center data-[dragging=true]:opacity-40 data-[drop-target=true]:before:absolute data-[drop-target=true]:before:-top-1.5 data-[drop-target=true]:before:h-0.5 data-[drop-target=true]:before:w-8 data-[drop-target=true]:before:rounded data-[drop-target=true]:before:bg-text">
         <Indicator selected={onServer} unread={anyUnread || totalPings > 0} />
         <NavLink
           to="/dashboard/channels"
@@ -120,6 +125,8 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           )}
         </NavLink>
       </div>
+        ) : null,
+      )}
 
       <div className="group/tile relative flex w-full justify-center">
         <button

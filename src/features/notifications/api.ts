@@ -32,6 +32,8 @@ export interface AppNotification {
   messageId: string | null;
   createdAt: string;
   read: boolean;
+  /** A short look at the message it is about, when the server could give one. */
+  preview?: { text: string; hasAttachments: boolean; deleted: boolean };
 }
 
 interface WireNotification {
@@ -42,6 +44,7 @@ interface WireNotification {
   message_id: string | null;
   created_at: string | null;
   read_at: string | null;
+  preview?: { text?: string; has_attachments?: boolean; deleted?: boolean };
 }
 
 /** The newest notifications, unread first is left to the caller; the server sorts newest first. */
@@ -55,6 +58,7 @@ export async function listNotifications(limit = 50): Promise<AppNotification[]> 
     messageId: n.message_id,
     createdAt: n.created_at ?? "",
     read: n.read_at !== null,
+    ...(n.preview ? { preview: { text: n.preview.text ?? "", hasAttachments: n.preview.has_attachments === true, deleted: n.preview.deleted === true } } : {}),
   }));
 }
 

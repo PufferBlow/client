@@ -35,6 +35,19 @@ export function useMessages(channelId: string) {
   return { ...query, messages: flattenMessages(query.data) };
 }
 
+/**
+ * The newest messages of a channel, for a quick look (the inbox) without opening it. Separate from the
+ * channel's own history, which is kept live; this one is read when asked for and goes stale quickly.
+ */
+export function useRecentMessages(channelId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["messages", "recent", channelId] as const,
+    queryFn: async () => (await loadMessages(channelId, null)).messages,
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
 /** The server refuses shorter queries. */
 export const MIN_SEARCH_LENGTH = 2;
 

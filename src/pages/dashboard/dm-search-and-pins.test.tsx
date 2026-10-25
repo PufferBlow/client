@@ -108,3 +108,38 @@ describe("pinned messages in a direct message", () => {
     expect(await screen.findByText(/at most 50 pins/)).toBeInTheDocument();
   });
 });
+
+describe("call lines in a direct message", () => {
+  const callEntry = (outcome: string, extra: Record<string, unknown> = {}) => ({
+    url: "call:c1",
+    type: "call",
+    call: { call_id: "c1", caller_id: "u2", callee_id: "me", caller_name: "grace", callee_name: "ada", outcome, duration_seconds: 0, ...extra },
+  });
+
+  it("draws a missed call and a finished one as what happened, with how long it lasted", async () => {
+    routeFetch({
+      "POST /api/v1/users/profile": { user_data: me },
+      "GET /api/v1/users/list": { users: [me] },
+      "GET /api/v1/system/server-info": { server_info: { server_id: "x", server_name: "S", max_message_length: 2000 } },
+      "GET /api/v1/dms/conversations": { conversations: [conversation] },
+      "GET /api/v1/dms/messages": {
+        conversation_id: "conv1",
+        messages: [
+          wire("m1", "call me later"),
+          { ...wire("m2", ""), attachments: [callEntry("missed")] },
+          { ...wire("m3", ""), message_id: "m3", attachments: [callEntry("completed", { call_id: "c2", duration_seconds: 4350 })] },
+        ],
+      },
+      "GET /api/v1/dms/conversations/conv1/pins": { pins: [], limit: 50 },
+      "GET /api/v1/channels/read-history": { unread_counts: {} },
+    });
+    renderWithProviders(<DirectMessageView />, { route: "/dashboard/dms/conv1?peer=grace", path: "/dashboard/dms/:conversationId" });
+
+    expect(await screen.findByText("Missed call from grace")).toBeInTheDocument();
+    expect(screen.getByText("grace called you")).toBeInTheDocument();
+    expect(screen.getByText("Lasted 1 hr 12 min")).toBeInTheDocument();
+    // They are notices, not messages: no toolbar of reactions, no name header.
+    expect(document.querySelectorAll("[data-call-log]")).toHaveLength(2);
+    expect(screen.getByText("call me later")).toBeInTheDocument();
+  });
+});

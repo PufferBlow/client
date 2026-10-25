@@ -1,9 +1,10 @@
 import { Skeleton } from "../ui/Skeleton";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useServerAppearance } from "../../features/server/look";
-import { NavLink } from "react-router";
-import { BellOff, ChevronDown, Globe, Hash, Lock, MoreHorizontal } from "lucide-react";
+import { NavLink, useMatch } from "react-router";
+import { BellOff, ChevronDown, ChevronRight, Globe, Hash, Lock, MoreHorizontal } from "lucide-react";
 import { groupChannels, useCategories } from "../../features/channels/categories";
+import { useCollapsedCategories } from "../../features/channels/collapsed";
 import { useChannels, useUnreadCounts } from "../../features/channels/hooks";
 import { hasText, type Channel } from "../../features/channels/types";
 import { useChannelPings, useMutedChannels } from "../../features/notifications/hooks";
@@ -19,12 +20,20 @@ type OpenChannelMenu = (channelId: string, point: MenuPoint) => void;
 
 const isMenuKey = (e: KeyboardEvent) => e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey);
 
-function GroupLabel({ children }: { children: string }) {
+/** A group's name; selecting it folds the group up or opens it again. */
+function GroupLabel({ children, collapsed, onToggle }: { children: string; collapsed: boolean; onToggle: () => void }) {
   return (
-    <div className="pb-section-label flex items-center gap-1.5 px-2.5 pb-1.5 pt-3.5">
-      <ChevronDown size={11} aria-hidden="true" />
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      aria-label={`${children} category`}
+      title={collapsed ? "Expand" : "Collapse"}
+      onClick={onToggle}
+      className="pb-section-label flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.5 pb-1.5 pt-3.5 text-left hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
+    >
+      {collapsed ? <ChevronRight size={11} aria-hidden="true" /> : <ChevronDown size={11} aria-hidden="true" />}
       {children}
-    </div>
+    </button>
   );
 }
 
@@ -144,6 +153,11 @@ export function ChannelSidebar() {
   const serverMenu = useServerMenu(show);
 
   const { data: categories = [] } = useCategories();
+  const { collapsed, toggle } = useCollapsedCategories();
+  const activeChannelId = useMatch("/dashboard/channels/:channelId")?.params.channelId;
+  /** In a folded group only the channel you are in and those with something unread stay in view. */
+  const shown = (group: string, list: Channel[]) =>
+    collapsed.has(group) ? list.filter((c) => c.channel_id === activeChannelId || (unread[c.channel_id] ?? 0) > 0 || (pings[c.channel_id] ?? 0) > 0) : list;
   // Channels in a category are shown with it, text and voice together; the rest keep the two plain groups.
   const groups = groupChannels(channels ?? [], categories);
   const categorised = groups.filter((g) => g.category !== null);
@@ -189,21 +203,27 @@ export function ChannelSidebar() {
           <>
             {categorised.map(({ category, channels: inside }) => (
               <section key={category!.category_id} aria-label={category!.name}>
-                <GroupLabel>{category!.name}</GroupLabel>
-                <div className="flex flex-col gap-px">{inside.map(renderChannel)}</div>
+                <GroupLabel collapsed={collapsed.has(category!.category_id)} onToggle={() => toggle(category!.category_id)}>
+                  {category!.name}
+                </GroupLabel>
+                <div className="flex flex-col gap-px">{shown(category!.category_id, inside).map(renderChannel)}</div>
               </section>
             ))}
             {textChannels.length > 0 && (
               <section>
-                <GroupLabel>Channels</GroupLabel>
-                <div className="flex flex-col gap-px">{textChannels.map(renderChannel)}</div>
+                <GroupLabel collapsed={collapsed.has("loose-text")} onToggle={() => toggle("loose-text")}>
+                  Channels
+                </GroupLabel>
+                <div className="flex flex-col gap-px">{shown("loose-text", textChannels).map(renderChannel)}</div>
               </section>
             )}
             {voiceChannels.length > 0 && (
               <section>
-                <GroupLabel>Voice</GroupLabel>
+                <GroupLabel collapsed={collapsed.has("loose-voice")} onToggle={() => toggle("loose-voice")}>
+                  Voice
+                </GroupLabel>
                 <div className="flex flex-col gap-px">
-                  {voiceChannels.map((channel) => (
+                  {shown("loose-voice", voiceChannels).map((channel) => (
                     <VoiceChannelRow
                       key={channel.channel_id}
                       channel={channel}
