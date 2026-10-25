@@ -1,4 +1,5 @@
 import { descriptionOf } from "../../lib/files";
+import type { ServerFilters } from "../../lib/searchFilters";
 import { api } from "../../services/api";
 import { authed, requireSession } from "../../services/authed";
 import { normalizeMessage, type WireMessage } from "./normalize";
@@ -77,9 +78,20 @@ export interface SearchResult {
 }
 
 /** Substring search over a channel's recent messages (the server decrypts and scans them; there is no full-text index). */
-export async function searchMessages(channelId: string, query: string, limit = 20, dm = false): Promise<SearchResult> {
+export async function searchMessages(channelId: string, query: string, limit = 20, dm = false, filters: ServerFilters = {}): Promise<SearchResult> {
   const path = dm ? `/api/v1/dms/conversations/${encodeURIComponent(channelId)}` : channelPath(channelId);
-  const res = await authed.query<SearchResponse>("GET", `${path}/search`, { query: { q: query, limit } });
+  const res = await authed.query<SearchResponse>("GET", `${path}/search`, {
+    query: {
+      ...(query ? { q: query } : {}),
+      limit,
+      ...(filters.fromUserId ? { from_user_id: filters.fromUserId } : {}),
+      ...(filters.mentions ? { mentions: filters.mentions } : {}),
+      ...(filters.has?.length ? { has: filters.has.join(",") } : {}),
+      ...(filters.before ? { before: filters.before } : {}),
+      ...(filters.after ? { after: filters.after } : {}),
+      ...(filters.authorType ? { author_type: filters.authorType } : {}),
+    },
+  });
   return { messages: (res.messages ?? []).map((m) => normalizeMessage(m, channelId)), scanned: res.scanned ?? 0, truncated: res.truncated_scan === true };
 }
 

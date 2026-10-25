@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { uploadProgress } from "../transfers/store";
+import { hasServerFilters, type ServerFilters } from "../../lib/searchFilters";
 import { loadMessages, reportMessage, searchMessages, sendMessage } from "./api";
 import { ApiError } from "../../services/api";
 import { CommandError } from "../realtime/commands";
@@ -37,11 +38,12 @@ export function useMessages(channelId: string) {
 /** The server refuses shorter queries. */
 export const MIN_SEARCH_LENGTH = 2;
 
-export function useMessageSearch(channelId: string, query: string, dm = false) {
+/** Searches a channel (or a DM conversation) for `query`, narrowed by `filters`; either may be empty, not both. */
+export function useMessageSearch(channelId: string, query: string, dm = false, filters: ServerFilters = {}, enabled = true) {
   return useQuery({
-    queryKey: ["messages", "search", channelId, query] as const,
-    queryFn: () => searchMessages(channelId, query, 20, dm),
-    enabled: query.length >= MIN_SEARCH_LENGTH,
+    queryKey: ["messages", "search", channelId, query, filters] as const,
+    queryFn: () => searchMessages(channelId, query, 20, dm, filters),
+    enabled: enabled && (query.length >= MIN_SEARCH_LENGTH ? true : query.length === 0 && hasServerFilters(filters)),
     staleTime: 30_000,
   });
 }

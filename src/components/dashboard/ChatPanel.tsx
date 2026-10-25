@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Hash, Lock, Users } from "lucide-react";
+import { useNavigate } from "react-router";
 import { usePinMessage, usePins } from "../../features/channels/pins";
-import { useMarkChannelRead } from "../../features/channels/hooks";
+import { useChannels, useMarkChannelRead } from "../../features/channels/hooks";
 import { useChannelPings, useMuteChannel, useMutedChannels } from "../../features/notifications/hooks";
-import type { Channel } from "../../features/channels/types";
+import { hasText, type Channel } from "../../features/channels/types";
 import type { Message } from "../../features/messages/types";
 import { toReplyPreview } from "../../features/messages/replies";
 import { useDeleteMessage, useEditMessage, useMessages, useReportMessage, useSendMessage, useToggleReaction } from "../../features/messages/hooks";
@@ -36,6 +37,11 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   const { messages, isPending, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = useMessages(channelId);
   const { data: me } = useMyProfile();
   const { data: users } = useUsers();
+  const { data: allChannels } = useChannels();
+  const navigate = useNavigate();
+  // Who `from:` and `mentions:` can name, and which channels `in:` can.
+  const searchPeople = useMemo(() => (users ?? []).map((u) => ({ id: u.user_id, name: u.username, avatarUrl: u.avatar_url })), [users]);
+  const searchChannels = useMemo(() => (allChannels ?? []).filter(hasText).map((c) => ({ id: c.channel_id, name: c.channel_name })), [allChannels]);
 
   // Who can be mentioned here, and who the log should recognise as a mention.
   const mentionables = useMemo<Mentionable[]>(() => {
@@ -164,7 +170,13 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
             {muted ? <BellOff size={17} aria-hidden="true" /> : <Bell size={17} aria-hidden="true" />}
           </button>
           <PinnedMessages channelId={channelId} canUnpin={canPin} onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
-          <ChannelSearch channelId={channelId} label={`#${channel.channel_name}`} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
+          <ChannelSearch
+            channelId={channelId}
+            label={`#${channel.channel_name}`}
+            people={searchPeople}
+            channels={searchChannels}
+            onPick={(message: Message) => (message.channelId === channelId ? log.current?.jumpTo(message.id) : navigate(`/dashboard/channels/${encodeURIComponent(message.channelId)}`))}
+          />
           {onToggleMembers && (
             <button
               type="button"

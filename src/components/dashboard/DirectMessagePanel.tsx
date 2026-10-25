@@ -94,6 +94,15 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   // A brand-new conversation is not in the list yet, but the person is on this instance's member list.
   const peerUserId = conversation?.peerUserId ?? (peer.includes("@") ? undefined : users?.find((u) => u.username === peer)?.user_id);
 
+  // The two of you are who `from:` and `mentions:` can name here.
+  const searchPeople = useMemo(
+    () => [
+      ...(me ? [{ id: me.user_id, name: me.username, avatarUrl: me.avatar_url }] : []),
+      ...(peerUserId ? [{ id: peerUserId, name, avatarUrl: conversation?.peerAvatarUrl ?? null }] : []),
+    ],
+    [me, peerUserId, name, conversation?.peerAvatarUrl],
+  );
+
   const avatar = <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={80} />;
 
   return (
@@ -105,7 +114,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         {peer.includes("@") && <span className="truncate text-[12.5px] text-text-muted">@{peer}</span>}
         <div className="ml-auto flex items-center gap-1">
           <PinnedMessages dm channelId={conversationId} canUnpin onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
-          <ChannelSearch dm channelId={conversationId} label={`@${name}`} onPick={(message) => log.current?.jumpTo(message.id)} />
+          <ChannelSearch dm channelId={conversationId} label={`@${name}`} people={searchPeople} onPick={(message) => log.current?.jumpTo(message.id)} />
           {peerUserId && (
             <button
               type="button"
