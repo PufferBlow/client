@@ -307,14 +307,21 @@ function MediaGallery({ message }: { message: Message }) {
   );
 }
 
+/** One short line of the message a reply answers: the first line only, whitespace folded, cut at 100 characters. */
+function replySnippet(text: string): string {
+  const line = toPlainText(text).split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? "";
+  const flat = line.replace(/\s+/g, " ");
+  return flat.length > 100 ? `${flat.slice(0, 100).trimEnd()}…` : flat;
+}
+
 /**
  * The line above a reply: who and what it answers, joined to the avatar below by a curved spine
  * the way Discord draws it. Clicking it jumps to the original.
  */
 function ReplyLine({ reply, onJumpTo }: { reply: ReplyPreview; onJumpTo?: (id: string) => void }) {
-  const snippet = reply.deleted ? "" : toPlainText(reply.text);
+  const snippet = reply.deleted ? "" : replySnippet(reply.text);
   return (
-    <div className="flex basis-full items-center gap-3">
+    <div className="flex h-[22px] basis-full items-center gap-3 overflow-hidden">
       <div className="relative h-[22px] w-10 shrink-0" aria-hidden="true">
         <span className="absolute -bottom-1 left-[19px] top-[11px] w-[29px] rounded-tl-[7px] border-l-2 border-t-2 border-border" />
       </div>
@@ -330,7 +337,7 @@ function ReplyLine({ reply, onJumpTo }: { reply: ReplyPreview; onJumpTo?: (id: s
           <Avatar name={reply.authorName} src={reply.authorAvatarUrl} seed={reply.authorId} size={16} />
           <span className="shrink-0 font-semibold text-text-tertiary">{reply.authorName || "Unknown user"}</span>
           {snippet ? (
-            <span className="min-w-0 truncate">
+            <span className="min-w-0 whitespace-nowrap truncate">
               <EmojiText text={snippet} size="1.1em" />
             </span>
           ) : (

@@ -514,6 +514,18 @@ describe("PufferblowBrand", () => {
   });
 });
 
+describe("the line above a reply", () => {
+  it("shows one short line of the original, never its whole body", () => {
+    const long = "```python\n#!/usr/bin/python\nimport sys\n" + "import something_long ".repeat(30) + "\n```";
+    const reply = { id: "o1", authorId: "u2", authorName: "r0d", authorAvatarUrl: null, text: long, hasAttachments: false, deleted: false };
+    render(<MessageItem message={{ ...message(), replyTo: reply }} isGroupStart myUserId="me" onEdit={vi.fn().mockResolvedValue(undefined)} onToggleReaction={vi.fn()} />);
+    const line = screen.getByRole("button", { name: /^Replying to r0d/ });
+    expect(line.textContent!.length).toBeLessThan(130);
+    expect(line.textContent).not.toMatch(/[\r\n]/);
+    expect(line.parentElement).toHaveClass("overflow-hidden");
+  });
+});
+
 describe("puff reactions in a message", () => {
   it("draws a puff reaction as its face and sends it back as the reserved string", async () => {
     const onToggleReaction = vi.fn();
