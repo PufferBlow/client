@@ -347,10 +347,29 @@ describe("FriendsView", () => {
     await waitFor(() => expect(requestLog(fetchMock)).toContain("DELETE /api/v1/friends/u1"));
   });
 
+  it("shows the request form only after Add friend, and puts it away again", async () => {
+    friendsBackend({});
+    const { user: u } = renderFriends();
+
+    await screen.findByRole("button", { name: "Add friend" });
+    expect(screen.queryByLabelText("Friend handle")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send request" })).not.toBeInTheDocument();
+
+    await u.click(screen.getByRole("button", { name: "Add friend" }));
+    expect(screen.getByLabelText("Friend handle")).toHaveFocus();
+    await u.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByLabelText("Friend handle")).not.toBeInTheDocument();
+
+    await u.click(screen.getByRole("button", { name: "Add friend" }));
+    await u.keyboard("{Escape}");
+    expect(screen.queryByLabelText("Friend handle")).not.toBeInTheDocument();
+  });
+
   it("sends a friend request with a bare username", async () => {
     const fetchMock = friendsBackend({ "POST /api/v1/friends/requests": { status_code: 201 } });
     const { user: u } = renderFriends();
 
+    await u.click(await screen.findByRole("button", { name: "Add friend" }));
     await u.type(await screen.findByLabelText("Friend handle"), "newbie");
     await u.click(screen.getByRole("button", { name: "Send request" }));
 
@@ -366,6 +385,7 @@ describe("FriendsView", () => {
     const fetchMock = friendsBackend({ "POST /api/v1/friends/requests": { status_code: 201 } });
     const { user: u } = renderFriends();
 
+    await u.click(await screen.findByRole("button", { name: "Add friend" }));
     await u.type(await screen.findByLabelText("Friend handle"), "@zed@kiln.social");
     await u.click(screen.getByRole("button", { name: "Send request" }));
 
@@ -378,6 +398,7 @@ describe("FriendsView", () => {
     friendsBackend({ "POST /api/v1/friends/requests": jsonResponse({ error_code: "friends.not_found", message: "No such user.", user_message: "No such user." }, 404) });
     const { user: u } = renderFriends();
 
+    await u.click(await screen.findByRole("button", { name: "Add friend" }));
     await u.type(await screen.findByLabelText("Friend handle"), "ghost");
     await u.click(screen.getByRole("button", { name: "Send request" }));
 

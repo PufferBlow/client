@@ -77,8 +77,9 @@ export interface SearchResult {
 }
 
 /** Substring search over a channel's recent messages (the server decrypts and scans them; there is no full-text index). */
-export async function searchMessages(channelId: string, query: string, limit = 20): Promise<SearchResult> {
-  const res = await authed.query<SearchResponse>("GET", `${channelPath(channelId)}/search`, { query: { q: query, limit } });
+export async function searchMessages(channelId: string, query: string, limit = 20, dm = false): Promise<SearchResult> {
+  const path = dm ? `/api/v1/dms/conversations/${encodeURIComponent(channelId)}` : channelPath(channelId);
+  const res = await authed.query<SearchResponse>("GET", `${path}/search`, { query: { q: query, limit } });
   return { messages: (res.messages ?? []).map((m) => normalizeMessage(m, channelId)), scanned: res.scanned ?? 0, truncated: res.truncated_scan === true };
 }
 

@@ -164,7 +164,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
             {muted ? <BellOff size={17} aria-hidden="true" /> : <Bell size={17} aria-hidden="true" />}
           </button>
           <PinnedMessages channelId={channelId} canUnpin={canPin} onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
-          <ChannelSearch channelId={channelId} channelName={channel.channel_name} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
+          <ChannelSearch channelId={channelId} label={`#${channel.channel_name}`} onPick={(message: Message) => log.current?.jumpTo(message.id)} />
           {onToggleMembers && (
             <button
               type="button"

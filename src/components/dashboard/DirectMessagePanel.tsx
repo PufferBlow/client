@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AtSign, Phone } from "lucide-react";
 import { isCallActive, useCall } from "../../features/calls/callContext";
 import type { Conversation } from "../../features/dms/api";
@@ -9,16 +9,20 @@ import {
   useSendDirectMessage,
   useToggleDirectReaction,
 } from "../../features/dms/hooks";
+import { usePinMessage, usePins } from "../../features/channels/pins";
 import { toReplyPreview } from "../../features/messages/replies";
 import { useServerInfo } from "../../features/server/hooks";
 import { useTypingUsers } from "../../features/typing/store";
 import { useTypingNotifier } from "../../features/typing/useTypingNotifier";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
 import { useToast } from "../../hooks/useToast";
+import { classifyAuthError } from "../../utils/authErrors";
 import { ToastRegion } from "../ui/Toast";
 import { Avatar } from "./Avatar";
+import { ChannelSearch } from "./ChannelSearch";
 import { Composer } from "./Composer";
-import { MessageLog } from "./MessageLog";
+import { MessageLog, type MessageLogHandle } from "./MessageLog";
+import { PinnedMessages } from "./PinnedMessages";
 import type { MessagePermissions } from "./messageMenu";
 
 /** In a private conversation you can edit and delete only your own messages; there is no one to report to. */
@@ -48,6 +52,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const { toast, show: showToast } = useToast();
   const call = useCall();
   const { data: users } = useUsers();
+  const log = useRef<MessageLogHandle>(null);
 
   const name = conversation?.peerUsername ?? peer.split("@")[0] ?? peer;
   // In a 1:1 conversation the only other person who can be typing is the peer.
@@ -64,6 +69,20 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const handleReply = useCallback((id: string) => setReply({ conversationId, id }), [conversationId]);
   const cancelReply = useCallback(() => setReply(null), []);
   const loadOlder = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+
+  // Either person can pin. The pins are read once there is a conversation to read them from, which also
+  // tells the message menu what is pinned already.
+  const { data: pinned } = usePins(conversationId, messages.length > 0, true);
+  const { pin, unpin } = usePinMessage(conversationId, true);
+  const pinnedIds = useMemo(() => new Set((pinned?.pins ?? []).map((p) => p.message.id)), [pinned]);
+  const togglePin = useCallback(
+    (id: string, pinIt: boolean) =>
+      (pinIt ? pin : unpin).mutate(id, {
+        onSuccess: () => showToast(pinIt ? "Message pinned." : "Message unpinned."),
+        onError: (err) => showToast(classifyAuthError(err, pinIt ? "Couldn't pin the message." : "Couldn't unpin the message.").message, "error"),
+      }),
+    [pin, unpin, showToast],
+  );
 
   const handleSend = async (input: { text: string; files: File[] }) => {
     typing.reset();
@@ -84,21 +103,26 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={26} presence={conversation?.peerStatus} />
         <h1 className="m-0 text-[15px] font-bold">{name}</h1>
         {peer.includes("@") && <span className="truncate text-[12.5px] text-text-muted">@{peer}</span>}
-        {peerUserId && (
-          <button
-            type="button"
-            aria-label={`Call ${name}`}
-            title={isCallActive(call) ? "You are already on a call" : `Start an end-to-end encrypted call with ${name}`}
-            disabled={isCallActive(call)}
-            onClick={() => void call.startCall({ userId: peerUserId, name })}
-            className="ml-auto grid size-9 place-items-center rounded-full border-0 bg-transparent text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text disabled:opacity-40"
-          >
-            <Phone size={17} aria-hidden="true" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          <PinnedMessages dm channelId={conversationId} canUnpin onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
+          <ChannelSearch dm channelId={conversationId} label={`@${name}`} onPick={(message) => log.current?.jumpTo(message.id)} />
+          {peerUserId && (
+            <button
+              type="button"
+              aria-label={`Call ${name}`}
+              title={isCallActive(call) ? "You are already on a call" : `Start an end-to-end encrypted call with ${name}`}
+              disabled={isCallActive(call)}
+              onClick={() => void call.startCall({ userId: peerUserId, name })}
+              className="grid size-9 place-items-center rounded-full border-0 bg-transparent text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text disabled:opacity-40"
+            >
+              <Phone size={17} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </header>
 
       <MessageLog
+        ref={log}
         conversationId={conversationId}
         messages={messages}
         isPending={isPending}
@@ -132,6 +156,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
         onDiscard={discard}
         onReply={handleReply}
         permissions={DM_PERMISSIONS}
+        pins={{ ids: pinnedIds, toggle: togglePin }}
         showToast={showToast}
       />
 

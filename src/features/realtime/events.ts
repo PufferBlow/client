@@ -103,6 +103,9 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
     case "dm.message.deleted":
       return { kind: "message_deleted", channelId: str(data.conversation_id), messageId: str(data.message_id), dm: true };
 
+    case "dm.pins.updated":
+      return str(data.conversation_id) ? { kind: "pins", channelId: str(data.conversation_id) } : null;
+
     case "dm.reaction.updated":
       return { kind: "reactions", channelId: str(data.conversation_id), messageId: str(data.message_id), reactions: reactionsFromView(data.reactions) };
 

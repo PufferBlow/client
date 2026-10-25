@@ -96,7 +96,8 @@ function FriendCard({ friend, voice, onMessage }: { friend: Friend; voice: Reado
   );
 }
 
-function AddFriendForm() {
+/** The request form, opened by the header's Add friend button; Escape or the close button puts it away. */
+function AddFriendForm({ onClose }: { onClose: () => void }) {
   const [handle, setHandle] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const send = useSendFriendRequest();
@@ -114,12 +115,12 @@ function AddFriendForm() {
   };
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2.5 rounded-lg bg-surface-secondary p-3.5">
+    <form onSubmit={submit} aria-label="Add a friend" onKeyDown={(e) => e.key === "Escape" && onClose()} className="flex flex-col gap-2.5 rounded-lg bg-surface-secondary p-3.5">
       <div className="flex gap-2.5">
         <div className="flex h-11 flex-1 items-center gap-2.5 rounded-md bg-surface px-3.5 text-[14.5px] text-text-tertiary shadow-[0_0_0_2px_var(--color-surface-secondary),0_0_0_4px_var(--color-text)]">
           <AtSign size={16} aria-hidden="true" />
           <input
-            id="add-friend"
+            autoFocus
             value={handle}
             onChange={(e) => {
               setHandle(e.target.value);
@@ -134,6 +135,9 @@ function AddFriendForm() {
         </div>
         <Button type="submit" size="lg" className="h-11" loading={send.isPending} disabled={!handle.trim()}>
           Send request
+        </Button>
+        <Button type="button" variant="ghost" size="lg" className="h-11 px-3.5" aria-label="Close" title="Close" onClick={onClose}>
+          <X size={16} aria-hidden="true" />
         </Button>
       </div>
       {sentTo && !send.error && (
@@ -309,6 +313,7 @@ function ActiveNow({ friends, voice }: { friends: Friend[]; voice: ReadonlyMap<s
 export function FriendsView() {
   const [tab, setTab] = useState<Tab>("online");
   const [view, setView] = useState<View>("list");
+  const [adding, setAdding] = useState(false);
   const [instance, setInstance] = useState("");
   const friends = useFriends();
   const requests = useFriendRequests();
@@ -339,7 +344,7 @@ export function FriendsView() {
   else if (tab === "blocked") body = <BlockedList />;
   else if (friends.isPending) body = <LoadingState message="Loading friends…" />;
   else if (friends.error) body = <ErrorState title="Couldn't load friends" message={classifyAuthError(friends.error, "Try again.").message} onRetry={() => void friends.refetch()} />;
-  else body = <FriendsList friends={tab === "online" ? online : all} empty={tab === "online" ? "Nobody is online right now." : "No friends yet. Send a request above."} view={view} voice={voice} />;
+  else body = <FriendsList friends={tab === "online" ? online : all} empty={tab === "online" ? "Nobody is online right now." : "No friends yet. Use Add friend to send a request."} view={view} voice={voice} />;
 
   const inVoice = everyone.filter((f) => voice.has(f.userId)).length;
 
@@ -379,7 +384,7 @@ export function FriendsView() {
                 </button>
               ))}
             </div>
-            <Button size="sm" onClick={() => document.getElementById("add-friend")?.focus()}>
+            <Button size="sm" aria-expanded={adding} onClick={() => setAdding((open) => !open)}>
               <UserPlus size={15} aria-hidden="true" />
               Add friend
             </Button>
@@ -393,7 +398,7 @@ export function FriendsView() {
               {inVoice > 0 ? ` · ${inVoice} in voice` : ""}
             </p>
           )}
-          <AddFriendForm />
+          {adding && <AddFriendForm onClose={() => setAdding(false)} />}
           {body}
         </div>
       </section>

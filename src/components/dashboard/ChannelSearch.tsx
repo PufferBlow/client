@@ -30,13 +30,16 @@ const formatWhen = (iso: string) => {
 
 interface ChannelSearchProps {
   channelId: string;
-  channelName: string;
+  /** What it searches, as the field says it: `#general`, or `@ada` in a direct message. */
+  label: string;
+  /** The id is a direct-message conversation's. */
+  dm?: boolean;
   /** Jump to a message in the open conversation. */
   onPick: (message: Message) => void;
 }
 
 /** The channel search field, always shown in the header, with matches listed under it while you type. */
-export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchProps) {
+export function ChannelSearch({ channelId, label, dm = false, onPick }: ChannelSearchProps) {
   const [text, setText] = useState("");
   // The matches are a popover: clicking elsewhere puts them away without touching what you typed.
   const [showResults, setShowResults] = useState(false);
@@ -64,7 +67,7 @@ export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchP
   }, [showResults]);
 
   const ready = query.length >= MIN_SEARCH_LENGTH;
-  const search = useMessageSearch(channelId, query);
+  const search = useMessageSearch(channelId, query, dm);
 
   const results = search.data?.messages ?? [];
 
@@ -83,8 +86,8 @@ export function ChannelSearch({ channelId, channelName, onPick }: ChannelSearchP
           onKeyDown={(e) => {
             if (e.key === "Escape") clear();
           }}
-          placeholder={`Search #${channelName}`}
-          aria-label={`Search #${channelName}`}
+          placeholder={`Search ${label}`}
+          aria-label={`Search ${label}`}
           className="min-w-0 flex-1 bg-transparent text-[13.5px] text-text outline-none placeholder:text-text-muted [&::-webkit-search-cancel-button]:hidden"
         />
         {text.length > 0 && (

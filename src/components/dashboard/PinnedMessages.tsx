@@ -21,8 +21,11 @@ export function PinnedMessages({
   onJump,
   canUnpin,
   onUnpin,
+  dm = false,
 }: {
   channelId: string;
+  /** The id is a direct-message conversation's: either person may unpin, and the empty text says so. */
+  dm?: boolean;
   onJump: (message: Message) => void;
   canUnpin: boolean;
   onUnpin: (messageId: string) => void;
@@ -31,7 +34,7 @@ export function PinnedMessages({
   const root = useRef<HTMLDivElement>(null);
   // Fetched once the list is first opened, then kept fresh by the realtime pin events.
   const [wanted, setWanted] = useState(false);
-  const { data, isPending, error } = usePins(channelId, wanted);
+  const { data, isPending, error } = usePins(channelId, wanted, dm);
   const count = data?.pins.length ?? 0;
 
   useEffect(() => {
@@ -81,7 +84,7 @@ export function PinnedMessages({
               <div className="flex flex-col items-center gap-1.5 px-4 py-6 text-center">
                 <Pin size={22} aria-hidden="true" className="text-text-muted" />
                 <p className="m-0 text-sm text-text">Nothing is pinned yet</p>
-                <p className="pb-meta m-0 text-[12.5px]">Moderators can pin a message from its menu.</p>
+                <p className="pb-meta m-0 text-[12.5px]">{dm ? "Either of you can pin a message from its menu." : "Moderators can pin a message from its menu."}</p>
               </div>
             ) : (
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0">

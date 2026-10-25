@@ -142,6 +142,10 @@ describe("toRealtimeEvent", () => {
     expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", access: "granted" } })).toMatchObject({ change: "granted" });
   });
 
+  it("recognises a pin change in a direct message by its conversation", () => {
+    expect(toRealtimeEvent({ ...event("event_channel_updated"), name: "dm.pins.updated", data: { conversation_id: "conv1", message_id: "m1" } })).toEqual({ kind: "pins", channelId: "conv1" });
+  });
+
   it("recognises a pin or an unpin, and a topic change as an ordinary update", () => {
     const base = event("event_channel_updated");
     expect(toRealtimeEvent({ ...base, data: { channel_id: "c1", pin: { message_id: "m1", pinned: true } } })).toEqual({ kind: "pins", channelId: "c1" });

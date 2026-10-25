@@ -47,7 +47,7 @@ interface MessageLogProps {
   permissions?: MessagePermissions;
   /** Offered in the menu when the permissions allow it. */
   onReport?: (id: string) => void;
-  /** Pin and unpin from the menu: the ids pinned now, and what to do. Omit where pins do not exist (DMs). */
+  /** Pin and unpin from the menu: the ids pinned now, and what to do. Omit where the viewer cannot pin. */
   pins?: { ids: ReadonlySet<string>; toggle: (id: string, pin: boolean) => void };
   showToast: (text: string, tone?: "info" | "error") => void;
 }

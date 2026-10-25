@@ -37,10 +37,10 @@ export function useMessages(channelId: string) {
 /** The server refuses shorter queries. */
 export const MIN_SEARCH_LENGTH = 2;
 
-export function useMessageSearch(channelId: string, query: string) {
+export function useMessageSearch(channelId: string, query: string, dm = false) {
   return useQuery({
     queryKey: ["messages", "search", channelId, query] as const,
-    queryFn: () => searchMessages(channelId, query),
+    queryFn: () => searchMessages(channelId, query, 20, dm),
     enabled: query.length >= MIN_SEARCH_LENGTH,
     staleTime: 30_000,
   });
