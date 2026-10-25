@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { rememberActiveAccount, saveActiveAccount } from "../../services/accounts";
-import { getActiveAccountId, getAuthToken, persistSession, setActiveAccountId } from "../../services/auth";
+import { persistSession, setActiveAccountId } from "../../services/auth";
 import { resolveInstance, setStoredInstance } from "../../services/instance";
 import { routeFetch } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
@@ -42,33 +42,14 @@ afterEach(() => {
 });
 
 describe("the rail of joined instances", () => {
-  it("shows the instance you are in, and each other instance you hold an account on", async () => {
+  it("shows the instance you are in, and leaves other accounts to the account switcher", async () => {
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
 
     expect(await screen.findByRole("link", { name: /Two Place/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Switch to ada on one.example" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Switch to bo/ })).not.toBeInTheDocument(); // you are already there
+    // ada on one.example is saved on this device, but her instance is not a tile here.
+    expect(screen.queryByRole("button", { name: /Switch to/ })).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/one\.example/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add an instance" })).toBeInTheDocument();
-  });
-
-  it("switching to another instance signs in as that account and starts the app over", async () => {
-    const { user } = renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
-
-    await user.click(await screen.findByRole("button", { name: "Switch to ada on one.example" }));
-
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("/dashboard"));
-    expect(getAuthToken()).toBe("a1");
-    expect(getActiveAccountId()).toBe(`ada@${one.raw}`);
-  });
-
-  it("goes to the picker instead when that account has to sign in again", async () => {
-    localStorage.setItem("pb_accounts", JSON.stringify(JSON.parse(localStorage.getItem("pb_accounts")!).map((a: { id: string }) => (a.id.startsWith("ada") ? { ...a, snapshot: null } : a))));
-    const { user } = renderWithProviders(<ServerRail />, { route: "/dashboard/channels" });
-
-    await user.click(await screen.findByRole("button", { name: "Switch to ada on one.example" }));
-
-    expect(await screen.findByTestId("elsewhere")).toHaveTextContent("/accounts");
-    expect(assign).not.toHaveBeenCalled();
   });
 
   it("adds an instance through the login page", async () => {

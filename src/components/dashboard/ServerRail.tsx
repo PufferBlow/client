@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { saveActiveAccount } from "../../services/accounts";
 import { NavLink, useMatch, useNavigate } from "react-router";
 import { Plus, SlidersHorizontal } from "lucide-react";
@@ -13,9 +12,6 @@ import { isServerOwner } from "../../features/users/roles";
 import { useToast } from "../../hooks/useToast";
 import { PufferblowBrand } from "../ui/PufferblowBrand";
 import { SpaceIcon } from "../ui/SpaceIcon";
-import { listAccounts, switchAccount } from "../../services/accounts";
-import { getActiveAccountId } from "../../services/auth";
-import { useQueryClient } from "@tanstack/react-query";
 import { usePublicHealth } from "../../features/health/hooks";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
@@ -46,9 +42,6 @@ const iconTileBase = tileBase.replace(" text-on-primary", "");
 /** `clearUserPanel`: leave room at the bottom for the user card floating over the rail. */
 export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean } = {}) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const activeId = getActiveAccountId();
-  const others = useMemo(() => listAccounts().filter((a) => a.id !== activeId), [activeId]);
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
   const onHome = onFriends || onDms;
@@ -127,28 +120,6 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           )}
         </NavLink>
       </div>
-
-      {others.map((account) => (
-        <div key={account.id} className="group/tile relative flex w-full justify-center">
-          <Indicator selected={false} unread={false} />
-          <button
-            type="button"
-            aria-label={`Switch to ${account.username} on ${account.instance.raw}`}
-            title={`${account.instance.raw} · ${account.username}${account.snapshot ? "" : " (signed out)"}`}
-            onClick={async () => {
-              if (!(await switchAccount(account.id))) {
-                navigate("/accounts");
-                return;
-              }
-              queryClient.clear();
-              window.location.assign("/dashboard");
-            }}
-            className={`${tileBase} rounded-[14px] ${account.snapshot ? "" : "opacity-55"}`}
-          >
-            <SpaceIcon id={account.instance.raw} name={account.instance.raw} src={null} size={48} radius="inherit" className="absolute inset-0" />
-          </button>
-        </div>
-      ))}
 
       <div className="group/tile relative flex w-full justify-center">
         <button
