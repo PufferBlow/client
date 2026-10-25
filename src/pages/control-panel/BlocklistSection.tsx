@@ -5,7 +5,7 @@ import { ErrorState } from "../../components/ui/ErrorState";
 import { Input } from "../../components/ui/Input";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { SpaceIcon } from "../../components/ui/SpaceIcon";
-import { type ImportResult, parseHostList, usePeerAdmin, usePeers } from "../../features/federation/peers";
+import { type ImportResult, parseHostList, peerHost, usePeerAdmin, usePeers } from "../../features/federation/peers";
 import { classifyAuthError } from "../../utils/authErrors";
 
 const MAX_IMPORT = 500;
@@ -40,11 +40,11 @@ export function BlocklistSection() {
 
   const blockOne = (event: FormEvent) => {
     event.preventDefault();
-    const value = host.trim();
+    const value = peerHost(host);
     if (!value) return;
     void attempt(
       // A host that is already a peer is switched to blocked; a new one is added blocked.
-      (data.peers.some((p) => p.host === value.toLowerCase()) ? admin.setStatus.mutateAsync({ host: value.toLowerCase(), status: "blocked" }) : admin.add.mutateAsync({ host: value, status: "blocked" })).then(() => setHost("")),
+      (data.peers.some((p) => p.host === value) ? admin.setStatus.mutateAsync({ host: value, status: "blocked" }) : admin.add.mutateAsync({ host: value, status: "blocked" })).then(() => setHost("")),
     );
   };
 

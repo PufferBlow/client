@@ -87,6 +87,11 @@ export function usePeerAdmin() {
   return { setMode, add, setStatus, setPolicy, remove, checkNow, importHosts };
 }
 
+/** The bare host of whatever was typed or pasted: a URL, `Host:Port`, with a path or in capitals. */
+export function peerHost(text: string): string {
+  return text.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/[/?#].*$/, "").replace(/^.*@/, "").toLowerCase();
+}
+
 /** One host per line, or separated by commas or spaces; blank lines and `#` comments are ignored. */
 export function parseHostList(text: string): string[] {
   return text

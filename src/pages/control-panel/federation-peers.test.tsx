@@ -3,7 +3,7 @@ import { screen, within } from "@testing-library/react";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ControlPanelPage } from "./ControlPanelPage";
-import { type FederationMode, type Peer, type PeerStatus, parseHostList } from "../../features/federation/peers";
+import { type FederationMode, type Peer, type PeerStatus, parseHostList, peerHost } from "../../features/federation/peers";
 
 beforeEach(() => signIn("tok"));
 
@@ -265,6 +265,18 @@ describe("the Blocklist page", () => {
     expect(state.peers.find((p) => p.host === "mesh.garden")!.status).toBe("blocked");
   });
 
+  it("switches an existing peer to blocked when it is typed as a URL", async () => {
+    const { state } = backend();
+    const { user } = renderPanel("blocklist");
+    const section = within(await screen.findByRole("region", { name: "Blocked instances" }));
+
+    await user.type(await section.findByLabelText("Instance to block"), "HTTPS://Mesh.Garden/about");
+    await user.click(section.getByRole("button", { name: "Block" }));
+    expect(await section.findByText("mesh.garden")).toBeInTheDocument();
+    expect(section.queryByRole("alert")).not.toBeInTheDocument();
+    expect(state.peers.find((p) => p.host === "mesh.garden")!.status).toBe("blocked");
+  });
+
   it("imports a list and reports what was added, skipped and not valid", async () => {
     const { state } = backend();
     const { user } = renderPanel("blocklist");
@@ -276,6 +288,13 @@ describe("the Blocklist page", () => {
 
     expect(await aside.findByRole("status")).toHaveTextContent(/Blocked 2, skipped 1 already known, 1 not valid \(bad\)/);
     expect(state.peers.filter((p) => p.status === "blocked").map((p) => p.host)).toEqual(expect.arrayContaining(["a.example", "b.example"]));
+  });
+});
+
+describe("peerHost", () => {
+  it("reduces a URL or a capitalised host to the bare host", () => {
+    expect(peerHost(" https://User@Mesh.Garden:8443/a?b#c ")).toBe("mesh.garden:8443");
+    expect(peerHost("noise.example")).toBe("noise.example");
   });
 });
 
