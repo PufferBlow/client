@@ -467,7 +467,7 @@ export function Composer({
               // Open above the field with its right edge on the button.
               setPicker({ x: rect.right - 334, y: rect.top - 394 - 10 });
             }}
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] transition-colors hover:bg-surface-tertiary hover:text-text ${picker ? "bg-surface-tertiary text-primary" : ""}`}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition-colors hover:bg-surface-tertiary hover:text-text ${picker ? "bg-surface-tertiary text-primary" : ""}`}
           >
             <Smile size={18} />
           </button>
@@ -475,7 +475,7 @@ export function Composer({
             type="submit"
             aria-label="Send message"
             disabled={!canSend}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary text-on-primary transition-[opacity,transform] active:scale-95 disabled:opacity-40"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary text-on-primary transition-[opacity,transform] active:scale-95 disabled:opacity-40"
           >
             <Send size={16} />
           </button>

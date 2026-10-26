@@ -265,7 +265,7 @@ function PeerDetails({
               aria-label={name}
               disabled={switchesLocked || busy}
               onClick={() => onPolicy(key, !peer.policy[key])}
-              className={`relative h-5 w-9 rounded-[10px] border-0 p-0 transition-colors duration-(--motion-fast) disabled:opacity-50 ${peer.policy[key] ? "bg-text" : "bg-surface-tertiary"}`}
+              className={`relative h-5 w-9 rounded-md border-0 p-0 transition-colors duration-(--motion-fast) disabled:opacity-50 ${peer.policy[key] ? "bg-text" : "bg-surface-tertiary"}`}
             >
               <span className={`absolute top-0.5 size-4 rounded-full transition-[left] duration-(--motion-fast) ${peer.policy[key] ? "left-[18px] bg-background" : "left-0.5 bg-text-muted"}`} />
             </button>

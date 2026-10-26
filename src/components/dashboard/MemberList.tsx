@@ -71,7 +71,7 @@ export function MemberList() {
   const groups = useMemo(() => groupByRole(users ?? []), [users]);
 
   return (
-    <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-lg bg-surface px-2.5 py-3">
+    <aside aria-label="Members" className="w-60 shrink-0 overflow-y-auto rounded-lg bg-surface px-2.5 py-3 max-lg:fixed max-lg:inset-y-2 max-lg:right-2 max-lg:z-20 max-lg:shadow-modal">
       {isPending ? (
         <div role="status" className="flex flex-col pt-2" aria-busy="true">
           <span className="sr-only">Loading members…</span>

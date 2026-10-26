@@ -15,16 +15,17 @@ export function LinkEmbed({ url }: { url: string }) {
 function IframeCard({ embed }: { embed: IframeEmbed }) {
   const size = embed.aspect ? { aspectRatio: String(embed.aspect) } : { height: embed.height };
   return (
-    <div className="relative mt-2 w-full overflow-hidden rounded-xl bg-background-secondary" style={{ maxWidth: embed.maxWidth ?? 480, ...size }}>
+    <div className={`relative mt-2 w-full overflow-hidden rounded-xl ${embed.srcDoc !== undefined ? "bg-white" : "bg-background-secondary"}`} style={{ maxWidth: embed.maxWidth ?? 480, ...size }}>
       <iframe
-        src={embed.src}
-        title={`${embed.provider} player`}
+        {...(embed.srcDoc !== undefined ? { srcDoc: embed.srcDoc } : { src: embed.src })}
+        title={`${embed.provider} embed`}
         loading="lazy"
         className="absolute inset-0 h-full w-full border-0"
         allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write"
         allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
-        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
+        // A page we wrote ourselves runs a provider's script, so it gets no same-origin access to this app.
+        sandbox={`allow-scripts ${embed.srcDoc !== undefined ? "" : "allow-same-origin "}allow-popups allow-popups-to-escape-sandbox allow-presentation`}
       />
     </div>
   );
@@ -39,7 +40,7 @@ function DirectMedia({ embed }: { embed: MediaEmbed }) {
 
   if (embed.kind === "image") {
     return (
-      <a href={embed.url} target="_blank" rel="noreferrer noopener" className="inline-block max-w-full">
+      <a href={embed.href ?? embed.url} target="_blank" rel="noreferrer noopener" className="inline-block max-w-full">
         <img src={embed.url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={fail} className={frame} />
       </a>
     );

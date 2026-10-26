@@ -38,10 +38,10 @@ export function SettingsPage() {
 
   return (
     <>
-      <aside className="flex w-[244px] shrink-0 flex-col gap-1 overflow-y-auto rounded-[14px] bg-surface p-2.5 max-md:hidden">
+      <aside className="flex w-[244px] shrink-0 flex-col gap-1 overflow-y-auto rounded-lg bg-surface p-2.5 max-md:hidden">
         <Link
           to={lastAppLocation()}
-          className="mb-2 flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] text-text-tertiary hover:bg-surface-secondary hover:text-text"
+          className="mb-2 flex h-10 items-center gap-2.5 rounded-md px-3 text-[14.5px] text-text-tertiary hover:bg-surface-secondary hover:text-text"
         >
           <ArrowLeft size={16} aria-hidden="true" />
           Back to app
@@ -56,7 +56,7 @@ export function SettingsPage() {
               to={`/settings/${id}`}
               aria-current={active === id ? "page" : undefined}
               className={[
-                "flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px]",
+                "flex h-10 items-center gap-2.5 rounded-md px-3 text-[14.5px]",
                 active === id
                   ? "bg-surface-tertiary font-semibold text-text"
                   : "text-text-tertiary hover:bg-surface-secondary hover:text-text",
@@ -69,7 +69,7 @@ export function SettingsPage() {
         </nav>
       </aside>
 
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-[14px] bg-surface px-6 py-8 sm:px-10">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg bg-surface px-6 py-8 sm:px-10">
         <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
           <h1 className="m-0 font-display text-[34px] font-normal leading-tight tracking-normal">
             {SECTIONS.find((s) => s.id === active)?.label}

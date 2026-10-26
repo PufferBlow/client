@@ -51,11 +51,12 @@ function CardPopover({ userId, anchor, onClose }: { userId: string; anchor: Card
   if (!person) return null;
 
   const left = Math.max(MARGIN, Math.min(anchor.x, window.innerWidth - CARD_WIDTH - MARGIN));
-  const top = Math.max(MARGIN, Math.min(anchor.y, window.innerHeight - 460));
+  // Opening upward from something (the user card): sit the card's bottom edge on it, however tall the card turns out.
+  const place = anchor.bottom !== undefined ? { bottom: Math.max(MARGIN, window.innerHeight - anchor.bottom) } : { top: Math.max(MARGIN, Math.min(anchor.y, window.innerHeight - 460)) };
   const isMe = me?.user_id === person.user_id;
 
   return createPortal(
-    <div ref={root} role="dialog" aria-label={`${person.username}'s profile`} className="fixed z-[70]" style={{ left, top, maxHeight: `calc(100vh - ${MARGIN * 2}px)` }}>
+    <div ref={root} role="dialog" aria-label={`${person.username}'s profile`} className="fixed z-[70]" style={{ left, ...place, maxHeight: `calc(100vh - ${MARGIN * 2}px)` }}>
       <ProfileCard
         profile={person}
         size="compact"

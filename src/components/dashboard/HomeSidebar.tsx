@@ -5,6 +5,7 @@ import { useConversations } from "../../features/dms/hooks";
 import { useDmUnread } from "../../features/dms/unread";
 import { useMyProfile } from "../../features/users/hooks";
 import { Avatar, CountBadge } from "./Avatar";
+import { drawerClasses, useSidebarDrawer } from "../../features/navigation/sidebarDrawerContext";
 
 /** Where a conversation row links to: the conversation, with the peer to load it by. */
 function conversationPath(conversation: Conversation, myHost: string | undefined): string {
@@ -14,18 +15,19 @@ function conversationPath(conversation: Conversation, myHost: string | undefined
 
 /** The left column of the home screen: Friends, then the direct-message conversations. */
 export function HomeSidebar({ activeConversationId }: { activeConversationId?: string }) {
+  const drawer = useSidebarDrawer();
   const { data: conversations = [], isPending } = useConversations();
   const { data: me } = useMyProfile();
   const { countFor } = useDmUnread(conversations);
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden mb-[70px] rounded-[14px] bg-surface max-md:hidden" aria-label="Home">
+    <aside className={`flex w-[288px] shrink-0 flex-col overflow-hidden mb-[calc(var(--dock-h,56px)+8px)] rounded-lg bg-surface ${drawerClasses(drawer.open)}`} aria-label="Home">
       <div className="flex flex-col gap-0.5 px-2 pt-3">
         <NavLink
           to="/dashboard/friends"
           end
           className={({ isActive }) =>
-            `flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-[14.5px] font-semibold transition-colors ${
+            `flex h-10 items-center gap-2.5 rounded-md px-3 text-[14.5px] font-semibold transition-colors ${
               isActive ? "bg-surface-tertiary text-text" : "text-text-tertiary hover:bg-surface-secondary hover:text-text"
             }`
           }
@@ -48,7 +50,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
                   <NavLink
                     to={conversationPath(c, me?.origin_server)}
                     aria-current={active ? "page" : undefined}
-                    className={`flex h-[46px] items-center gap-2.5 rounded-[10px] px-2 transition-colors ${
+                    className={`flex h-[46px] items-center gap-2.5 rounded-md px-2 transition-colors ${
                       active ? "bg-surface-tertiary" : "hover:bg-surface-secondary"
                     }`}
                   >
@@ -70,7 +72,6 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
           </ul>
         )}
       </nav>
-      <div aria-hidden="true" className="shrink-0" style={{ height: "var(--dock-h, 76px)" }} />
     </aside>
   );
 }

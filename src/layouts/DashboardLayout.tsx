@@ -11,6 +11,7 @@ import { CallProvider } from "../features/calls/CallProvider";
 import { RealtimeProvider } from "../features/realtime/RealtimeProvider";
 import { VoiceProvider } from "../features/voice/VoiceProvider";
 import { useRememberAppLocation } from "../features/navigation/lastAppLocation";
+import { SidebarBackdrop, SidebarDrawerProvider } from "../features/navigation/sidebarDrawer";
 import { useSessionKeeper } from "../hooks/useSessionKeeper";
 
 /** Full-page screens (settings, control panel) take the whole window; the server rail is for the chat views. */
@@ -39,6 +40,7 @@ export function DashboardLayout() {
         <CallProvider>
           <CustomEmojiProvider>
           <ProfileCardProvider>
+          <SidebarDrawerProvider>
             <div className="relative flex h-full min-w-0 flex-1">
               <div
                 inert={blocked}
@@ -46,9 +48,11 @@ export function DashboardLayout() {
                 className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}
               >
                 {showRail && <ServerRail clearUserPanel={showUserPanel} />}
-                <div className="flex min-h-0 min-w-0 flex-1 gap-2">
+                {/* Without the sidebars beside it, the page leaves room under it for the dock. */}
+                <div className={`flex min-h-0 min-w-0 flex-1 gap-2 ${showUserPanel ? "max-md:pb-[calc(var(--dock-h,56px)+8px)]" : ""}`}>
                   <Outlet />
                 </div>
+                <SidebarBackdrop />
                 {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
                 {showUserPanel && (
                   <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
@@ -60,6 +64,7 @@ export function DashboardLayout() {
               {blocked && <InstanceUnavailable status={status} />}
               <CallOverlay />
             </div>
+          </SidebarDrawerProvider>
           </ProfileCardProvider>
           </CustomEmojiProvider>
         </CallProvider>

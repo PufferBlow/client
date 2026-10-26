@@ -1,6 +1,7 @@
 import { Select } from "../../components/ui/Select";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
+import { SidebarToggle } from "../../features/navigation/sidebarDrawer";
 import { AlertCircle, AtSign, Check, MessageCircle, UserMinus, UserPlus, Users, Volume2, X } from "lucide-react";
 import { Avatar, CountBadge } from "../../components/dashboard/Avatar";
 import { HomeSidebar } from "../../components/dashboard/HomeSidebar";
@@ -38,7 +39,7 @@ function activityOf(friend: Friend, voice: ReadonlyMap<string, InVoice>): { text
 
 function PersonRow({ person, subtitle, live, children }: { person: Friend; subtitle: ReactNode; live?: boolean; children: ReactNode }) {
   return (
-    <li className="flex items-center gap-3 rounded-lg border-t border-border-secondary p-2.5 transition-colors duration-(--motion-fast) hover:bg-surface-secondary">
+    <li className="flex items-center gap-3 rounded-lg p-2.5 transition-colors duration-(--motion-fast) hover:bg-surface-secondary">
       <Avatar name={person.username} src={person.avatarUrl} seed={person.userId} size={40} presence={person.status} activity={live} />
       <div className="min-w-0 flex-1 leading-snug">
         <div className="truncate text-[15px]">
@@ -205,7 +206,7 @@ function BlockedList() {
   return (
     <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
       {data.map((b) => (
-        <li key={b.userId} className="flex items-center gap-3 rounded-lg border-t border-border-secondary p-2.5">
+        <li key={b.userId} className="flex items-center gap-3 rounded-lg p-2.5">
           <Avatar name={b.username} src={b.avatarUrl} seed={b.userId} size={40} />
           <div className="min-w-0 flex-1 truncate text-[15px]">
             <b>{b.username}</b> <span className="text-[12.5px] text-text-muted">{handleOf(b)}</span>
@@ -296,9 +297,10 @@ export function FriendsView() {
       <HomeSidebar />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label="Friends">
         <header className="flex h-[60px] shrink-0 items-center gap-3.5 border-b border-border-secondary px-[18px]">
+          <SidebarToggle label="Conversations" />
           <h1 className="m-0 flex items-center gap-2 font-heading text-xl font-semibold">
             <Users size={19} aria-hidden="true" />
-            Friends
+            <span className="max-lg:sr-only">Friends</span>
           </h1>
           <div role="tablist" className="flex gap-1 rounded-lg bg-background p-1">
             {tabs.map(({ id, label, badge, count }) => (
@@ -320,7 +322,7 @@ export function FriendsView() {
             {hosts.length > 1 && (
               <Select label="Instance" className="rounded-pill! bg-transparent! px-3.5! text-[13.5px]! text-text-tertiary! shadow-[inset_0_0_0_1px_var(--color-border)]" value={instance} onChange={setInstance} options={[{ value: "", label: "All instances" }, ...hosts.map((h) => ({ value: h, label: h }))]} />
             )}
-            <Button size="sm" aria-expanded={adding} onClick={() => setAdding((open) => !open)}>
+            <Button size="sm" className="shrink-0 whitespace-nowrap" aria-expanded={adding} onClick={() => setAdding((open) => !open)}>
               <UserPlus size={15} aria-hidden="true" />
               Add friend
             </Button>

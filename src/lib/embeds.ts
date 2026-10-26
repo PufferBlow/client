@@ -14,6 +14,11 @@ export interface IframeEmbed {
   /** The link as posted. */
   url: string;
   src: string;
+  /**
+   * A page we write ourselves, for providers whose embed is a script (gists, GitLab snippets). Shown in place of `src`,
+   * in a frame with no access to this app.
+   */
+  srcDoc?: string;
   /** Width / height for players that scale (video); otherwise a fixed `height` in px. */
   aspect?: number;
   height?: number;
@@ -23,7 +28,10 @@ export interface IframeEmbed {
 
 export interface MediaEmbed {
   kind: "image" | "video" | "audio";
+  /** The file itself. */
   url: string;
+  /** Where clicking it goes, when that is not the file (a repository's preview card links to the repository). */
+  href?: string;
 }
 
 export type Embed = IframeEmbed | MediaEmbed;
@@ -37,6 +45,16 @@ const AUDIO = /\.(mp3|ogg|oga|wav|flac|m4a|opus)$/i;
 
 /** `location.hostname`, which Twitch requires as `parent`; empty when the app runs from file://. */
 const currentHost = () => (typeof location === "undefined" ? "" : location.hostname);
+
+/** Accounts and pages on github.com that are not an owner's name. */
+const RESERVED_GITHUB = new Set(["orgs", "settings", "login", "signup", "features", "marketplace", "sponsors", "topics", "about", "pricing", "notifications", "explore", "search", "site", "enterprise"]);
+
+/**
+ * A page that does nothing but load one provider script. The address is built by the caller from validated parts; the
+ * frame it goes in has no access to this app (no same-origin), so what the script does stays in that frame.
+ */
+const scriptPage = (scriptUrl: string) =>
+  `<!doctype html><meta charset="utf-8"><base target="_blank"><body style="margin:0"><script src="${scriptUrl}"></script>`;
 
 export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | null {
   let url: URL;
@@ -128,9 +146,56 @@ export function resolveEmbed(raw: string, parentHost = currentHost()): Embed | n
     return null;
   }
 
-  // X / Twitter posts.
-  if ((host === "twitter.com" || host === "x.com") && path[1] === "status" && path[2] && /^\d+$/.test(path[2])) {
-    return iframe("X", "#e7e9ea", `https://platform.twitter.com/embed/Tweet.html?id=${path[2]}&theme=dark&dnt=true`, { height: 520, maxWidth: 550 });
+  // X / Twitter posts: /USER/status/ID, /i/status/ID, /i/web/status/ID.
+  if (host === "twitter.com" || host === "x.com" || host === "mobile.twitter.com" || host === "fixupx.com" || host === "fxtwitter.com" || host === "vxtwitter.com") {
+    const at = path.indexOf("status");
+    const id = at > 0 ? path[at + 1] : undefined;
+    if (id && /^\d+$/.test(id)) {
+      return iframe("X", "#e7e9ea", `https://platform.twitter.com/embed/Tweet.html?id=${id}&theme=dark&dnt=true`, { height: 520, maxWidth: 550 });
+    }
+    return null;
+  }
+
+  // Reddit posts and comments: /r/SUB/comments/ID/slug/(COMMENT/). The embed host is Reddit's own.
+  if (host === "reddit.com" || host === "old.reddit.com" || host === "new.reddit.com" || host === "np.reddit.com") {
+    if ((path[0] === "r" || path[0] === "user") && path[1] && path[2] === "comments" && path[3] && /^[\w-]+$/.test(path[1]) && /^[a-z0-9]+$/i.test(path[3])) {
+      const rest = path.slice(4).filter((p) => /^[\w-]+$/.test(p));
+      const base = `https://embed.reddit.com/${path[0]}/${path[1]}/comments/${path[3]}${rest.length ? `/${rest.join("/")}` : ""}/`;
+      return iframe("Reddit", "#ff4500", `${base}?embed=true&theme=dark`, { height: 460, maxWidth: 550 });
+    }
+    return null;
+  }
+
+  // GitHub. A gist is a real embed; repositories, issues, pull requests and commits cannot be framed, so they get the
+  // preview card GitHub makes for the link (its social image), which opens the page.
+  if (host === "gist.github.com" && path.length >= 1) {
+    const [owner, id] = path.length >= 2 ? path : [undefined, path[0]];
+    if ((!owner || /^[\w-]+$/.test(owner)) && id && /^[\da-f]{8,40}$/i.test(id)) {
+      const script = `https://gist.github.com/${owner ? `${owner}/` : ""}${id}.js`;
+      return { ...iframe("GitHub", "#8b949e", "about:blank", { height: 360 }), srcDoc: scriptPage(script) };
+    }
+    return null;
+  }
+  if (host === "github.com" && path[0] && path[1] && /^[\w.-]+$/.test(path[0]) && /^[\w.-]+$/.test(path[1]) && !RESERVED_GITHUB.has(path[0])) {
+    const rest = path.slice(2);
+    const known = rest.length === 0 || (["issues", "pull", "commit", "releases", "discussions"].includes(rest[0]!) && rest.every((p) => /^[\w.-]+$/.test(p)));
+    if (known) {
+      return { kind: "image", url: `https://opengraph.githubassets.com/1/${path[0]}/${path[1]}${rest.length ? `/${rest.join("/")}` : ""}`, href };
+    }
+    return null;
+  }
+
+  // GitLab snippets embed with a script; the rest of GitLab refuses to be framed.
+  if (host === "gitlab.com") {
+    const at = path.indexOf("snippets");
+    const id = at > 0 && path[at - 1] === "-" ? path[at + 1] : undefined;
+    if (id && /^\d+$/.test(id)) {
+      const owner = path.slice(0, at - 1);
+      if (owner.every((p) => /^[\w.-]+$/.test(p))) {
+        return { ...iframe("GitLab", "#fc6d26", "about:blank", { height: 360 }), srcDoc: scriptPage(`https://gitlab.com/${owner.length ? `${owner.join("/")}/` : ""}-/snippets/${id}.js`) };
+      }
+    }
+    return null;
   }
 
   // TikTok videos.

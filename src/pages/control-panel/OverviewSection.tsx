@@ -84,7 +84,7 @@ export function OverviewSection() {
               <li key={id}>
                 <Link
                   to={`/control-panel/${id}`}
-                  className="flex h-10 items-center justify-between rounded-[10px] px-3 text-sm text-text-secondary no-underline hover:bg-surface-tertiary hover:text-text"
+                  className="flex h-10 items-center justify-between rounded-md px-3 text-sm text-text-secondary no-underline hover:bg-surface-tertiary hover:text-text"
                 >
                   {label}
                   <ArrowRight size={15} aria-hidden="true" />

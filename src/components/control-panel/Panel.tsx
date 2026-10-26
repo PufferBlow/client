@@ -35,7 +35,7 @@ export function Panel({
 
 export function StatCard({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="rounded-[14px] border border-border-secondary bg-surface-secondary p-4">
+    <div className="rounded-lg border border-border-secondary bg-surface-secondary p-4">
       <div className="font-heading text-[11.5px] font-semibold uppercase tracking-[0.12em] text-text-muted">{label}</div>
       <div className="mt-2 font-display text-[32px] leading-none">{value}</div>
       {hint && <div className="mt-2 text-xs text-text-tertiary">{hint}</div>}

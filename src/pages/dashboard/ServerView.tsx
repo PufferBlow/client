@@ -7,9 +7,10 @@ import { EmptyState, ErrorState, LoadingState } from "@pufferblow/spines";
 import { useChannels } from "../../features/channels/hooks";
 import { hasText } from "../../features/channels/types";
 import { classifyAuthError } from "../../utils/authErrors";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 function MainPane({ children }: { children: ReactNode }) {
-  return <section className="flex min-w-0 flex-1 items-center justify-center rounded-[14px] bg-surface">{children}</section>;
+  return <section className="flex min-w-0 flex-1 items-center justify-center rounded-lg bg-surface">{children}</section>;
 }
 
 const MEMBERS_KEY = "pb_members_open";
@@ -27,9 +28,15 @@ function initialMembersOpen(): boolean {
 
 export function ServerView() {
   const { channelId } = useParams();
-  const [membersOpen, setMembersOpen] = useState(initialMembersOpen);
+  // Wide windows keep the list beside the chat, and remember the choice. Under 1024px it opens over the chat, only
+  // when asked for, and never stays open behind a window that was resized smaller.
+  const wide = useMediaQuery("(min-width: 1024px)", true);
+  const [wideOpen, setWideOpen] = useState(initialMembersOpen);
+  const [narrowOpen, setNarrowOpen] = useState(false);
+  const membersOpen = wide ? wideOpen : narrowOpen;
   const toggleMembers = useCallback(() => {
-    setMembersOpen((open) => {
+    if (!wide) return setNarrowOpen((open) => !open);
+    setWideOpen((open) => {
       try {
         localStorage.setItem(MEMBERS_KEY, open ? "0" : "1");
       } catch {
@@ -37,7 +44,7 @@ export function ServerView() {
       }
       return !open;
     });
-  }, []);
+  }, [wide]);
   const { data: channels, isPending, error, refetch } = useChannels();
 
   useEffect(() => {

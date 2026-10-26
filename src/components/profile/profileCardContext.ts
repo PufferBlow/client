@@ -3,6 +3,8 @@ import { createContext, useContext } from "react";
 export interface CardAnchor {
   x: number;
   y: number;
+  /** Put the card's bottom edge here (a viewport y) instead of its top at `y`: for a card that opens upward from something. */
+  bottom?: number;
 }
 
 export interface ProfileCardControls {

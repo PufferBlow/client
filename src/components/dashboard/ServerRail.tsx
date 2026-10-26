@@ -76,7 +76,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const { ordered, itemProps } = useSortable(["current"], "pb_server_order");
 
   return (
-    <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[var(--dock-h,76px)]" : "pb-2"}`}>
+    <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[calc(var(--dock-h,56px)+8px)]" : "pb-2"}`}>
       <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
@@ -84,7 +84,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           end
           aria-label="Home"
           title="Home"
-          className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-[14px]"} ${
+          className={`${tileBase} ${onHome ? "rounded-[12px]" : "rounded-lg"} ${
             onHome ? "bg-primary text-black" : "bg-surface-secondary text-[#f2f2f2] hover:bg-primary hover:text-black"
           }`}
         >
@@ -113,7 +113,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           }}
           aria-label={server ? `${serverName} on ${server.server_id}` : "Server"}
           title={serverName}
-          className={`${tileBase} ${onServer ? "rounded-[12px]" : "rounded-[14px]"} bg-surface-secondary`}
+          className={`${tileBase} ${onServer ? "rounded-[12px]" : "rounded-lg"} bg-surface-secondary`}
         >
           <SpaceIcon
             id={appearance.id}
@@ -152,7 +152,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
             saveActiveAccount(); // keep this account on the device while another is added
             navigate("/login?add=1");
           }}
-          className={`${iconTileBase} rounded-full bg-surface-secondary text-text-tertiary hover:rounded-[14px] hover:bg-surface-tertiary hover:text-text`}
+          className={`${iconTileBase} rounded-full bg-surface-secondary text-text-tertiary hover:rounded-lg hover:bg-surface-tertiary hover:text-text`}
         >
           <Plus size={20} aria-hidden="true" />
         </button>
@@ -165,7 +165,7 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
             to="/control-panel"
             aria-label="Server control panel"
             title="Server control panel"
-            className={`${iconTileBase} ${onControlPanel ? "rounded-[12px]" : "rounded-[14px]"} bg-surface text-primary hover:bg-surface-secondary`}
+            className={`${iconTileBase} ${onControlPanel ? "rounded-[12px]" : "rounded-lg"} bg-surface text-primary hover:bg-surface-secondary`}
           >
             <SlidersHorizontal size={20} aria-hidden="true" />
           </NavLink>

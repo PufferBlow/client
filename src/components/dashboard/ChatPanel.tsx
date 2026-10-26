@@ -24,6 +24,7 @@ import { PinnedMessages } from "./PinnedMessages";
 import { Composer } from "./Composer";
 import { ReportMessageDialog } from "./MessageDialogs";
 import { MessageLog, type MessageLogHandle } from "./MessageLog";
+import { SidebarToggle } from "../../features/navigation/sidebarDrawer";
 
 interface ChatPanelProps {
   channel: Channel;
@@ -155,6 +156,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label={`#${channel.channel_name}`}>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
+        <SidebarToggle />
         <Icon size={18} className="text-text-tertiary" aria-hidden="true" />
         <h1 className="m-0 font-heading text-[19px] font-semibold">{channel.channel_name}</h1>
         {channel.topic && <p className="m-0 min-w-0 flex-1 truncate text-[13px] text-text-tertiary">{channel.topic}</p>}
@@ -184,7 +186,7 @@ export function ChatPanel({ channel, membersOpen = false, onToggleMembers }: Cha
               aria-pressed={membersOpen}
               title={membersOpen ? "Hide member list" : "Show member list"}
               onClick={onToggleMembers}
-              className={`grid h-8 w-8 place-items-center rounded-lg transition-colors hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus ${
+              className={`grid h-8 w-8 place-items-center rounded-md transition-colors duration-(--motion-fast) hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus ${
                 membersOpen ? "bg-surface-secondary text-primary" : "text-text-tertiary"
               }`}
             >

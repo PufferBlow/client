@@ -104,7 +104,7 @@ export function CountBadge({ count, className, tone = "mention" }: { count: numb
   return (
     <span
       className={[
-        "grid h-5 min-w-5 place-items-center rounded-[10px] px-1.5 font-sans text-[11px] font-bold leading-none",
+        "grid h-5 min-w-5 place-items-center rounded-md px-1.5 font-sans text-[11px] font-bold leading-none",
         tone === "mention" ? "bg-error text-white" : "bg-surface-tertiary text-text-body",
         className,
       ]

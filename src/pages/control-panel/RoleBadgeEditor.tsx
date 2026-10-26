@@ -135,7 +135,7 @@ export function RoleBadgeEditor({ roleName, badge, onChange, privileges, onPrese
                     aria-pressed={badge.glyph === name}
                     title={name}
                     onClick={() => onChange({ tier: badge.tier, tone: badge.tone, glyph: name })}
-                    className={`grid size-11 cursor-pointer place-items-center rounded-[10px] border-0 p-0 ${badge.glyph === name ? "bg-text text-on-primary" : "bg-surface-tertiary text-text-body hover:bg-active"}`}
+                    className={`grid size-11 cursor-pointer place-items-center rounded-md border-0 p-0 ${badge.glyph === name ? "bg-text text-on-primary" : "bg-surface-tertiary text-text-body hover:bg-active"}`}
                   >
                     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
                       <path d={BADGE_GLYPHS[name]} style={{ fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }} />
@@ -150,7 +150,7 @@ export function RoleBadgeEditor({ roleName, badge, onChange, privileges, onPrese
                   aria-pressed={badge.glyph === IMAGE_GLYPH}
                   disabled={progress !== null}
                   onClick={() => file.current?.click()}
-                  className={`grid size-11 shrink-0 cursor-pointer place-items-center rounded-[10px] border-0 p-0 shadow-[inset_0_0_0_1.5px_rgba(242,242,242,0.25)] ${badge.glyph === IMAGE_GLYPH ? "bg-text text-on-primary" : "bg-transparent text-text-tertiary"}`}
+                  className={`grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border-0 p-0 shadow-[inset_0_0_0_1.5px_rgba(242,242,242,0.25)] ${badge.glyph === IMAGE_GLYPH ? "bg-text text-on-primary" : "bg-transparent text-text-tertiary"}`}
                 >
                   <Upload size={20} aria-hidden="true" />
                 </button>

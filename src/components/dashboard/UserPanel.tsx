@@ -26,7 +26,9 @@ export function UserPanel() {
           aria-label="Your profile"
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
-            profileCard.open(me.user_id, { x: rect.left, y: window.innerHeight });
+            // The card opens above the whole dock, not over the call card that may be on top of this one.
+            const dock = e.currentTarget.closest("[data-dock]")?.getBoundingClientRect();
+            profileCard.open(me.user_id, { x: rect.left, y: window.innerHeight, bottom: (dock?.top ?? rect.top) - 8 });
           }}
           className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md border-0 bg-transparent p-0 text-left outline-none focus-visible:outline-2 focus-visible:outline-focus"
         >

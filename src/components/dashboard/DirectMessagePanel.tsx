@@ -24,6 +24,7 @@ import { Composer } from "./Composer";
 import { MessageLog, type MessageLogHandle } from "./MessageLog";
 import { PinnedMessages } from "./PinnedMessages";
 import type { MessagePermissions } from "./messageMenu";
+import { SidebarToggle } from "../../features/navigation/sidebarDrawer";
 
 /** In a private conversation you can edit and delete only your own messages; there is no one to report to. */
 const DM_PERMISSIONS: MessagePermissions = {
@@ -106,11 +107,12 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
   const avatar = <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={80} />;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[14px] bg-surface" aria-label={`Conversation with ${name}`}>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg bg-surface" aria-label={`Conversation with ${name}`}>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-secondary px-[18px]">
+        <SidebarToggle label="Conversations" />
         <AtSign size={18} className="text-text-tertiary" aria-hidden="true" />
         <Avatar name={name} src={conversation?.peerAvatarUrl ?? null} seed={conversation?.peerUserId ?? peer} size={26} presence={conversation?.peerStatus} />
-        <h1 className="m-0 text-[15px] font-bold">{name}</h1>
+        <h1 className="m-0 font-heading text-[19px] font-semibold">{name}</h1>
         {peer.includes("@") && <span className="truncate text-[12.5px] text-text-muted">@{peer}</span>}
         <div className="ml-auto flex items-center gap-1">
           <PinnedMessages dm channelId={conversationId} canUnpin onUnpin={(id) => togglePin(id, false)} onJump={(message) => log.current?.jumpTo(message.id)} />
@@ -122,7 +124,7 @@ export function DirectMessagePanel({ conversationId, peer, conversation }: Direc
               title={isCallActive(call) ? "You are already on a call" : `Start an end-to-end encrypted call with ${name}`}
               disabled={isCallActive(call)}
               onClick={() => void call.startCall({ userId: peerUserId, name })}
-              className="grid size-9 place-items-center rounded-full border-0 bg-transparent text-text-tertiary transition-colors hover:bg-surface-secondary hover:text-text disabled:opacity-40"
+              className="grid h-8 w-8 place-items-center rounded-md border-0 bg-transparent text-text-tertiary transition-colors duration-(--motion-fast) hover:bg-surface-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"
             >
               <Phone size={17} aria-hidden="true" />
             </button>

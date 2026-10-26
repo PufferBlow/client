@@ -14,6 +14,7 @@ import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useChannelMenu, useServerMenu, type MenuPoint } from "./useSidebarMenus";
 import { VoiceChannelRow } from "./VoiceChannelRow";
+import { drawerClasses, useSidebarDrawer } from "../../features/navigation/sidebarDrawerContext";
 
 type OpenChannelMenu = (channelId: string, point: MenuPoint) => void;
 
@@ -143,6 +144,7 @@ function SidebarHeader({ onMenu }: { onMenu: (point: MenuPoint) => void }) {
 }
 
 export function ChannelSidebar() {
+  const drawer = useSidebarDrawer();
   const { data: channels, isPending, error } = useChannels();
   const { data: unread = {} } = useUnreadCounts();
   const pings = useChannelPings();
@@ -185,7 +187,7 @@ export function ChannelSidebar() {
     );
 
   return (
-    <aside className="flex w-[288px] shrink-0 flex-col overflow-hidden mb-[70px] rounded-lg bg-surface max-md:hidden">
+    <aside className={`flex w-[288px] shrink-0 flex-col overflow-hidden mb-[calc(var(--dock-h,56px)+8px)] rounded-lg bg-surface ${drawerClasses(drawer.open)}`}>
       <SidebarHeader onMenu={serverMenu.open} />
 
       <nav aria-label="Channels" className="min-h-0 flex-1 overflow-y-auto px-2 pt-1">
@@ -240,7 +242,6 @@ export function ChannelSidebar() {
         )}
       </nav>
 
-      <div aria-hidden="true" className="shrink-0" style={{ height: "var(--dock-h, 76px)" }} />
 
       {channelMenu.node}
       {serverMenu.node}

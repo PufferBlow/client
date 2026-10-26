@@ -126,7 +126,7 @@ export function ProfileCard({ profile, draft, avatarSrc, size = "large", onMessa
             )}
           </div>
           {large && profile.custom_status && (
-            <div className="relative mr-auto mt-14 min-w-0 max-w-[190px] self-start rounded-[14px] bg-[#161616] px-3 py-2 text-[13px] leading-snug text-text-body shadow-[0_6px_18px_rgba(0,0,0,0.35)] [overflow-wrap:anywhere]">
+            <div className="relative mr-auto mt-14 min-w-0 max-w-[190px] self-start rounded-lg bg-[#161616] px-3 py-2 text-[13px] leading-snug text-text-body shadow-[0_6px_18px_rgba(0,0,0,0.35)] [overflow-wrap:anywhere]">
               <span aria-hidden="true" className="absolute -left-[7px] bottom-1 size-2.5 rounded-full bg-[#161616]" />
               <span aria-hidden="true" className="absolute -left-3.5 -bottom-[3px] size-[5px] rounded-full bg-[#161616]" />
               {profile.custom_status}

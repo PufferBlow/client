@@ -74,6 +74,44 @@ describe("resolveEmbed", () => {
     expect(src("https://codepen.io/someone/pen/AbCdEf")).toContain("codepen.io/someone/embed/AbCdEf");
   });
 
+  it("embeds X posts from every address a post has", () => {
+    for (const url of ["https://x.com/user/status/1234567890?s=20", "https://mobile.twitter.com/user/status/1234567890", "https://x.com/i/status/1234567890", "https://x.com/i/web/status/1234567890"]) {
+      expect(src(url)).toContain("Tweet.html?id=1234567890");
+    }
+    expect(resolveEmbed("https://x.com/user")).toBeNull();
+    expect(resolveEmbed("https://x.com/user/status/notanumber")).toBeNull();
+  });
+
+  it("embeds Reddit posts through Reddit's own embed host, and nothing else on Reddit", () => {
+    expect(src("https://www.reddit.com/r/programming/comments/abc123/some_title/")).toBe("https://embed.reddit.com/r/programming/comments/abc123/some_title/?embed=true&theme=dark");
+    expect(src("https://old.reddit.com/r/programming/comments/abc123/some_title/def456/?context=3")).toContain("/comments/abc123/some_title/def456/?embed=true");
+    expect(src("https://reddit.com/r/programming/comments/abc123")).toContain("/comments/abc123/?embed=true");
+    expect(resolveEmbed("https://www.reddit.com/r/programming/")).toBeNull();
+    expect(resolveEmbed("https://www.reddit.com/r/pro gramming/comments/abc123/")).toBeNull();
+  });
+
+  it("embeds gists with a script page we write, in a frame, and never takes a script address from the message", () => {
+    const embed = resolveEmbed("https://gist.github.com/someone/0123456789abcdef0123456789abcdef");
+    expect(embed).toMatchObject({ kind: "iframe", provider: "GitHub", srcDoc: expect.stringContaining('<script src="https://gist.github.com/someone/0123456789abcdef0123456789abcdef.js">') });
+    expect(resolveEmbed('https://gist.github.com/some"one/0123456789abcdef')).toBeNull();
+    expect(resolveEmbed("https://gist.github.com/someone/not-a-hex-id")).toBeNull();
+  });
+
+  it("shows a GitHub repository, issue or pull request as its preview card, linking to the page", () => {
+    expect(resolveEmbed("https://github.com/PufferBlow/client")).toEqual({ kind: "image", url: "https://opengraph.githubassets.com/1/PufferBlow/client", href: "https://github.com/PufferBlow/client" });
+    expect(resolveEmbed("https://github.com/PufferBlow/client/pull/12")).toMatchObject({ url: "https://opengraph.githubassets.com/1/PufferBlow/client/pull/12" });
+    expect(resolveEmbed("https://github.com/PufferBlow/client/blob/main/README.md")).toBeNull();
+    expect(resolveEmbed("https://github.com/settings/profile")).toBeNull();
+    expect(resolveEmbed("https://github.com/PufferBlow")).toBeNull();
+  });
+
+  it("embeds GitLab snippets, and leaves the rest of GitLab as a link", () => {
+    expect(resolveEmbed("https://gitlab.com/-/snippets/12345")).toMatchObject({ srcDoc: expect.stringContaining("https://gitlab.com/-/snippets/12345.js") });
+    expect(resolveEmbed("https://gitlab.com/group/sub/-/snippets/12345")).toMatchObject({ srcDoc: expect.stringContaining("https://gitlab.com/group/sub/-/snippets/12345.js") });
+    expect(resolveEmbed("https://gitlab.com/group/project")).toBeNull();
+    expect(resolveEmbed("https://gitlab.com/group/project/-/merge_requests/3")).toBeNull();
+  });
+
   it("shows direct media links as the file itself", () => {
     expect(resolveEmbed("https://cdn.example/cat.GIF")).toEqual({ kind: "image", url: "https://cdn.example/cat.GIF" });
     expect(resolveEmbed("https://cdn.example/clip.mp4?x=1")).toMatchObject({ kind: "video" });
