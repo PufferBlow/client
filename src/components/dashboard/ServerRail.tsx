@@ -1,6 +1,8 @@
 import { saveActiveAccount } from "../../services/accounts";
 import { NavLink, useMatch, useNavigate } from "react-router";
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { Plus, SlidersHorizontal, Volume2 } from "lucide-react";
+import { useChannels } from "../../features/channels/hooks";
+import { useVoice } from "../../features/voice/voiceContext";
 import { useUnreadCounts } from "../../features/channels/hooks";
 import { useConversations } from "../../features/dms/hooks";
 import { useDmUnread } from "../../features/dms/unread";
@@ -66,11 +68,15 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const anyUnread = Object.entries(unread ?? {}).some(([id, n]) => n > 0 && !muted.has(id));
   const totalPings = Object.entries(pings).reduce((sum, [id, n]) => (muted.has(id) ? sum : sum + n), 0);
   const serverName = server?.server_name ?? "Server";
+  // A live call shows on the server it is in, so it is plain from anywhere that you are still connected.
+  const voice = useVoice();
+  const { data: channels } = useChannels();
+  const voiceChannel = voice.status === "connected" ? (channels?.find((c) => c.channel_id === voice.channelId)?.channel_name ?? "a voice channel") : null;
   // The servers in the person's own order. One instance is joined at a time today, so there is one to place.
   const { ordered, itemProps } = useSortable(["current"], "pb_server_order");
 
   return (
-    <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[76px]" : "pb-2"}`}>
+    <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[var(--dock-h,76px)]" : "pb-2"}`}>
       <div className="group/tile relative flex w-full justify-center">
         <Indicator selected={onHome} unread={unreadDms > 0} />
         <NavLink
@@ -119,6 +125,16 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
             className="absolute inset-0"
           />
           <CountBadge count={totalPings} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
+          {voiceChannel && (
+            <span
+              role="img"
+              aria-label={`Connected to voice in ${voiceChannel}`}
+              title={`Connected to voice in ${voiceChannel}`}
+              className="absolute -bottom-1.5 -left-1.5 grid size-5 place-items-center rounded-full bg-success text-black shadow-[0_0_0_3px_var(--color-background)]"
+            >
+              <Volume2 size={11} aria-hidden="true" />
+            </span>
+          )}
           {troubled && totalPings === 0 && (
             <span role="img" aria-label="This instance is having trouble" title={`${serverName} is having trouble`} className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-warning shadow-[0_0_0_3px_var(--color-background)]" />
           )}

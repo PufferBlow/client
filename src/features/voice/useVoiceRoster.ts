@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useChannels } from "../channels/hooks";
-import { listVoiceParticipants } from "./api";
+import { getVoiceRoom } from "./api";
 import { voiceKeys } from "./hooks";
 import type { VoiceParticipant } from "./types";
 
@@ -23,7 +23,8 @@ export function useVoiceRoster(): ReadonlyMap<string, InVoice> {
   const results = useQueries({
     queries: rooms.map((room) => ({
       queryKey: voiceKeys.participants(room.channel_id),
-      queryFn: () => listVoiceParticipants(room.channel_id),
+      queryFn: () => getVoiceRoom(room.channel_id),
+      select: (r: { participants: VoiceParticipant[] }) => r.participants,
       refetchInterval: POLL_MS,
       staleTime: POLL_MS / 2,
     })),

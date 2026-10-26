@@ -5,6 +5,7 @@ import { channelKeys } from "../channels/hooks";
 import { pinKeys } from "../channels/pins";
 import { dmKeys } from "../dms/keys";
 import { markDmRead, noteIncomingDm } from "../dms/unread";
+import type { AppNotification } from "../notifications/api";
 import { notificationKeys } from "../notifications/hooks";
 import type { UnreadCounts } from "../channels/types";
 import { friendKeys } from "../friends/hooks";
@@ -98,11 +99,17 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       void queryClient.invalidateQueries({ queryKey: pinKeys.channel(event.channelId) });
       return;
 
-    case "notification":
-      playSound("ping");
+    case "notification": {
       void queryClient.invalidateQueries({ queryKey: channelKeys.unread });
-      void queryClient.invalidateQueries({ queryKey: notificationKeys.list });
+      // A ping sounds only for a notification that turns up while the app is running: one the list did not have a
+      // moment ago. The first load of the list (nothing to compare with) and anything already read stay silent.
+      const known = queryClient.getQueryData<AppNotification[]>(notificationKeys.list);
+      void queryClient.invalidateQueries({ queryKey: notificationKeys.list }).then(() => {
+        const now = queryClient.getQueryData<AppNotification[]>(notificationKeys.list);
+        if (known && now?.some((n) => !n.read && !known.some((k) => k.id === n.id))) playSound("ping");
+      });
       return;
+    }
 
     case "typing":
       // Your own other tabs and devices announce you too; you don't need to see that.

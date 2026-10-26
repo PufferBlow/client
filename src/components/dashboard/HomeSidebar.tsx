@@ -70,7 +70,7 @@ export function HomeSidebar({ activeConversationId }: { activeConversationId?: s
           </ul>
         )}
       </nav>
-      <div aria-hidden="true" className="h-[76px] shrink-0" />
+      <div aria-hidden="true" className="shrink-0" style={{ height: "var(--dock-h, 76px)" }} />
     </aside>
   );
 }

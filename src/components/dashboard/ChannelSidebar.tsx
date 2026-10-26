@@ -13,7 +13,6 @@ import { useToast } from "../../hooks/useToast";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useChannelMenu, useServerMenu, type MenuPoint } from "./useSidebarMenus";
-import { VoiceBar } from "./VoiceBar";
 import { VoiceChannelRow } from "./VoiceChannelRow";
 
 type OpenChannelMenu = (channelId: string, point: MenuPoint) => void;
@@ -241,8 +240,7 @@ export function ChannelSidebar() {
         )}
       </nav>
 
-      <VoiceBar />
-      <div aria-hidden="true" className="h-[76px] shrink-0" />
+      <div aria-hidden="true" className="shrink-0" style={{ height: "var(--dock-h, 76px)" }} />
 
       {channelMenu.node}
       {serverMenu.node}

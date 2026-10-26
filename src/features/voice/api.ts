@@ -44,20 +44,38 @@ interface WireParticipant {
 interface ParticipantsResponse {
   participants: WireParticipant[];
   session_id: string | null;
+  started_at?: string | null;
+}
+
+/** A channel's call as it is now: who is in it, and when it began (the first person to join an empty channel). */
+export interface VoiceRoom {
+  participants: VoiceParticipant[];
+  /** Null when nobody is in the channel. Resets by itself, since a call ends when the last person leaves. */
+  startedAt: number | null;
+}
+
+/** Who is in a channel's call right now, and since when. Read-only: it does not join. */
+export async function getVoiceRoom(channelId: string): Promise<VoiceRoom> {
+  const res = await authed.query<ParticipantsResponse>("GET", `${channelPath(channelId)}/participants`);
+  // A time with no zone on it is UTC (an older server sends it that way); reading it as local time would be hours off.
+  const started = res.started_at ? Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(res.started_at) ? res.started_at : `${res.started_at}Z`) : NaN;
+  return {
+    participants: (res.participants ?? [])
+      .filter((p) => p.is_connected !== false)
+      .map((p) => ({
+        userId: p.user_id,
+        username: p.username ?? "",
+        isMuted: p.is_muted === true,
+        isDeafened: p.is_deafened === true,
+        isSpeaking: p.is_speaking === true,
+      })),
+    startedAt: Number.isNaN(started) ? null : started,
+  };
 }
 
 /** Who is in a channel's call right now. Read-only: it does not join. */
 export async function listVoiceParticipants(channelId: string): Promise<VoiceParticipant[]> {
-  const res = await authed.query<ParticipantsResponse>("GET", `${channelPath(channelId)}/participants`);
-  return (res.participants ?? [])
-    .filter((p) => p.is_connected !== false)
-    .map((p) => ({
-      userId: p.user_id,
-      username: p.username ?? "",
-      isMuted: p.is_muted === true,
-      isDeafened: p.is_deafened === true,
-      isSpeaking: p.is_speaking === true,
-    }));
+  return (await getVoiceRoom(channelId)).participants;
 }
 
 /** Record a self-scoped state change so the roster the API serves agrees with what the media server reports. */

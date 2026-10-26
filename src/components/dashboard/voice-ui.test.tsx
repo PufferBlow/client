@@ -7,7 +7,9 @@ import type { VoiceDeps } from "../../features/voice/transport";
 import { jsonResponse, requestLog, routeFetch, signIn } from "../../test/helpers";
 import { renderWithProviders } from "../../test/render";
 import { ChannelSidebar } from "./ChannelSidebar";
-import { UserPanel } from "./UserPanel";
+import { ServerRail } from "./ServerRail";
+import { UserDock } from "./UserDock";
+import { VoiceSwitchDialog } from "./VoiceSwitchDialog";
 
 beforeEach(() => signIn("tok"));
 
@@ -124,8 +126,10 @@ async function open(extra?: Record<string, unknown>) {
   const user = userEvent.setup();
   renderWithProviders(
     <VoiceProvider deps={deps}>
+      <ServerRail />
       <ChannelSidebar />
-      <UserPanel />
+      <UserDock />
+      <VoiceSwitchDialog />
     </VoiceProvider>,
     { route: "/dashboard/channels/c1", path: "/dashboard/channels/:channelId" },
   );
@@ -160,7 +164,7 @@ describe("voice channels in the sidebar", () => {
     await screen.findByRole("list", { name: "In this call" });
     const join = screen.getByRole("button", { name: /Join voice channel Lounge/ });
     expect(join).toHaveAccessibleName("Join voice channel Lounge, 1 person in the call");
-    expect(join.parentElement).toHaveTextContent(/^Lounge1$/);
+    expect(screen.getByRole("button", { name: "Lounge, 1 person in the call" }).parentElement).toHaveTextContent(/Lounge.*1/);
   });
 
   it("has mute and deafen ready before a call, and a call then starts the way they are set", async () => {
@@ -184,8 +188,10 @@ describe("voice channels in the sidebar", () => {
 
     expect(bodyOf(fetchMock, "POST", "/api/v2/voice/channels/v1/sessions")).toEqual({ auth_token: "tok", quality_profile: "balanced" });
     expect(socket().url).toBe("ws://sfu.test/rtc/v1/ws?join_token=token-v1");
-    expect(screen.getByText("Voice connected").closest("[role=status]")).toHaveTextContent("Lounge");
-    expect(screen.getByRole("button", { name: /Lounge, connected/ })).toHaveAttribute("aria-pressed", "true");
+    // The card says what and where: channel / server.
+    expect(screen.getByText("Voice connected").closest("[role=status]")).toHaveTextContent("Lounge / Test Server");
+    expect(screen.getByRole("button", { name: /Lounge, connected/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Join voice channel Lounge/ })).not.toBeInTheDocument();
     // Now the live roster is shown: you and grace.
     const roster = screen.getByRole("list", { name: "In this call" });
     expect(within(roster).getAllByRole("listitem")).toHaveLength(2);
@@ -250,15 +256,58 @@ describe("voice channels in the sidebar", () => {
     expect(screen.getByRole("button", { name: "Mute microphone" })).toBeEnabled();
   });
 
-  it("leaves by clicking the connected channel again", async () => {
-    const { user } = await joinLounge();
-    await user.click(screen.getByRole("button", { name: /Lounge, connected/ }));
-    await waitFor(() => expect(screen.queryByText("Voice connected")).not.toBeInTheDocument());
+  it("clicking a channel only hides or shows who is in it: it never joins or leaves", async () => {
+    const { user, fetchMock } = await open();
+    const row = () => screen.getByRole("button", { name: "Lounge, 1 person in the call" });
+    await screen.findByRole("list", { name: "In this call" });
+
+    await user.click(row());
+    expect(screen.queryByRole("list", { name: "In this call" })).not.toBeInTheDocument();
+    expect(row()).toHaveAttribute("aria-expanded", "false");
+    await user.click(row());
+    expect(screen.getByRole("list", { name: "In this call" })).toBeInTheDocument();
+    expect(FakeSocket.all).toHaveLength(0);
+    expect(requestLog(fetchMock)).not.toContain("POST /api/v2/voice/channels/v1/sessions");
   });
 
-  it("joining a second channel leaves the first", async () => {
+  it("marks the server you are connected in with a voice badge, only while connected", async () => {
+    await open();
+    expect(screen.queryByRole("img", { name: /Connected to voice/ })).not.toBeInTheDocument();
+    const { user } = { user: userEvent.setup() };
+    await user.click(screen.getByRole("button", { name: /Join voice channel Lounge/ }));
+    await act(async () => socket().receive(joinedFrame(["me", "ada"])));
+    expect(await screen.findByRole("img", { name: "Connected to voice in Lounge" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Leave voice channel" }));
+    await waitFor(() => expect(screen.queryByRole("img", { name: /Connected to voice/ })).not.toBeInTheDocument());
+  });
+
+  it("clicking the channel you are in does not leave it", async () => {
+    const { user } = await joinLounge();
+    await user.click(screen.getByRole("button", { name: /Lounge, connected/ }));
+    expect(screen.getByText("Voice connected")).toBeInTheDocument();
+    expect(socket().closed).toBe(false);
+  });
+
+  it("asks before joining a second channel, and stays put if you say no", async () => {
+    const { user } = await joinLounge();
+    await user.click(screen.getByRole("button", { name: /Join voice channel Stand-up/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("You're already in a voice channel");
+    expect(dialog).toHaveTextContent("Lounge");
+    expect(dialog).toHaveTextContent("Stand-up");
+    await user.click(within(dialog).getByRole("button", { name: /Stay in Lounge/ }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(FakeSocket.all).toHaveLength(1);
+    expect(socket().closed).toBe(false);
+    expect(screen.getByRole("button", { name: /Lounge, connected/ })).toBeInTheDocument();
+  });
+
+  it("joining a second channel, once confirmed, leaves the first", async () => {
     const { user, fetchMock } = await joinLounge();
     await user.click(screen.getByRole("button", { name: /Join voice channel Stand-up/ }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Leave and join Stand-up/ }));
 
     await waitFor(() => expect(FakeSocket.all).toHaveLength(2));
     expect(FakeSocket.all[0]!.closed).toBe(true);
@@ -266,6 +315,24 @@ describe("voice channels in the sidebar", () => {
     await act(async () => socket().receive(joinedFrame(["me", "ada"])));
     expect(await screen.findByRole("button", { name: /Stand-up, connected/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Join voice channel Lounge/ })).toBeInTheDocument();
+  });
+
+  describe("the shared timer", () => {
+    const started = () => new Date(Date.now() - 125_000).toISOString();
+
+    it("counts how long the channel has been busy while exactly one person is in it", async () => {
+      await open({ "GET /api/v2/voice/channels/v1/participants": { participants: [{ user_id: "u2", username: "grace", is_connected: true }], participant_count: 1, session_id: "s", started_at: started() } });
+      const timer = await screen.findByTitle("How long this channel has been in a call");
+      expect(timer).toHaveTextContent(/^2:0\d$/);
+    });
+
+    it("is hidden once a second person is in, and when nobody is", async () => {
+      await open({
+        "GET /api/v2/voice/channels/v1/participants": { participants: [{ user_id: "u2", username: "grace", is_connected: true }, { user_id: "u3", username: "linus", is_connected: true }], participant_count: 2, session_id: "s", started_at: started() },
+      });
+      await screen.findByRole("list", { name: "In this call" });
+      expect(screen.queryByTitle("How long this channel has been in a call")).not.toBeInTheDocument();
+    });
   });
 
   describe("when it goes wrong", () => {

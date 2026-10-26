@@ -2,7 +2,8 @@ import { CustomEmojiProvider } from "../features/catalog/CustomEmojiProvider";
 import { Outlet, useLocation } from "react-router";
 import { CallOverlay } from "../components/dashboard/CallOverlay";
 import { ServerRail } from "../components/dashboard/ServerRail";
-import { UserPanel } from "../components/dashboard/UserPanel";
+import { UserDock } from "../components/dashboard/UserDock";
+import { VoiceSwitchDialog } from "../components/dashboard/VoiceSwitchDialog";
 import { InstanceUnavailable } from "../components/instance/InstanceUnavailable";
 import { ProfileCardProvider } from "../components/profile/ProfileCardProvider";
 import { useInstanceStatus } from "../features/instance/status";
@@ -51,9 +52,10 @@ export function DashboardLayout() {
                 {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
                 {showUserPanel && (
                   <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
-                    <UserPanel />
+                    <UserDock />
                   </div>
                 )}
+                <VoiceSwitchDialog />
               </div>
               {blocked && <InstanceUnavailable status={status} />}
               <CallOverlay />

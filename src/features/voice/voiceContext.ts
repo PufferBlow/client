@@ -12,6 +12,14 @@ export interface VoiceState {
 }
 
 export interface VoiceControls extends VoiceState {
+  /** The channel someone asked to join while already in another call, waiting for them to confirm leaving the first. */
+  pendingJoin: string | null;
+  /** Join a channel the way a person asks to: straight away if free, otherwise by asking first (see `pendingJoin`). */
+  requestJoin: (channelId: string) => void;
+  /** Leave the current call and join the one that was asked for. */
+  confirmJoin: () => Promise<void>;
+  /** Stay in the current call. */
+  cancelJoin: () => void;
   join: (channelId: string) => Promise<void>;
   leave: () => Promise<void>;
   toggleMute: () => void;
@@ -24,6 +32,10 @@ export const VoiceContext = createContext<VoiceControls | null>(null);
 
 const OUTSIDE_DASHBOARD: VoiceControls = {
   ...IDLE_VOICE,
+  pendingJoin: null,
+  requestJoin: () => undefined,
+  confirmJoin: async () => undefined,
+  cancelJoin: () => undefined,
   join: async () => undefined,
   leave: async () => undefined,
   toggleMute: () => undefined,

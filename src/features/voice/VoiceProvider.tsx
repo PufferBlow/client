@@ -142,6 +142,24 @@ export function VoiceProvider({ children, deps = browserDeps }: { children: Reac
     }
   }, []);
 
+  // Joining a second channel drops the first, so a person is asked before that happens.
+  const [pendingJoin, setPendingJoin] = useState<string | null>(null);
+  const requestJoin = useCallback(
+    (channelId: string) => {
+      const busy = state.status === "connecting" || state.status === "connected";
+      if (busy && state.channelId === channelId) return;
+      if (busy && state.channelId !== null) setPendingJoin(channelId);
+      else void join(channelId);
+    },
+    [state.status, state.channelId, join],
+  );
+  const confirmJoin = useCallback(async () => {
+    const target = pendingJoin;
+    setPendingJoin(null);
+    if (target) await join(target); // joining already leaves the call being left
+  }, [pendingJoin, join]);
+  const cancelJoin = useCallback(() => setPendingJoin(null), []);
+
   // Leave when the dashboard goes away.
   useEffect(
     () => () => {
@@ -151,6 +169,9 @@ export function VoiceProvider({ children, deps = browserDeps }: { children: Reac
     [release],
   );
 
-  const value = useMemo<VoiceControls>(() => ({ ...state, join, leave, toggleMute, toggleDeafen }), [state, join, leave, toggleMute, toggleDeafen]);
+  const value = useMemo<VoiceControls>(
+    () => ({ ...state, pendingJoin, requestJoin, confirmJoin, cancelJoin, join, leave, toggleMute, toggleDeafen }),
+    [state, pendingJoin, requestJoin, confirmJoin, cancelJoin, join, leave, toggleMute, toggleDeafen],
+  );
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
 }

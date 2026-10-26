@@ -19,7 +19,7 @@ export function UserPanel() {
   const profileCard = useProfileCard();
 
   return (
-    <div className="pointer-events-auto relative flex items-center gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 shadow-modal">
+    <div className="relative flex items-center gap-2.5 px-3 py-2.5">
       {me ? (
         <button
           type="button"
