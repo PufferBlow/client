@@ -1,0 +1,57 @@
+name: Release the desktop app
+
+# Push a tag like v1.2.0 to build the installers for Windows, macOS and Linux and publish them as a GitHub release.
+# The installed apps look at that release for updates (electron-updater reads latest.yml, latest-mac.yml and
+# latest-linux.yml, which electron-builder uploads next to the installers).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # @pufferblow/spines is a path dependency (`file:../spines`), so it is checked out next to the client.
+      - uses: actions/checkout@v4
+        with:
+          path: client
+      - uses: actions/checkout@v4
+        with:
+          repository: PufferBlow/spines
+          path: spines
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - run: npm test
+        working-directory: client
+      # The tag is the version: v1.2.0 builds 1.2.0, which is what the installed apps compare against.
+      - name: Set the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+        working-directory: client
+      - name: Build and publish
+        shell: bash
+        run: npm run release
+        working-directory: client
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional signing. Without these the builds are unsigned: Windows shows SmartScreen, and macOS cannot
+          # update an unsigned app by itself.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

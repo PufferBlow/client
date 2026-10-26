@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router";
-import { ArrowLeft, Palette, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Monitor, Palette, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { ErrorState, LoadingState } from "@pufferblow/spines";
 import { useMyProfile } from "../../features/users/hooks";
 import { classifyAuthError } from "../../utils/authErrors";
+import { DesktopSection } from "./DesktopSection";
 import { AccountSection } from "./AccountSection";
 import { ProfileSection } from "./ProfileSection";
 import { SecuritySection } from "./SecuritySection";
@@ -13,10 +14,14 @@ const SECTIONS = [
   { id: "account", label: "My account", icon: UserRound },
   { id: "profile", label: "Profile", icon: Palette },
   { id: "security", label: "Security", icon: ShieldCheck },
+  { id: "desktop", label: "Desktop app", icon: Monitor },
 ] as const satisfies readonly { id: string; label: string; icon: LucideIcon }[];
 
 type SectionId = (typeof SECTIONS)[number]["id"];
-const isSection = (value: string | undefined): value is SectionId => SECTIONS.some((s) => s.id === value);
+/** Tray and updates belong to the desktop app; a browser has no such section. */
+const inDesktop = () => typeof window !== "undefined" && !!window.electron;
+const sectionsHere = () => SECTIONS.filter((s) => s.id !== "desktop" || inDesktop());
+const isSection = (value: string | undefined): value is SectionId => sectionsHere().some((s) => s.id === value);
 
 export function SettingsPage() {
   const { section } = useParams();
@@ -45,7 +50,7 @@ export function SettingsPage() {
           Settings
         </h2>
         <nav aria-label="Settings sections" className="flex flex-col gap-0.5">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
+          {sectionsHere().map(({ id, label, icon: Icon }) => (
             <Link
               key={id}
               to={`/settings/${id}`}
@@ -86,6 +91,7 @@ export function SettingsPage() {
                 <div className="grid items-start gap-5 xl:grid-cols-2">
                   {active === "account" && <AccountSection profile={profile} />}
                   {active === "security" && <SecuritySection />}
+                  {active === "desktop" && <DesktopSection />}
                 </div>
               )}
             </>

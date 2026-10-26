@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useMatch } from "react-router";
 import { Minus, Square, X, Copy } from "lucide-react";
+import { UpdateButton } from "../../features/desktop/UpdateButton";
 import { InboxButton } from "../inbox/Inbox";
 
 export function TitleBar() {
@@ -31,6 +32,7 @@ export function TitleBar() {
 
       {isElectron && (
         <div className="flex h-full" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <UpdateButton />
           {signedInArea && <InboxButton />}
           <button
             onClick={handleMinimize}

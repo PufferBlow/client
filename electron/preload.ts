@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopSettings } from "./desktopSettings";
 import type { RefreshResult } from "./sessionVault";
+import type { UpdateState } from "./updates";
 
 const api = {
   platform: process.platform,
@@ -15,6 +17,27 @@ const api = {
     ipcRenderer.on("window-state-changed", (_event, isMaximized: boolean) => {
       callback(isMaximized);
     });
+  },
+  /** Settings of the desktop app itself (the tray), and the version that is running. */
+  desktop: {
+    get: (): Promise<DesktopSettings & { version: string }> => ipcRenderer.invoke("desktop:get"),
+    set: (patch: Partial<DesktopSettings>): Promise<DesktopSettings> => ipcRenderer.invoke("desktop:set", patch),
+    onChange: (callback: (settings: DesktopSettings) => void): (() => void) => {
+      const listener = (_event: unknown, settings: DesktopSettings) => callback(settings);
+      ipcRenderer.on("desktop:settings", listener);
+      return () => ipcRenderer.removeListener("desktop:settings", listener);
+    },
+  },
+  /** Updates download in the background; `install` restarts into a downloaded one. */
+  updates: {
+    state: (): Promise<UpdateState> => ipcRenderer.invoke("updates:state"),
+    check: (): Promise<void> => ipcRenderer.invoke("updates:check"),
+    install: (): Promise<boolean> => ipcRenderer.invoke("updates:install"),
+    onState: (callback: (state: UpdateState) => void): (() => void) => {
+      const listener = (_event: unknown, state: UpdateState) => callback(state);
+      ipcRenderer.on("updates:state", listener);
+      return () => ipcRenderer.removeListener("updates:state", listener);
+    },
   },
   /**
    * The refresh token, held by the main process. `store` hands it over at sign-in (false when this
