@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { playSound } from "../sounds/sounds";
 import { useMyProfile } from "../users/hooks";
 import { applyVoiceAction, joinVoiceSession, leaveVoiceSession } from "./api";
 import { browserDeps, VoiceTransport, type VoiceDeps } from "./transport";
@@ -37,6 +38,7 @@ export function VoiceProvider({ children, deps = browserDeps }: { children: Reac
 
   const leave = useCallback(async () => {
     attempt.current += 1;
+    if (transport.current || sessionId.current) playSound("leave");
     await release();
     setState(idle());
   }, [release, idle]);
@@ -71,6 +73,7 @@ export function VoiceProvider({ children, deps = browserDeps }: { children: Reac
             onStatus: (status, error) => {
               if (attempt.current !== mine) return;
               setState((s) => ({ ...s, status, error: error ?? null }));
+              if (status === "connected") playSound("join");
               if (status === "failed") {
                 // The call is over; free the seat on the server and let the user rejoin from the bar.
                 const dead = transport.current;

@@ -13,6 +13,7 @@ import { messageKeys, patchMessage, removeMessage, setReactions, upsertMessage, 
 import { clearTyping, noteTyping } from "../typing/store";
 import { userKeys } from "../users/hooks";
 import type { UserProfile } from "../users/types";
+import { playSound } from "../sounds/sounds";
 import type { RealtimeEvent } from "./events";
 
 export interface EventContext {
@@ -98,6 +99,7 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       return;
 
     case "notification":
+      playSound("ping");
       void queryClient.invalidateQueries({ queryKey: channelKeys.unread });
       void queryClient.invalidateQueries({ queryKey: notificationKeys.list });
       return;

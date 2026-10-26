@@ -1,55 +1,66 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { notifyIncomingCall, startRinging } from "./ring";
+import { notifyIncomingCall, startCalling, startRinging } from "./ring";
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.useRealTimers();
+  localStorage.clear();
 });
 
 function fakeAudio() {
-  const made = { oscillators: 0, closed: 0 };
-  class FakeContext {
-    currentTime = 0;
-    state = "running";
-    destination = {};
-    createOscillator() {
-      made.oscillators += 1;
-      return { type: "", frequency: { value: 0 }, connect: (n: unknown) => n, start: () => undefined, stop: () => undefined };
+  const made: { src: string; loop: boolean; plays: number; paused: boolean }[] = [];
+  class FakeAudio {
+    entry = { src: "", loop: false, plays: 0, paused: false };
+    volume = 1;
+    constructor(src: string) {
+      this.entry.src = src;
+      made.push(this.entry);
     }
-    createGain() {
-      return { gain: { setValueAtTime: () => undefined, linearRampToValueAtTime: () => undefined }, connect: (n: unknown) => n };
+    set loop(value: boolean) {
+      this.entry.loop = value;
     }
-    resume = async () => undefined;
-    close = async () => void (made.closed += 1, (this.state = "closed"));
+    async play() {
+      this.entry.plays += 1;
+    }
+    pause() {
+      this.entry.paused = true;
+    }
+    removeAttribute() {}
+    load() {}
   }
-  vi.stubGlobal("AudioContext", FakeContext);
+  vi.stubGlobal("Audio", FakeAudio);
   return made;
 }
 
 describe("ringing", () => {
-  it("rings at once, again every couple of seconds, and stops when told to", () => {
-    vi.useFakeTimers();
+  it("plays the ring on a loop until told to stop", () => {
     const made = fakeAudio();
-
     const stop = startRinging();
-    expect(made.oscillators).toBe(2); // two tones per ring
-    vi.advanceTimersByTime(4_000);
-    expect(made.oscillators).toBe(6);
-
+    expect(made).toHaveLength(1);
+    expect(made[0]).toMatchObject({ loop: true, plays: 1, paused: false });
+    expect(made[0]!.src).toContain("ring");
     stop();
-    vi.advanceTimersByTime(10_000);
-    expect(made.oscillators).toBe(6);
-    expect(made.closed).toBe(1);
+    expect(made[0]!.paused).toBe(true);
   });
 
-  it("does nothing, quietly, where there is no Web Audio", () => {
-    vi.stubGlobal("AudioContext", undefined);
+  it("plays a different sound for a call you place", () => {
+    const made = fakeAudio();
+    startCalling()();
+    expect(made[0]!.src).toContain("calling");
+    expect(made[0]!.loop).toBe(true);
+  });
+
+  it("is silent when sounds are turned off", () => {
+    const made = fakeAudio();
+    localStorage.setItem("pb_sounds_off", "1");
     expect(() => startRinging()()).not.toThrow();
+    expect(made).toHaveLength(0);
   });
 
-  it("does nothing if the browser will not make an audio context", () => {
+  it("does nothing, quietly, where there is no audio or the browser refuses", () => {
+    vi.stubGlobal("Audio", undefined);
+    expect(() => startRinging()()).not.toThrow();
     vi.stubGlobal(
-      "AudioContext",
+      "Audio",
       class {
         constructor() {
           throw new Error("blocked");

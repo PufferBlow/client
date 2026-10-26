@@ -10,7 +10,8 @@ import { loadIdentity, indexedDbKeyStore, memoryKeyStore, type Identity, type Ke
 import { localPinStore, markVerified as pinVerified, type PinStore } from "./crypto/trust";
 import { browserCallDeps, CallEngine, type CallDeps, type RelaySetup } from "./engine";
 import { browserFrameEncryption, canEncryptFrames } from "./frameEncryption";
-import { notifyIncomingCall, startRinging } from "./ring";
+import { playSound } from "../sounds/sounds";
+import { notifyIncomingCall, startCalling, startRinging } from "./ring";
 import { callSignals } from "./signals";
 import { IDLE_CALL, type CallState, type IceServer } from "./types";
 
@@ -213,6 +214,20 @@ export function CallProvider({ children, deps = browserCallDeps, keyStore, pinSt
       closeNotice();
     };
   }, [ringingFor, callerName]);
+
+  // The sound of your own call going out, until it is answered, given up on or cancelled.
+  const calling = state.phase === "calling";
+  useEffect(() => (calling ? startCalling() : undefined), [calling]);
+
+  // A call that connects, and one that ends, each have a sound.
+  const lastPhase = useRef(state.phase);
+  useEffect(() => {
+    const before = lastPhase.current;
+    lastPhase.current = state.phase;
+    if (before === state.phase) return;
+    if (state.phase === "connected") playSound("accept");
+    else if ((state.phase === "ended" || state.phase === "failed") && before !== "ended" && before !== "failed") playSound("end");
+  }, [state.phase]);
 
   // ── what the other side does ──────────────────────────────
 

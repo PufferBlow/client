@@ -1,12 +1,17 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, net, safeStorage, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, net, protocol, safeStorage, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
-import { readFileSync, rmSync, writeFileSync } from "fs";
+import { readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
+import { pathToFileURL } from "url";
+import { APP_SCHEME, APP_URL, resolveAppFile } from "./appProtocol";
 import { DesktopSettingsStore } from "./desktopSettings";
 import { SessionVault } from "./sessionVault";
 import { UpdateManager, type UpdateState, type Updater } from "./updates";
 
 declare const __dirname: string;
+
+// The installed app is served from app://pufferblow/ (see appProtocol.ts). The scheme has to be declared before the app is ready.
+protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -115,7 +120,7 @@ function createWindow() {
   if (devUrl) {
     mainWindow.loadURL(devUrl);
   } else {
-    mainWindow.loadFile(join(__dirname, "../dist/index.html"));
+    mainWindow.loadURL(APP_URL);
   }
 }
 
@@ -185,8 +190,23 @@ function createSessionVault(): SessionVault {
   });
 }
 
+function serveApp() {
+  const root = join(__dirname, "../dist");
+  protocol.handle(APP_SCHEME, (request) => {
+    const file = resolveAppFile(root, new URL(request.url).pathname, (path) => {
+      try {
+        return statSync(path).isFile();
+      } catch {
+        return false;
+      }
+    });
+    return net.fetch(pathToFileURL(file).toString());
+  });
+}
+
 app.whenReady().then(() => {
   if (!firstInstance) return;
+  serveApp();
   const settingsFile = join(app.getPath("userData"), "desktop.json");
   settings = new DesktopSettingsStore({
     read: () => {

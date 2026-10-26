@@ -2,12 +2,13 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, Copy, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router";
-import { AuthField, PasswordField } from "../../components/auth/AuthFields";
+import { AuthField, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button } from "@pufferblow/spines";
 import { Avatar } from "../../components/dashboard/Avatar";
 import { copyToClipboard } from "../../lib/clipboard";
+import { playSound, setSoundsEnabled, soundsEnabled } from "../../features/sounds/sounds";
 import { listAccounts, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { changePassword, updateUsername } from "../../features/users/api";
@@ -248,11 +249,30 @@ function DeviceAccountsCard() {
   );
 }
 
+function SoundsCard() {
+  const [on, setOn] = useState(soundsEnabled);
+  return (
+    <SettingsCard title="Sounds" description="Calls ringing, answered and ended, joining and leaving a voice channel, and being pinged.">
+      <Switch
+        checked={on}
+        onChange={(next) => {
+          setSoundsEnabled(next);
+          setOn(next);
+          if (next) playSound("ping");
+        }}
+      >
+        Play sounds
+      </Switch>
+    </SettingsCard>
+  );
+}
+
 export function AccountSection({ profile }: { profile: UserProfile }) {
   return (
     <>
       <OverviewCard profile={profile} />
       <DeviceAccountsCard />
+      <SoundsCard />
       <UsernameCard profile={profile} />
       <PasswordCard />
     </>

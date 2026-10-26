@@ -33,7 +33,7 @@ const backend = (extra: Record<string, unknown> = {}) =>
 const render = () => renderWithProviders(<FriendsView />, { route: "/dashboard/friends" });
 const main = () => screen.getByRole("region", { name: "Friends" });
 
-describe("friends: roster, instances and who is active", () => {
+describe("friends: instances and who is active", () => {
   it("shows what a friend is doing: in voice, else their presence", async () => {
     backend();
     render();
@@ -59,23 +59,6 @@ describe("friends: roster, instances and who is active", () => {
     render();
     const active = await screen.findByRole("complementary", { name: "Active now" });
     expect(await within(active).findByText("It's quiet")).toBeInTheDocument();
-  });
-
-  it("switches to the roster: portrait cards that open a message, with a summary line", async () => {
-    backend();
-    const { user } = render();
-    await within(main()).findByText("grace");
-
-    await user.click(screen.getByRole("button", { name: "Roster view" }));
-
-    expect(screen.getByRole("button", { name: "Roster view" })).toHaveAttribute("aria-pressed", "true");
-    expect(await within(main()).findByRole("button", { name: "Message grace" })).toBeInTheDocument();
-    expect(within(main()).getByText(/4 friends on 3 instances/)).toBeInTheDocument();
-    expect(within(main()).getByText(/1 in voice/)).toBeInTheDocument();
-    expect(within(main()).queryByRole("button", { name: "Remove grace from friends" })).not.toBeInTheDocument(); // cards are for looking and messaging
-
-    await user.click(screen.getByRole("button", { name: "List view" }));
-    expect(await within(main()).findByRole("button", { name: "Remove grace from friends" })).toBeInTheDocument();
   });
 
   it("filters by instance, counting this instance's people as local", async () => {

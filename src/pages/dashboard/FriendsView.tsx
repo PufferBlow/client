@@ -1,10 +1,10 @@
 import { Select } from "../../components/ui/Select";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { AlertCircle, AtSign, Check, LayoutGrid, List, MessageCircle, UserMinus, UserPlus, Users, Volume2, X } from "lucide-react";
+import { AlertCircle, AtSign, Check, MessageCircle, UserMinus, UserPlus, Users, Volume2, X } from "lucide-react";
 import { Avatar, CountBadge } from "../../components/dashboard/Avatar";
 import { HomeSidebar } from "../../components/dashboard/HomeSidebar";
-import { Button, defaultAvatarUrl, defaultBannerCss, EmptyState, ErrorState, HostPill, LoadingState } from "@pufferblow/spines";
+import { Button, EmptyState, ErrorState, HostPill, LoadingState } from "@pufferblow/spines";
 import {
   useAcceptFriendRequest,
   useBlocks,
@@ -22,10 +22,8 @@ import { peerHandle } from "../../features/dms/api";
 import { useOpenDirectMessage } from "../../features/dms/hooks";
 import { useMyProfile } from "../../features/users/hooks";
 import { useVoiceRoster, type InVoice } from "../../features/voice/useVoiceRoster";
-import { resolveAssetUrl } from "../../services/authed";
 
 type Tab = "online" | "all" | "pending" | "blocked";
-type View = "list" | "roster";
 
 const circleButton = "grid h-9 w-9 place-items-center rounded-full bg-surface-secondary text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text disabled:opacity-50";
 
@@ -55,40 +53,6 @@ function PersonRow({ person, subtitle, live, children }: { person: Friend; subti
 
 function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="pb-section-label m-0 mb-1">{children}</h2>;
-}
-
-/** A friend as a portrait card: their identity art, their face, status and what they are doing. */
-function FriendCard({ friend, voice, onMessage }: { friend: Friend; voice: ReadonlyMap<string, InVoice>; onMessage: () => void }) {
-  const activity = activityOf(friend, voice);
-  const look = PRESENCE[friend.status];
-  const handle = `${friend.username}@${friend.host || "here"}`;
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onMessage}
-        aria-label={`Message ${friend.username}`}
-        className="group relative block aspect-[3/4] w-full cursor-pointer overflow-hidden rounded-xl border-0 p-0 text-left transition-shadow hover:shadow-[0_0_0_2px_var(--color-text)] focus-visible:shadow-[0_0_0_2px_var(--color-text)]"
-        style={{ background: defaultBannerCss(handle, "50% 38%"), opacity: friend.status === "offline" ? 0.7 : 1 }}
-      >
-        <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-[5px] rounded-pill bg-background/60 px-2 py-1 font-heading text-[10.5px] font-bold uppercase leading-none tracking-[0.1em]" style={{ color: activity.live ? "var(--color-in-game)" : look.color }}>
-          <span className="size-1.5 rounded-full" style={{ background: activity.live ? "var(--color-in-game)" : look.color }} />
-          {activity.live ? "In voice" : look.label}
-        </span>
-        <img
-          src={resolveAssetUrl(friend.avatarUrl) ?? defaultAvatarUrl(friend.userId)}
-          alt=""
-          draggable={false}
-          className="absolute left-1/2 top-[38%] size-[76px] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover shadow-[0_0_0_4px_rgba(10,10,10,0.5)] transition-transform duration-(--motion-puff) ease-(--motion-ease-puff) group-hover:scale-105 motion-reduce:transform-none"
-        />
-        <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background/95 to-transparent px-3 pb-3 pt-7">
-          <span className="block font-heading text-[17px] font-semibold leading-tight">{friend.username}</span>
-          <span className="block truncate text-[11px] text-text-tertiary">{friend.host || "this instance"}</span>
-          <span className="mt-1 block truncate text-[11.5px] text-text-body">{activity.text}</span>
-        </span>
-      </button>
-    </li>
-  );
 }
 
 /** The request form, opened by the header's Add friend button; Escape or the close button puts it away. */
@@ -151,7 +115,7 @@ function AddFriendForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function FriendsList({ friends, empty, view, voice }: { friends: Friend[]; empty: string; view: View; voice: ReadonlyMap<string, InVoice> }) {
+function FriendsList({ friends, empty, voice }: { friends: Friend[]; empty: string; voice: ReadonlyMap<string, InVoice> }) {
   const remove = useRemoveFriend();
   const openDm = useOpenDirectMessage();
   const { data: me } = useMyProfile();
@@ -161,18 +125,6 @@ function FriendsList({ friends, empty, view, voice }: { friends: Friend[]; empty
       {friends.length} {friends.length === 1 ? "friend" : "friends"}
     </SectionTitle>
   );
-  if (view === "roster") {
-    return (
-      <>
-        {title}
-        <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 xl:grid-cols-5">
-          {friends.map((f) => (
-            <FriendCard key={f.userId} friend={f} voice={voice} onMessage={() => openDm.mutate(peerHandle(f, me?.origin_server))} />
-          ))}
-        </ul>
-      </>
-    );
-  }
   return (
     <>
       {title}
@@ -195,7 +147,7 @@ function FriendsList({ friends, empty, view, voice }: { friends: Friend[]; empty
   );
 }
 
-function PendingList({ view }: { view: View }) {
+function PendingList() {
   const { data, isPending, error, refetch } = useFriendRequests();
   const accept = useAcceptFriendRequest();
   const dismiss = useRemoveFriendRequest();
@@ -205,13 +157,12 @@ function PendingList({ view }: { view: View }) {
   if (data.incoming.length === 0 && data.outgoing.length === 0) return <p className="m-auto text-sm text-text-muted">No pending requests.</p>;
 
   const busy = accept.isPending || dismiss.isPending;
-  const grid = view === "roster";
   return (
     <>
       {data.incoming.length > 0 && (
         <section>
           <SectionTitle>Incoming — {data.incoming.length}</SectionTitle>
-          <ul className={grid ? "m-0 grid list-none gap-3 p-0 sm:grid-cols-2" : "m-0 flex list-none flex-col gap-0.5 p-0"}>
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {data.incoming.map((r) => (
               <PersonRow key={r.friendshipId} person={r} subtitle="Wants to be friends">
                 <button type="button" className={circleButton} aria-label={`Decline ${r.username}`} disabled={busy} onClick={() => dismiss.mutate(r.friendshipId)}>
@@ -228,7 +179,7 @@ function PendingList({ view }: { view: View }) {
       {data.outgoing.length > 0 && (
         <section>
           <SectionTitle>Sent — {data.outgoing.length}</SectionTitle>
-          <ul className={grid ? "m-0 grid list-none gap-3 p-0 sm:grid-cols-2" : "m-0 flex list-none flex-col gap-0.5 p-0"}>
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {data.outgoing.map((r) => (
               <PersonRow key={r.friendshipId} person={r} subtitle="Waiting for a response">
                 <button type="button" className={circleButton} aria-label={`Cancel request to ${r.username}`} disabled={busy} onClick={() => dismiss.mutate(r.friendshipId)}>
@@ -307,8 +258,7 @@ function ActiveNow({ friends, voice }: { friends: Friend[]; voice: ReadonlyMap<s
 
 export function FriendsView() {
   const [tab, setTab] = useState<Tab>("online");
-  const [view, setView] = useState<View>("list");
-  const [adding, setAdding] = useState(false);
+    const [adding, setAdding] = useState(false);
   const [instance, setInstance] = useState("");
   const friends = useFriends();
   const requests = useFriendRequests();
@@ -335,13 +285,11 @@ export function FriendsView() {
   ];
 
   let body: ReactNode;
-  if (tab === "pending") body = <PendingList view={view} />;
+  if (tab === "pending") body = <PendingList />;
   else if (tab === "blocked") body = <BlockedList />;
   else if (friends.isPending) body = <LoadingState message="Loading friends…" />;
   else if (friends.error) body = <ErrorState title="Couldn't load friends" message={classifyAuthError(friends.error, "Try again.").message} onRetry={() => void friends.refetch()} />;
-  else body = <FriendsList friends={tab === "online" ? online : all} empty={tab === "online" ? "Nobody is online right now." : "No friends yet. Use Add friend to send a request."} view={view} voice={voice} />;
-
-  const inVoice = everyone.filter((f) => voice.has(f.userId)).length;
+  else body = <FriendsList friends={tab === "online" ? online : all} empty={tab === "online" ? "Nobody is online right now." : "No friends yet. Use Add friend to send a request."} voice={voice} />;
 
   return (
     <>
@@ -364,7 +312,7 @@ export function FriendsView() {
               >
                 {label}
                 {badge !== undefined && <CountBadge count={badge} />}
-                {count !== undefined && <span className="text-xs opacity-60">{count}</span>}
+                {count !== undefined && <span className="min-w-5 rounded-pill bg-surface-secondary px-1.5 py-px text-center text-xs font-semibold tabular-nums text-text-body">{count}</span>}
               </button>
             ))}
           </div>
@@ -372,13 +320,6 @@ export function FriendsView() {
             {hosts.length > 1 && (
               <Select label="Instance" className="rounded-pill! bg-transparent! px-3.5! text-[13.5px]! text-text-tertiary! shadow-[inset_0_0_0_1px_var(--color-border)]" value={instance} onChange={setInstance} options={[{ value: "", label: "All instances" }, ...hosts.map((h) => ({ value: h, label: h }))]} />
             )}
-            <div role="group" aria-label="View" className="flex gap-0.5 rounded-lg bg-background p-1">
-              {([["list", List, "List view"], ["roster", LayoutGrid, "Roster view"]] as const).map(([id, Icon, label]) => (
-                <button key={id} type="button" aria-label={label} aria-pressed={view === id} onClick={() => setView(id)} className={`grid size-7 place-items-center rounded-sm ${view === id ? "bg-surface-tertiary text-text" : "text-text-tertiary hover:text-text"}`}>
-                  <Icon size={15} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
             <Button size="sm" aria-expanded={adding} onClick={() => setAdding((open) => !open)}>
               <UserPlus size={15} aria-hidden="true" />
               Add friend
@@ -387,12 +328,6 @@ export function FriendsView() {
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-[18px]">
-          {view === "roster" && everyone.length > 0 && (
-            <p className="pb-meta m-0 text-[13px]">
-              {everyone.length} friends on {hosts.length} {hosts.length === 1 ? "instance" : "instances"}
-              {inVoice > 0 ? ` · ${inVoice} in voice` : ""}
-            </p>
-          )}
           {adding && <AddFriendForm onClose={() => setAdding(false)} />}
           {body}
         </div>
