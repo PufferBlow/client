@@ -6,7 +6,7 @@ import type { JoinMode, ServerInfo } from "../../features/server/types";
 import { homeOf, listAccounts, switchAccount } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { resolveInstance } from "../../services/instance";
-import { HomeSessionExpired, joinServer, resolveHome } from "../../services/servers";
+import { HomeSessionExpired, joinServer, resolveHome, WrongAddress } from "../../services/servers";
 import type { InstanceConfig } from "../../services/types";
 import { classifyAuthError } from "../../utils/authErrors";
 
@@ -100,6 +100,7 @@ export function AddServerDialog({ onClose }: { onClose: () => void }) {
       else onClose();
     } catch (cause) {
       if (cause instanceof HomeSessionExpired) setError({ message: cause.message, expired: true });
+      else if (cause instanceof WrongAddress) setError({ message: cause.message });
       else setError({ message: classifyAuthError(cause, "Couldn't join that server.").message });
     } finally {
       setBusy(false);

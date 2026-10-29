@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dropMembership, listAccounts, listMemberships, listPeople, rememberActiveAccount, removeAccount, signOutActiveAccount, switchAccount } from "./accounts";
 import { getActiveAccountId, persistSession, setActiveAccountId } from "./auth";
 import { resolveInstance, setStoredInstance } from "./instance";
-import { checkRequest, HomeSessionExpired, joinServer, leaveServer, resolveHome } from "./servers";
+import { checkRequest, HomeSessionExpired, joinServer, leaveServer, resolveHome, WrongAddress } from "./servers";
 import { jsonResponse, requestLog, routeFetch } from "../test/helpers";
 
 const home = resolveInstance("home.example");
 const away = resolveInstance("away.example");
-const info = { server_id: "away.example:7575", server_name: "Away Place" };
+const info = { server_id: "away.example:443", server_name: "Away Place" };
 
 const tokens = (token: string) => ({
   auth_token: token,
@@ -41,7 +41,7 @@ describe("joining a server with the account you have", () => {
     const fetchMock = routeFetch({
       "POST /api/v1/federation/assertions": (_url: URL, init: RequestInit) => {
         const body = JSON.parse(String(init.body));
-        expect(body).toEqual({ auth_token: "home-token", audience: "away.example:7575" });
+        expect(body).toEqual({ auth_token: "home-token", audience: "away.example:443" });
         return jsonResponse({ assertion: "signed.statement" });
       },
       "POST /api/v1/federation/join": (_url: URL, init: RequestInit) => {
@@ -76,6 +76,29 @@ describe("joining a server with the account you have", () => {
     routeFetch({ "POST /api/v1/federation/assertions": jsonResponse({ error_code: "auth.invalid_token", message: "no" }, 401) });
     await expect(joinServer(away, info)).rejects.toBeInstanceOf(HomeSessionExpired);
     expect(listMemberships()).toEqual([]);
+  });
+
+  it("never lets a server name the address its assertion is made out to", async () => {
+    const fetchMock = routeFetch({});
+    // This server says it is somewhere else: an assertion for that other place must not be made and handed to this one.
+    await expect(joinServer(away, { server_id: "victim.example:443", server_name: "Evil" })).rejects.toBeInstanceOf(WrongAddress);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps what it joins the way the account it joins with is kept", async () => {
+    // A sign-in that was only for this tab.
+    setStoredInstance(home);
+    setActiveAccountId(`ada@${home.raw}`);
+    await persistSession(tokens("tab-token"), false);
+    await rememberActiveAccount({ username: "ada" });
+    routeFetch({
+      "POST /api/v1/federation/assertions": { assertion: "x.y" },
+      "POST /api/v1/federation/join": () => jsonResponse(joined),
+      "POST /api/v1/users/joined-servers": { status_code: 201 },
+    });
+    await joinServer(away, info);
+    expect(JSON.parse(sessionStorage.getItem("pb_accounts") ?? "[]").some((a: { membership?: unknown }) => a.membership)).toBe(true);
+    expect(JSON.parse(localStorage.getItem("pb_accounts") ?? "[]").some((a: { membership?: unknown }) => a.membership)).toBe(false);
   });
 
   it("will not join your own server", async () => {
@@ -116,9 +139,9 @@ describe("joining a server with the account you have", () => {
       "POST /api/v1/federation/join/status": jsonResponse({ error_code: "auth.membership_denied", message: "declined" }, 403),
     });
     const other = resolveInstance("other.example");
-    await joinServer(other, { server_id: "other.example:7575", server_name: "Other" });
+    await joinServer(other, { server_id: "other.example:443", server_name: "Other" });
     const entry = listMemberships().find((a) => a.membership?.status === "pending")!;
-    await expect(checkRequest(entry, { server_id: "other.example:7575", server_name: "Other" })).rejects.toMatchObject({ code: "auth.membership_denied" });
+    await expect(checkRequest(entry, { server_id: "other.example:443", server_name: "Other" })).rejects.toMatchObject({ code: "auth.membership_denied" });
     expect(listMemberships().some((a) => a.membership?.status === "pending")).toBe(false);
   });
 

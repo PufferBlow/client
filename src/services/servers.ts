@@ -1,7 +1,7 @@
 import { createLogger } from "../lib/logger";
 import { api, ApiError } from "./api";
 import { homeOf, listAccounts, dropMembership, saveMembership, type Account } from "./accounts";
-import { accountIdFor, getActiveAccountId, getAuthToken, snapshotFromTokens, type AuthTokens } from "./auth";
+import { accountIdFor, getActiveAccountId, getAuthToken, isSessionRemembered, snapshotFromTokens, type AuthTokens } from "./auth";
 import { getApiUrl, getStoredInstance } from "./instance";
 import type { InstanceConfig } from "./types";
 import type { ServerInfo } from "../features/server/types";
@@ -23,6 +23,8 @@ export interface HomeSession {
   handle: string;
   instance: InstanceConfig;
   token: string;
+  /** Whether that sign-in was kept on this device or only for this tab; what is joined with it is kept the same way. */
+  remember: boolean;
 }
 
 /** The home server's sign-in has run out. Only the live account can renew its own, so it has to be opened again. */
@@ -49,12 +51,13 @@ export function resolveHome(): HomeSession | null {
   if (home) {
     const live = home.id === activeId;
     const token = live ? getAuthToken() : (home.snapshot?.authToken ?? null);
-    return token ? { account: home, handle: `${home.username}@${home.instance.raw}`, instance: home.instance, token } : null;
+    const remember = live ? isSessionRemembered() : (home.snapshot?.session.remember ?? true);
+    return token ? { account: home, handle: `${home.username}@${home.instance.raw}`, instance: home.instance, token, remember } : null;
   }
   // A session from before accounts were kept: the live one is all there is.
   const instance = getStoredInstance();
   const token = getAuthToken();
-  return instance && token ? { account: null, handle: `you@${instance.raw}`, instance, token } : null;
+  return instance && token ? { account: null, handle: `you@${instance.raw}`, instance, token, remember: isSessionRemembered() } : null;
 }
 
 interface JoinResponse extends AuthTokens {
@@ -69,8 +72,30 @@ const sameServer = (a: InstanceConfig, b: InstanceConfig) => a.raw.toLowerCase()
 
 const pendingId = (home: HomeSession, instance: InstanceConfig) => `pending:${home.account?.id ?? "home"}>${instance.raw}`;
 
-/** The server's own name for itself, which is what an assertion has to be addressed to (not however it was typed). */
-const addressOf = (instance: InstanceConfig, info: Pick<ServerInfo, "server_id"> | undefined) => info?.server_id || instance.raw;
+const withPort = (host: string, secure: boolean) => {
+  const bare = host.trim().toLowerCase().replace(/\.$/, "");
+  return /:\d+$/.test(bare) ? bare : `${bare}:${secure ? 443 : 80}`;
+};
+
+/**
+ * The address an assertion is made out to. It is the address that was actually contacted, and the server's own name for
+ * itself has to agree with it: taking the name from what the server says would let a server that claims to be another one
+ * collect an assertion meant for that other one and use it there.
+ */
+export class WrongAddress extends Error {
+  constructor(public claimed: string) {
+    super(`That server calls itself ${claimed}, which is not the address you gave. Use ${claimed} instead.`);
+    this.name = "WrongAddress";
+  }
+}
+
+function audienceFor(instance: InstanceConfig, info: Pick<ServerInfo, "server_id"> | undefined): string {
+  const secure = instance.protocol === "https";
+  const contacted = withPort(instance.raw, secure);
+  const claimed = info?.server_id ? withPort(info.server_id, secure) : contacted;
+  if (claimed !== contacted) throw new WrongAddress(info!.server_id);
+  return contacted;
+}
 
 async function assertionFor(home: HomeSession, audience: string): Promise<string> {
   try {
@@ -99,7 +124,7 @@ async function settle(home: HomeSession, instance: InstanceConfig, response: Joi
   }
   if (!response.user?.username || !response.auth_token) throw new Error("The server returned an unexpected response.");
   const id = accountIdFor(response.user.username, instance);
-  const snapshot = await snapshotFromTokens(response, true, getApiUrl(instance), id);
+  const snapshot = await snapshotFromTokens(response, home.remember, getApiUrl(instance), id);
   saveMembership({ id, username: response.user.username, avatarUrl: null, instance, snapshot, membership: { homeId, handle, status: "joined", serverName } });
   await dropMembership(pendingId(home, instance));
   // The account's own server keeps the list of what it has joined, so the list follows the account to other devices.
@@ -116,7 +141,7 @@ export async function joinServer(instance: InstanceConfig, info: Pick<ServerInfo
   const home = resolveHome();
   if (!home) throw new NotSignedIn();
   if (sameServer(instance, home.instance)) throw new Error("That is your own server.");
-  const assertion = await assertionFor(home, addressOf(instance, info));
+  const assertion = await assertionFor(home, audienceFor(instance, info));
   const response = await api.post<JoinResponse>(`${getApiUrl(instance)}/api/v1/federation/join`, {
     json: { assertion, invite_code: options.inviteCode?.trim() || undefined, message: options.message?.trim() || undefined },
   });
@@ -127,7 +152,7 @@ export async function joinServer(instance: InstanceConfig, info: Pick<ServerInfo
 export async function checkRequest(account: Account, info?: Pick<ServerInfo, "server_id" | "server_name">): Promise<JoinResult> {
   const home = resolveHome();
   if (!home) throw new NotSignedIn();
-  const assertion = await assertionFor(home, addressOf(account.instance, info));
+  const assertion = await assertionFor(home, audienceFor(account.instance, info));
   try {
     const response = await api.post<JoinResponse | { status: "none" }>(`${getApiUrl(account.instance)}/api/v1/federation/join/status`, { json: { assertion } });
     if (response.status === "none") {
