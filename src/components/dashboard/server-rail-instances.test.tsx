@@ -49,12 +49,13 @@ describe("the rail of joined instances", () => {
     // ada on one.example is saved on this device, but her instance is not a tile here.
     expect(screen.queryByRole("button", { name: /Switch to/ })).not.toBeInTheDocument();
     expect(screen.queryByTitle(/one\.example/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add an instance" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Join a server" })).toBeInTheDocument();
   });
 
-  it("adds an instance through the login page", async () => {
+  it("opens the join popup from the plus, not the sign-up screens", async () => {
     const { user } = renderWithProviders(<ServerRail />, { route: "/dashboard/channels" });
-    await user.click(await screen.findByRole("button", { name: "Add an instance" }));
-    expect(await screen.findByTestId("elsewhere")).toHaveTextContent("/login?add=1");
+    await user.click(await screen.findByRole("button", { name: "Join a server" }));
+    expect(await screen.findByRole("dialog", { name: "Join a server" })).toBeInTheDocument();
+    expect(screen.queryByTestId("elsewhere")).not.toBeInTheDocument();
   });
 });

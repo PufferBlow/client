@@ -20,6 +20,7 @@ export type RealtimeEvent =
   /** A message was pinned or unpinned in a channel. */
   | { kind: "pins"; channelId: string }
   | { kind: "notification" }
+  | { kind: "join_requests" }
   /** Someone is calling, or something happened on a call we are in (see `CallSignal`). */
   | { kind: "call"; signal: CallSignal }
   /** Someone started typing; `scope` is the channel id, or the conversation id for a DM. */
@@ -73,6 +74,10 @@ export function toRealtimeEvent(frame: EventFrame): RealtimeEvent | null {
 
     case "notification.created":
       return { kind: "notification" };
+
+    case "join_request.created":
+    case "join_request.decided":
+      return { kind: "join_requests" };
 
     case "typing.started": {
       const scope = str(data.conversation_id) || channelId;

@@ -1,3 +1,5 @@
+export type JoinMode = "open" | "invite" | "request";
+
 /** Public `GET /system/server-info` payload (fields the client uses). */
 export interface ServerInfo {
   server_id: string;
@@ -13,6 +15,8 @@ export interface ServerInfo {
   members_count: number | null;
   online_members: number | null;
   is_private: boolean;
+  /** Who may join: anyone, with an invitation code, or by asking and being approved. Older servers do not say (anyone). */
+  join_mode?: JoinMode;
   max_message_length: number | null;
   max_total_attachment_size: number | null;
   welcome_message?: string | null;

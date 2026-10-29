@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus, X } from "lucide-react";
-import { listAccounts, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";
+import { listPeople, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { Avatar } from "./Avatar";
 
@@ -45,7 +45,7 @@ export function AccountSwitcher({ children, className }: { children: ReactNode; 
 
   const toggle = () => {
     if (!open) {
-      setAccounts(listAccounts());
+      setAccounts(listPeople());
       setFailed(null);
     }
     setOpen(!open);
@@ -72,7 +72,7 @@ export function AccountSwitcher({ children, className }: { children: ReactNode; 
 
   const remove = async (account: Account) => {
     await removeAccount(account.id);
-    setAccounts(listAccounts());
+    setAccounts(listPeople());
   };
 
   return (

@@ -126,6 +126,8 @@ export interface ServerSettingsChange {
   server_description?: string;
   welcome_message?: string;
   is_private?: boolean;
+  /** Who may join: anyone, with an invitation code, or by asking and being approved. */
+  join_mode?: "open" | "invite" | "request";
   max_message_length?: number;
   max_image_size?: number;
   max_video_size?: number;

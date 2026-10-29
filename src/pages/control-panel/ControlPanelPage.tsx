@@ -5,10 +5,14 @@ import { ErrorState, LoadingState, RoleTag, SpaceIcon } from "@pufferblow/spines
 import { getStoredInstance } from "../../services/instance";
 import { useServerInfo } from "../../features/server/hooks";
 import { useServerAppearance } from "../../features/server/look";
+import { CountBadge } from "../../components/dashboard/Avatar";
 import { useMyProfile } from "../../features/users/hooks";
 import { isServerOwner } from "../../features/users/roles";
 import { classifyAuthError } from "../../utils/authErrors";
+import { canManageInvites, canManageRequests, usePendingJoinRequests } from "../../features/admin/access";
 import { ChannelsSection } from "./ChannelsSection";
+import { InvitesSection } from "./InvitesSection";
+import { JoinRequestsSection } from "./JoinRequestsSection";
 import { BlocklistSection } from "./BlocklistSection";
 import { EmojiSection } from "./EmojiSection";
 import { HealthSection } from "./HealthSection";
@@ -32,6 +36,10 @@ function SectionBody({ id }: { id: SectionId }) {
       return <ChannelsSection />;
     case "members":
       return <MembersSection />;
+    case "join-requests":
+      return <JoinRequestsSection />;
+    case "invites":
+      return <InvitesSection />;
     case "health":
       return <HealthSection />;
     case "peers":
@@ -57,12 +65,16 @@ function SectionBody({ id }: { id: SectionId }) {
   }
 }
 
-/** Owner-only server administration. The server enforces ownership too; this only gates the screen. */
+/**
+ * Server administration. The owner has all of it; someone who may decide join requests or make invitation codes (a
+ * moderator, by default) has just those screens. The server enforces every privilege too; this only gates the screen.
+ */
 export function ControlPanelPage() {
   const { section } = useParams();
   const { data: me, isPending, error, refetch } = useMyProfile();
   const { data: server } = useServerInfo();
   const appearance = useServerAppearance();
+  const pendingRequests = usePendingJoinRequests(canManageRequests(me?.resolved_privileges) || isServerOwner(me)).data ?? 0;
 
   useEffect(() => {
     // Admin screens aren't somewhere to resume on the next launch.
@@ -83,10 +95,15 @@ export function ControlPanelPage() {
       </main>
     );
   }
-  if (!isServerOwner(me)) return <Navigate to="/dashboard" replace />;
-  if (section !== undefined && !isSectionId(section)) return <Navigate to="/control-panel" replace />;
+  const owner = isServerOwner(me);
+  const mayRequests = owner || canManageRequests(me?.resolved_privileges);
+  const mayInvites = owner || canManageInvites(me?.resolved_privileges);
+  if (!owner && !mayRequests && !mayInvites) return <Navigate to="/dashboard" replace />;
+  const allowed = (id: SectionId) => owner || (id === "join-requests" && mayRequests) || (id === "invites" && mayInvites);
+  const firstAllowed: SectionId = owner ? DEFAULT_SECTION : mayRequests ? "join-requests" : "invites";
+  if (section !== undefined && (!isSectionId(section) || !allowed(section))) return <Navigate to="/control-panel" replace />;
 
-  const active: SectionId = isSectionId(section) ? section : DEFAULT_SECTION;
+  const active: SectionId = isSectionId(section) ? section : firstAllowed;
   const current = SECTIONS.find((s) => s.id === active)!;
 
   const host = getStoredInstance()?.raw ?? "";
@@ -100,7 +117,7 @@ export function ControlPanelPage() {
           <div className="flex min-w-0 flex-col gap-1.5">
             <span className="pb-panel-header truncate leading-tight">{server?.server_name ?? " "}</span>
             <span className="pb-meta flex items-center gap-1.5 text-xs">
-              <RoleTag name="Owner" colour="#dadada" dot={false} />
+              <RoleTag name={owner ? "Owner" : "Moderator"} colour="#dadada" dot={false} />
               {server?.version ? `Pufferblow ${server.version}` : host}
             </span>
           </div>
@@ -114,10 +131,10 @@ export function ControlPanelPage() {
             <ArrowLeft size={16} aria-hidden="true" />
             Back to app
           </Link>
-          {GROUPS.map((group) => (
+          {GROUPS.filter((group) => group.ids.some(allowed)).map((group) => (
             <div key={group.name} role="group" aria-label={group.name}>
               <div className="pb-section-label px-2.5 pb-1.5 pt-3.5">{group.name}</div>
-              {group.ids.map((id) => {
+              {group.ids.filter(allowed).map((id) => {
                 const { label, icon: Icon, ...rest } = SECTIONS.find((s) => s.id === id)!;
                 return (
                   <Link
@@ -131,6 +148,7 @@ export function ControlPanelPage() {
                   >
                     <Icon size={16} aria-hidden="true" />
                     <span className="flex-1">{label}</span>
+                    {id === "join-requests" && pendingRequests > 0 && <CountBadge count={pendingRequests} />}
                     {"planned" in rest && <span className="text-[10px] uppercase tracking-[0.1em] text-text-faint">Soon</span>}
                   </Link>
                 );
@@ -141,7 +159,7 @@ export function ControlPanelPage() {
 
         <p className="m-2 flex items-start gap-2.5 rounded-lg bg-surface-secondary px-3 py-2.5 text-xs leading-snug text-text-tertiary">
           <Lock size={14} aria-hidden="true" className="mt-px shrink-0" />
-          Only the owner of {host || "this instance"} can open this panel.
+          {owner ? `Only the owner of ${host || "this instance"} can open all of this panel.` : "You can decide who joins here. The rest is for the owner."}
         </p>
       </aside>
 

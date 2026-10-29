@@ -111,6 +111,11 @@ export function applyEvent(queryClient: QueryClient, event: RealtimeEvent, conte
       return;
     }
 
+    case "join_requests":
+      // Someone asked to join, or a request was decided: the waiting list and its count are stale.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "join-requests"] });
+      return;
+
     case "typing":
       // Your own other tabs and devices announce you too; you don't need to see that.
       if (event.userId === queryClient.getQueryData<UserProfile>(userKeys.profile)?.user_id) return;

@@ -1,4 +1,4 @@
-import { Bell, BellOff, CheckCheck, CopyPlus, Fingerprint, Globe, Link2, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Bell, BellOff, CheckCheck, CopyPlus, Fingerprint, Globe, Link2, LogOut, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { MenuEntry } from "../ui/ContextMenu";
 import type { Channel } from "../../features/channels/types";
 
@@ -87,6 +87,8 @@ export interface ServerMenuContext {
     copyAddress: () => void;
     create: () => void;
     openControlPanel: () => void;
+    /** Only for a server joined with an account from elsewhere: give the membership up. */
+    leave?: () => void;
   };
 }
 
@@ -105,6 +107,7 @@ export function serverMenuEntries(ctx: ServerMenuContext): MenuEntry[] {
       },
     ],
     [{ kind: "item", id: "copy-address", label: "Copy server address", icon: <Globe size={15} />, onSelect: actions.copyAddress }],
+    ...(actions.leave ? [[{ kind: "item", id: "leave-server", label: "Leave server", icon: <LogOut size={15} />, onSelect: actions.leave, danger: true } as MenuEntry]] : []),
     [
       ...(ctx.canCreate ? [{ kind: "item", id: "create", label: "Create channel", icon: <Plus size={15} />, onSelect: actions.create } as MenuEntry] : []),
       ...(ctx.isOwner

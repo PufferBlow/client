@@ -10,6 +10,8 @@ import {
   Network,
   Smile,
   ShieldBan,
+  Ticket,
+  UserCheck,
   Settings2,
   Users,
   type LucideIcon,
@@ -35,6 +37,8 @@ export const SECTIONS = [
     description: "Name, privacy, upload limits and the server look.",
   },
   { id: "members", label: "Members", icon: Users, description: "Everyone with an account on this server." },
+  { id: "join-requests", label: "Join requests", icon: UserCheck, description: "People asking to join, for you to approve or decline." },
+  { id: "invites", label: "Invitations", icon: Ticket, description: "Codes that let people join." },
   { id: "channels", label: "Channels", icon: Hash, description: "Every text, voice and mixed channel on this server." },
   { id: "emoji", label: "Emoji & stickers", icon: Smile, description: "Custom emoji and stickers people can use on this server." },
   {
@@ -82,7 +86,7 @@ export type SectionId = (typeof SECTIONS)[number]["id"];
 /** How the navigation groups the sections, in order. */
 export const GROUPS: ReadonlyArray<{ name: string; ids: readonly SectionId[] }> = [
   { name: "Instance", ids: ["overview", "health", "settings"] },
-  { name: "Community", ids: ["members", "channels", "roles", "emoji"] },
+  { name: "Community", ids: ["members", "join-requests", "invites", "channels", "roles", "emoji"] },
   { name: "Federation", ids: ["peers", "relays", "blocklist"] },
   { name: "Safety", ids: ["reports", "blocked-ips", "audit"] },
 ];

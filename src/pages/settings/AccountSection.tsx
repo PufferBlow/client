@@ -9,7 +9,7 @@ import { Button } from "@pufferblow/spines";
 import { Avatar } from "../../components/dashboard/Avatar";
 import { copyToClipboard } from "../../lib/clipboard";
 import { playSound, setSoundsEnabled, soundsEnabled } from "../../features/sounds/sounds";
-import { listAccounts, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";
+import { listPeople, removeAccount, saveActiveAccount, switchAccount, type Account } from "../../services/accounts";
 import { getActiveAccountId } from "../../services/auth";
 import { changePassword, updateUsername } from "../../features/users/api";
 import { userKeys } from "../../features/users/hooks";
@@ -181,7 +181,7 @@ function OverviewCard({ profile }: { profile: UserProfile }) {
 /** The accounts signed in on this device, one per instance: switch, remove or add another. */
 function DeviceAccountsCard() {
   const navigate = useNavigate();
-  const [accounts, setAccounts] = useState<Account[]>(() => listAccounts());
+  const [accounts, setAccounts] = useState<Account[]>(() => listPeople());
   const [failed, setFailed] = useState<string | null>(null);
   const activeId = getActiveAccountId();
 
@@ -220,7 +220,7 @@ function DeviceAccountsCard() {
                     aria-label={`Remove ${account.username} from this device`}
                     onClick={async () => {
                       await removeAccount(account.id);
-                      setAccounts(listAccounts());
+                      setAccounts(listPeople());
                     }}
                     className="grid size-7 place-items-center rounded-md border-0 bg-transparent text-text-muted hover:bg-active hover:text-text"
                   >

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { ArrowRight, KeyRound, Lock, Plus, X } from "lucide-react";
 import { BrandLockup, Button, defaultAvatarUrl } from "@pufferblow/spines";
 import { previewAssetUrl } from "../../features/instance/preview";
-import { listAccounts, removeAccount, switchAccount, type Account } from "../../services/accounts";
+import { listPeople, removeAccount, switchAccount, type Account } from "../../services/accounts";
 import { login } from "../../services/auth";
 import { classifyAuthError } from "../../utils/authErrors";
 import { resolvePostAuthRedirect } from "../../utils/authRedirect";
@@ -20,7 +20,7 @@ function avatarOf(account: Account): string {
 export function AccountPickerPage() {
   const [params] = useSearchParams();
   const redirect = params.get("redirect");
-  const [accounts, setAccounts] = useState<Account[]>(() => listAccounts());
+  const [accounts, setAccounts] = useState<Account[]>(() => listPeople());
   const [chosen, setChosen] = useState<string | null>(null);
   const [managing, setManaging] = useState(false);
   const [password, setPassword] = useState("");
@@ -62,7 +62,7 @@ export function AccountPickerPage() {
 
   const remove = async (account: Account) => {
     await removeAccount(account.id);
-    setAccounts(listAccounts());
+    setAccounts(listPeople());
     if (chosen === account.id) setChosen(null);
   };
 

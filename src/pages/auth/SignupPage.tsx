@@ -3,10 +3,12 @@ import { useEffect } from "react";
 import { useAuthArt } from "../../layouts/authLayoutContext";
 import { useHandleInstance } from "../../features/instance/useHandleInstance";
 import { Link, useNavigate, useSearchParams } from "react-router";
+import { ApiError } from "../../services/api";
 import { ArrowRight, AtSign } from "lucide-react";
 import { Button } from "@pufferblow/spines";
 import { AuthField, FoundBadge, Notice, PasswordField, Switch } from "../../components/auth/AuthFields";
 import { signup } from "../../services/auth";
+import { Clock, KeyRound, MessageSquare } from "lucide-react";
 import {
   classifyAuthError,
   PASSWORD_MAX,
@@ -18,6 +20,7 @@ import { resolveHandle } from "../../utils/authForm";
 import { buildSiblingAuthLink, resolvePostAuthRedirect } from "../../utils/authRedirect";
 
 interface FormErrors {
+  code?: string;
   handle?: string;
   password?: string;
   confirm?: string;
@@ -39,6 +42,11 @@ export function SignupPage() {
   const [remember, setRemember] = useState(true);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
+  const [code, setCode] = useState("");
+  const [note, setNote] = useState("");
+  const [waiting, setWaiting] = useState<string | null>(null);
+  // What the server asks of a newcomer, once it has answered about itself.
+  const joinMode = preview?.join_mode ?? "open";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -52,6 +60,7 @@ export function SignupPage() {
     else if (password.length > PASSWORD_MAX) next.password = `Use at most ${PASSWORD_MAX} characters.`;
 
     if (confirm !== password) next.confirm = "Passwords don't match.";
+    if (joinMode === "invite" && !code.trim()) next.code = "This server is invite-only. Enter your invitation code.";
 
     if (!target.ok || Object.keys(next).length > 0) {
       setErrors(next);
@@ -61,19 +70,39 @@ export function SignupPage() {
     setErrors({});
     setLoading(true);
     try {
-      await signup({ username: target.username, password, instance: target.instance, remember });
+      const outcome = await signup({ username: target.username, password, instance: target.instance, remember, inviteCode: code, message: note });
+      if ("status" in outcome) {
+        setWaiting(outcome.message);
+        return;
+      }
       // Adding an account swaps who is signed in, so start clean rather than carry the old one's data.
       if (adding) window.location.assign(resolvePostAuthRedirect(redirect));
       else navigate(resolvePostAuthRedirect(redirect), { replace: true });
     } catch (err) {
       const info = classifyAuthError(err, "Sign up failed. Please try again.");
-      if (info.field === "username" || info.field === "instance") setErrors({ handle: info.message });
+      if (err instanceof ApiError && (err.code === "join.invite_required" || err.code === "join.invite_invalid")) setErrors({ code: info.message });
+      else if (info.field === "username" || info.field === "instance") setErrors({ handle: info.message });
       else if (info.field === "password") setErrors({ password: info.message });
       else setErrors({ form: info.message });
     } finally {
       setLoading(false);
     }
   };
+
+  if (waiting) {
+    return (
+      <div className="mx-auto flex w-full max-w-[380px] flex-1 flex-col gap-4">
+        <Clock size={28} className="text-primary" aria-hidden="true" />
+        <h1 className="font-display text-[34px] font-normal leading-[1.1]">Request sent</h1>
+        <p role="status" className="m-0 text-[14.5px] leading-relaxed text-text-tertiary">
+          {waiting} Come back and sign in once you have been approved.
+        </p>
+        <Link to={buildSiblingAuthLink("/login", redirect, adding)} className="font-semibold text-primary hover:underline">
+          Go to sign in
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[380px] flex-1 flex-col gap-[18px]">
@@ -121,6 +150,23 @@ export function SignupPage() {
           autoComplete="new-password"
           error={errors.confirm}
         />
+
+        {joinMode !== "open" && (
+          <AuthField
+            icon={<KeyRound size={16} aria-hidden="true" />}
+            label={joinMode === "invite" ? "Invitation code" : "Invitation code (optional)"}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="ABCD-EFGH-JKMN"
+            autoCapitalize="characters"
+            spellCheck={false}
+            error={errors.code}
+            hint={joinMode === "invite" ? "This server is invite-only." : "With a code you are let in at once; without one a moderator approves you."}
+          />
+        )}
+        {joinMode === "request" && !code.trim() && (
+          <AuthField icon={<MessageSquare size={16} aria-hidden="true" />} label="Note for the moderators (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Who you are, who sent you" hint="They see this when they decide." />
+        )}
 
         <Switch checked={remember} onChange={setRemember}>
           Stay signed in on this device

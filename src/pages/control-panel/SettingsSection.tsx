@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Users } from "lucide-react";
-import { Switch } from "../../components/auth/AuthFields";
 import { Panel } from "../../components/control-panel/Panel";
 import { ExtensionList } from "../../components/settings/ExtensionList";
 import { PictureUploader } from "../../components/settings/PictureUploader";
@@ -14,7 +13,7 @@ import type { ServerSettingsChange } from "../../features/admin/api";
 import { uploadPicture, type PictureKind } from "../../features/pictures/upload";
 import { serverKeys, useServerInfo } from "../../features/server/hooks";
 import { serverIdentityId, serverPictures } from "../../features/server/look";
-import type { ServerInfo } from "../../features/server/types";
+import type { JoinMode, ServerInfo } from "../../features/server/types";
 import { ICON_STYLE_CHOICES, SERVER_BANNER_CHOICES, serverLookOf, type ServerLookChoice } from "../../lib/serverLook";
 import { classifyAuthError } from "../../utils/authErrors";
 
@@ -87,16 +86,22 @@ function Preview({ info, draft }: { info: ServerInfo; draft: Draft }) {
   );
 }
 
+const JOIN_CHOICES: { value: JoinMode; label: string; hint: string }[] = [
+  { value: "open", label: "Open", hint: "Anyone can join." },
+  { value: "invite", label: "Invite only", hint: "People need an invitation code." },
+  { value: "request", label: "Request to join", hint: "People ask, and you or a moderator approve. A valid code skips the wait." },
+];
+
 function GeneralPanel({ info, draft, onDraft }: { info: ServerInfo; draft: Draft; onDraft: (change: Partial<Draft>) => void }) {
   const admin = useServerSettingsAdmin();
   const { run, loading, feedback } = useSave("Saved.");
-  const [isPrivate, setPrivate] = useState(info.is_private);
+  const [joinMode, setJoinMode] = useState<JoinMode>(info.join_mode ?? "open");
 
   const change: ServerSettingsChange = {
     ...(draft.name.trim() !== info.server_name ? { server_name: draft.name.trim() } : {}),
     ...(draft.description.trim() !== (info.server_description ?? "") ? { server_description: draft.description.trim() } : {}),
     ...(draft.welcome.trim() !== (info.welcome_message ?? "") ? { welcome_message: draft.welcome.trim() } : {}),
-    ...(isPrivate !== info.is_private ? { is_private: isPrivate } : {}),
+    ...(joinMode !== (info.join_mode ?? "open") ? { join_mode: joinMode } : {}),
   };
   const changed = Object.keys(change).length > 0 && draft.name.trim().length > 0;
 
@@ -118,9 +123,22 @@ function GeneralPanel({ info, draft, onDraft }: { info: ServerInfo; draft: Draft
         <Field label="Welcome message" hint={`Shown to people who join. ${draft.welcome.length}/${WELCOME_MAX}`}>
           <textarea aria-label="Welcome message" value={draft.welcome} maxLength={WELCOME_MAX} rows={3} onChange={(e) => onDraft({ welcome: e.target.value })} className={textarea} />
         </Field>
-        <Switch checked={isPrivate} onChange={setPrivate}>
-          Private: people need an invitation to join
-        </Switch>
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-1 p-0 text-[13px] text-text-secondary">Who can join</legend>
+          {JOIN_CHOICES.map(({ value, label, hint }) => (
+            <label
+              key={value}
+              className={["flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-3", joinMode === value ? "border-primary/60 bg-primary/10" : "border-border hover:border-border-secondary"].join(" ")}
+            >
+              <input type="radio" name="join-mode" value={value} checked={joinMode === value} onChange={() => setJoinMode(value)} className="mt-1 accent-primary" />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">{label}</span>
+                <span className="text-[13px] text-text-tertiary">{hint}</span>
+              </span>
+            </label>
+          ))}
+          <p className="m-0 text-[12.5px] text-text-muted">This covers signing up here and joining with an account from another server. Codes and requests are under Community.</p>
+        </fieldset>
         <div className="flex items-center gap-4">
           <Button type="submit" loading={loading} disabled={!changed}>
             Save

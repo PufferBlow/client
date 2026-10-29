@@ -132,11 +132,11 @@ describe("settings", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.clear(name);
     await user.type(name, "Renamed");
-    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("radio", { name: /Invite only/ }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await screen.findByText("Saved.");
-    expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", server_name: "Renamed", is_private: true });
+    expect(bodyOf(fetchMock, "PUT /api/v1/system/server-info")).toEqual({ auth_token: "tok", server_name: "Renamed", join_mode: "invite" });
   });
 
   it("sends changed limits as numbers and refuses a bad one", async () => {

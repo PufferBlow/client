@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, redirect } from "react-router";
-import { listAccounts } from "./services/accounts";
+import { listPeople } from "./services/accounts";
 import { getAuthToken } from "./services/auth";
 import { buildAuthRedirectPath } from "./utils/authRedirect";
 import { RootLayout } from "./layouts/RootLayout";
@@ -81,6 +81,6 @@ function rootLoader() {
     return redirect("/dashboard");
   }
   // Nobody is signed in, but accounts are saved on this device: choose one.
-  if (listAccounts().length > 0) return redirect("/accounts");
+  if (listPeople().length > 0) return redirect("/accounts");
   return null;
 }

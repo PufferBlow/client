@@ -156,6 +156,25 @@ export async function persistSession(
   commit?.();
 }
 
+/**
+ * A session for someone who is not the live account (a server joined with an account from elsewhere), kept the way
+ * `snapshotSession` keeps one. On the desktop the refresh token goes to the keychain under `accountId`.
+ */
+export async function snapshotFromTokens(tokens: AuthTokens, remember: boolean, apiUrl: string, accountId: string): Promise<SessionSnapshot> {
+  let refreshToken: string | null = tokens.refresh_token ?? null;
+  const bridge = vault();
+  if (bridge && refreshToken && (await bridge.store(apiUrl, refreshToken, remember, accountId).catch(() => false))) refreshToken = null;
+  return {
+    authToken: tokens.auth_token,
+    session: {
+      refreshToken,
+      authExpiresAt: parseDate(tokens.auth_token_expire_time)?.toISOString() ?? null,
+      refreshExpiresAt: parseDate(tokens.refresh_token_expire_time)?.toISOString() ?? null,
+      remember,
+    },
+  };
+}
+
 type AccessTokens = Pick<AuthTokens, "auth_token" | "auth_token_expire_time" | "refresh_token_expire_time">;
 
 function writeSession(tokens: AccessTokens, remember: boolean, refreshToken: string | null): void {
@@ -239,12 +258,19 @@ export async function login({ username, password, instance, remember }: Credenti
   return startSession(tokens, remember, instance, username);
 }
 
-export async function signup({ username, password, instance, remember }: Credentials): Promise<AuthTokens> {
+/** A server that approves new people answers a sign-up with this instead of a session: the account waits. */
+export interface SignupPending {
+  status: "pending";
+  message: string;
+}
+
+export async function signup({ username, password, instance, remember, inviteCode, message }: Credentials & { inviteCode?: string; message?: string }): Promise<AuthTokens | SignupPending> {
   log.info(`signing up as ${username} on ${instance.origin}`);
-  const tokens = await api.post<AuthTokens>(`${getApiUrl(instance)}/api/v1/users/signup`, {
-    json: { username, password },
+  const answer = await api.post<AuthTokens | SignupPending>(`${getApiUrl(instance)}/api/v1/users/signup`, {
+    json: { username, password, invite_code: inviteCode?.trim() || undefined, message: message?.trim() || undefined },
   });
-  return startSession(tokens, remember, instance, username);
+  if ("status" in answer && answer.status === "pending") return answer;
+  return startSession(answer as AuthTokens, remember, instance, username);
 }
 
 /**

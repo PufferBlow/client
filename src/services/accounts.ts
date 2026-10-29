@@ -23,13 +23,28 @@ import type { InstanceConfig } from "./types";
 const log = createLogger("accounts");
 const KEY = "pb_accounts";
 
+/**
+ * What makes an entry a server joined with an account from somewhere else, not an account of its own: whose account it
+ * was joined with (`homeId`), who that person is there (`handle`, as `name@home`), and whether they are in or waiting.
+ */
+export interface Membership {
+  homeId: string;
+  handle: string;
+  status: "joined" | "pending";
+  /** The request while it waits, to ask after it. */
+  requestId?: string;
+  serverName?: string;
+}
+
 export interface Account {
   id: string;
   username: string;
   avatarUrl: string | null;
   instance: InstanceConfig;
-  /** The session as it was when the account was last live. Null if it was not kept. */
+  /** The session as it was when the account was last live. Null if it was not kept (or a request still waits). */
   snapshot: SessionSnapshot | null;
+  /** Set for a joined server; absent for a person's own account. */
+  membership?: Membership;
 }
 
 const vault = () => (typeof window === "undefined" ? undefined : window.electron?.session);
@@ -42,6 +57,17 @@ function readList(store: Storage): Account[] {
     log.warn("the saved account list is unreadable, starting over");
     return [];
   }
+}
+
+/** The accounts that are people's own, not servers joined with one of them. */
+export const listPeople = (): Account[] => listAccounts().filter((a) => !a.membership);
+
+/** The servers joined with accounts from elsewhere, optionally only those joined with one account. */
+export const listMemberships = (homeId?: string): Account[] => listAccounts().filter((a) => a.membership && (homeId === undefined || a.membership.homeId === homeId));
+
+/** The account a server was joined with. A person's own account is its own home. */
+export function homeOf(account: Account): Account | undefined {
+  return account.membership ? listAccounts().find((a) => a.id === account.membership!.homeId) : account;
 }
 
 /** Every saved account. A session that was not to be remembered lives in this tab's storage only. */
@@ -75,6 +101,17 @@ onSessionCleared(() => {
   if (accounts.some((a) => a.id === id && a.snapshot)) save(accounts.map((a) => (a.id === id ? { ...a, snapshot: null } : a)));
 });
 
+/** Save a joined server (or change it: a request that was approved, a session that was renewed). */
+export function saveMembership(account: Account): void {
+  upsert(account);
+}
+
+/** Forget a joined server. Its desktop session goes with it. */
+export async function dropMembership(id: string): Promise<void> {
+  save(listAccounts().filter((a) => a.id !== id));
+  await vault()?.forget(id).catch(() => undefined);
+}
+
 function upsert(account: Account): void {
   const rest = listAccounts().filter((a) => a.id !== account.id);
   save([account, ...rest].sort((a, b) => a.id.localeCompare(b.id)));
@@ -98,7 +135,8 @@ export async function rememberActiveAccount(profile: { username: string; avatar_
     // The profile belongs to someone else (a username change would land here too): follow it.
     setActiveAccountId(id);
   }
-  upsert({ id, username: profile.username, avatarUrl: profile.avatar_url ?? null, instance, snapshot: snapshotSession() });
+  const kept = listAccounts().find((a) => a.id === id)?.membership;
+  upsert({ id, username: profile.username, avatarUrl: profile.avatar_url ?? null, instance, snapshot: snapshotSession(), ...(kept ? { membership: kept } : {}) });
 }
 
 /** Save the live session, so a different sign-in can replace it and this one can come back. */
@@ -132,8 +170,10 @@ export async function switchAccount(id: string): Promise<boolean> {
 /** Forget a saved account, never the live one (that is signing out). With nobody signed in, any can go. */
 export async function removeAccount(id: string): Promise<void> {
   if (id === getActiveAccountId() && getAuthToken() !== null) return;
-  save(listAccounts().filter((a) => a.id !== id));
-  await vault()?.forget(id).catch(() => undefined);
+  // The servers joined with an account go when it does: there is nobody left to vouch for them.
+  const gone = new Set(listAccounts().filter((a) => a.id === id || a.membership?.homeId === id).map((a) => a.id));
+  save(listAccounts().filter((a) => !gone.has(a.id)));
+  await Promise.all([...gone].map((goneId) => vault()?.forget(goneId).catch(() => undefined)));
 }
 
 /**
@@ -142,10 +182,13 @@ export async function removeAccount(id: string): Promise<void> {
  */
 export async function signOutActiveAccount(): Promise<"switched" | "signed-out"> {
   const id = getActiveAccountId();
+  const active = listAccounts().find((a) => a.id === id);
+  // Signing out of a joined server leaves the account it was joined with alone; signing out of an account takes its servers.
+  const leaving = active?.membership ? [id] : listAccounts().filter((a) => a.id === id || a.membership?.homeId === id).map((a) => a.id);
   await logout();
-  if (id) save(listAccounts().filter((a) => a.id !== id));
+  if (id) save(listAccounts().filter((a) => !leaving.includes(a.id)));
   setActiveAccountId(null);
-  const next = listAccounts().find((a) => a.snapshot);
+  const next = active?.membership ? listAccounts().find((a) => a.id === active.membership!.homeId && a.snapshot) : listPeople().find((a) => a.snapshot);
   if (next && (await switchAccount(next.id))) return "switched";
   return "signed-out";
 }

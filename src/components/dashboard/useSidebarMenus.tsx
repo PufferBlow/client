@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { homeOf, listAccounts, switchAccount, type Account } from "../../services/accounts";
+import { getActiveAccountId } from "../../services/auth";
+import { leaveServer } from "../../services/servers";
 import { useMatch, useNavigate } from "react-router";
 import { ChannelDialogs, type ChannelDialog } from "../channels/ChannelDialogs";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -113,6 +116,15 @@ export function useServerMenu(notify: Notify) {
   const { data: server } = useServerInfo();
   const { data: channels } = useChannels();
   const { data: unread } = useUnreadCounts();
+  // A server joined with an account from elsewhere can be left; your own cannot.
+  const activeMembership = listAccounts().find((a) => a.id === getActiveAccountId() && a.membership) ?? null;
+  const leaveActive = async (account: Account) => {
+    const home = homeOf(account);
+    await leaveServer(account);
+    // Back to the account it was joined with.
+    if (home && (await switchAccount(home.id))) window.location.assign("/dashboard/channels");
+    else window.location.assign("/login");
+  };
   const { data: me } = useMyProfile();
   const muted = useMutedChannels();
   const markAll = useMarkAllChannelsRead();
@@ -147,6 +159,7 @@ export function useServerMenu(notify: Notify) {
                 copyAddress: () => void copy(server?.server_id ?? "", "Server address copied."),
                 create: () => setDialog({ kind: "create" }),
                 openControlPanel: () => navigate("/control-panel"),
+                ...(activeMembership ? { leave: () => void leaveActive(activeMembership) } : {}),
               },
             })}
           />

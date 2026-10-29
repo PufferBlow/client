@@ -1,5 +1,7 @@
-import { saveActiveAccount } from "../../services/accounts";
-import { NavLink, useMatch, useNavigate } from "react-router";
+import { homeOf, listAccounts, listMemberships } from "../../services/accounts";
+import { getActiveAccountId } from "../../services/auth";
+import { NavLink, useMatch } from "react-router";
+import { useState } from "react";
 import { Plus, SlidersHorizontal, Volume2 } from "lucide-react";
 import { useChannels } from "../../features/channels/hooks";
 import { useVoice } from "../../features/voice/voiceContext";
@@ -18,6 +20,9 @@ import { usePublicHealth } from "../../features/health/hooks";
 import { ToastRegion } from "../ui/Toast";
 import { CountBadge } from "./Avatar";
 import { useServerMenu } from "./useSidebarMenus";
+import { AddServerDialog } from "./AddServerDialog";
+import { OtherServerTile } from "./OtherServerTile";
+import { canManageInvites, canManageRequests, usePendingJoinRequests } from "../../features/admin/access";
 
 /** Left-edge pill: 36px when open, 20px on hover, 8px when unread, hidden otherwise. */
 function Indicator({ selected, unread }: { selected: boolean; unread: boolean }) {
@@ -43,7 +48,7 @@ const iconTileBase = tileBase.replace(" text-on-primary", "");
  */
 /** `clearUserPanel`: leave room at the bottom for the user card floating over the rail. */
 export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean } = {}) {
-  const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
   const onFriends = useMatch("/dashboard/friends") !== null;
   const onDms = useMatch("/dashboard/dms/*") !== null;
   const onHome = onFriends || onDms;
@@ -73,7 +78,14 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
   const { data: channels } = useChannels();
   const voiceChannel = voice.status === "connected" ? (channels?.find((c) => c.channel_id === voice.channelId)?.channel_name ?? "a voice channel") : null;
   // The servers in the person's own order. One instance is joined at a time today, so there is one to place.
-  const { ordered, itemProps } = useSortable(["current"], "pb_server_order");
+  // The servers beside the open one: your own (when a joined one is open) and the ones joined with your account.
+  const activeId = getActiveAccountId();
+  const active = listAccounts().find((a) => a.id === activeId);
+  const home = active ? homeOf(active) : undefined;
+  const others = [...(active?.membership && home ? [home] : []), ...listMemberships(home?.id ?? "__none__").filter((a) => a.id !== activeId)];
+  const { ordered, itemProps } = useSortable(["current", ...others.map((a) => a.id)], "pb_server_order");
+  const mayDecide = isOwner || canManageRequests(me?.resolved_privileges) || canManageInvites(me?.resolved_privileges);
+  const waiting = usePendingJoinRequests(isOwner || canManageRequests(me?.resolved_privileges)).data ?? 0;
 
   return (
     <nav aria-label="Servers" className={`flex w-[72px] shrink-0 flex-col items-center gap-2.5 overflow-y-auto pt-1.5 ${clearUserPanel ? "pb-[calc(var(--dock-h,56px)+8px)]" : "pb-2"}`}>
@@ -140,25 +152,32 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
           )}
         </NavLink>
       </div>
-        ) : null,
+        ) : (
+          (() => {
+            const account = others.find((a) => a.id === id);
+            if (!account) return null;
+            return (
+              <div key={id} {...itemProps(id)} className="group/tile relative flex w-full justify-center data-[dragging=true]:opacity-40 data-[drop-target=true]:before:absolute data-[drop-target=true]:before:-top-1.5 data-[drop-target=true]:before:h-0.5 data-[drop-target=true]:before:w-8 data-[drop-target=true]:before:rounded data-[drop-target=true]:before:bg-text">
+                <OtherServerTile account={account} tileClass={tileBase} indicator={<Indicator selected={false} unread={account.membership?.status === "pending"} />} />
+              </div>
+            );
+          })()
+        ),
       )}
 
       <div className="group/tile relative flex w-full justify-center">
         <button
           type="button"
-          aria-label="Add an instance"
-          title="Add an instance"
-          onClick={() => {
-            saveActiveAccount(); // keep this account on the device while another is added
-            navigate("/login?add=1");
-          }}
+          aria-label="Join a server"
+          title="Join a server"
+          onClick={() => setAdding(true)}
           className={`${iconTileBase} rounded-full bg-surface-secondary text-text-tertiary hover:rounded-lg hover:bg-surface-tertiary hover:text-text`}
         >
           <Plus size={20} aria-hidden="true" />
         </button>
       </div>
 
-      {isOwner && (
+      {mayDecide && (
         <div className="group/tile relative mt-auto flex w-full justify-center">
           <Indicator selected={onControlPanel} unread={false} />
           <NavLink
@@ -168,10 +187,12 @@ export function ServerRail({ clearUserPanel = true }: { clearUserPanel?: boolean
             className={`${iconTileBase} ${onControlPanel ? "rounded-[12px]" : "rounded-lg"} bg-surface text-primary hover:bg-surface-secondary`}
           >
             <SlidersHorizontal size={20} aria-hidden="true" />
+            <CountBadge count={waiting} className="absolute -bottom-1.5 -right-1.5 border-[3px] border-background" />
           </NavLink>
         </div>
       )}
       {serverMenu.node}
+      {adding && <AddServerDialog onClose={() => setAdding(false)} />}
       <ToastRegion toast={toast} />
     </nav>
   );
