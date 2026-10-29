@@ -5,7 +5,7 @@ import { createContext } from "react";
  * `@name` mentions. A mention starts with `@` at the start of the text or after whitespace and
  * runs over letters, digits and `. _ -` (at most 32), the same rule the server uses to decide who
  * to notify. `@everyone` is not a person: it pings the whole channel and the server only honours
- * it from owners, admins and moderators.
+ * it from owners and moderators.
  */
 
 export const EVERYONE = "everyone";

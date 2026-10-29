@@ -15,7 +15,7 @@ const byName = (a: UserProfile, b: UserProfile) => a.username.localeCompare(b.us
 const onlineFirst = (a: UserProfile, b: UserProfile) => Number(isOnline(b.status)) - Number(isOnline(a.status)) || byName(a, b);
 
 /**
- * People grouped by their highest role, the highest group first: Owner, Admin, Moderator, then roles the instance
+ * People grouped by their highest role, the highest group first: Owner, Moderator, then roles the instance
  * made (staff-badged ones first), and everyone else under Members. Inside a group the people who are online come
  * first. A person is in one group, the one for their top role.
  */

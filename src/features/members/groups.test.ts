@@ -16,7 +16,6 @@ const person = (username: string, status: string, roles: { id: string; name: str
   }) as unknown as UserProfile;
 
 const owner = { id: "owner", name: "Owner" };
-const admin = { id: "admin", name: "Admin" };
 const moderator = { id: "moderator", name: "Moderator" };
 const coach = { id: "coach", name: "Coach", badge: { tier: "community", tone: "violet", glyph: "target" } };
 const helper = { id: "helper", name: "Helper" };
@@ -27,14 +26,12 @@ describe("groupByRole", () => {
     const groups = groupByRole([
       person("zed", "online"),
       person("mod", "online", [moderator, user]),
-      person("boss", "online", [owner, admin]),
-      person("adm", "online", [admin]),
+      person("boss", "online", [owner]),
       person("coachy", "online", [coach]),
       person("plain", "offline", [user]),
     ]);
     expect(groups.map((g) => [g.label, g.members.map((m) => m.username)])).toEqual([
       ["Owner", ["boss"]],
-      ["Admin", ["adm"]],
       ["Moderator", ["mod"]],
       ["Coach", ["coachy"]],
       ["Members", ["zed", "plain"]],

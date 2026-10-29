@@ -20,7 +20,7 @@ export function isServerOwner(profile: WithRoles | null | undefined): boolean {
 }
 
 /**
- * Whether this user may ping the whole channel with `@everyone`: owners, admins and moderators,
+ * Whether this user may ping the whole channel with `@everyone`: owners and moderators,
  * who share the `moderate_content` privilege. The server decides for real; this only decides
  * whether to offer it.
  */
@@ -32,7 +32,7 @@ export function canMentionEveryone(profile: (WithRoles & Pick<UserProfile, "reso
 /** Roles every account has, which say nothing about a person. */
 const ORDINARY_ROLES = new Set(["member", "user", "everyone"]);
 /** Roles that outrank the rest of their tier, in order. Any other role comes after them, in the order it was given. */
-const RANKED_ROLES = [OWNER_ROLE_ID, "admin", "moderator"];
+const RANKED_ROLES = [OWNER_ROLE_ID, "moderator"];
 
 /** What instances that predate role badges are drawn with: the badges the built-in roles have always had. */
 const BUILT_IN_BADGES: Record<string, RoleBadgeData> = Object.fromEntries(
@@ -52,7 +52,7 @@ const tidy = (id: string) => id.replace(/[-_]+/g, " ").replace(/^\w/, (c) => c.t
 
 /**
  * The roles that say something about a person, in the order they are shown: staff first, then community,
- * then system, then the ones with no badge; inside a tier the built-in Owner, Admin and Moderator lead.
+ * then system, then the ones with no badge; inside a tier the built-in Owner and Moderator lead.
  */
 export function rolesOf(profile: WithRoles | null | undefined): RoleOfPerson[] {
   if (!profile) return [];

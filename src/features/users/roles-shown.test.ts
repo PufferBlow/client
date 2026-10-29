@@ -14,9 +14,8 @@ describe("the badge shown beside a name", () => {
     expect(shownBadge({ roles_ids: ["user"] })).toBeUndefined();
   });
 
-  it("is the built-in owner, admin or moderator badge even when the instance sent none (older instances)", () => {
+  it("is the built-in owner or moderator badge even when the instance sent none (older instances)", () => {
     expect(shownBadge({ roles_ids: ["owner"] })?.badge).toEqual({ tier: "staff", tone: "brass", glyph: "crown" });
-    expect(shownBadge({ roles_ids: ["admin"] })?.badge.glyph).toBe("key");
     expect(shownBadge({ roles_ids: ["moderator"] })?.badge.glyph).toBe("shield");
   });
 

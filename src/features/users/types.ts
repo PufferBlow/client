@@ -25,7 +25,7 @@ export interface UserProfile {
   origin_server: string;
   last_seen?: string | null;
   created_at?: string | null;
-  /** Role ids held by the user (`"owner"`, `"admin"`, ...). */
+  /** Role ids held by the user (`"owner"`, `"moderator"`, ...). */
   roles_ids?: string[] | null;
   resolved_roles?: UserRole[];
   resolved_privileges?: string[];
