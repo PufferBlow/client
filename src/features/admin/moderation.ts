@@ -15,15 +15,25 @@ export interface ModerationState {
   timeoutUntil: Date | null;
 }
 
-const TARGETED = new Set(["user_banned", "user_unbanned", "user_timed_out", "user_timeout_cleared"]);
+const TARGETED = new Set([
+  "user_banned",
+  "user_unbanned",
+  "user_timed_out",
+  "user_timeout_cleared",
+]);
 
 /**
  * Who is banned or timed out right now, worked out from the audit log: the instance records each
  * action there and keeps no separate list. The newest entry for a person wins, and a timeout that
  * has run out counts as over. `entries` are in any order.
  */
-export function moderationStates(entries: readonly AuditEntry[], now: Date = new Date()): Map<string, ModerationState> {
-  const ordered = entries.filter((e) => TARGETED.has(e.type)).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+export function moderationStates(
+  entries: readonly AuditEntry[],
+  now: Date = new Date(),
+): Map<string, ModerationState> {
+  const ordered = entries
+    .filter((e) => TARGETED.has(e.type))
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   const states = new Map<string, ModerationState>();
   for (const entry of ordered) {
     const id = entry.metadata.target_user_id;
@@ -33,12 +43,14 @@ export function moderationStates(entries: readonly AuditEntry[], now: Date = new
     else if (entry.type === "user_unbanned") state.banned = false;
     else if (entry.type === "user_timeout_cleared") state.timeoutUntil = null;
     else {
-      const until = typeof entry.metadata.expires_at === "string" ? new Date(entry.metadata.expires_at) : null;
+      const until =
+        typeof entry.metadata.expires_at === "string" ? new Date(entry.metadata.expires_at) : null;
       state.timeoutUntil = until && !Number.isNaN(until.getTime()) ? until : null;
     }
     states.set(id, state);
   }
-  for (const state of states.values()) if (state.timeoutUntil && state.timeoutUntil <= now) state.timeoutUntil = null;
+  for (const state of states.values())
+    if (state.timeoutUntil && state.timeoutUntil <= now) state.timeoutUntil = null;
   return states;
 }
 

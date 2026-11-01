@@ -5,15 +5,24 @@ import { tableClasses } from "../../components/control-panel/tableClasses";
 import { FeedbackLine } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { Button, EmptyState, ErrorState, Input, LoadingState, Modal } from "@pufferblow/spines";
-import { useModerationAdmin, useModerationStates, useRoleAdmin, useRoles } from "../../features/admin/hooks";
+import {
+  useModerationAdmin,
+  useModerationStates,
+  useRoleAdmin,
+  useRoles,
+} from "../../features/admin/hooks";
+import { canKick } from "../../features/admin/access";
 import { durationLabel, TIMEOUT_CHOICES } from "../../features/admin/moderation";
 import { PRESENCE } from "../../features/members/presence";
 import { useMyProfile, useUsers } from "../../features/users/hooks";
-import { OWNER_ROLE_ID, roleNames } from "../../features/users/roles";
+import { isServerOwner, OWNER_ROLE_ID, roleNames } from "../../features/users/roles";
 import type { UserProfile } from "../../features/users/types";
 import { classifyAuthError } from "../../utils/authErrors";
 
-type Action = { kind: "roles" | "timeout" | "ban" | "unban" | "clear-timeout"; member: UserProfile };
+type Action = {
+  kind: "roles" | "timeout" | "ban" | "unban" | "clear-timeout" | "kick" | "reinstate";
+  member: UserProfile;
+};
 
 function RolesDialog({ member, onClose }: { member: UserProfile; onClose: () => void }) {
   const roles = useRoles();
@@ -42,7 +51,13 @@ function RolesDialog({ member, onClose }: { member: UserProfile; onClose: () => 
           </Button>
           <Button
             loading={loading}
-            onClick={() => void run(() => admin.assign.mutateAsync({ userId: member.user_id, rolesIds: [...picked] }).then(() => undefined))}
+            onClick={() =>
+              void run(() =>
+                admin.assign
+                  .mutateAsync({ userId: member.user_id, rolesIds: [...picked] })
+                  .then(() => undefined),
+              )
+            }
           >
             Save roles
           </Button>
@@ -52,12 +67,22 @@ function RolesDialog({ member, onClose }: { member: UserProfile; onClose: () => 
       {roles.isPending ? (
         <LoadingState message="Loading roles…" />
       ) : roles.error || !roles.data ? (
-        <p className="pb-error m-0">{classifyAuthError(roles.error, "Couldn't load the roles.").message}</p>
+        <p className="pb-error m-0">
+          {classifyAuthError(roles.error, "Couldn't load the roles.").message}
+        </p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {roles.data.map((role) => (
-            <label key={role.role_id} className="flex cursor-pointer items-center gap-2.5 rounded-md bg-surface-secondary px-3 py-2 text-[13.5px] text-text-body">
-              <input type="checkbox" className="size-4 accent-[var(--color-primary)]" checked={picked.has(role.role_id)} onChange={() => toggle(role.role_id)} />
+            <label
+              key={role.role_id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-md bg-surface-secondary px-3 py-2 text-[13.5px] text-text-body"
+            >
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--color-primary)]"
+                checked={picked.has(role.role_id)}
+                onChange={() => toggle(role.role_id)}
+              />
               {role.role_name}
             </label>
           ))}
@@ -72,7 +97,15 @@ function ModerationDialog({ action, onClose }: { action: Action; onClose: () => 
   const admin = useModerationAdmin();
   const { member, kind } = action;
   const { run, loading, feedback } = useSave(
-    { timeout: "Timeout set.", ban: "Banned.", unban: "Unbanned.", "clear-timeout": "Timeout cleared.", roles: "" }[kind],
+    {
+      timeout: "Timeout set.",
+      ban: "Banned.",
+      unban: "Unbanned.",
+      "clear-timeout": "Timeout cleared.",
+      kick: "Removed.",
+      reinstate: "Let back in.",
+      roles: "",
+    }[kind],
   );
   const [minutes, setMinutes] = useState<number>(TIMEOUT_CHOICES[1]);
   const [reason, setReason] = useState("");
@@ -80,14 +113,26 @@ function ModerationDialog({ action, onClose }: { action: Action; onClose: () => 
   const confirm = () =>
     run(async () => {
       const why = reason.trim() || undefined;
-      if (kind === "timeout") await admin.timeout.mutateAsync({ userId: member.user_id, minutes, reason: why });
+      if (kind === "timeout")
+        await admin.timeout.mutateAsync({ userId: member.user_id, minutes, reason: why });
       else if (kind === "ban") await admin.ban.mutateAsync({ userId: member.user_id, reason: why });
       else if (kind === "unban") await admin.unban.mutateAsync(member.user_id);
+      else if (kind === "kick")
+        await admin.kick.mutateAsync({ userId: member.user_id, reason: why });
+      else if (kind === "reinstate") await admin.reinstate.mutateAsync(member.user_id);
       else await admin.clearTimeout.mutateAsync(member.user_id);
     });
 
-  const titles = { timeout: "Time out", ban: "Ban", unban: "Unban", "clear-timeout": "End the timeout of", roles: "" } as const;
-  const asksWhy = kind === "timeout" || kind === "ban";
+  const titles = {
+    timeout: "Time out",
+    ban: "Ban",
+    unban: "Unban",
+    "clear-timeout": "End the timeout of",
+    kick: "Remove",
+    reinstate: "Let back in",
+    roles: "",
+  } as const;
+  const asksWhy = kind === "timeout" || kind === "ban" || kind === "kick";
 
   return (
     <Modal
@@ -99,14 +144,20 @@ function ModerationDialog({ action, onClose }: { action: Action; onClose: () => 
           ? "They will not be able to use this server until you unban them."
           : kind === "timeout"
             ? "They can read, but not speak or send messages, until the timeout ends."
-            : undefined
+            : kind === "kick"
+              ? "They stay an account holder but can no longer get into this server, and are signed out of it now. You can let them back in."
+              : undefined
       }
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          <Button variant={kind === "ban" ? "danger" : "primary"} loading={loading} onClick={() => void confirm()}>
+          <Button
+            variant={kind === "ban" || kind === "kick" ? "danger" : "primary"}
+            loading={loading}
+            onClick={() => void confirm()}
+          >
             {titles[kind].replace(" of", "")}
           </Button>
         </>
@@ -116,7 +167,14 @@ function ModerationDialog({ action, onClose }: { action: Action; onClose: () => 
         {kind === "timeout" && (
           <div role="radiogroup" aria-label="Length" className="flex flex-wrap gap-2">
             {TIMEOUT_CHOICES.map((m) => (
-              <Button key={m} size="sm" variant={minutes === m ? "primary" : "secondary"} role="radio" aria-checked={minutes === m} onClick={() => setMinutes(m)}>
+              <Button
+                key={m}
+                size="sm"
+                variant={minutes === m ? "primary" : "secondary"}
+                role="radio"
+                aria-checked={minutes === m}
+                onClick={() => setMinutes(m)}
+              >
                 {durationLabel(m)}
               </Button>
             ))}
@@ -125,7 +183,12 @@ function ModerationDialog({ action, onClose }: { action: Action; onClose: () => 
         {asksWhy && (
           <label className="flex flex-col gap-[7px] text-[13px] text-text-tertiary">
             Reason (kept in the audit log)
-            <Input aria-label="Reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+            <Input
+              aria-label="Reason"
+              value={reason}
+              maxLength={500}
+              onChange={(e) => setReason(e.target.value)}
+            />
           </label>
         )}
         <FeedbackLine feedback={feedback} />
@@ -141,9 +204,18 @@ export function MembersSection() {
   const states = useModerationStates();
   const [query, setQuery] = useState("");
   const [action, setAction] = useState<Action | null>(null);
+  const mayKick = isServerOwner(me) || canKick(me?.resolved_privileges);
+  const viewerIsOwner = isServerOwner(me);
 
   if (isPending) return <LoadingState message="Loading members…" />;
-  if (error) return <ErrorState title="Couldn't load members" message={classifyAuthError(error, "Try again.").message} onRetry={() => void refetch()} />;
+  if (error)
+    return (
+      <ErrorState
+        title="Couldn't load members"
+        message={classifyAuthError(error, "Try again.").message}
+        onRetry={() => void refetch()}
+      />
+    );
   if (data.length === 0) return <EmptyState title="No members yet" />;
 
   const shown = [...data]
@@ -160,17 +232,30 @@ export function MembersSection() {
         flush
         action={
           <div className="w-56">
-            <Input aria-label="Search members" placeholder="Search members" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <Input
+              aria-label="Search members"
+              placeholder="Search members"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
         }
       >
         <table className={tableClasses.table}>
           <thead>
             <tr>
-              <th scope="col" className={tableClasses.head}>Member</th>
-              <th scope="col" className={tableClasses.head}>Status</th>
-              <th scope="col" className={tableClasses.head}>Roles</th>
-              <th scope="col" className={`${tableClasses.head} text-right`}>Actions</th>
+              <th scope="col" className={tableClasses.head}>
+                Member
+              </th>
+              <th scope="col" className={tableClasses.head}>
+                Status
+              </th>
+              <th scope="col" className={tableClasses.head}>
+                Roles
+              </th>
+              <th scope="col" className={`${tableClasses.head} text-right`}>
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -179,12 +264,23 @@ export function MembersSection() {
               const isOwner = (member.roles_ids ?? []).includes(OWNER_ROLE_ID);
               const self = member.user_id === me?.user_id;
               const timedOut = state?.timeoutUntil ?? null;
+              const removed = member.membership_status === "kicked";
+              // The server decides; this only hides what it would refuse (a moderator is removed by the owner alone).
+              const staff = (member.roles_ids ?? []).includes("moderator");
+              const mayRemove = mayKick && !isOwner && !self && (viewerIsOwner || !staff);
               const act = (kind: Action["kind"]) => setAction({ kind, member });
               return (
                 <tr key={member.user_id} className={tableClasses.row}>
                   <td className={tableClasses.cell}>
                     <span className="inline-flex items-center gap-3">
-                      <Avatar name={member.username} src={member.avatar_url} seed={member.user_id} size={32} presence={member.status} ringColor="var(--color-background-secondary)" />
+                      <Avatar
+                        name={member.username}
+                        src={member.avatar_url}
+                        seed={member.user_id}
+                        size={32}
+                        presence={member.status}
+                        ringColor="var(--color-background-secondary)"
+                      />
                       <span className="font-semibold">{member.username}</span>
                       {self && <span className="text-xs text-text-muted">you</span>}
                     </span>
@@ -193,39 +289,93 @@ export function MembersSection() {
                     <span className="inline-flex flex-wrap items-center gap-2">
                       {PRESENCE[member.status].label}
                       {state?.banned && <Tag tone="red">Banned</Tag>}
-                      {timedOut && <Tag tone="brass">Timed out until {timedOut.toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</Tag>}
+                      {removed && <Tag tone="red">Removed</Tag>}
+                      {timedOut && (
+                        <Tag tone="brass">
+                          Timed out until{" "}
+                          {timedOut.toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                        </Tag>
+                      )}
                     </span>
                   </td>
                   <td className={tableClasses.cell}>
                     <span className="inline-flex flex-wrap gap-1.5">
                       {roleNames(member).map((name) => (
-                        <Tag key={name} tone={name.toLowerCase() === "owner" ? "brass" : "neutral"}>{name}</Tag>
+                        <Tag key={name} tone={name.toLowerCase() === "owner" ? "brass" : "neutral"}>
+                          {name}
+                        </Tag>
                       ))}
                     </span>
                   </td>
                   <td className={`${tableClasses.cell} text-right`}>
                     <span className="inline-flex flex-wrap justify-end gap-1.5">
-                      <Button size="sm" variant="secondary" aria-label={`Roles of ${member.username}`} disabled={isOwner} onClick={() => act("roles")}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-label={`Roles of ${member.username}`}
+                        disabled={isOwner}
+                        onClick={() => act("roles")}
+                      >
                         Roles
                       </Button>
-                      {!isOwner && !self && (
+                      {removed && mayKick && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          aria-label={`Let ${member.username} back in`}
+                          onClick={() => act("reinstate")}
+                        >
+                          Let back in
+                        </Button>
+                      )}
+                      {!isOwner && !self && !removed && (
                         <>
                           {timedOut ? (
-                            <Button size="sm" variant="secondary" aria-label={`End the timeout of ${member.username}`} onClick={() => act("clear-timeout")}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`End the timeout of ${member.username}`}
+                              onClick={() => act("clear-timeout")}
+                            >
                               End timeout
                             </Button>
                           ) : (
-                            <Button size="sm" variant="secondary" aria-label={`Time out ${member.username}`} onClick={() => act("timeout")}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Time out ${member.username}`}
+                              onClick={() => act("timeout")}
+                            >
                               Time out
                             </Button>
                           )}
                           {state?.banned ? (
-                            <Button size="sm" variant="secondary" aria-label={`Unban ${member.username}`} onClick={() => act("unban")}>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Unban ${member.username}`}
+                              onClick={() => act("unban")}
+                            >
                               Unban
                             </Button>
                           ) : (
-                            <Button size="sm" variant="danger" aria-label={`Ban ${member.username}`} onClick={() => act("ban")}>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              aria-label={`Ban ${member.username}`}
+                              onClick={() => act("ban")}
+                            >
                               Ban
+                            </Button>
+                          )}
+                          {mayRemove && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-label={`Remove ${member.username} from the server`}
+                              onClick={() => act("kick")}
+                            >
+                              Remove
                             </Button>
                           )}
                         </>
@@ -245,8 +395,12 @@ export function MembersSection() {
           </tbody>
         </table>
       </Panel>
-      {action?.kind === "roles" && <RolesDialog member={action.member} onClose={() => setAction(null)} />}
-      {action && action.kind !== "roles" && <ModerationDialog action={action} onClose={() => setAction(null)} />}
+      {action?.kind === "roles" && (
+        <RolesDialog member={action.member} onClose={() => setAction(null)} />
+      )}
+      {action && action.kind !== "roles" && (
+        <ModerationDialog action={action} onClose={() => setAction(null)} />
+      )}
     </>
   );
 }

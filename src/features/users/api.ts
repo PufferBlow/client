@@ -18,13 +18,18 @@ export async function listUsers(): Promise<UserProfile[]> {
 }
 
 /** `PUT /profile` applies exactly one field per request, so each setter sends one. */
-const editProfile = (fields: Record<string, string>) => authed.body<unknown>("PUT", `${USERS}/profile`, fields).then(() => undefined);
+const editProfile = (fields: Record<string, string>) =>
+  authed.body<unknown>("PUT", `${USERS}/profile`, fields).then(() => undefined);
 
 export const updateUsername = (newUsername: string) => editProfile({ new_username: newUsername });
 export const updateAbout = (about: string) => editProfile({ about });
 /** Pronouns and the custom status go together in one request; an omitted one is left alone and "" clears it. */
-export const updateProfileText = (fields: { pronouns?: string; custom_status?: string }) => editProfile(fields as Record<string, string>);
+export const updateProfileText = (fields: { pronouns?: string; custom_status?: string }) =>
+  editProfile(fields as Record<string, string>);
 export const updateStatus = (status: PresenceStatus) => editProfile({ status });
+/** Delete your own account. Asks for the password again; what you wrote stays, shown as "Deleted user". */
+export const deleteAccount = (password: string) =>
+  authed.body<unknown>("POST", `${USERS}/delete`, { password });
 export const changePassword = (oldPassword: string, newPassword: string) =>
   editProfile({ old_password: oldPassword, new_password: newPassword });
 

@@ -1,21 +1,24 @@
-import { Button, LoadingState } from "@pufferblow/spines";
+import { Button, LoadingState, Modal } from "@pufferblow/spines";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, LogOut } from "lucide-react";
+import { KeyRound, LogOut, Trash2 } from "lucide-react";
 import { PasswordField } from "../../components/auth/AuthFields";
 import { FeedbackLine, SettingsCard } from "../../components/settings/SettingsParts";
 import { useSave } from "../../components/settings/useSave";
 import { signOutActiveAccount } from "../../services/accounts";
 import { isSessionRemembered } from "../../services/auth";
-import { resetSessionTokens } from "../../features/users/api";
+import { deleteAccount, resetSessionTokens } from "../../features/users/api";
 import { useMyProfile } from "../../features/users/hooks";
 import { listIdentityKeys, removeIdentityKey } from "../../features/calls/api";
+import { classifyAuthError } from "../../utils/authErrors";
 
 function ResetTokensCard() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
-  const { run, loading, feedback } = useSave("Session tokens reset. Other devices were signed out.");
+  const { run, loading, feedback } = useSave(
+    "Session tokens reset. Other devices were signed out.",
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -79,13 +82,98 @@ function SignOutCard() {
   );
 }
 
+/**
+ * Delete your own account. Only its owner can, and they confirm with their password. The name, picture, bio, friends and
+ * keys are erased; what they wrote stays in the channels, shown as "Deleted user".
+ */
+function DeleteAccountCard() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(false);
+
+  const close = () => {
+    setOpen(false);
+    setPassword("");
+    setError(undefined);
+  };
+
+  const confirm = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!password) {
+      setError("Enter your password to confirm.");
+      return;
+    }
+    setError(undefined);
+    setLoading(true);
+    try {
+      await deleteAccount(password);
+    } catch (cause) {
+      setError(classifyAuthError(cause, "Couldn't delete the account.").message);
+      setLoading(false);
+      return;
+    }
+    // The account is gone: forget it here too, as signing out does.
+    const next = await signOutActiveAccount();
+    queryClient.clear();
+    if (next === "switched") window.location.assign("/dashboard");
+    else navigate("/login", { replace: true });
+  };
+
+  return (
+    <SettingsCard
+      title="Delete account"
+      description="Erase your account on this server for good. What you wrote stays, shown as Deleted user. This cannot be undone."
+    >
+      <div>
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          <Trash2 size={15} aria-hidden="true" />
+          Delete account…
+        </Button>
+      </div>
+      {open && (
+        <Modal
+          isOpen
+          onClose={close}
+          title="Delete your account?"
+          description="Your name, picture, bio, friends and keys are erased and you are signed out everywhere. The server's owner has to hand the server over before deleting."
+        >
+          <form onSubmit={confirm} className="flex flex-col gap-4" noValidate>
+            <PasswordField
+              label="Confirm with your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              error={error}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="danger" loading={loading}>
+                Delete my account
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </SettingsCard>
+  );
+}
+
 /** The signing keys of the devices this account has made calls from. Remove one for a device you no longer have. */
 function CallKeysCard() {
   const queryClient = useQueryClient();
   const { data: me } = useMyProfile();
   const userId = me?.user_id;
   const queryKey = ["identity-keys", userId] as const;
-  const { data: keys, isPending, isError } = useQuery({ queryKey, queryFn: () => listIdentityKeys(userId!), enabled: !!userId });
+  const {
+    data: keys,
+    isPending,
+    isError,
+  } = useQuery({ queryKey, queryFn: () => listIdentityKeys(userId!), enabled: !!userId });
   const { run, feedback } = useSave("Key removed.");
 
   return (
@@ -102,7 +190,10 @@ function CallKeysCard() {
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {keys.map((key) => (
-            <li key={key.key_id} className="flex items-center gap-3 rounded-lg bg-background px-3 py-2.5">
+            <li
+              key={key.key_id}
+              className="flex items-center gap-3 rounded-lg bg-background px-3 py-2.5"
+            >
               <KeyRound size={16} aria-hidden="true" className="shrink-0 text-text-tertiary" />
               <span className="flex min-w-0 flex-1 flex-col leading-tight">
                 <span className="truncate text-sm font-semibold">{key.label || "This device"}</span>
@@ -115,7 +206,8 @@ function CallKeysCard() {
                 variant="secondary"
                 aria-label={`Remove key ${key.label || key.key_id.slice(0, 12)}`}
                 onClick={async () => {
-                  if (await run(() => removeIdentityKey(key.key_id).then(() => undefined))) await queryClient.invalidateQueries({ queryKey });
+                  if (await run(() => removeIdentityKey(key.key_id).then(() => undefined)))
+                    await queryClient.invalidateQueries({ queryKey });
                 }}
               >
                 Remove
@@ -135,6 +227,7 @@ export function SecuritySection() {
       <CallKeysCard />
       <ResetTokensCard />
       <SignOutCard />
+      <DeleteAccountCard />
     </>
   );
 }

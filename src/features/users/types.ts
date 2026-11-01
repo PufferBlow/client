@@ -6,6 +6,8 @@ export type PresenceStatus = "online" | "idle" | "afk" | "dnd" | "offline";
 export interface UserProfile {
   user_id: string;
   username: string;
+  /** `active`, or `kicked` for someone a moderator removed (their account stays, they cannot get in). */
+  membership_status?: "active" | "kicked" | "remote" | string;
   about: string | null;
   status: PresenceStatus;
   accent_color: string | null;

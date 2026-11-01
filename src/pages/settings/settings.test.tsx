@@ -21,12 +21,18 @@ const backend = (extra: Record<string, unknown> = {}) =>
   routeFetch({ "POST /api/v1/users/profile": { user_data: me }, ...extra });
 
 const renderSettings = (section = "account") =>
-  renderWithProviders(<SettingsPage />, { route: `/settings/${section}`, path: "/settings/:section?" });
+  renderWithProviders(<SettingsPage />, {
+    route: `/settings/${section}`,
+    path: "/settings/:section?",
+  });
 
 /** JSON bodies sent with the given method + path. */
 const bodies = (fetchMock: ReturnType<typeof routeFetch>, method: string, path: string) =>
   fetchMock.mock.calls
-    .filter(([input, init]) => (init?.method ?? "GET") === method && new URL(String(input)).pathname === path)
+    .filter(
+      ([input, init]) =>
+        (init?.method ?? "GET") === method && new URL(String(input)).pathname === path,
+    )
     .map(([, init]) => JSON.parse(String(init!.body)) as Record<string, unknown>);
 
 describe("SettingsPage", () => {
@@ -54,7 +60,10 @@ describe("SettingsPage", () => {
     renderWithProviders(<SettingsPage />, { route: "/settings", path: "/settings/:section?" });
 
     const nav = await screen.findByRole("navigation", { name: "Settings sections" });
-    expect(within(nav).getByRole("link", { name: /My account/ })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: /My account/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(within(nav).getByRole("link", { name: /Profile/ })).not.toHaveAttribute("aria-current");
   });
 
@@ -65,7 +74,12 @@ describe("SettingsPage", () => {
   });
 
   it("shows an error with retry when the profile can't be loaded", async () => {
-    routeFetch({ "POST /api/v1/users/profile": jsonResponse({ error_code: "auth.invalid_token", user_message: "Your session has expired." }, 401) });
+    routeFetch({
+      "POST /api/v1/users/profile": jsonResponse(
+        { error_code: "auth.invalid_token", user_message: "Your session has expired." },
+        401,
+      ),
+    });
     renderSettings();
     expect(await screen.findByText("Couldn't load your profile")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
@@ -96,7 +110,8 @@ describe("SettingsPage", () => {
     it("changes the username with a single-field PUT and refreshes the profile", async () => {
       let currentName = "ada";
       const fetchMock = backend({
-        "POST /api/v1/users/profile": () => jsonResponse({ user_data: { ...me, username: currentName } }),
+        "POST /api/v1/users/profile": () =>
+          jsonResponse({ user_data: { ...me, username: currentName } }),
         "PUT /api/v1/users/profile": () => {
           currentName = "ada2";
           return jsonResponse({ status_code: 200 });
@@ -108,12 +123,23 @@ describe("SettingsPage", () => {
       await user.click(screen.getByRole("button", { name: "Save username" }));
 
       expect(await screen.findByText("Username updated.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ new_username: "ada2", auth_token: "tok" }]);
+      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([
+        { new_username: "ada2", auth_token: "tok" },
+      ]);
       await waitFor(() => expect(screen.getByLabelText("Username")).toHaveValue("ada2"));
     });
 
     it("explains a taken username", async () => {
-      backend({ "PUT /api/v1/users/profile": jsonResponse({ error_code: "auth.username_taken", message: "taken", details: { field: "new_username" } }, 409) });
+      backend({
+        "PUT /api/v1/users/profile": jsonResponse(
+          {
+            error_code: "auth.username_taken",
+            message: "taken",
+            details: { field: "new_username" },
+          },
+          409,
+        ),
+      });
       const { user } = renderSettings();
       await user.type(await screen.findByLabelText("Username"), "2");
       await user.click(screen.getByRole("button", { name: "Save username" }));
@@ -170,7 +196,9 @@ describe("SettingsPage", () => {
       await user.click(screen.getByRole("button", { name: "Save profile" }));
 
       expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ about: "hello world", auth_token: "tok" }]);
+      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([
+        { about: "hello world", auth_token: "tok" },
+      ]);
     });
 
     it("limits the about text to 190 characters, as the instance does", async () => {
@@ -180,15 +208,22 @@ describe("SettingsPage", () => {
     });
 
     it("marks the current status and saves a change with the profile", async () => {
-      const fetchMock = backend({ "PUT /api/v1/users/profile": { status_code: 200, status: "dnd" } });
+      const fetchMock = backend({
+        "PUT /api/v1/users/profile": { status_code: 200, status: "dnd" },
+      });
       const { user } = renderSettings("profile");
 
-      expect(await screen.findByRole("button", { name: "Online" })).toHaveAttribute("aria-pressed", "true");
+      expect(await screen.findByRole("button", { name: "Online" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
       await user.click(screen.getByRole("button", { name: "Do not disturb" }));
       await user.click(screen.getByRole("button", { name: "Save profile" }));
 
       expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
-      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([{ status: "dnd", auth_token: "tok" }]);
+      expect(bodies(fetchMock, "PUT", "/api/v1/users/profile")).toEqual([
+        { status: "dnd", auth_token: "tok" },
+      ]);
     });
   });
 
@@ -205,7 +240,11 @@ describe("SettingsPage", () => {
     it("replaces this device's session with the new tokens, keeping its remember choice", async () => {
       persistSession({ auth_token: "old", refresh_token: "old-r" }, false);
       const fetchMock = backend({
-        "POST /api/v1/users/profile/reset-auth-token": { auth_token: "new-access", refresh_token: "new-refresh", auth_token_expire_time: "2099-01-01T00:00:00Z" },
+        "POST /api/v1/users/profile/reset-auth-token": {
+          auth_token: "new-access",
+          refresh_token: "new-refresh",
+          auth_token_expire_time: "2099-01-01T00:00:00Z",
+        },
       });
       const { user } = renderSettings("security");
 
@@ -213,14 +252,23 @@ describe("SettingsPage", () => {
       await user.click(screen.getByRole("button", { name: "Reset tokens" }));
 
       expect(await screen.findByText(/other devices were signed out/i)).toBeInTheDocument();
-      expect(bodies(fetchMock, "POST", "/api/v1/users/profile/reset-auth-token")).toEqual([{ auth_token: "old", password: "my-password" }]);
+      expect(bodies(fetchMock, "POST", "/api/v1/users/profile/reset-auth-token")).toEqual([
+        { auth_token: "old", password: "my-password" },
+      ]);
       expect(getAuthToken()).toBe("new-access");
       expect(isSessionRemembered()).toBe(false);
     });
 
     it("shows the server's reason when the password is wrong", async () => {
       backend({
-        "POST /api/v1/users/profile/reset-auth-token": jsonResponse({ error_code: "auth.reset_password_wrong", message: "Wrong password", user_message: "That password is incorrect." }, 401),
+        "POST /api/v1/users/profile/reset-auth-token": jsonResponse(
+          {
+            error_code: "auth.reset_password_wrong",
+            message: "Wrong password",
+            user_message: "That password is incorrect.",
+          },
+          401,
+        ),
       });
       const { user } = renderSettings("security");
 
@@ -231,6 +279,58 @@ describe("SettingsPage", () => {
       expect(getAuthToken()).toBe("tok"); // unchanged
     });
 
+    it("deletes the account after asking for the password again, then leaves", async () => {
+      persistSession({ auth_token: "tok", refresh_token: "refresh-1" }, true);
+      const fetchMock = backend({
+        "POST /api/v1/users/delete": { status_code: 200, deleted: true },
+        "POST /api/v1/auth/revoke": { status_code: 200 },
+      });
+      const { user } = renderSettings("security");
+
+      await user.click(await screen.findByRole("button", { name: /Delete account/ }));
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+      expect(
+        await within(dialog).findByText("Enter your password to confirm."),
+      ).toBeInTheDocument();
+      expect(bodies(fetchMock, "POST", "/api/v1/users/delete")).toEqual([]);
+
+      await user.type(within(dialog).getByLabelText("Confirm with your password"), "my-password");
+      await user.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+
+      expect(await screen.findByTestId("elsewhere")).toHaveTextContent("/login");
+      expect(bodies(fetchMock, "POST", "/api/v1/users/delete")).toEqual([
+        { auth_token: "tok", password: "my-password" },
+      ]);
+      expect(getAuthToken()).toBeNull();
+    });
+
+    it("says why the account was not deleted and stays signed in", async () => {
+      backend({
+        "POST /api/v1/users/delete": jsonResponse(
+          {
+            error_code: "account.owner_cannot_delete",
+            message: "owner",
+            user_message: "The owner cannot delete their account. Hand the server over first.",
+          },
+          409,
+        ),
+      });
+      const { user } = renderSettings("security");
+
+      await user.click(await screen.findByRole("button", { name: /Delete account/ }));
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Confirm with your password"), "my-password");
+      await user.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+
+      expect(
+        await within(dialog).findByText(
+          "The owner cannot delete their account. Hand the server over first.",
+        ),
+      ).toBeInTheDocument();
+      expect(getAuthToken()).toBe("tok");
+    });
+
     it("signs out: revokes the token, clears the session, and goes to the login page", async () => {
       persistSession({ auth_token: "tok", refresh_token: "refresh-1" }, true);
       const fetchMock = backend({ "POST /api/v1/auth/revoke": { status_code: 200 } });
@@ -239,7 +339,9 @@ describe("SettingsPage", () => {
       await user.click(await screen.findByRole("button", { name: "Sign out" }));
 
       expect(await screen.findByTestId("elsewhere")).toHaveTextContent("/login");
-      expect(bodies(fetchMock, "POST", "/api/v1/auth/revoke")).toEqual([{ refresh_token: "refresh-1" }]);
+      expect(bodies(fetchMock, "POST", "/api/v1/auth/revoke")).toEqual([
+        { refresh_token: "refresh-1" },
+      ]);
       expect(getAuthToken()).toBeNull();
     });
   });
@@ -248,7 +350,9 @@ describe("SettingsPage", () => {
 describe("SettingsPage security: call keys", () => {
   it("lists the keys of your devices and removes one", async () => {
     const fetchMock = backend({
-      "GET /api/v1/identity-keys/me": { keys: [{ key_id: "abcdef1234567890", label: "Laptop", created_at: "2026-10-01T10:00:00Z" }] },
+      "GET /api/v1/identity-keys/me": {
+        keys: [{ key_id: "abcdef1234567890", label: "Laptop", created_at: "2026-10-01T10:00:00Z" }],
+      },
       "DELETE /api/v1/identity-keys/abcdef1234567890": { removed: true },
     });
     const { user } = renderSettings("security");

@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { bearerOf, calledUrl, jsonResponse, mockFetch, signIn } from "../../test/helpers";
 import { withDescription } from "../../lib/files";
 import { loadMessages, PAGE_SIZE, sendMessage } from "./api";
-import { flattenMessages, patchMessage, removeMessage, setReactions, upsertMessage, type MessageCache } from "./cache";
+import {
+  flattenMessages,
+  patchMessage,
+  removeMessage,
+  setReactions,
+  upsertMessage,
+  type MessageCache,
+} from "./cache";
 import { isWireMessage, normalizeMessage, normalizeReactions, type WireMessage } from "./normalize";
 import type { Message } from "./types";
 
@@ -32,6 +39,17 @@ const message = (id: string, overrides: Partial<Message> = {}): Message => ({
 });
 
 describe("normalizeMessage", () => {
+  it("shows what an erased account wrote as Deleted user", () => {
+    expect(normalizeMessage(wire("m1", { username: "deleted_1a2b3c4d" })).authorName).toBe(
+      "Deleted user",
+    );
+    expect(
+      normalizeMessage(wire("m2", { username: undefined, sender_username: "deleted_1a2b3c4d" }))
+        .authorName,
+    ).toBe("Deleted user");
+    expect(normalizeMessage(wire("m3", { username: "ada" })).authorName).toBe("ada");
+  });
+
   it("reads the live broadcast shape", () => {
     expect(normalizeMessage(wire("m1", { sender_avatar_url: "/storage/abc" }))).toMatchObject({
       id: "m1",
@@ -44,13 +62,28 @@ describe("normalizeMessage", () => {
   });
 
   it("reads the hydrated history shape (sender_username, empty sender_id)", () => {
-    const m = normalizeMessage({ message_id: "m2", sender_id: "", sender_user_id: "u9", sender_username: "grace", message: "hi", sent_at: "t" }, "fallback-channel");
+    const m = normalizeMessage(
+      {
+        message_id: "m2",
+        sender_id: "",
+        sender_user_id: "u9",
+        sender_username: "grace",
+        message: "hi",
+        sent_at: "t",
+      },
+      "fallback-channel",
+    );
     expect(m).toMatchObject({ authorId: "u9", authorName: "grace", channelId: "fallback-channel" });
   });
 
   it("prefers sender_user_id over a blank sender_id, and falls back to sender_id", () => {
-    expect(normalizeMessage({ message_id: "m", sender_id: "", sender_user_id: "u1", sent_at: "t" }).authorId).toBe("u1");
-    expect(normalizeMessage({ message_id: "m", sender_id: "legacy", sent_at: "t" }).authorId).toBe("legacy");
+    expect(
+      normalizeMessage({ message_id: "m", sender_id: "", sender_user_id: "u1", sent_at: "t" })
+        .authorId,
+    ).toBe("u1");
+    expect(normalizeMessage({ message_id: "m", sender_id: "legacy", sent_at: "t" }).authorId).toBe(
+      "legacy",
+    );
   });
 
   it("fills defaults for missing optional fields", () => {
@@ -65,8 +98,18 @@ describe("normalizeMessage", () => {
   });
 
   it("carries edit state and reactions", () => {
-    const m = normalizeMessage(wire("m", { edit_count: 2, last_edited_at: "later", reactions: [{ emoji: "👍", count: 2, user_ids: ["a", "b"] }] }));
-    expect(m).toMatchObject({ editCount: 2, editedAt: "later", reactions: [{ emoji: "👍", count: 2, userIds: ["a", "b"] }] });
+    const m = normalizeMessage(
+      wire("m", {
+        edit_count: 2,
+        last_edited_at: "later",
+        reactions: [{ emoji: "👍", count: 2, user_ids: ["a", "b"] }],
+      }),
+    );
+    expect(m).toMatchObject({
+      editCount: 2,
+      editedAt: "later",
+      reactions: [{ emoji: "👍", count: 2, userIds: ["a", "b"] }],
+    });
   });
 });
 
@@ -79,13 +122,17 @@ describe("forwarded messages", () => {
 
   it("are not flagged when nothing was forwarded", () => {
     expect(normalizeMessage(wire("m1"))).not.toHaveProperty("forwarded");
-    expect(normalizeMessage(wire("m1", { forwarded_from_message_id: null }))).not.toHaveProperty("forwarded");
+    expect(normalizeMessage(wire("m1", { forwarded_from_message_id: null }))).not.toHaveProperty(
+      "forwarded",
+    );
   });
 });
 
 describe("normalizeReactions", () => {
   it("derives the count from user ids when absent", () => {
-    expect(normalizeReactions([{ emoji: "🎉", user_ids: ["a", "b", "c"] }])).toEqual([{ emoji: "🎉", count: 3, userIds: ["a", "b", "c"] }]);
+    expect(normalizeReactions([{ emoji: "🎉", user_ids: ["a", "b", "c"] }])).toEqual([
+      { emoji: "🎉", count: 3, userIds: ["a", "b", "c"] },
+    ]);
   });
 
   it("handles null", () => {
@@ -133,7 +180,9 @@ describe("message cache", () => {
   });
 
   it("keeps cached reactions when the repeated push carries none", () => {
-    const reacted = patchMessage(cache(), "m4", { reactions: [{ emoji: "👍", count: 1, userIds: ["a"] }] });
+    const reacted = patchMessage(cache(), "m4", {
+      reactions: [{ emoji: "👍", count: 1, userIds: ["a"] }],
+    });
     const merged = upsertMessage(reacted, message("m4"))!;
     expect(flattenMessages(merged).find((m) => m.id === "m4")!.reactions).toHaveLength(1);
   });
@@ -143,9 +192,20 @@ describe("message cache", () => {
   });
 
   it("patches, replaces reactions on, and removes by id", () => {
-    expect(flattenMessages(patchMessage(cache(), "m2", { text: "edited" })).find((m) => m.id === "m2")!.text).toBe("edited");
-    expect(flattenMessages(setReactions(cache(), "m1", [{ emoji: "❤️", count: 1, userIds: ["x"] }])).find((m) => m.id === "m1")!.reactions).toHaveLength(1);
-    expect(flattenMessages(removeMessage(cache(), "m3")).map((m) => m.id)).toEqual(["m1", "m2", "m4"]);
+    expect(
+      flattenMessages(patchMessage(cache(), "m2", { text: "edited" })).find((m) => m.id === "m2")!
+        .text,
+    ).toBe("edited");
+    expect(
+      flattenMessages(
+        setReactions(cache(), "m1", [{ emoji: "❤️", count: 1, userIds: ["x"] }]),
+      ).find((m) => m.id === "m1")!.reactions,
+    ).toHaveLength(1);
+    expect(flattenMessages(removeMessage(cache(), "m3")).map((m) => m.id)).toEqual([
+      "m1",
+      "m2",
+      "m4",
+    ]);
   });
 
   it("does not mutate the input cache", () => {
@@ -159,7 +219,9 @@ describe("message cache", () => {
 describe("loadMessages", () => {
   it("requests page 1 first and returns oldest-first with a derived cursor when the page is full", async () => {
     signIn("tok");
-    const full = Array.from({ length: PAGE_SIZE }, (_, i) => wire(`m${i}`, { sent_at: `2030-01-01T00:00:${String(i).padStart(2, "0")}Z` }));
+    const full = Array.from({ length: PAGE_SIZE }, (_, i) =>
+      wire(`m${i}`, { sent_at: `2030-01-01T00:00:${String(i).padStart(2, "0")}Z` }),
+    );
     const fetchMock = mockFetch(jsonResponse({ messages: full, next_cursor: null }));
 
     const page = await loadMessages("c1", null);
@@ -188,7 +250,9 @@ describe("loadMessages", () => {
 
   it("pages older messages with before_cursor and reverses the newest-first response", async () => {
     signIn();
-    const fetchMock = mockFetch(jsonResponse({ messages: [wire("m3"), wire("m2"), wire("m1")], next_cursor: "next|m1" }));
+    const fetchMock = mockFetch(
+      jsonResponse({ messages: [wire("m3"), wire("m2"), wire("m1")], next_cursor: "next|m1" }),
+    );
 
     const page = await loadMessages("c1", "cur|m4");
 
@@ -228,11 +292,18 @@ describe("sendMessage", () => {
   it("sends each file's description as a list in the same order, and nothing when there are none", async () => {
     signIn("tok");
     const fetchMock = mockFetch(jsonResponse({ message_data: wire("new") }));
-    const described = withDescription(new File(["x"], "a.png", { type: "image/png" }), "  A chart ");
+    const described = withDescription(
+      new File(["x"], "a.png", { type: "image/png" }),
+      "  A chart ",
+    );
     const plain = new File(["y"], "b.png", { type: "image/png" });
 
     await sendMessage("c1", { text: "", files: [described, plain] });
-    expect(JSON.parse(String((fetchMock.mock.calls[0]![1]!.body as FormData).get("attachment_descriptions")))).toEqual(["A chart", ""]);
+    expect(
+      JSON.parse(
+        String((fetchMock.mock.calls[0]![1]!.body as FormData).get("attachment_descriptions")),
+      ),
+    ).toEqual(["A chart", ""]);
 
     const second = mockFetch(jsonResponse({ message_data: wire("new2") }));
     await sendMessage("c1", { text: "", files: [plain] });
