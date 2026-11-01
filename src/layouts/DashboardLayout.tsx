@@ -4,6 +4,7 @@ import { CallOverlay } from "../components/dashboard/CallOverlay";
 import { ServerRail } from "../components/dashboard/ServerRail";
 import { UserDock } from "../components/dashboard/UserDock";
 import { VoiceSwitchDialog } from "../components/dashboard/VoiceSwitchDialog";
+import { InstanceSlowBanner } from "../components/instance/InstanceSlowBanner";
 import { InstanceUnavailable } from "../components/instance/InstanceUnavailable";
 import { ProfileCardProvider } from "../components/profile/ProfileCardProvider";
 import { useInstanceStatus } from "../features/instance/status";
@@ -32,40 +33,44 @@ export function DashboardLayout() {
   // The hub home is a landing page: no sidebar for the card to float over.
   const showUserPanel = showRail && !isHubHome(pathname);
   const status = useInstanceStatus();
-  const blocked = status !== "ok";
+  // Only an instance that has stayed silent, or one that refuses the session, covers the app. A slow one gets a note.
+  const blocked = status === "unreachable" || status === "signed_out";
 
   return (
     <RealtimeProvider>
       <VoiceProvider>
         <CallProvider>
           <CustomEmojiProvider>
-          <ProfileCardProvider>
-          <SidebarDrawerProvider>
-            <div className="relative flex h-full min-w-0 flex-1">
-              <div
-                inert={blocked}
-                aria-hidden={blocked || undefined}
-                className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}
-              >
-                {showRail && <ServerRail clearUserPanel={showUserPanel} />}
-                {/* Without the sidebars beside it, the page leaves room under it for the dock. */}
-                <div className={`flex min-h-0 min-w-0 flex-1 gap-2 ${showUserPanel ? "max-md:pb-[calc(var(--dock-h,56px)+8px)]" : ""}`}>
-                  <Outlet />
-                </div>
-                <SidebarBackdrop />
-                {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
-                {showUserPanel && (
-                  <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
-                    <UserDock />
+            <ProfileCardProvider>
+              <SidebarDrawerProvider>
+                <div className="relative flex h-full min-w-0 flex-1">
+                  <div
+                    inert={blocked}
+                    aria-hidden={blocked || undefined}
+                    className={`relative flex h-full min-w-0 flex-1 bg-background p-2 ${showRail ? "pl-0" : ""}`}
+                  >
+                    {showRail && <ServerRail clearUserPanel={showUserPanel} />}
+                    {/* Without the sidebars beside it, the page leaves room under it for the dock. */}
+                    <div
+                      className={`flex min-h-0 min-w-0 flex-1 gap-2 ${showUserPanel ? "max-md:pb-[calc(var(--dock-h,56px)+8px)]" : ""}`}
+                    >
+                      <Outlet />
+                    </div>
+                    <SidebarBackdrop />
+                    {/* Its own card, floating bottom-left across the server list and the sidebar (72px + 288px, less the gutter). */}
+                    {showUserPanel && (
+                      <div className="pointer-events-none absolute bottom-2 left-2 z-10 w-[352px] max-w-[calc(100%-1rem)]">
+                        <UserDock />
+                      </div>
+                    )}
+                    <VoiceSwitchDialog />
                   </div>
-                )}
-                <VoiceSwitchDialog />
-              </div>
-              {blocked && <InstanceUnavailable status={status} />}
-              <CallOverlay />
-            </div>
-          </SidebarDrawerProvider>
-          </ProfileCardProvider>
+                  {status === "slow" && <InstanceSlowBanner />}
+                  {blocked && <InstanceUnavailable status={status} />}
+                  <CallOverlay />
+                </div>
+              </SidebarDrawerProvider>
+            </ProfileCardProvider>
           </CustomEmojiProvider>
         </CallProvider>
       </VoiceProvider>

@@ -154,7 +154,7 @@ describe("useSessionKeeper", () => {
     renderHook(() => useSessionKeeper(), { wrapper });
     await vi.advanceTimersByTimeAsync(0);
 
-    await waitFor(() => expect(getInstanceStatus()).toBe("unreachable"));
+    await waitFor(() => expect(getInstanceStatus()).toBe("slow"));
   });
 
   it("stops checking when unmounted", async () => {

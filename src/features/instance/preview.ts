@@ -10,14 +10,23 @@ import type { ServerInfo } from "../server/types";
  * screens use it for the "Found" badge and for the art beside the form (the instance's own banner,
  * name and counts), so people see where they are going before they type a password.
  */
-export async function fetchInstancePreview(instance: InstanceConfig, signal?: AbortSignal): Promise<ServerInfo> {
-  const { server_info } = await api.get<{ server_info: ServerInfo }>(`${getApiUrl(instance)}/api/v1/system/server-info`, { signal, timeout: 6000 });
+export async function fetchInstancePreview(
+  instance: InstanceConfig,
+  signal?: AbortSignal,
+): Promise<ServerInfo> {
+  const { server_info } = await api.get<{ server_info: ServerInfo }>(
+    `${getApiUrl(instance)}/api/v1/system/server-info`,
+    { signal, timeout: 6000 },
+  );
   if (!server_info) throw new Error("This does not look like a Pufferblow instance.");
   return server_info;
 }
 
 /** A path the instance serves (`/storage/...`, `/assets/...`) as a URL, for an instance that is not the signed-in one. */
-export function previewAssetUrl(instance: InstanceConfig, path: string | null | undefined): string | undefined {
+export function previewAssetUrl(
+  instance: InstanceConfig,
+  path: string | null | undefined,
+): string | undefined {
   if (!path) return undefined;
   if (/^(https?:\/\/|blob:|data:)/i.test(path)) return path;
   return `${getApiUrl(instance)}${path.startsWith("/") ? "" : "/"}${path}`;

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { getAuthToken, msUntilAuthExpiry, renewSession } from "../services/auth";
-import { setInstanceStatus } from "../features/instance/status";
+import { reportNoAnswer, setInstanceStatus } from "../features/instance/status";
 
 const CHECK_INTERVAL_MS = 30_000;
 const REFRESH_AHEAD_MS = 2 * 60_000;
@@ -22,7 +22,7 @@ export function useSessionKeeper(): void {
       const outcome = await renewSession();
       if (cancelled) return;
       if (outcome === "rejected" && !getAuthToken()) setInstanceStatus("signed_out");
-      else if (outcome === "unreachable") setInstanceStatus("unreachable");
+      else if (outcome === "unreachable") reportNoAnswer();
     };
 
     void check();

@@ -7,7 +7,16 @@ import { HealthBanner } from "./HealthBanner";
 
 beforeEach(() => signIn("tok"));
 
-const profile = { user_id: "me", username: "ada", about: null, status: "online", accent_color: null, avatar_url: null, origin_server: "localhost:7575", roles_ids: [] };
+const profile = {
+  user_id: "me",
+  username: "ada",
+  about: null,
+  status: "online",
+  accent_color: null,
+  avatar_url: null,
+  origin_server: "localhost:7575",
+  roles_ids: [],
+};
 
 const backend = (health: unknown) =>
   routeFetch({
@@ -15,7 +24,9 @@ const backend = (health: unknown) =>
     "POST /api/v1/users/profile": { user_data: profile },
     "POST /api/v1/channels/list/": { channels: [] },
     "GET /api/v1/channels/read-history": { unread_counts: {} },
-    "GET /api/v1/system/server-info": { server_info: { server_id: "x", server_name: "Test Server" } },
+    "GET /api/v1/system/server-info": {
+      server_info: { server_id: "x", server_name: "Test Server" },
+    },
     "GET /api/v1/notifications/preferences": { preferences: [] },
     "GET /api/v1/notifications": { notifications: [] },
     "GET /api/v1/dms/conversations": { conversations: [] },
@@ -45,13 +56,17 @@ describe("trouble on the instance", () => {
   it("puts a dot on the instance's tile in the rail", async () => {
     backend({ status: "degraded" });
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
-    expect(await screen.findByRole("img", { name: "This instance is having trouble" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: "This instance is having trouble" }),
+    ).toBeInTheDocument();
   });
 
   it("leaves the rail clean while it is well", async () => {
     backend({ status: "ok" });
     renderWithProviders(<ServerRail />, { route: "/dashboard/channels", path: "*" });
     await screen.findByRole("link", { name: /Test Server/ });
-    expect(screen.queryByRole("img", { name: "This instance is having trouble" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "This instance is having trouble" }),
+    ).not.toBeInTheDocument();
   });
 });
