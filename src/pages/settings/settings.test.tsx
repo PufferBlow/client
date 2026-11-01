@@ -305,6 +305,28 @@ describe("SettingsPage", () => {
       expect(getAuthToken()).toBeNull();
     });
 
+    it("says the password is incorrect when it is, not that the username is", async () => {
+      backend({
+        "POST /api/v1/users/delete": jsonResponse(
+          {
+            error_code: "auth.invalid_credentials",
+            message: "x",
+            user_message: "Invalid username or password.",
+          },
+          401,
+        ),
+      });
+      const { user } = renderSettings("security");
+
+      await user.click(await screen.findByRole("button", { name: /Delete account/ }));
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Confirm with your password"), "nope");
+      await user.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+
+      expect(await within(dialog).findByText("That password is incorrect.")).toBeInTheDocument();
+      expect(getAuthToken()).toBe("tok");
+    });
+
     it("says why the account was not deleted and stays signed in", async () => {
       backend({
         "POST /api/v1/users/delete": jsonResponse(

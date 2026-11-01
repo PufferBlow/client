@@ -111,7 +111,9 @@ function DeleteAccountCard() {
     try {
       await deleteAccount(password);
     } catch (cause) {
-      setError(classifyAuthError(cause, "Couldn't delete the account.").message);
+      const info = classifyAuthError(cause, "Couldn't delete the account.");
+      // Here the sign-in message would be wrong: they are signed in, it is the confirmation that failed.
+      setError(info.kind === "credentials" ? "That password is incorrect." : info.message);
       setLoading(false);
       return;
     }
